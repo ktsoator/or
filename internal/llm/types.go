@@ -11,6 +11,7 @@ type Protocol string
 
 const (
 	ProtocolOpenAICompletions Protocol = "openai-completions"
+	ProtocolAnthropicMessages Protocol = "anthropic-messages"
 )
 
 // ModelInput identifies an input modality accepted by a model.
@@ -150,6 +151,25 @@ func (*OpenAICompletionsCompatibility) Protocol() Protocol {
 	return ProtocolOpenAICompletions
 }
 
+// AnthropicMessagesCompatibility describes differences between providers that
+// implement an Anthropic Messages-compatible endpoint. Pointer booleans
+// distinguish an explicit false value from an unspecified provider default.
+// Anthropic-compatible vendors (e.g. MiniMax) are served by pointing the base
+// URL at their endpoint; most need no overrides at all.
+type AnthropicMessagesCompatibility struct {
+	SupportsTemperature       *bool `json:"supportsTemperature,omitempty"`
+	SupportsCacheControl      *bool `json:"supportsCacheControl,omitempty"`
+	SupportsCacheControlTools *bool `json:"supportsCacheControlOnTools,omitempty"`
+	ForceAdaptiveThinking     *bool `json:"forceAdaptiveThinking,omitempty"`
+	AllowEmptySignature       *bool `json:"allowEmptySignature,omitempty"`
+}
+
+// Protocol identifies the API protocol whose request and message dialect this
+// compatibility configuration describes.
+func (*AnthropicMessagesCompatibility) Protocol() Protocol {
+	return ProtocolAnthropicMessages
+}
+
 // ModelCompatibility is implemented by protocol-specific compatibility
 // configurations. It keeps Model independent from any one provider protocol
 // while allowing registration and adapters to verify type/protocol agreement.
@@ -202,6 +222,13 @@ func (model *Model) UnmarshalJSON(data []byte) error {
 	switch model.Protocol {
 	case ProtocolOpenAICompletions:
 		var compatibility OpenAICompletionsCompatibility
+		if err := json.Unmarshal(wire.Compatibility, &compatibility); err != nil {
+			return fmt.Errorf("decode %s compatibility: %w", model.Protocol, err)
+		}
+		model.Compatibility = &compatibility
+		return nil
+	case ProtocolAnthropicMessages:
+		var compatibility AnthropicMessagesCompatibility
 		if err := json.Unmarshal(wire.Compatibility, &compatibility); err != nil {
 			return fmt.Errorf("decode %s compatibility: %w", model.Protocol, err)
 		}

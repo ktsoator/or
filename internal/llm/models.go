@@ -222,17 +222,30 @@ func cloneModel(model Model) Model {
 			clone.ThinkingLevelMap[level] = cloneStringPointer(value)
 		}
 	}
-	if compatibility, ok := model.Compatibility.(*OpenAICompletionsCompatibility); ok && compatibility != nil {
-		compatibilityClone := *compatibility
-		compatibilityClone.SupportsStore = cloneBoolPointer(compatibility.SupportsStore)
-		compatibilityClone.SupportsDeveloperRole = cloneBoolPointer(compatibility.SupportsDeveloperRole)
-		compatibilityClone.SupportsReasoningEffort = cloneBoolPointer(compatibility.SupportsReasoningEffort)
-		compatibilityClone.SupportsStrictMode = cloneBoolPointer(compatibility.SupportsStrictMode)
-		compatibilityClone.RequiresReasoningContentOnAssistantMessages = cloneBoolPointer(
-			compatibility.RequiresReasoningContentOnAssistantMessages,
-		)
-		compatibilityClone.ZAIToolStream = cloneBoolPointer(compatibility.ZAIToolStream)
-		clone.Compatibility = &compatibilityClone
+	switch compatibility := model.Compatibility.(type) {
+	case *OpenAICompletionsCompatibility:
+		if compatibility != nil {
+			compatibilityClone := *compatibility
+			compatibilityClone.SupportsStore = cloneBoolPointer(compatibility.SupportsStore)
+			compatibilityClone.SupportsDeveloperRole = cloneBoolPointer(compatibility.SupportsDeveloperRole)
+			compatibilityClone.SupportsReasoningEffort = cloneBoolPointer(compatibility.SupportsReasoningEffort)
+			compatibilityClone.SupportsStrictMode = cloneBoolPointer(compatibility.SupportsStrictMode)
+			compatibilityClone.RequiresReasoningContentOnAssistantMessages = cloneBoolPointer(
+				compatibility.RequiresReasoningContentOnAssistantMessages,
+			)
+			compatibilityClone.ZAIToolStream = cloneBoolPointer(compatibility.ZAIToolStream)
+			clone.Compatibility = &compatibilityClone
+		}
+	case *AnthropicMessagesCompatibility:
+		if compatibility != nil {
+			compatibilityClone := *compatibility
+			compatibilityClone.SupportsTemperature = cloneBoolPointer(compatibility.SupportsTemperature)
+			compatibilityClone.SupportsCacheControl = cloneBoolPointer(compatibility.SupportsCacheControl)
+			compatibilityClone.SupportsCacheControlTools = cloneBoolPointer(compatibility.SupportsCacheControlTools)
+			compatibilityClone.ForceAdaptiveThinking = cloneBoolPointer(compatibility.ForceAdaptiveThinking)
+			compatibilityClone.AllowEmptySignature = cloneBoolPointer(compatibility.AllowEmptySignature)
+			clone.Compatibility = &compatibilityClone
+		}
 	}
 	return clone
 }
@@ -244,6 +257,10 @@ func validateModelCompatibility(model Model) error {
 
 	switch compatibility := model.Compatibility.(type) {
 	case *OpenAICompletionsCompatibility:
+		if compatibility == nil {
+			return errors.New("model compatibility is a typed nil")
+		}
+	case *AnthropicMessagesCompatibility:
 		if compatibility == nil {
 			return errors.New("model compatibility is a typed nil")
 		}
