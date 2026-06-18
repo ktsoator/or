@@ -11,6 +11,7 @@ import (
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/packages/respjson"
+	"github.com/openai/openai-go/v3/shared"
 )
 
 const OpenAICompletionsAPI = "openai-completions"
@@ -36,7 +37,7 @@ func (p *OpenAIProvider) API() string {
 }
 
 // Stream starts a Chat Completions request and translates SDK chunks into
-// package events. This initial implementation supports text messages only.
+// package events. It supports text, reasoning, and tool call content.
 func (p *OpenAIProvider) Stream(
 	ctx context.Context,
 	model Model,
@@ -58,6 +59,11 @@ func (p *OpenAIProvider) Stream(
 		return nil, err
 	}
 
+	tools, err := convertOpenAITools(input.Tools)
+	if err != nil {
+		return nil, err
+	}
+
 	clientOptions := []option.RequestOption{
 		option.WithAPIKey(options.APIKey),
 		option.WithHTTPClient(p.httpClient),
@@ -74,12 +80,17 @@ func (p *OpenAIProvider) Stream(
 		output := AssistantMessage{Model: model.ID}
 		events <- Event{Type: EventStart, Partial: cloneAssistantMessage(output)}
 
-		stream := client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{
+		params := openai.ChatCompletionNewParams{
 			Model:    model.ID,
 			Messages: messages,
-		})
+		}
+		if len(tools) > 0 {
+			params.Tools = tools
+		}
+		stream := client.Chat.Completions.NewStreaming(ctx, params)
 		defer stream.Close()
 
+		toolCallsByIndex := make(map[int64]*ToolCall)
 		finishReason := ""
 		for stream.Next() {
 			chunk := stream.Current()
@@ -109,6 +120,18 @@ func (p *OpenAIProvider) Stream(
 					Partial: cloneAssistantMessage(output),
 				}
 			}
+			for _, toolDelta := range choice.Delta.ToolCalls {
+				block := ensureAssistantToolCall(&output, toolCallsByIndex, toolDelta)
+				if toolDelta.Function.Arguments != "" {
+					block.Arguments += toolDelta.Function.Arguments
+				}
+				events <- Event{
+					Type:     EventToolCallDelta,
+					Delta:    toolDelta.Function.Arguments,
+					ToolCall: cloneToolCall(block),
+					Partial:  cloneAssistantMessage(output),
+				}
+			}
 			if choice.FinishReason != "" {
 				finishReason = choice.FinishReason
 			}
@@ -125,6 +148,15 @@ func (p *OpenAIProvider) Stream(
 			return
 		}
 		output.StopReason = stopReason
+		for _, content := range output.Content {
+			if content.Type == ContentToolCall && content.ToolCall != nil {
+				events <- Event{
+					Type:     EventToolCallEnd,
+					ToolCall: cloneToolCall(content.ToolCall),
+					Partial:  cloneAssistantMessage(output),
+				}
+			}
+		}
 		events <- Event{Type: EventDone, Message: cloneAssistantMessage(output)}
 	}()
 
@@ -138,19 +170,29 @@ func convertOpenAIMessages(input Context) ([]openai.ChatCompletionMessageParamUn
 	}
 
 	for _, message := range input.Messages {
-		text, err := messageText(message)
-		if err != nil {
-			return nil, err
-		}
-
 		switch message.Role {
 		case RoleUser:
+			text, err := messageText(message)
+			if err != nil {
+				return nil, err
+			}
 			messages = append(messages, openai.UserMessage(text))
 		case RoleAssistant:
-			messages = append(messages, openai.AssistantMessage(text))
+			assistant, err := convertAssistantMessage(message)
+			if err != nil {
+				return nil, err
+			}
+			if assistant == nil {
+				continue
+			}
+			messages = append(messages, openai.ChatCompletionMessageParamUnion{OfAssistant: assistant})
 		case RoleToolResult:
 			if message.ToolCallID == "" {
 				return nil, errors.New("tool result message is missing tool call ID")
+			}
+			text, err := messageText(message)
+			if err != nil {
+				return nil, err
 			}
 			messages = append(messages, openai.ToolMessage(text, message.ToolCallID))
 		default:
@@ -159,6 +201,101 @@ func convertOpenAIMessages(input Context) ([]openai.ChatCompletionMessageParamUn
 	}
 
 	return messages, nil
+}
+
+// convertAssistantMessage serializes an assistant message, including any tool
+// calls, into an OpenAI assistant message param. It returns nil for an empty
+// message (no text and no tool calls), which the caller skips: some providers
+// reject assistant messages that carry neither content nor tool calls.
+func convertAssistantMessage(message Message) (*openai.ChatCompletionAssistantMessageParam, error) {
+	assistant := &openai.ChatCompletionAssistantMessageParam{}
+	var text strings.Builder
+	for _, content := range message.Content {
+		switch content.Type {
+		case ContentText:
+			text.WriteString(content.Text)
+		case ContentThinking:
+			// Reasoning is not replayed to the OpenAI completions API.
+		case ContentToolCall:
+			if content.ToolCall == nil {
+				return nil, errors.New("assistant tool call content is missing tool call data")
+			}
+			assistant.ToolCalls = append(assistant.ToolCalls, openai.ChatCompletionMessageToolCallUnionParam{
+				OfFunction: &openai.ChatCompletionMessageFunctionToolCallParam{
+					ID: content.ToolCall.ID,
+					Function: openai.ChatCompletionMessageFunctionToolCallFunctionParam{
+						Name:      content.ToolCall.Name,
+						Arguments: content.ToolCall.Arguments,
+					},
+				},
+			})
+		default:
+			return nil, fmt.Errorf("content type %q is not supported in assistant messages", content.Type)
+		}
+	}
+
+	hasText := false
+	if value := text.String(); value != "" {
+		assistant.Content.OfString = openai.String(value)
+		hasText = true
+	}
+	if !hasText && len(assistant.ToolCalls) == 0 {
+		return nil, nil
+	}
+	return assistant, nil
+}
+
+// convertOpenAITools maps tool definitions to OpenAI function tool params.
+func convertOpenAITools(tools []ToolDefinition) ([]openai.ChatCompletionToolUnionParam, error) {
+	if len(tools) == 0 {
+		return nil, nil
+	}
+
+	converted := make([]openai.ChatCompletionToolUnionParam, 0, len(tools))
+	for _, tool := range tools {
+		if tool.Name == "" {
+			return nil, errors.New("tool definition is missing a name")
+		}
+
+		function := shared.FunctionDefinitionParam{Name: tool.Name}
+		if tool.Description != "" {
+			function.Description = openai.String(tool.Description)
+		}
+		if len(tool.Parameters) > 0 {
+			var parameters map[string]any
+			if err := json.Unmarshal(tool.Parameters, &parameters); err != nil {
+				return nil, fmt.Errorf("decode parameters for tool %q: %w", tool.Name, err)
+			}
+			function.Parameters = parameters
+		}
+
+		converted = append(converted, openai.ChatCompletionFunctionTool(function))
+	}
+
+	return converted, nil
+}
+
+// ensureAssistantToolCall finds or creates the streaming tool call block for a
+// delta's index, appending a new block to the message content on first sight and
+// backfilling the id and name as they arrive across chunks.
+func ensureAssistantToolCall(
+	message *AssistantMessage,
+	byIndex map[int64]*ToolCall,
+	delta openai.ChatCompletionChunkChoiceDeltaToolCall,
+) *ToolCall {
+	block, ok := byIndex[delta.Index]
+	if !ok {
+		block = &ToolCall{ID: delta.ID, Name: delta.Function.Name}
+		byIndex[delta.Index] = block
+		message.Content = append(message.Content, Content{Type: ContentToolCall, ToolCall: block})
+	}
+	if block.ID == "" && delta.ID != "" {
+		block.ID = delta.ID
+	}
+	if block.Name == "" && delta.Function.Name != "" {
+		block.Name = delta.Function.Name
+	}
+	return block
 }
 
 func messageText(message Message) (string, error) {
@@ -200,7 +337,19 @@ func appendAssistantThinking(message *AssistantMessage, delta string) {
 
 func cloneAssistantMessage(message AssistantMessage) *AssistantMessage {
 	clone := message
-	clone.Content = append([]Content(nil), message.Content...)
+	clone.Content = make([]Content, len(message.Content))
+	for i, content := range message.Content {
+		clone.Content[i] = content
+		clone.Content[i].ToolCall = cloneToolCall(content.ToolCall)
+	}
+	return &clone
+}
+
+func cloneToolCall(toolCall *ToolCall) *ToolCall {
+	if toolCall == nil {
+		return nil
+	}
+	clone := *toolCall
 	return &clone
 }
 

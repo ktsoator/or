@@ -10,6 +10,8 @@ const (
 	EventTextDelta EventType = "text_delta"
 	// EventThinkingDelta carries newly generated reasoning content.
 	EventThinkingDelta EventType = "thinking_delta"
+	// EventToolCallDelta carries a fragment of a tool call's arguments as it streams.
+	EventToolCallDelta EventType = "toolcall_delta"
 	// EventToolCallEnd carries a completed tool call request.
 	EventToolCallEnd EventType = "toolcall_end"
 	// EventDone carries the final assistant message.
