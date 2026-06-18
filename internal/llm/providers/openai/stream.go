@@ -98,10 +98,10 @@ func cloneToolCall(toolCall *llm.ToolCall) *llm.ToolCall {
 
 func emitError(events chan<- llm.Event, output llm.AssistantMessage, ctx context.Context, err error) {
 	if ctx.Err() != nil {
-		output.StopReason = "aborted"
+		output.StopReason = llm.StopReasonAborted
 		err = ctx.Err()
 	} else {
-		output.StopReason = "error"
+		output.StopReason = llm.StopReasonError
 	}
 	output.ErrorMessage = err.Error()
 	events <- llm.Event{Type: llm.EventError, Message: cloneAssistantMessage(output), Err: err}
@@ -132,14 +132,14 @@ func extraString(fields map[string]respjson.Field, name string) (string, error) 
 	return value, nil
 }
 
-func mapStopReason(reason string) (string, error) {
+func mapStopReason(reason string) (llm.StopReason, error) {
 	switch reason {
 	case "stop":
-		return "stop", nil
+		return llm.StopReasonStop, nil
 	case "length":
-		return "length", nil
+		return llm.StopReasonLength, nil
 	case "tool_calls", "function_call":
-		return "toolUse", nil
+		return llm.StopReasonToolUse, nil
 	case "content_filter":
 		return "", errors.New("OpenAI response was blocked by the content filter")
 	case "":

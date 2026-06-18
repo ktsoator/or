@@ -115,6 +115,22 @@ type Usage struct {
 	TotalTokens int64 `json:"totalTokens"`
 }
 
+// StopReason explains why the model stopped generating a response.
+type StopReason string
+
+const (
+	// StopReasonStop marks a normal completion.
+	StopReasonStop StopReason = "stop"
+	// StopReasonLength marks truncation by the max output token limit.
+	StopReasonLength StopReason = "length"
+	// StopReasonToolUse marks a stop to let the caller execute tool calls.
+	StopReasonToolUse StopReason = "toolUse"
+	// StopReasonError marks a provider or runtime failure.
+	StopReasonError StopReason = "error"
+	// StopReasonAborted marks a cancelled request.
+	StopReasonAborted StopReason = "aborted"
+)
+
 // AssistantMessage is the final or partial response returned by a provider.
 type AssistantMessage struct {
 	Content       []AssistantContent `json:"content"`
@@ -124,7 +140,7 @@ type AssistantMessage struct {
 	ResponseModel string             `json:"responseModel,omitempty"`
 	ResponseID    string             `json:"responseId,omitempty"`
 	Usage         Usage              `json:"usage"`
-	StopReason    string             `json:"stopReason"`
+	StopReason    StopReason         `json:"stopReason"`
 	ErrorMessage  string             `json:"errorMessage,omitempty"`
 	Timestamp     int64              `json:"timestamp"`
 }
