@@ -1,4 +1,4 @@
-package openaicompletions
+package openai
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/ktsoator/or/internal/llm"
-	openai "github.com/openai/openai-go/v3"
+	oai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/packages/respjson"
 	"github.com/openai/openai-go/v3/shared"
@@ -72,7 +72,7 @@ func (p *Provider) Stream(
 	if model.BaseURL != "" {
 		clientOptions = append(clientOptions, option.WithBaseURL(model.BaseURL))
 	}
-	client := openai.NewClient(clientOptions...)
+	client := oai.NewClient(clientOptions...)
 
 	events := make(chan llm.Event)
 	go func() {
@@ -81,7 +81,7 @@ func (p *Provider) Stream(
 		output := llm.AssistantMessage{Model: model.ID}
 		events <- llm.Event{Type: llm.EventStart, Partial: cloneAssistantMessage(output)}
 
-		params := openai.ChatCompletionNewParams{
+		params := oai.ChatCompletionNewParams{
 			Model:    model.ID,
 			Messages: messages,
 		}
@@ -164,10 +164,10 @@ func (p *Provider) Stream(
 	return events, nil
 }
 
-func convertMessages(input llm.Context) ([]openai.ChatCompletionMessageParamUnion, error) {
-	messages := make([]openai.ChatCompletionMessageParamUnion, 0, len(input.Messages)+1)
+func convertMessages(input llm.Context) ([]oai.ChatCompletionMessageParamUnion, error) {
+	messages := make([]oai.ChatCompletionMessageParamUnion, 0, len(input.Messages)+1)
 	if input.SystemPrompt != "" {
-		messages = append(messages, openai.SystemMessage(input.SystemPrompt))
+		messages = append(messages, oai.SystemMessage(input.SystemPrompt))
 	}
 
 	for _, message := range input.Messages {
@@ -177,7 +177,7 @@ func convertMessages(input llm.Context) ([]openai.ChatCompletionMessageParamUnio
 			if err != nil {
 				return nil, err
 			}
-			messages = append(messages, openai.UserMessage(text))
+			messages = append(messages, oai.UserMessage(text))
 		case llm.RoleAssistant:
 			assistant, err := convertAssistantMessage(message)
 			if err != nil {
@@ -186,7 +186,7 @@ func convertMessages(input llm.Context) ([]openai.ChatCompletionMessageParamUnio
 			if assistant == nil {
 				continue
 			}
-			messages = append(messages, openai.ChatCompletionMessageParamUnion{OfAssistant: assistant})
+			messages = append(messages, oai.ChatCompletionMessageParamUnion{OfAssistant: assistant})
 		case llm.RoleToolResult:
 			if message.ToolCallID == "" {
 				return nil, errors.New("tool result message is missing tool call ID")
@@ -195,7 +195,7 @@ func convertMessages(input llm.Context) ([]openai.ChatCompletionMessageParamUnio
 			if err != nil {
 				return nil, err
 			}
-			messages = append(messages, openai.ToolMessage(text, message.ToolCallID))
+			messages = append(messages, oai.ToolMessage(text, message.ToolCallID))
 		default:
 			return nil, fmt.Errorf("unsupported message role %q", message.Role)
 		}
@@ -208,8 +208,8 @@ func convertMessages(input llm.Context) ([]openai.ChatCompletionMessageParamUnio
 // calls, into an OpenAI assistant message param. It returns nil for an empty
 // message (no text and no tool calls), which the caller skips: some providers
 // reject assistant messages that carry neither content nor tool calls.
-func convertAssistantMessage(message llm.Message) (*openai.ChatCompletionAssistantMessageParam, error) {
-	assistant := &openai.ChatCompletionAssistantMessageParam{}
+func convertAssistantMessage(message llm.Message) (*oai.ChatCompletionAssistantMessageParam, error) {
+	assistant := &oai.ChatCompletionAssistantMessageParam{}
 	var text strings.Builder
 	var reasoning strings.Builder
 	for _, content := range message.Content {
@@ -222,10 +222,10 @@ func convertAssistantMessage(message llm.Message) (*openai.ChatCompletionAssista
 			if content.ToolCall == nil {
 				return nil, errors.New("assistant tool call content is missing tool call data")
 			}
-			assistant.ToolCalls = append(assistant.ToolCalls, openai.ChatCompletionMessageToolCallUnionParam{
-				OfFunction: &openai.ChatCompletionMessageFunctionToolCallParam{
+			assistant.ToolCalls = append(assistant.ToolCalls, oai.ChatCompletionMessageToolCallUnionParam{
+				OfFunction: &oai.ChatCompletionMessageFunctionToolCallParam{
 					ID: content.ToolCall.ID,
-					Function: openai.ChatCompletionMessageFunctionToolCallFunctionParam{
+					Function: oai.ChatCompletionMessageFunctionToolCallFunctionParam{
 						Name:      content.ToolCall.Name,
 						Arguments: content.ToolCall.Arguments,
 					},
@@ -238,7 +238,7 @@ func convertAssistantMessage(message llm.Message) (*openai.ChatCompletionAssista
 
 	hasText := false
 	if value := text.String(); value != "" {
-		assistant.Content.OfString = openai.String(value)
+		assistant.Content.OfString = oai.String(value)
 		hasText = true
 	}
 	if value := reasoning.String(); value != "" {
@@ -253,12 +253,12 @@ func convertAssistantMessage(message llm.Message) (*openai.ChatCompletionAssista
 }
 
 // convertTools maps tool definitions to OpenAI function tool params.
-func convertTools(tools []llm.ToolDefinition) ([]openai.ChatCompletionToolUnionParam, error) {
+func convertTools(tools []llm.ToolDefinition) ([]oai.ChatCompletionToolUnionParam, error) {
 	if len(tools) == 0 {
 		return nil, nil
 	}
 
-	converted := make([]openai.ChatCompletionToolUnionParam, 0, len(tools))
+	converted := make([]oai.ChatCompletionToolUnionParam, 0, len(tools))
 	for _, tool := range tools {
 		if tool.Name == "" {
 			return nil, errors.New("tool definition is missing a name")
@@ -266,7 +266,7 @@ func convertTools(tools []llm.ToolDefinition) ([]openai.ChatCompletionToolUnionP
 
 		function := shared.FunctionDefinitionParam{Name: tool.Name}
 		if tool.Description != "" {
-			function.Description = openai.String(tool.Description)
+			function.Description = oai.String(tool.Description)
 		}
 		if len(tool.Parameters) > 0 {
 			var parameters map[string]any
@@ -276,7 +276,7 @@ func convertTools(tools []llm.ToolDefinition) ([]openai.ChatCompletionToolUnionP
 			function.Parameters = parameters
 		}
 
-		converted = append(converted, openai.ChatCompletionFunctionTool(function))
+		converted = append(converted, oai.ChatCompletionFunctionTool(function))
 	}
 
 	return converted, nil
@@ -288,7 +288,7 @@ func convertTools(tools []llm.ToolDefinition) ([]openai.ChatCompletionToolUnionP
 func ensureAssistantToolCall(
 	message *llm.AssistantMessage,
 	byIndex map[int64]*llm.ToolCall,
-	delta openai.ChatCompletionChunkChoiceDeltaToolCall,
+	delta oai.ChatCompletionChunkChoiceDeltaToolCall,
 ) *llm.ToolCall {
 	block, ok := byIndex[delta.Index]
 	if !ok {

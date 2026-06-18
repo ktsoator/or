@@ -1,4 +1,4 @@
-package openaicompletions
+package openai
 
 import (
 	"context"
