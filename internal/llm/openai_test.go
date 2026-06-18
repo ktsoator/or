@@ -116,9 +116,10 @@ func TestOpenAIProviderStreamsToolCall(t *testing.T) {
 				} `json:"function"`
 			} `json:"tools"`
 			Messages []struct {
-				Role       string `json:"role"`
-				ToolCallID string `json:"tool_call_id"`
-				ToolCalls  []struct {
+				Role             string `json:"role"`
+				ReasoningContent string `json:"reasoning_content"`
+				ToolCallID       string `json:"tool_call_id"`
+				ToolCalls        []struct {
 					ID       string `json:"id"`
 					Function struct {
 						Name      string `json:"name"`
@@ -138,6 +139,9 @@ func TestOpenAIProviderStreamsToolCall(t *testing.T) {
 		var foundToolCall, foundToolResult bool
 		for _, message := range request.Messages {
 			if message.Role == "assistant" && len(message.ToolCalls) == 1 {
+				if message.ReasoningContent != "I should call get_weather." {
+					t.Errorf("unexpected assistant reasoning content: %q", message.ReasoningContent)
+				}
 				call := message.ToolCalls[0]
 				if call.ID != "call_1" || call.Function.Name != "get_weather" || call.Function.Arguments != `{"city":"Paris"}` {
 					t.Errorf("unexpected assistant tool call: %#v", call)
@@ -175,9 +179,12 @@ func TestOpenAIProviderStreamsToolCall(t *testing.T) {
 			}},
 			Messages: []Message{
 				{Role: RoleUser, Content: []Content{{Type: ContentText, Text: "Weather in Paris?"}}},
-				{Role: RoleAssistant, Content: []Content{{Type: ContentToolCall, ToolCall: &ToolCall{
-					ID: "call_1", Name: "get_weather", Arguments: `{"city":"Paris"}`,
-				}}}},
+				{Role: RoleAssistant, Content: []Content{
+					{Type: ContentThinking, Thinking: "I should call get_weather."},
+					{Type: ContentToolCall, ToolCall: &ToolCall{
+						ID: "call_1", Name: "get_weather", Arguments: `{"city":"Paris"}`,
+					}},
+				}},
 				{Role: RoleToolResult, ToolCallID: "call_1", ToolName: "get_weather", Content: []Content{
 					{Type: ContentText, Text: "Sunny, 20C"},
 				}},

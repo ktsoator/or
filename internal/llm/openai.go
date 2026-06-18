@@ -210,12 +210,13 @@ func convertOpenAIMessages(input Context) ([]openai.ChatCompletionMessageParamUn
 func convertAssistantMessage(message Message) (*openai.ChatCompletionAssistantMessageParam, error) {
 	assistant := &openai.ChatCompletionAssistantMessageParam{}
 	var text strings.Builder
+	var reasoning strings.Builder
 	for _, content := range message.Content {
 		switch content.Type {
 		case ContentText:
 			text.WriteString(content.Text)
 		case ContentThinking:
-			// Reasoning is not replayed to the OpenAI completions API.
+			reasoning.WriteString(content.Thinking)
 		case ContentToolCall:
 			if content.ToolCall == nil {
 				return nil, errors.New("assistant tool call content is missing tool call data")
@@ -238,6 +239,11 @@ func convertAssistantMessage(message Message) (*openai.ChatCompletionAssistantMe
 	if value := text.String(); value != "" {
 		assistant.Content.OfString = openai.String(value)
 		hasText = true
+	}
+	if value := reasoning.String(); value != "" {
+		assistant.SetExtraFields(map[string]any{
+			"reasoning_content": value,
+		})
 	}
 	if !hasText && len(assistant.ToolCalls) == 0 {
 		return nil, nil
