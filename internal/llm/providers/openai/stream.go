@@ -11,6 +11,208 @@ import (
 	"github.com/openai/openai-go/v3/packages/respjson"
 )
 
+// streamState owns all mutable data accumulated while consuming one provider
+// response. Keeping it separate from Adapter.Stream makes the public entry point
+// responsible only for validation and request construction.
+type streamState struct {
+	model  llm.Model
+	output llm.AssistantMessage
+
+	toolCallsByIndex map[int64]*llm.ToolCall
+	toolCallsByID    map[string]*llm.ToolCall
+	toolArgumentJSON map[*llm.ToolCall]string
+
+	finishReason string
+	started      bool
+}
+
+func newStreamState(model llm.Model) *streamState {
+	return &streamState{
+		model:            model,
+		output:           llm.NewAssistantMessage(model),
+		toolCallsByIndex: make(map[int64]*llm.ToolCall),
+		toolCallsByID:    make(map[string]*llm.ToolCall),
+		toolArgumentJSON: make(map[*llm.ToolCall]string),
+	}
+}
+
+// consumeStream owns the SDK stream and guarantees exactly one terminal event
+// before closing events: done for a successful response or error for a failure.
+func consumeStream(
+	ctx context.Context,
+	client oai.Client,
+	params oai.ChatCompletionNewParams,
+	model llm.Model,
+	events chan<- llm.Event,
+) {
+	defer close(events)
+
+	state := newStreamState(model)
+	stream := client.Chat.Completions.NewStreaming(ctx, params)
+	defer stream.Close()
+
+	for stream.Next() {
+		if !state.started {
+			state.started = true
+			events <- llm.Event{Type: llm.EventStart, Partial: cloneAssistantMessage(state.output)}
+		}
+		if err := state.processChunk(stream.Current(), events); err != nil {
+			emitError(events, state.output, ctx, err)
+			return
+		}
+	}
+
+	if err := stream.Err(); err != nil {
+		emitError(events, state.output, ctx, err)
+		return
+	}
+	if err := state.finish(events); err != nil {
+		emitError(events, state.output, ctx, err)
+	}
+}
+
+// processChunk merges one provider chunk into the partial assistant message and
+// emits the corresponding delta events.
+func (state *streamState) processChunk(chunk oai.ChatCompletionChunk, events chan<- llm.Event) error {
+	if state.output.ResponseID == "" {
+		state.output.ResponseID = chunk.ID
+	}
+	if state.output.ResponseModel == "" && chunk.Model != "" && chunk.Model != state.model.ID {
+		state.output.ResponseModel = chunk.Model
+	}
+	if chunk.JSON.Usage.Valid() {
+		state.output.Usage = usageFrom(chunk.Usage, state.model)
+	}
+	if len(chunk.Choices) == 0 {
+		return nil
+	}
+
+	choice := chunk.Choices[0]
+	// Moonshot and a few compatible providers report usage inside choice rather
+	// than in the standard top-level chunk field.
+	if !chunk.JSON.Usage.Valid() {
+		usage, ok, err := usageFromExtra(choice.JSON.ExtraFields, "usage", state.model)
+		if err != nil {
+			return err
+		}
+		if ok {
+			state.output.Usage = usage
+		}
+	}
+
+	reasoningDelta, err := extraReasoning(choice.Delta.JSON.ExtraFields)
+	if err != nil {
+		return err
+	}
+	if reasoningDelta != "" {
+		content, contentIndex, started := ensureAssistantThinking(&state.output)
+		if started {
+			events <- llm.Event{
+				Type:         llm.EventThinkingStart,
+				ContentIndex: contentIndex,
+				Partial:      cloneAssistantMessage(state.output),
+			}
+		}
+		content.Thinking += reasoningDelta
+		events <- llm.Event{
+			Type:         llm.EventThinkingDelta,
+			ContentIndex: contentIndex,
+			Delta:        reasoningDelta,
+			Partial:      cloneAssistantMessage(state.output),
+		}
+	}
+
+	if choice.Delta.Content != "" {
+		content, contentIndex, started := ensureAssistantText(&state.output)
+		if started {
+			events <- llm.Event{
+				Type:         llm.EventTextStart,
+				ContentIndex: contentIndex,
+				Partial:      cloneAssistantMessage(state.output),
+			}
+		}
+		content.Text += choice.Delta.Content
+		events <- llm.Event{
+			Type:         llm.EventTextDelta,
+			ContentIndex: contentIndex,
+			Delta:        choice.Delta.Content,
+			Partial:      cloneAssistantMessage(state.output),
+		}
+	}
+
+	for _, toolDelta := range choice.Delta.ToolCalls {
+		block, contentIndex, started := ensureAssistantToolCall(
+			&state.output,
+			state.toolCallsByIndex,
+			state.toolCallsByID,
+			toolDelta,
+		)
+		if started {
+			events <- llm.Event{
+				Type:         llm.EventToolCallStart,
+				ContentIndex: contentIndex,
+				ToolCall:     cloneToolCall(block),
+				Partial:      cloneAssistantMessage(state.output),
+			}
+		}
+		if toolDelta.Function.Arguments != "" {
+			state.toolArgumentJSON[block] += toolDelta.Function.Arguments
+		}
+		events <- llm.Event{
+			Type:         llm.EventToolCallDelta,
+			ContentIndex: contentIndex,
+			Delta:        toolDelta.Function.Arguments,
+			ToolCall:     cloneToolCall(block),
+			Partial:      cloneAssistantMessage(state.output),
+		}
+	}
+
+	if choice.FinishReason != "" {
+		state.finishReason = choice.FinishReason
+	}
+	return nil
+}
+
+// finish validates the provider finish reason, finalizes tool-call arguments,
+// emits one end event per content block, and then emits the final done event.
+func (state *streamState) finish(events chan<- llm.Event) error {
+	stopReason, err := mapStopReason(state.finishReason)
+	if err != nil {
+		return err
+	}
+	state.output.StopReason = stopReason
+
+	for contentIndex, rawContent := range state.output.Content {
+		switch content := rawContent.(type) {
+		case *llm.TextContent:
+			events <- llm.Event{
+				Type:         llm.EventTextEnd,
+				ContentIndex: contentIndex,
+				Content:      content.Text,
+				Partial:      cloneAssistantMessage(state.output),
+			}
+		case *llm.ThinkingContent:
+			events <- llm.Event{
+				Type:         llm.EventThinkingEnd,
+				ContentIndex: contentIndex,
+				Content:      content.Thinking,
+				Partial:      cloneAssistantMessage(state.output),
+			}
+		case *llm.ToolCall:
+			content.Arguments = parseToolArguments(state.toolArgumentJSON[content])
+			events <- llm.Event{
+				Type:         llm.EventToolCallEnd,
+				ContentIndex: contentIndex,
+				ToolCall:     cloneToolCall(content),
+				Partial:      cloneAssistantMessage(state.output),
+			}
+		}
+	}
+
+	events <- llm.Event{Type: llm.EventDone, Message: cloneAssistantMessage(state.output)}
+	return nil
+}
+
 // ensureAssistantToolCall finds or creates the streaming tool call block for a
 // delta, appending a new block to the message content on first sight and
 // backfilling the id and name as they arrive across chunks. It tracks blocks by
