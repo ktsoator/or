@@ -41,14 +41,12 @@ func (a *Adapter) Stream(
 		)
 	}
 
-	events := make(chan llm.Event, 4)
+	events := make(chan llm.Event, 6)
 
 	go func() {
 		defer close(events)
 
-		partial := llm.AssistantMessage{
-			Model: model.ID,
-		}
+		partial := llm.NewAssistantMessage(model)
 
 		events <- llm.Event{
 			Type:    llm.EventStart,
@@ -57,10 +55,9 @@ func (a *Adapter) Stream(
 
 		select {
 		case <-ctx.Done():
-			failed := llm.AssistantMessage{
-				Model:      model.ID,
-				StopReason: "aborted",
-			}
+			failed := llm.NewAssistantMessage(model)
+			failed.StopReason = "aborted"
+			failed.ErrorMessage = ctx.Err().Error()
 
 			events <- llm.Event{
 				Type:    llm.EventError,
@@ -72,21 +69,32 @@ func (a *Adapter) Stream(
 		default:
 		}
 
-		partial = llm.AssistantMessage{
-			Model: model.ID,
-			Content: []llm.AssistantContent{
-				&llm.TextContent{Text: a.response},
-			},
-		}
+		textStart := partial
+		textStart.Content = []llm.AssistantContent{&llm.TextContent{}}
 
 		events <- llm.Event{
-			Type:    llm.EventTextDelta,
-			Delta:   a.response,
-			Partial: &partial,
+			Type:         llm.EventTextStart,
+			ContentIndex: 0,
+			Partial:      &textStart,
+		}
+
+		partial.Content = []llm.AssistantContent{&llm.TextContent{Text: a.response}}
+
+		events <- llm.Event{
+			Type:         llm.EventTextDelta,
+			ContentIndex: 0,
+			Delta:        a.response,
+			Partial:      &partial,
 		}
 
 		finalMessage := partial
 		finalMessage.StopReason = "stop"
+		events <- llm.Event{
+			Type:         llm.EventTextEnd,
+			ContentIndex: 0,
+			Content:      a.response,
+			Partial:      &finalMessage,
+		}
 
 		events <- llm.Event{
 			Type:    llm.EventDone,

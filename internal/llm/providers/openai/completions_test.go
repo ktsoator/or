@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
@@ -23,7 +24,10 @@ func TestOpenAIProviderStreamsText(t *testing.T) {
 		}
 
 		var request struct {
-			Model    string `json:"model"`
+			Model         string `json:"model"`
+			StreamOptions struct {
+				IncludeUsage bool `json:"include_usage"`
+			} `json:"stream_options"`
 			Messages []struct {
 				Role    string `json:"role"`
 				Content string `json:"content"`
@@ -35,15 +39,18 @@ func TestOpenAIProviderStreamsText(t *testing.T) {
 		if request.Model != "test-model" {
 			t.Errorf("unexpected model: %q", request.Model)
 		}
+		if !request.StreamOptions.IncludeUsage {
+			t.Error("stream usage was not requested")
+		}
 		if len(request.Messages) != 2 || request.Messages[0].Role != "system" || request.Messages[1].Role != "user" {
 			t.Errorf("unexpected messages: %#v", request.Messages)
 		}
 
 		w.Header().Set("Content-Type", "text/event-stream")
-		fmt.Fprint(w, "data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"test-model\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\"think \"},\"finish_reason\":null}]}\n\n")
-		fmt.Fprint(w, "data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"test-model\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"carefully\",\"content\":\"hello \"},\"finish_reason\":null}]}\n\n")
-		fmt.Fprint(w, "data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"test-model\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"world\"},\"finish_reason\":null}]}\n\n")
-		fmt.Fprint(w, "data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"test-model\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
+		fmt.Fprint(w, "data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"response-model\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\"think \"},\"finish_reason\":null}]}\n\n")
+		fmt.Fprint(w, "data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"response-model\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"carefully\",\"content\":\"hello \"},\"finish_reason\":null}]}\n\n")
+		fmt.Fprint(w, "data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"response-model\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"world\"},\"finish_reason\":null}]}\n\n")
+		fmt.Fprint(w, "data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"response-model\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":5,\"total_tokens\":17,\"prompt_tokens_details\":{\"cached_tokens\":2}}}\n\n")
 		fmt.Fprint(w, "data: [DONE]\n\n")
 	}))
 	defer server.Close()
@@ -75,13 +82,45 @@ func TestOpenAIProviderStreamsText(t *testing.T) {
 
 	var deltas string
 	var thinkingDeltas string
+	var eventTypes []llm.EventType
 	var message *llm.AssistantMessage
 	for event := range events {
+		eventTypes = append(eventTypes, event.Type)
 		switch event.Type {
+		case llm.EventTextStart:
+			if event.Partial == nil || event.ContentIndex >= len(event.Partial.Content) {
+				t.Fatalf("unexpected text start partial: %#v", event.Partial)
+			}
+			content, ok := event.Partial.Content[event.ContentIndex].(*llm.TextContent)
+			if !ok || content.Text != "" {
+				t.Fatalf("unexpected text start partial: %#v", event.Partial)
+			}
 		case llm.EventTextDelta:
+			if event.ContentIndex != 1 {
+				t.Fatalf("text content index = %d, want 1", event.ContentIndex)
+			}
 			deltas += event.Delta
 		case llm.EventThinkingDelta:
+			if event.ContentIndex != 0 {
+				t.Fatalf("thinking content index = %d, want 0", event.ContentIndex)
+			}
 			thinkingDeltas += event.Delta
+		case llm.EventThinkingStart:
+			if event.Partial == nil || event.ContentIndex >= len(event.Partial.Content) {
+				t.Fatalf("unexpected thinking start partial: %#v", event.Partial)
+			}
+			content, ok := event.Partial.Content[event.ContentIndex].(*llm.ThinkingContent)
+			if !ok || content.Thinking != "" {
+				t.Fatalf("unexpected thinking start partial: %#v", event.Partial)
+			}
+		case llm.EventTextEnd:
+			if event.ContentIndex != 1 || event.Content != "hello world" {
+				t.Fatalf("unexpected text end event: %#v", event)
+			}
+		case llm.EventThinkingEnd:
+			if event.ContentIndex != 0 || event.Content != "think carefully" {
+				t.Fatalf("unexpected thinking end event: %#v", event)
+			}
 		case llm.EventDone:
 			message = event.Message
 		case llm.EventError:
@@ -94,11 +133,38 @@ func TestOpenAIProviderStreamsText(t *testing.T) {
 	if thinkingDeltas != "think carefully" {
 		t.Fatalf("unexpected thinking deltas: %q", thinkingDeltas)
 	}
+	wantEventTypes := []llm.EventType{
+		llm.EventStart,
+		llm.EventThinkingStart,
+		llm.EventThinkingDelta,
+		llm.EventThinkingDelta,
+		llm.EventTextStart,
+		llm.EventTextDelta,
+		llm.EventTextDelta,
+		llm.EventThinkingEnd,
+		llm.EventTextEnd,
+		llm.EventDone,
+	}
+	if !slices.Equal(eventTypes, wantEventTypes) {
+		t.Fatalf("event types = %v, want %v", eventTypes, wantEventTypes)
+	}
 	if message == nil {
 		t.Fatal("stream did not emit a final message")
 	}
 	if message.StopReason != "stop" {
 		t.Fatalf("unexpected stop reason: %q", message.StopReason)
+	}
+	if message.Protocol != llm.ProtocolOpenAICompletions || message.Provider != "openai" || message.Model != "test-model" {
+		t.Fatalf("unexpected response identity: %#v", message)
+	}
+	if message.ResponseID != "chatcmpl-1" || message.ResponseModel != "response-model" {
+		t.Fatalf("unexpected provider response metadata: %#v", message)
+	}
+	if message.Timestamp == 0 {
+		t.Fatal("response timestamp was not set")
+	}
+	if message.Usage.Input != 10 || message.Usage.Output != 5 || message.Usage.CacheRead != 2 || message.Usage.TotalTokens != 17 {
+		t.Fatalf("unexpected usage: %#v", message.Usage)
 	}
 	if len(message.Content) != 2 {
 		t.Fatalf("unexpected response content: %#v", message.Content)
@@ -273,11 +339,20 @@ func TestOpenAIProviderStreamsToolCall(t *testing.T) {
 	}
 
 	var ended *llm.ToolCall
+	var started *llm.ToolCall
 	var message *llm.AssistantMessage
 	for event := range events {
 		switch event.Type {
+		case llm.EventToolCallStart:
+			started = event.ToolCall
+			if event.ContentIndex != 0 {
+				t.Fatalf("tool call start content index = %d, want 0", event.ContentIndex)
+			}
 		case llm.EventToolCallEnd:
 			ended = event.ToolCall
+			if event.ContentIndex != 0 {
+				t.Fatalf("tool call end content index = %d, want 0", event.ContentIndex)
+			}
 		case llm.EventDone:
 			message = event.Message
 		case llm.EventError:
@@ -285,8 +360,11 @@ func TestOpenAIProviderStreamsToolCall(t *testing.T) {
 		}
 	}
 
-	if ended == nil {
+	if started == nil || ended == nil {
 		t.Fatal("stream did not emit a tool call end event")
+	}
+	if started.Arguments != "" {
+		t.Fatalf("tool call start contains arguments: %#v", started)
 	}
 	if ended.ID != "call_2" || ended.Name != "get_weather" || ended.Arguments != `{"city":"Paris"}` {
 		t.Fatalf("unexpected completed tool call: %#v", ended)
@@ -354,6 +432,9 @@ func TestOpenAIProviderCancellation(t *testing.T) {
 		}
 		if event.Message == nil || event.Message.StopReason != "aborted" {
 			t.Fatalf("unexpected cancellation message: %#v", event.Message)
+		}
+		if event.Message.ErrorMessage == "" {
+			t.Fatal("cancellation message is missing error metadata")
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for cancellation event")

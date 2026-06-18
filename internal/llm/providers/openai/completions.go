@@ -72,12 +72,15 @@ func (a *Adapter) Stream(
 	go func() {
 		defer close(events)
 
-		output := llm.AssistantMessage{Model: model.ID}
+		output := llm.NewAssistantMessage(model)
 		events <- llm.Event{Type: llm.EventStart, Partial: cloneAssistantMessage(output)}
 
 		params := oai.ChatCompletionNewParams{
 			Model:    model.ID,
 			Messages: messages,
+			StreamOptions: oai.ChatCompletionStreamOptionsParam{
+				IncludeUsage: oai.Bool(true),
+			},
 		}
 		if len(tools) > 0 {
 			params.Tools = tools
@@ -89,6 +92,15 @@ func (a *Adapter) Stream(
 		finishReason := ""
 		for stream.Next() {
 			chunk := stream.Current()
+			if output.ResponseID == "" {
+				output.ResponseID = chunk.ID
+			}
+			if output.ResponseModel == "" && chunk.Model != "" && chunk.Model != model.ID {
+				output.ResponseModel = chunk.Model
+			}
+			if chunk.JSON.Usage.Valid() {
+				output.Usage = parseUsage(chunk)
+			}
 			if len(chunk.Choices) == 0 {
 				continue
 			}
@@ -100,31 +112,58 @@ func (a *Adapter) Stream(
 				return
 			}
 			if reasoningDelta != "" {
-				appendAssistantThinking(&output, reasoningDelta)
+				content, contentIndex, started := ensureAssistantThinking(&output)
+				if started {
+					events <- llm.Event{
+						Type:         llm.EventThinkingStart,
+						ContentIndex: contentIndex,
+						Partial:      cloneAssistantMessage(output),
+					}
+				}
+				content.Thinking += reasoningDelta
 				events <- llm.Event{
-					Type:    llm.EventThinkingDelta,
-					Delta:   reasoningDelta,
-					Partial: cloneAssistantMessage(output),
+					Type:         llm.EventThinkingDelta,
+					ContentIndex: contentIndex,
+					Delta:        reasoningDelta,
+					Partial:      cloneAssistantMessage(output),
 				}
 			}
 			if choice.Delta.Content != "" {
-				appendAssistantText(&output, choice.Delta.Content)
+				content, contentIndex, started := ensureAssistantText(&output)
+				if started {
+					events <- llm.Event{
+						Type:         llm.EventTextStart,
+						ContentIndex: contentIndex,
+						Partial:      cloneAssistantMessage(output),
+					}
+				}
+				content.Text += choice.Delta.Content
 				events <- llm.Event{
-					Type:    llm.EventTextDelta,
-					Delta:   choice.Delta.Content,
-					Partial: cloneAssistantMessage(output),
+					Type:         llm.EventTextDelta,
+					ContentIndex: contentIndex,
+					Delta:        choice.Delta.Content,
+					Partial:      cloneAssistantMessage(output),
 				}
 			}
 			for _, toolDelta := range choice.Delta.ToolCalls {
-				block := ensureAssistantToolCall(&output, toolCallsByIndex, toolDelta)
+				block, contentIndex, started := ensureAssistantToolCall(&output, toolCallsByIndex, toolDelta)
+				if started {
+					events <- llm.Event{
+						Type:         llm.EventToolCallStart,
+						ContentIndex: contentIndex,
+						ToolCall:     cloneToolCall(block),
+						Partial:      cloneAssistantMessage(output),
+					}
+				}
 				if toolDelta.Function.Arguments != "" {
 					block.Arguments += toolDelta.Function.Arguments
 				}
 				events <- llm.Event{
-					Type:     llm.EventToolCallDelta,
-					Delta:    toolDelta.Function.Arguments,
-					ToolCall: cloneToolCall(block),
-					Partial:  cloneAssistantMessage(output),
+					Type:         llm.EventToolCallDelta,
+					ContentIndex: contentIndex,
+					Delta:        toolDelta.Function.Arguments,
+					ToolCall:     cloneToolCall(block),
+					Partial:      cloneAssistantMessage(output),
 				}
 			}
 			if choice.FinishReason != "" {
@@ -143,12 +182,28 @@ func (a *Adapter) Stream(
 			return
 		}
 		output.StopReason = stopReason
-		for _, content := range output.Content {
-			if toolCall, ok := content.(*llm.ToolCall); ok && toolCall != nil {
+		for contentIndex, rawContent := range output.Content {
+			switch content := rawContent.(type) {
+			case *llm.TextContent:
 				events <- llm.Event{
-					Type:     llm.EventToolCallEnd,
-					ToolCall: cloneToolCall(toolCall),
-					Partial:  cloneAssistantMessage(output),
+					Type:         llm.EventTextEnd,
+					ContentIndex: contentIndex,
+					Content:      content.Text,
+					Partial:      cloneAssistantMessage(output),
+				}
+			case *llm.ThinkingContent:
+				events <- llm.Event{
+					Type:         llm.EventThinkingEnd,
+					ContentIndex: contentIndex,
+					Content:      content.Thinking,
+					Partial:      cloneAssistantMessage(output),
+				}
+			case *llm.ToolCall:
+				events <- llm.Event{
+					Type:         llm.EventToolCallEnd,
+					ContentIndex: contentIndex,
+					ToolCall:     cloneToolCall(content),
+					Partial:      cloneAssistantMessage(output),
 				}
 			}
 		}

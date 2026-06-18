@@ -6,10 +6,20 @@ type EventType string
 const (
 	// EventStart marks the beginning of a provider stream.
 	EventStart EventType = "start"
+	// EventTextStart marks the creation of a text content block.
+	EventTextStart EventType = "text_start"
 	// EventTextDelta carries newly generated text.
 	EventTextDelta EventType = "text_delta"
+	// EventTextEnd carries the completed text content block.
+	EventTextEnd EventType = "text_end"
+	// EventThinkingStart marks the creation of a reasoning content block.
+	EventThinkingStart EventType = "thinking_start"
 	// EventThinkingDelta carries newly generated reasoning content.
 	EventThinkingDelta EventType = "thinking_delta"
+	// EventThinkingEnd carries the completed reasoning content block.
+	EventThinkingEnd EventType = "thinking_end"
+	// EventToolCallStart marks the creation of a tool call content block.
+	EventToolCallStart EventType = "toolcall_start"
 	// EventToolCallDelta carries a fragment of a tool call's arguments as it streams.
 	EventToolCallDelta EventType = "toolcall_delta"
 	// EventToolCallEnd carries a completed tool call request.
@@ -24,7 +34,11 @@ const (
 type Event struct {
 	Type EventType
 
+	ContentIndex int
+
 	Delta string
+
+	Content string
 
 	ToolCall *ToolCall
 

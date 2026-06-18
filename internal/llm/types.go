@@ -1,6 +1,9 @@
 package llm
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Protocol identifies the API protocol used to communicate with a model.
 type Protocol string
@@ -103,11 +106,37 @@ type Model struct {
 	BaseURL  string   `json:"baseUrl"`
 }
 
+// Usage records token consumption for one assistant response.
+type Usage struct {
+	Input       int64 `json:"input"`
+	Output      int64 `json:"output"`
+	CacheRead   int64 `json:"cacheRead"`
+	CacheWrite  int64 `json:"cacheWrite"`
+	TotalTokens int64 `json:"totalTokens"`
+}
+
 // AssistantMessage is the final or partial response returned by a provider.
 type AssistantMessage struct {
-	Content    []AssistantContent `json:"content"`
-	Model      string             `json:"model"`
-	StopReason string             `json:"stopReason"`
+	Content       []AssistantContent `json:"content"`
+	Protocol      Protocol           `json:"protocol"`
+	Provider      string             `json:"provider"`
+	Model         string             `json:"model"`
+	ResponseModel string             `json:"responseModel,omitempty"`
+	ResponseID    string             `json:"responseId,omitempty"`
+	Usage         Usage              `json:"usage"`
+	StopReason    string             `json:"stopReason"`
+	ErrorMessage  string             `json:"errorMessage,omitempty"`
+	Timestamp     int64              `json:"timestamp"`
 }
 
 func (*AssistantMessage) isMessage() {}
+
+// NewAssistantMessage initializes provider-independent response metadata.
+func NewAssistantMessage(model Model) AssistantMessage {
+	return AssistantMessage{
+		Protocol:  model.Protocol,
+		Provider:  model.Provider,
+		Model:     model.ID,
+		Timestamp: time.Now().UnixMilli(),
+	}
+}

@@ -18,8 +18,9 @@ func ensureAssistantToolCall(
 	message *llm.AssistantMessage,
 	byIndex map[int64]*llm.ToolCall,
 	delta oai.ChatCompletionChunkChoiceDeltaToolCall,
-) *llm.ToolCall {
+) (*llm.ToolCall, int, bool) {
 	block, ok := byIndex[delta.Index]
+	started := !ok
 	if !ok {
 		block = &llm.ToolCall{ID: delta.ID, Name: delta.Function.Name}
 		byIndex[delta.Index] = block
@@ -31,27 +32,38 @@ func ensureAssistantToolCall(
 	if block.Name == "" && delta.Function.Name != "" {
 		block.Name = delta.Function.Name
 	}
-	return block
+	return block, assistantContentIndex(message.Content, block), started
 }
 
-func appendAssistantText(message *llm.AssistantMessage, delta string) {
-	for _, rawContent := range message.Content {
+func ensureAssistantText(message *llm.AssistantMessage) (*llm.TextContent, int, bool) {
+	for i, rawContent := range message.Content {
 		if content, ok := rawContent.(*llm.TextContent); ok && content != nil {
-			content.Text += delta
-			return
+			return content, i, false
 		}
 	}
-	message.Content = append(message.Content, &llm.TextContent{Text: delta})
+	content := &llm.TextContent{}
+	message.Content = append(message.Content, content)
+	return content, len(message.Content) - 1, true
 }
 
-func appendAssistantThinking(message *llm.AssistantMessage, delta string) {
-	for _, rawContent := range message.Content {
+func ensureAssistantThinking(message *llm.AssistantMessage) (*llm.ThinkingContent, int, bool) {
+	for i, rawContent := range message.Content {
 		if content, ok := rawContent.(*llm.ThinkingContent); ok && content != nil {
-			content.Thinking += delta
-			return
+			return content, i, false
 		}
 	}
-	message.Content = append(message.Content, &llm.ThinkingContent{Thinking: delta})
+	content := &llm.ThinkingContent{}
+	message.Content = append(message.Content, content)
+	return content, len(message.Content) - 1, true
+}
+
+func assistantContentIndex(content []llm.AssistantContent, target llm.AssistantContent) int {
+	for i, candidate := range content {
+		if candidate == target {
+			return i
+		}
+	}
+	return -1
 }
 
 func cloneAssistantMessage(message llm.AssistantMessage) *llm.AssistantMessage {
@@ -91,7 +103,20 @@ func emitError(events chan<- llm.Event, output llm.AssistantMessage, ctx context
 	} else {
 		output.StopReason = "error"
 	}
+	output.ErrorMessage = err.Error()
 	events <- llm.Event{Type: llm.EventError, Message: cloneAssistantMessage(output), Err: err}
+}
+
+func parseUsage(chunk oai.ChatCompletionChunk) llm.Usage {
+	usage := chunk.Usage
+	cacheRead := usage.PromptTokensDetails.CachedTokens
+	input := max(0, usage.PromptTokens-cacheRead)
+	return llm.Usage{
+		Input:       input,
+		Output:      usage.CompletionTokens,
+		CacheRead:   cacheRead,
+		TotalTokens: input + usage.CompletionTokens + cacheRead,
+	}
 }
 
 func extraString(fields map[string]respjson.Field, name string) (string, error) {
