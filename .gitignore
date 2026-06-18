@@ -27,6 +27,12 @@ go.work.sum
 # env file
 .env
 
+# macOS
+.DS_Store
+
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Local demo / scratch programs (self-testing, not committed)
+example/
