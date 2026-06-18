@@ -100,12 +100,13 @@ func (state *streamState) processChunk(chunk oai.ChatCompletionChunk, events cha
 		}
 	}
 
-	reasoningDelta, err := extraReasoning(choice.Delta.JSON.ExtraFields)
+	reasoningDelta, reasoningField, err := extraReasoning(choice.Delta.JSON.ExtraFields)
 	if err != nil {
 		return err
 	}
 	if reasoningDelta != "" {
-		content, contentIndex, started := ensureAssistantThinking(&state.output)
+		signature := reasoningSignature(state.model, reasoningField)
+		content, contentIndex, started := ensureAssistantThinking(&state.output, signature)
 		if started {
 			events <- llm.Event{
 				Type:         llm.EventThinkingStart,
@@ -271,15 +272,28 @@ func ensureAssistantText(message *llm.AssistantMessage) (*llm.TextContent, int, 
 	return content, len(message.Content) - 1, true
 }
 
-func ensureAssistantThinking(message *llm.AssistantMessage) (*llm.ThinkingContent, int, bool) {
+// ensureAssistantThinking returns the message's reasoning block, creating it on
+// first sight. signature records which provider field carried the reasoning so
+// it can be replayed under the same field on later turns.
+func ensureAssistantThinking(message *llm.AssistantMessage, signature string) (*llm.ThinkingContent, int, bool) {
 	for i, rawContent := range message.Content {
 		if content, ok := rawContent.(*llm.ThinkingContent); ok && content != nil {
 			return content, i, false
 		}
 	}
-	content := &llm.ThinkingContent{}
+	content := &llm.ThinkingContent{ThinkingSignature: signature}
 	message.Content = append(message.Content, content)
 	return content, len(message.Content) - 1, true
+}
+
+// reasoningSignature records the source field for a reasoning delta. opencode-go
+// streams reasoning under "reasoning" but replays it as "reasoning_content", so
+// it is normalized here to match the field accepted on the next turn.
+func reasoningSignature(model llm.Model, field string) string {
+	if model.Provider == "opencode-go" && field == "reasoning" {
+		return "reasoning_content"
+	}
+	return field
 }
 
 func assistantContentIndex(content []llm.AssistantContent, target llm.AssistantContent) int {
@@ -409,18 +423,19 @@ func usageFromExtra(fields map[string]respjson.Field, name string, model llm.Mod
 var reasoningFieldNames = []string{"reasoning_content", "reasoning", "reasoning_text"}
 
 // extraReasoning returns the first non-empty reasoning delta among the known
-// provider-specific field names.
-func extraReasoning(fields map[string]respjson.Field) (string, error) {
+// provider-specific field names, along with the field it came from so the
+// reasoning can be replayed under the same field.
+func extraReasoning(fields map[string]respjson.Field) (string, string, error) {
 	for _, name := range reasoningFieldNames {
 		value, err := extraString(fields, name)
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 		if value != "" {
-			return value, nil
+			return value, name, nil
 		}
 	}
-	return "", nil
+	return "", "", nil
 }
 
 func extraString(fields map[string]respjson.Field, name string) (string, error) {

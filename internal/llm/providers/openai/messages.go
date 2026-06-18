@@ -16,7 +16,7 @@ func convertMessages(
 	model llm.Model,
 	compat resolvedCompat,
 ) ([]oai.ChatCompletionMessageParamUnion, error) {
-	transformed := llm.TransformMessages(input.Messages, model)
+	transformed := llm.TransformMessages(input.Messages, model, toolCallIDNormalizer(model))
 	messages := make([]oai.ChatCompletionMessageParamUnion, 0, len(transformed)+1)
 	if input.SystemPrompt != "" {
 		if model.Reasoning && compat.supportsDeveloperRole {
@@ -79,6 +79,45 @@ func convertMessages(
 	}
 
 	return messages, nil
+}
+
+// toolCallIDNormalizer returns the rewrite applied to tool-call IDs when an
+// assistant turn from another model is replayed against this one. It collapses
+// the pipe-separated IDs the OpenAI Responses API emits ({call_id}|{long_id})
+// into a sanitized, length-limited call_id, and truncates over-long IDs for the
+// native OpenAI endpoint. Other providers keep their IDs unchanged.
+func toolCallIDNormalizer(model llm.Model) func(string) string {
+	return func(id string) string {
+		if index := strings.IndexByte(id, '|'); index >= 0 {
+			return truncateASCII(sanitizeToolCallID(id[:index]), 40)
+		}
+		if model.Provider == "openai" {
+			return truncateASCII(id, 40)
+		}
+		return id
+	}
+}
+
+// sanitizeToolCallID replaces any character outside the Anthropic-compatible set
+// [a-zA-Z0-9_-] with an underscore.
+func sanitizeToolCallID(id string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_', r == '-':
+			return r
+		default:
+			return '_'
+		}
+	}, id)
+}
+
+// truncateASCII caps an ASCII identifier at limit bytes. Tool-call IDs are ASCII,
+// so a byte slice never splits a multi-byte rune.
+func truncateASCII(id string, limit int) string {
+	if len(id) > limit {
+		return id[:limit]
+	}
+	return id
 }
 
 func convertUserMessage(message *llm.UserMessage) (*oai.ChatCompletionMessageParamUnion, error) {
@@ -186,6 +225,7 @@ func convertAssistantMessage(
 	assistant := &oai.ChatCompletionAssistantMessageParam{}
 	var text strings.Builder
 	var reasoning strings.Builder
+	reasoningSig := ""
 	for _, rawContent := range message.Content {
 		switch content := rawContent.(type) {
 		case *llm.TextContent:
@@ -196,6 +236,17 @@ func convertAssistantMessage(
 		case *llm.ThinkingContent:
 			if content == nil {
 				return nil, errors.New("assistant thinking content is nil")
+			}
+			// Skip empty reasoning and replay only what carries content. The first
+			// non-empty block's signature names the field this provider expects.
+			if strings.TrimSpace(content.Thinking) == "" {
+				continue
+			}
+			if reasoning.Len() > 0 {
+				reasoning.WriteString("\n")
+			}
+			if reasoningSig == "" {
+				reasoningSig = content.ThinkingSignature
 			}
 			reasoning.WriteString(content.Thinking)
 		case *llm.ToolCall:
@@ -225,11 +276,24 @@ func convertAssistantMessage(
 		assistant.Content.OfString = oai.String(value)
 		hasText = true
 	}
-	reasoningValue := reasoning.String()
-	if reasoningValue != "" || (compat.requiresReasoningContentOnAssistantMessages && model.Reasoning) {
-		assistant.SetExtraFields(map[string]any{
-			"reasoning_content": reasoningValue,
-		})
+	extras := map[string]any{}
+	// Replay reasoning only when its source field is known: a provider rejects
+	// reasoning sent under a field it does not expect, so unsigned reasoning is
+	// dropped rather than guessed.
+	if field := reasoningSignature(model, reasoningSig); field != "" {
+		if reasoningValue := reasoning.String(); reasoningValue != "" {
+			extras[field] = reasoningValue
+		}
+	}
+	// Some providers require every replayed assistant message to carry
+	// reasoning_content once reasoning is enabled, even when it is empty.
+	if compat.requiresReasoningContentOnAssistantMessages && model.Reasoning {
+		if _, ok := extras["reasoning_content"]; !ok {
+			extras["reasoning_content"] = ""
+		}
+	}
+	if len(extras) > 0 {
+		assistant.SetExtraFields(extras)
 	}
 	if !hasText && len(assistant.ToolCalls) == 0 {
 		return nil, nil

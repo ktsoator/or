@@ -1,6 +1,9 @@
 package llm
 
-import "slices"
+import (
+	"slices"
+	"strings"
+)
 
 const (
 	// These placeholders preserve the fact that visual information existed in
@@ -27,17 +30,145 @@ const (
 //
 // Shared transformations are applied in this order:
 //  1. Replace images with descriptive text when the target model is text-only.
-//  2. Drop assistant turns terminated by an error or cancellation because they
+//  2. Reconcile assistant turns produced by a different model: keep reasoning for
+//     the same model, downgrade it to text otherwise, and normalize tool-call
+//     identifiers via normalizeToolCallID when crossing providers.
+//  3. Drop assistant turns terminated by an error or cancellation because they
 //     may contain partial reasoning or half-streamed tool calls.
-//  3. Insert synthetic error results for tool calls with no matching result
+//  4. Insert synthetic error results for tool calls with no matching result
 //     before the conversation continues or ends.
+//
+// normalizeToolCallID rewrites a tool-call ID for the target provider; pass nil
+// to leave identifiers unchanged.
 //
 // The returned slice is new and this function does not mutate messages. Message
 // objects requiring no changes may still be shared with the input, so callers
 // should treat the input and result as immutable.
-func TransformMessages(messages []Message, model Model) []Message {
+func TransformMessages(messages []Message, model Model, normalizeToolCallID func(string) string) []Message {
 	transformed := downgradeUnsupportedImages(messages, model)
+	transformed = reconcileAssistantHistory(transformed, model, normalizeToolCallID)
 	return synthesizeOrphanedToolResults(transformed)
+}
+
+// reconcileAssistantHistory rewrites each assistant turn for the target model and
+// remaps the tool results that answer any renamed tool calls. Tool calls precede
+// their results in a transcript, so a single forward pass can record an ID change
+// on the assistant turn and apply it to later results.
+func reconcileAssistantHistory(messages []Message, model Model, normalizeToolCallID func(string) string) []Message {
+	idRemap := make(map[string]string)
+	result := make([]Message, 0, len(messages))
+	for _, message := range messages {
+		switch typed := message.(type) {
+		case *AssistantMessage:
+			if typed == nil {
+				result = append(result, message)
+				continue
+			}
+			result = append(result, reconcileAssistantMessage(typed, model, normalizeToolCallID, idRemap))
+		case *ToolResultMessage:
+			if typed != nil {
+				if newID, ok := idRemap[typed.ToolCallID]; ok && newID != typed.ToolCallID {
+					clone := *typed
+					clone.ToolCallID = newID
+					result = append(result, &clone)
+					continue
+				}
+			}
+			result = append(result, message)
+		default:
+			result = append(result, message)
+		}
+	}
+	return result
+}
+
+// reconcileAssistantMessage rewrites one assistant turn's content for the target
+// model. sameModel is true only when provider, protocol, and model id all match,
+// which is the condition for replaying model-specific reasoning and signatures.
+func reconcileAssistantMessage(
+	message *AssistantMessage,
+	model Model,
+	normalizeToolCallID func(string) string,
+	idRemap map[string]string,
+) Message {
+	sameModel := message.Provider == model.Provider &&
+		message.Protocol == model.Protocol &&
+		message.Model == model.ID
+
+	content := make([]AssistantContent, 0, len(message.Content))
+	for _, block := range message.Content {
+		switch typed := block.(type) {
+		case *ThinkingContent:
+			if kept := reconcileThinking(typed, sameModel); kept != nil {
+				content = append(content, kept)
+			}
+		case *TextContent:
+			if sameModel || typed == nil {
+				content = append(content, block)
+			} else {
+				// A text signature is only valid for its originating model.
+				content = append(content, &TextContent{Text: typed.Text})
+			}
+		case *ToolCall:
+			content = append(content, reconcileToolCall(typed, sameModel, normalizeToolCallID, idRemap))
+		default:
+			content = append(content, block)
+		}
+	}
+
+	clone := *message
+	clone.Content = content
+	return &clone
+}
+
+// reconcileThinking decides how a stored reasoning block is replayed. Redacted
+// reasoning is an opaque encrypted payload only the original model can consume.
+// A signed block is kept for the same model even when empty. Otherwise empty
+// reasoning is dropped, same-model reasoning is kept, and reasoning from another
+// model is downgraded to plain text so it survives without a valid signature.
+func reconcileThinking(content *ThinkingContent, sameModel bool) AssistantContent {
+	if content == nil {
+		return nil
+	}
+	if content.Redacted {
+		if sameModel {
+			return content
+		}
+		return nil
+	}
+	if sameModel && content.ThinkingSignature != "" {
+		return content
+	}
+	if strings.TrimSpace(content.Thinking) == "" {
+		return nil
+	}
+	if sameModel {
+		return content
+	}
+	return &TextContent{Text: content.Thinking}
+}
+
+// reconcileToolCall keeps a same-model tool call intact. Crossing models it drops
+// the provider-specific thought signature and, when a normalizer is supplied,
+// rewrites the call ID, recording the change so the matching result is remapped.
+func reconcileToolCall(
+	call *ToolCall,
+	sameModel bool,
+	normalizeToolCallID func(string) string,
+	idRemap map[string]string,
+) AssistantContent {
+	if call == nil || sameModel {
+		return call
+	}
+	clone := *call
+	clone.ThoughtSignature = ""
+	if normalizeToolCallID != nil {
+		if newID := normalizeToolCallID(call.ID); newID != call.ID {
+			idRemap[call.ID] = newID
+			clone.ID = newID
+		}
+	}
+	return &clone
 }
 
 // downgradeUnsupportedImages projects image-bearing user and tool-result
