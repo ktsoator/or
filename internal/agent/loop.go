@@ -226,7 +226,11 @@ func (l *loop) runTool(ctx context.Context, call *llm.ToolCall) (Result, bool) {
 	if !ok {
 		return errorResult(fmt.Sprintf("unknown tool: %q", call.Name)), true
 	}
-	result, err := tool.Execute(ctx, call.Arguments)
+	arguments, err := llm.ValidateToolArguments(tool.Definition(), *call)
+	if err != nil {
+		return errorResult(err.Error()), true
+	}
+	result, err := tool.Execute(ctx, arguments)
 	if err != nil {
 		return errorResult(err.Error()), true
 	}

@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // ValidateToolCall finds the tool named by the call and validates its arguments.
@@ -26,11 +28,14 @@ func ValidateToolCall(tools []ToolDefinition, toolCall ToolCall) (map[string]any
 // validates them. It returns the coerced arguments, or a detailed error naming
 // the failing fields. The original toolCall.Arguments are left unchanged.
 //
-// The coercion mirrors pi's coerceWithJsonSchema. The validation is a minimal
-// JSON Schema checker (type, required, properties, items, enum); pi delegates
-// the equivalent check to TypeBox.
+// The coercion mirrors pi's coerceWithJsonSchema. Validation covers the JSON
+// Schema features normally emitted for tool definitions, including composition
+// keywords and object, array, string, and numeric constraints.
 func ValidateToolArguments(tool ToolDefinition, toolCall ToolCall) (map[string]any, error) {
-	schema := parseSchema(tool.Parameters)
+	schema, err := parseSchema(tool.Parameters)
+	if err != nil {
+		return nil, fmt.Errorf("invalid schema for tool %q: %w", tool.Name, err)
+	}
 	if schema == nil {
 		// No schema to validate against; return arguments unchanged.
 		return toolCall.Arguments, nil
@@ -54,15 +59,18 @@ func ValidateToolArguments(tool ToolDefinition, toolCall ToolCall) (map[string]a
 	return arguments, nil
 }
 
-func parseSchema(raw json.RawMessage) map[string]any {
+func parseSchema(raw json.RawMessage) (map[string]any, error) {
 	if len(raw) == 0 {
-		return nil
+		return nil, nil
 	}
 	var schema map[string]any
-	if err := json.Unmarshal(raw, &schema); err != nil || schema == nil {
-		return nil
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		return nil, err
 	}
-	return schema
+	if schema == nil {
+		return nil, fmt.Errorf("schema must be a JSON object")
+	}
+	return schema, nil
 }
 
 // schemaTypes returns the declared JSON types of a schema. "type" may be a
@@ -292,8 +300,8 @@ func coerceWithUnionSchema(value any, schemas []map[string]any) any {
 	return value
 }
 
-// validateValue checks a value against a schema and returns one message per
-// problem. It covers type, required, properties, items, and enum.
+// validateValue checks a value against the JSON Schema features commonly used
+// by tool definitions and returns one message per problem.
 func validateValue(value any, schema map[string]any, path string) []string {
 	var problems []string
 
@@ -313,6 +321,40 @@ func validateValue(value any, schema map[string]any, path string) []string {
 		}
 	}
 
+	for _, nested := range schemaList(schema["allOf"]) {
+		problems = append(problems, validateValue(value, nested, path)...)
+	}
+	if variants := schemaList(schema["anyOf"]); len(variants) > 0 {
+		matched := false
+		for _, nested := range variants {
+			if len(validateValue(value, nested, path)) == 0 {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			problems = append(problems, formatProblem(path, "value does not match any anyOf schema"))
+		}
+	}
+	if variants := schemaList(schema["oneOf"]); len(variants) > 0 {
+		matches := 0
+		for _, nested := range variants {
+			if len(validateValue(value, nested, path)) == 0 {
+				matches++
+			}
+		}
+		if matches != 1 {
+			problems = append(problems, formatProblem(path, fmt.Sprintf("value must match exactly one oneOf schema (matched %d)", matches)))
+		}
+	}
+	if nested, ok := schema["not"].(map[string]any); ok && len(validateValue(value, nested, path)) == 0 {
+		problems = append(problems, formatProblem(path, "value matches a forbidden schema"))
+	}
+
+	if constant, present := schema["const"]; present && !reflect.DeepEqual(constant, value) {
+		problems = append(problems, formatProblem(path, "value does not match const"))
+	}
+
 	if enum, ok := schema["enum"].([]any); ok && len(enum) > 0 {
 		if !containsValue(enum, value) {
 			problems = append(problems, formatProblem(path, "value is not one of the allowed options"))
@@ -330,17 +372,105 @@ func validateValue(value any, schema map[string]any, path string) []string {
 				problems = append(problems, validateValue(propertyValue, propertySchema, joinPath(path, key))...)
 			}
 		}
+		properties := schemaMap(schema["properties"])
+		for key, propertyValue := range object {
+			if _, defined := properties[key]; defined {
+				continue
+			}
+			switch additional := schema["additionalProperties"].(type) {
+			case bool:
+				if !additional {
+					problems = append(problems, formatProblem(joinPath(path, key), "additional property is not allowed"))
+				}
+			case map[string]any:
+				problems = append(problems, validateValue(propertyValue, additional, joinPath(path, key))...)
+			}
+		}
+		if minimum, ok := schemaNumber(schema["minProperties"]); ok && float64(len(object)) < minimum {
+			problems = append(problems, formatProblem(path, fmt.Sprintf("must contain at least %v properties", minimum)))
+		}
+		if maximum, ok := schemaNumber(schema["maxProperties"]); ok && float64(len(object)) > maximum {
+			problems = append(problems, formatProblem(path, fmt.Sprintf("must contain at most %v properties", maximum)))
+		}
 	}
 
 	if array, ok := value.([]any); ok {
-		if itemSchema, ok := schema["items"].(map[string]any); ok {
+		switch items := schema["items"].(type) {
+		case map[string]any:
 			for index, item := range array {
-				problems = append(problems, validateValue(item, itemSchema, fmt.Sprintf("%s[%d]", path, index))...)
+				problems = append(problems, validateValue(item, items, indexPath(path, index))...)
+			}
+		case []any:
+			for index, item := range array {
+				if index >= len(items) {
+					break
+				}
+				if itemSchema, ok := items[index].(map[string]any); ok {
+					problems = append(problems, validateValue(item, itemSchema, indexPath(path, index))...)
+				}
+			}
+		}
+		if minimum, ok := schemaNumber(schema["minItems"]); ok && float64(len(array)) < minimum {
+			problems = append(problems, formatProblem(path, fmt.Sprintf("must contain at least %v items", minimum)))
+		}
+		if maximum, ok := schemaNumber(schema["maxItems"]); ok && float64(len(array)) > maximum {
+			problems = append(problems, formatProblem(path, fmt.Sprintf("must contain at most %v items", maximum)))
+		}
+		if unique, _ := schema["uniqueItems"].(bool); unique {
+			for i := range array {
+				for j := 0; j < i; j++ {
+					if reflect.DeepEqual(array[i], array[j]) {
+						problems = append(problems, formatProblem(indexPath(path, i), "item must be unique"))
+						break
+					}
+				}
 			}
 		}
 	}
 
+	if text, ok := value.(string); ok {
+		length := float64(utf8.RuneCountInString(text))
+		if minimum, ok := schemaNumber(schema["minLength"]); ok && length < minimum {
+			problems = append(problems, formatProblem(path, fmt.Sprintf("length must be at least %v", minimum)))
+		}
+		if maximum, ok := schemaNumber(schema["maxLength"]); ok && length > maximum {
+			problems = append(problems, formatProblem(path, fmt.Sprintf("length must be at most %v", maximum)))
+		}
+		if pattern, ok := schema["pattern"].(string); ok {
+			compiled, err := regexp.Compile(pattern)
+			if err != nil {
+				problems = append(problems, formatProblem(path, "schema contains an invalid pattern"))
+			} else if !compiled.MatchString(text) {
+				problems = append(problems, formatProblem(path, "value does not match pattern"))
+			}
+		}
+	}
+
+	if number, ok := value.(float64); ok {
+		if minimum, ok := schemaNumber(schema["minimum"]); ok && number < minimum {
+			problems = append(problems, formatProblem(path, fmt.Sprintf("must be at least %v", minimum)))
+		}
+		if maximum, ok := schemaNumber(schema["maximum"]); ok && number > maximum {
+			problems = append(problems, formatProblem(path, fmt.Sprintf("must be at most %v", maximum)))
+		}
+		if minimum, ok := schemaNumber(schema["exclusiveMinimum"]); ok && number <= minimum {
+			problems = append(problems, formatProblem(path, fmt.Sprintf("must be greater than %v", minimum)))
+		}
+		if maximum, ok := schemaNumber(schema["exclusiveMaximum"]); ok && number >= maximum {
+			problems = append(problems, formatProblem(path, fmt.Sprintf("must be less than %v", maximum)))
+		}
+	}
+
 	return problems
+}
+
+func indexPath(path string, index int) string {
+	return fmt.Sprintf("%s[%d]", path, index)
+}
+
+func schemaNumber(value any) (float64, bool) {
+	number, ok := value.(float64)
+	return number, ok
 }
 
 func formatProblem(path, message string) string {
