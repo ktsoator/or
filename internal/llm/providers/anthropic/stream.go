@@ -51,7 +51,10 @@ func consumeStream(
 			started = true
 			events <- llm.Event{Type: llm.EventStart, Partial: cloneAssistantMessage(state.output)}
 		}
-		state.processEvent(stream.Current(), events)
+		if err := state.processEvent(stream.Current(), events); err != nil {
+			emitError(events, state.output, ctx, err)
+			return
+		}
 	}
 
 	if err := stream.Err(); err != nil {
@@ -67,7 +70,7 @@ func consumeStream(
 	events <- llm.Event{Type: llm.EventDone, Message: cloneAssistantMessage(state.output)}
 }
 
-func (state *streamState) processEvent(event sdk.MessageStreamEventUnion, events chan<- llm.Event) {
+func (state *streamState) processEvent(event sdk.MessageStreamEventUnion, events chan<- llm.Event) error {
 	switch ev := event.AsAny().(type) {
 	case sdk.MessageStartEvent:
 		state.output.ResponseID = ev.Message.ID
@@ -78,7 +81,9 @@ func (state *streamState) processEvent(event sdk.MessageStreamEventUnion, events
 	case sdk.ContentBlockDeltaEvent:
 		state.deltaBlock(ev, events)
 	case sdk.ContentBlockStopEvent:
-		state.stopBlock(ev, events)
+		if err := state.stopBlock(ev, events); err != nil {
+			return err
+		}
 	case sdk.MessageDeltaEvent:
 		if ev.Delta.StopReason != "" {
 			stopReason, errorMessage := mapStopReason(ev.Delta.StopReason)
@@ -106,6 +111,7 @@ func (state *streamState) processEvent(event sdk.MessageStreamEventUnion, events
 		}
 		state.setUsage(input, output, cacheRead, cacheWrite)
 	}
+	return nil
 }
 
 func (state *streamState) startBlock(ev sdk.ContentBlockStartEvent, events chan<- llm.Event) {
@@ -122,7 +128,7 @@ func (state *streamState) startBlock(ev sdk.ContentBlockStartEvent, events chan<
 		block = &llm.ThinkingContent{Thinking: "[Reasoning redacted]", ThinkingSignature: cb.Data, Redacted: true}
 		eventType = llm.EventThinkingStart
 	case sdk.ToolUseBlock:
-		block = &llm.ToolCall{ID: cb.ID, Name: cb.Name, Arguments: llm.ParseToolArguments(string(cb.Input))}
+		block = &llm.ToolCall{ID: cb.ID, Name: cb.Name, Arguments: map[string]any{}}
 		state.toolJSON[ev.Index] = ""
 		eventType = llm.EventToolCallStart
 	default:
@@ -187,10 +193,10 @@ func (state *streamState) deltaBlock(ev sdk.ContentBlockDeltaEvent, events chan<
 	}
 }
 
-func (state *streamState) stopBlock(ev sdk.ContentBlockStopEvent, events chan<- llm.Event) {
+func (state *streamState) stopBlock(ev sdk.ContentBlockStopEvent, events chan<- llm.Event) error {
 	block, ok := state.byIndex[ev.Index]
 	if !ok {
-		return
+		return nil
 	}
 	contentIndex := assistantContentIndex(state.output.Content, block)
 
@@ -210,7 +216,11 @@ func (state *streamState) stopBlock(ev sdk.ContentBlockStopEvent, events chan<- 
 			Partial:      cloneAssistantMessage(state.output),
 		}
 	case *llm.ToolCall:
-		content.Arguments = llm.ParseToolArguments(state.toolJSON[ev.Index])
+		arguments, err := llm.ParseToolArguments(state.toolJSON[ev.Index])
+		if err != nil {
+			return fmt.Errorf("parse arguments for tool call %q (%s): %w", content.ID, content.Name, err)
+		}
+		content.Arguments = arguments
 		events <- llm.Event{
 			Type:         llm.EventToolCallEnd,
 			ContentIndex: contentIndex,
@@ -218,6 +228,7 @@ func (state *streamState) stopBlock(ev sdk.ContentBlockStopEvent, events chan<- 
 			Partial:      cloneAssistantMessage(state.output),
 		}
 	}
+	return nil
 }
 
 func (state *streamState) setUsage(input, output, cacheRead, cacheWrite int64) {

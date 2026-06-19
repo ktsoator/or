@@ -230,6 +230,7 @@ func cloneModel(model Model) Model {
 			compatibilityClone.SupportsDeveloperRole = cloneBoolPointer(compatibility.SupportsDeveloperRole)
 			compatibilityClone.SupportsReasoningEffort = cloneBoolPointer(compatibility.SupportsReasoningEffort)
 			compatibilityClone.SupportsStrictMode = cloneBoolPointer(compatibility.SupportsStrictMode)
+			compatibilityClone.RequiresThinkingAsText = cloneBoolPointer(compatibility.RequiresThinkingAsText)
 			compatibilityClone.RequiresReasoningContentOnAssistantMessages = cloneBoolPointer(
 				compatibility.RequiresReasoningContentOnAssistantMessages,
 			)

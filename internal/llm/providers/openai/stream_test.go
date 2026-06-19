@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -98,6 +99,29 @@ func TestStreamCancellationEmitsOneAbortedTerminalEvent(t *testing.T) {
 	case <-requestDone:
 	case <-time.After(time.Second):
 		t.Fatal("request context was not cancelled")
+	}
+}
+
+func TestStreamMalformedToolArgumentsEmitsError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintln(w, `data: {"id":"chatcmpl_bad","object":"chat.completion.chunk","model":"test-model","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_bad","type":"function","function":{"name":"weather","arguments":"{\"city\":"}}]},"finish_reason":null}]}`)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, `data: {"id":"chatcmpl_bad","object":"chat.completion.chunk","model":"test-model","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}`)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "data: [DONE]")
+		fmt.Fprintln(w)
+	}))
+	defer server.Close()
+
+	events := streamOpenAITest(t, server.URL+"/v1")
+	assertSingleTerminalEvent(t, events, llm.EventError)
+	terminal := events[len(events)-1]
+	if terminal.Err == nil || !strings.Contains(terminal.Err.Error(), "parse arguments for tool call") {
+		t.Fatalf("terminal error = %v", terminal.Err)
+	}
+	if terminal.Message == nil || terminal.Message.StopReason != llm.StopReasonError {
+		t.Fatalf("terminal message = %#v", terminal.Message)
 	}
 }
 

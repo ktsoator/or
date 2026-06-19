@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -95,6 +96,27 @@ func TestStreamCancellationEmitsOneAbortedTerminalEvent(t *testing.T) {
 	case <-requestDone:
 	case <-time.After(time.Second):
 		t.Fatal("request context was not cancelled")
+	}
+}
+
+func TestStreamMalformedToolArgumentsEmitsError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		anthropicSSE(w, "message_start", `{"type":"message_start","message":{"id":"msg_bad","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":0}}}`)
+		anthropicSSE(w, "content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_bad","name":"weather","input":{}}}`)
+		anthropicSSE(w, "content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\"city\":"}}`)
+		anthropicSSE(w, "content_block_stop", `{"type":"content_block_stop","index":0}`)
+	}))
+	defer server.Close()
+
+	events := streamAnthropicTest(t, context.Background(), server.URL)
+	assertAnthropicSingleTerminal(t, events, llm.EventError)
+	terminal := events[len(events)-1]
+	if terminal.Err == nil || !strings.Contains(terminal.Err.Error(), "parse arguments for tool call") {
+		t.Fatalf("terminal error = %v", terminal.Err)
+	}
+	if terminal.Message == nil || terminal.Message.StopReason != llm.StopReasonError {
+		t.Fatalf("terminal message = %#v", terminal.Message)
 	}
 }
 

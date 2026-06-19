@@ -17,28 +17,35 @@ var validJSONEscapes = map[byte]bool{
 // object. Models occasionally emit JSON with unescaped control characters or
 // bad escape sequences; a strict decode of that input loses every argument. So
 // this first tries a strict decode, then retries on a repaired copy, and only
-// then gives up. It always returns a non-nil map so callers have a usable value.
-func ParseToolArguments(raw string) map[string]any {
+// then reports the parse error. Empty input represents a tool call with no
+// arguments and returns an empty object.
+func ParseToolArguments(raw string) (map[string]any, error) {
 	if strings.TrimSpace(raw) == "" {
-		return map[string]any{}
+		return map[string]any{}, nil
 	}
-	if arguments, ok := decodeJSONObject(raw); ok {
-		return arguments
+	arguments, strictErr := decodeJSONObject(raw)
+	if strictErr == nil {
+		return arguments, nil
 	}
 	if repaired := RepairJSON(raw); repaired != raw {
-		if arguments, ok := decodeJSONObject(repaired); ok {
-			return arguments
+		arguments, repairedErr := decodeJSONObject(repaired)
+		if repairedErr == nil {
+			return arguments, nil
 		}
+		return nil, fmt.Errorf("parse repaired tool arguments: %w", repairedErr)
 	}
-	return map[string]any{}
+	return nil, fmt.Errorf("parse tool arguments: %w", strictErr)
 }
 
-func decodeJSONObject(raw string) (map[string]any, bool) {
+func decodeJSONObject(raw string) (map[string]any, error) {
 	var arguments map[string]any
-	if err := json.Unmarshal([]byte(raw), &arguments); err != nil || arguments == nil {
-		return nil, false
+	if err := json.Unmarshal([]byte(raw), &arguments); err != nil {
+		return nil, err
 	}
-	return arguments, true
+	if arguments == nil {
+		return nil, fmt.Errorf("tool arguments must be a JSON object")
+	}
+	return arguments, nil
 }
 
 // RepairJSON fixes malformed JSON string literals by escaping raw control

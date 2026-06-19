@@ -200,7 +200,11 @@ func (state *streamState) finish(events chan<- llm.Event) error {
 				Partial:      cloneAssistantMessage(state.output),
 			}
 		case *llm.ToolCall:
-			content.Arguments = llm.ParseToolArguments(state.toolArgumentJSON[content])
+			arguments, err := llm.ParseToolArguments(state.toolArgumentJSON[content])
+			if err != nil {
+				return fmt.Errorf("parse arguments for tool call %q (%s): %w", content.ID, content.Name, err)
+			}
+			content.Arguments = arguments
 			events <- llm.Event{
 				Type:         llm.EventToolCallEnd,
 				ContentIndex: contentIndex,
