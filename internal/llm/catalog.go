@@ -17,6 +17,35 @@ func newBuiltInModelRegistry() *ModelRegistry {
 }
 
 func builtInModels() []Model {
+	models := make([]Model, 0, 619)
+	models = append(models, anthropicModels()...)
+	models = append(models, cerebrasModels()...)
+	models = append(models, deepseekModels()...)
+	models = append(models, fireworksModels()...)
+	models = append(models, githubCopilotModels()...)
+	models = append(models, groqModels()...)
+	models = append(models, huggingfaceModels()...)
+	models = append(models, kimiCodingModels()...)
+	models = append(models, minimaxModels()...)
+	models = append(models, minimaxCnModels()...)
+	models = append(models, moonshotaiModels()...)
+	models = append(models, moonshotaiCnModels()...)
+	models = append(models, opencodeModels()...)
+	models = append(models, opencodeGoModels()...)
+	models = append(models, openrouterModels()...)
+	models = append(models, vercelAiGatewayModels()...)
+	models = append(models, xaiModels()...)
+	models = append(models, xiaomiModels()...)
+	models = append(models, xiaomiTokenPlanAmsModels()...)
+	models = append(models, xiaomiTokenPlanCnModels()...)
+	models = append(models, xiaomiTokenPlanSgpModels()...)
+	models = append(models, zaiModels()...)
+	models = append(models, zaiCodingCnModels()...)
+	return models
+}
+
+// anthropicModels contains the generated anthropic model catalog.
+func anthropicModels() []Model {
 	return []Model{
 		{
 			ID:            "claude-3-5-haiku-latest",
@@ -251,6 +280,12 @@ func builtInModels() []Model {
 				ForceAdaptiveThinking: generatedBool(true),
 			},
 		},
+	}
+}
+
+// cerebrasModels contains the generated cerebras model catalog.
+func cerebrasModels() []Model {
+	return []Model{
 		{
 			ID:            "gpt-oss-120b",
 			Name:          "GPT OSS 120B",
@@ -275,6 +310,12 @@ func builtInModels() []Model {
 			ContextWindow: 131072,
 			MaxTokens:     40960,
 		},
+	}
+}
+
+// deepseekModels contains the generated deepseek model catalog.
+func deepseekModels() []Model {
+	return []Model{
 		{
 			ID:            "deepseek-chat",
 			Name:          "DeepSeek Chat",
@@ -337,6 +378,12 @@ func builtInModels() []Model {
 			ContextWindow: 1000000,
 			MaxTokens:     384000,
 		},
+	}
+}
+
+// fireworksModels contains the generated fireworks model catalog.
+func fireworksModels() []Model {
+	return []Model{
 		{
 			ID:        "accounts/fireworks/models/deepseek-v4-flash",
 			Name:      "DeepSeek V4 Flash",
@@ -531,6 +578,12 @@ func builtInModels() []Model {
 			ContextWindow: 262000,
 			MaxTokens:     262000,
 		},
+	}
+}
+
+// githubCopilotModels contains the generated github-copilot model catalog.
+func githubCopilotModels() []Model {
+	return []Model{
 		{
 			ID:            "claude-fable-5",
 			Name:          "Claude Fable 5",
@@ -831,6 +884,12 @@ func builtInModels() []Model {
 				SupportsReasoningEffort: generatedBool(false),
 			},
 		},
+	}
+}
+
+// groqModels contains the generated groq model catalog.
+func groqModels() []Model {
+	return []Model{
 		{
 			ID:            "llama-3.1-8b-instant",
 			Name:          "Llama 3.1 8B",
@@ -915,6 +974,12 @@ func builtInModels() []Model {
 			ContextWindow: 131072,
 			MaxTokens:     40960,
 		},
+	}
+}
+
+// huggingfaceModels contains the generated huggingface model catalog.
+func huggingfaceModels() []Model {
+	return []Model{
 		{
 			ID:            "MiniMaxAI/MiniMax-M2.1",
 			Name:          "MiniMax-M2.1",
@@ -1245,6 +1310,12 @@ func builtInModels() []Model {
 				SupportsDeveloperRole: generatedBool(false),
 			},
 		},
+	}
+}
+
+// kimiCodingModels contains the generated kimi-coding model catalog.
+func kimiCodingModels() []Model {
+	return []Model{
 		{
 			ID:            "k2p5",
 			Name:          "Kimi K2.5",
@@ -1305,6 +1376,12 @@ func builtInModels() []Model {
 				"User-Agent": "KimiCLI/1.5",
 			},
 		},
+	}
+}
+
+// minimaxModels contains the generated minimax model catalog.
+func minimaxModels() []Model {
+	return []Model{
 		{
 			ID:            "MiniMax-M2",
 			Name:          "MiniMax-M2",
@@ -1389,6 +1466,12 @@ func builtInModels() []Model {
 			ContextWindow: 512000,
 			MaxTokens:     128000,
 		},
+	}
+}
+
+// minimaxCnModels contains the generated minimax-cn model catalog.
+func minimaxCnModels() []Model {
+	return []Model{
 		{
 			ID:            "MiniMax-M2",
 			Name:          "MiniMax-M2",
@@ -1473,6 +1556,12 @@ func builtInModels() []Model {
 			ContextWindow: 512000,
 			MaxTokens:     128000,
 		},
+	}
+}
+
+// moonshotaiModels contains the generated moonshotai model catalog.
+func moonshotaiModels() []Model {
+	return []Model{
 		{
 			ID:            "kimi-k2-0711-preview",
 			Name:          "Kimi K2 0711",
@@ -1653,6 +1742,12 @@ func builtInModels() []Model {
 				ThinkingFormat:          "deepseek",
 			},
 		},
+	}
+}
+
+// moonshotaiCnModels contains the generated moonshotai-cn model catalog.
+func moonshotaiCnModels() []Model {
+	return []Model{
 		{
 			ID:            "kimi-k2-0711-preview",
 			Name:          "Kimi K2 0711",
@@ -1833,6 +1928,12 @@ func builtInModels() []Model {
 				ThinkingFormat:          "deepseek",
 			},
 		},
+	}
+}
+
+// opencodeModels contains the generated opencode model catalog.
+func opencodeModels() []Model {
+	return []Model{
 		{
 			ID:            "big-pickle",
 			Name:          "Big Pickle",
@@ -2210,6 +2311,12 @@ func builtInModels() []Model {
 			ContextWindow: 262144,
 			MaxTokens:     65536,
 		},
+	}
+}
+
+// opencodeGoModels contains the generated opencode-go model catalog.
+func opencodeGoModels() []Model {
+	return []Model{
 		{
 			ID:        "deepseek-v4-flash",
 			Name:      "DeepSeek V4 Flash",
@@ -2411,6 +2518,12 @@ func builtInModels() []Model {
 			ContextWindow: 1000000,
 			MaxTokens:     65536,
 		},
+	}
+}
+
+// openrouterModels contains the generated openrouter model catalog.
+func openrouterModels() []Model {
+	return []Model{
 		{
 			ID:            "ai21/jamba-large-1.7",
 			Name:          "AI21: Jamba Large 1.7",
@@ -5521,6 +5634,12 @@ func builtInModels() []Model {
 			ContextWindow: 400000,
 			MaxTokens:     128000,
 		},
+	}
+}
+
+// vercelAiGatewayModels contains the generated vercel-ai-gateway model catalog.
+func vercelAiGatewayModels() []Model {
+	return []Model{
 		{
 			ID:            "alibaba/qwen-3-14b",
 			Name:          "Qwen3-14B",
@@ -7565,6 +7684,12 @@ func builtInModels() []Model {
 			ContextWindow: 200000,
 			MaxTokens:     128000,
 		},
+	}
+}
+
+// xaiModels contains the generated xai model catalog.
+func xaiModels() []Model {
+	return []Model{
 		{
 			ID:            "grok-4.20-0309-non-reasoning",
 			Name:          "Grok 4.20 (Non-Reasoning)",
@@ -7613,6 +7738,12 @@ func builtInModels() []Model {
 			ContextWindow: 256000,
 			MaxTokens:     256000,
 		},
+	}
+}
+
+// xiaomiModels contains the generated xiaomi model catalog.
+func xiaomiModels() []Model {
+	return []Model{
 		{
 			ID:            "mimo-v2-flash",
 			Name:          "MiMo-V2-Flash",
@@ -7709,6 +7840,12 @@ func builtInModels() []Model {
 				ThinkingFormat: "deepseek",
 			},
 		},
+	}
+}
+
+// xiaomiTokenPlanAmsModels contains the generated xiaomi-token-plan-ams model catalog.
+func xiaomiTokenPlanAmsModels() []Model {
+	return []Model{
 		{
 			ID:            "mimo-v2-omni",
 			Name:          "MiMo-V2-Omni",
@@ -7789,6 +7926,12 @@ func builtInModels() []Model {
 				ThinkingFormat: "deepseek",
 			},
 		},
+	}
+}
+
+// xiaomiTokenPlanCnModels contains the generated xiaomi-token-plan-cn model catalog.
+func xiaomiTokenPlanCnModels() []Model {
+	return []Model{
 		{
 			ID:            "mimo-v2-omni",
 			Name:          "MiMo-V2-Omni",
@@ -7869,6 +8012,12 @@ func builtInModels() []Model {
 				ThinkingFormat: "deepseek",
 			},
 		},
+	}
+}
+
+// xiaomiTokenPlanSgpModels contains the generated xiaomi-token-plan-sgp model catalog.
+func xiaomiTokenPlanSgpModels() []Model {
+	return []Model{
 		{
 			ID:            "mimo-v2-omni",
 			Name:          "MiMo-V2-Omni",
@@ -7949,6 +8098,12 @@ func builtInModels() []Model {
 				ThinkingFormat: "deepseek",
 			},
 		},
+	}
+}
+
+// zaiModels contains the generated zai model catalog.
+func zaiModels() []Model {
+	return []Model{
 		{
 			ID:            "glm-4.5-air",
 			Name:          "GLM-4.5-Air",
@@ -8064,6 +8219,12 @@ func builtInModels() []Model {
 				ZAIToolStream:           generatedBool(true),
 			},
 		},
+	}
+}
+
+// zaiCodingCnModels contains the generated zai-coding-cn model catalog.
+func zaiCodingCnModels() []Model {
+	return []Model{
 		{
 			ID:            "glm-4.5-air",
 			Name:          "GLM-4.5-Air",
