@@ -6,8 +6,9 @@ Run from the repository root:
 go generate ./internal/llm
 ```
 
-The generated `internal/llm/catalog.go` is committed so normal builds do not
-need network access.
+The generated `internal/llm/catalog.generated.json` is committed and embedded
+by `catalog.go`, so normal builds and application startup do not need network
+or filesystem access.
 
 The generator uses the same catalog layers as pi-ai:
 
@@ -26,5 +27,4 @@ small and explicit.
 
 Only models whose protocol is implemented by the Go package are emitted.
 Currently those protocols are `openai-completions` and `anthropic-messages`.
-The generated source places each provider in its own function so provider
-catalogs can be folded independently in an editor.
+The generated JSON is grouped by provider at the top level.
