@@ -175,7 +175,7 @@ func reconcileToolCall(
 // messages into a representation accepted by a text-only model. Models that
 // support images receive a new outer slice with their messages unchanged.
 func downgradeUnsupportedImages(messages []Message, model Model) []Message {
-	if slices.Contains(model.Input, ModelInputImage) {
+	if slices.Contains(model.Input, Image) {
 		return append([]Message(nil), messages...)
 	}
 
