@@ -27,5 +27,4 @@ small and explicit.
 Only models whose protocol is implemented by the Go package are emitted.
 Currently those protocols are `openai-completions` and `anthropic-messages`.
 The generated source places each provider in its own function so provider
-catalogs can be folded independently in an editor. Chinese providers are
-listed first, followed by the remaining providers in lexical order.
+catalogs can be folded independently in an editor.
