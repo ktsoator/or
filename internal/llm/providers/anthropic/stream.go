@@ -47,6 +47,13 @@ func consumeStream(
 	defer close(events)
 
 	state := newStreamState(model)
+	// A panic in the SDK or event handling must surface as a terminal error event
+	// rather than crashing the host process.
+	defer func() {
+		if r := recover(); r != nil {
+			emitError(events, state.output, ctx, fmt.Errorf("anthropic stream panicked: %v", r))
+		}
+	}()
 	stream := client.Messages.NewStreaming(ctx, params)
 	defer stream.Close()
 
