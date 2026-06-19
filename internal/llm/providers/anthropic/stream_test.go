@@ -132,6 +132,52 @@ func TestStreamMalformedToolArgumentsDegradesToBestEffort(t *testing.T) {
 	}
 }
 
+// A provider that sends the full tool input on content_block_start with no
+// input_json_delta must keep those arguments rather than have them overwritten
+// by the empty delta buffer.
+func TestStreamKeepsEagerToolInputWithoutDeltas(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		anthropicSSE(w, "message_start", `{"type":"message_start","message":{"id":"msg_eager","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":0}}}`)
+		anthropicSSE(w, "content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_eager","name":"weather","input":{"city":"Paris"}}}`)
+		anthropicSSE(w, "content_block_stop", `{"type":"content_block_stop","index":0}`)
+		anthropicSSE(w, "message_delta", `{"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"output_tokens":2}}`)
+		anthropicSSE(w, "message_stop", `{"type":"message_stop"}`)
+	}))
+	defer server.Close()
+
+	events := streamAnthropicTest(t, context.Background(), server.URL)
+	assertAnthropicSingleTerminal(t, events, llm.EventDone)
+	message := events[len(events)-1].Message
+	if message == nil {
+		t.Fatal("done event has no message")
+	}
+	call, ok := message.Content[0].(*llm.ToolCall)
+	if !ok || call.Name != "weather" || call.Arguments["city"] != "Paris" {
+		t.Fatalf("tool call = %#v", message.Content[0])
+	}
+}
+
+// A stream that closes cleanly without a stop reason or message_stop was cut
+// short and must surface as an error rather than a successful EventDone.
+func TestStreamWithoutStopReasonEmitsError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		anthropicSSE(w, "message_start", `{"type":"message_start","message":{"id":"msg_cut","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":0}}}`)
+		anthropicSSE(w, "content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`)
+		anthropicSSE(w, "content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"partial answer"}}`)
+		// Connection ends here: no content_block_stop, message_delta, or message_stop.
+	}))
+	defer server.Close()
+
+	events := streamAnthropicTest(t, context.Background(), server.URL)
+	assertAnthropicSingleTerminal(t, events, llm.EventError)
+	terminal := events[len(events)-1]
+	if terminal.Message == nil || terminal.Message.StopReason != llm.StopReasonError {
+		t.Fatalf("terminal message = %#v", terminal.Message)
+	}
+}
+
 func anthropicSSE(w http.ResponseWriter, event, data string) {
 	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, data)
 }

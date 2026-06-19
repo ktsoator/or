@@ -18,6 +18,10 @@ type streamState struct {
 	output   llm.AssistantMessage
 	byIndex  map[int64]llm.AssistantContent
 	toolJSON map[int64]string
+	// sawStop records whether the model signaled completion via a stop reason or
+	// a message_stop event. A stream that closes cleanly without one was cut
+	// short, so the accumulated (possibly truncated) response is not a success.
+	sawStop bool
 }
 
 func newStreamState(model llm.Model) *streamState {
@@ -64,6 +68,10 @@ func consumeStream(
 		events <- llm.Event{Type: llm.EventError, Message: message, Err: errors.New(state.output.ErrorMessage)}
 		return
 	}
+	if !state.sawStop {
+		emitError(events, state.output, ctx, errors.New("Anthropic stream ended without a stop reason"))
+		return
+	}
 
 	events <- llm.Event{Type: llm.EventDone, Message: cloneAssistantMessage(state.output)}
 }
@@ -80,8 +88,11 @@ func (state *streamState) processEvent(event sdk.MessageStreamEventUnion, events
 		state.deltaBlock(ev, events)
 	case sdk.ContentBlockStopEvent:
 		state.stopBlock(ev, events)
+	case sdk.MessageStopEvent:
+		state.sawStop = true
 	case sdk.MessageDeltaEvent:
 		if ev.Delta.StopReason != "" {
+			state.sawStop = true
 			stopReason, errorMessage := mapStopReason(ev.Delta.StopReason)
 			state.output.StopReason = stopReason
 			if errorMessage != "" {
@@ -211,7 +222,12 @@ func (state *streamState) stopBlock(ev sdk.ContentBlockStopEvent, events chan<- 
 			Partial:      cloneAssistantMessage(state.output),
 		}
 	case *llm.ToolCall:
-		content.Arguments = llm.ParseToolArguments(state.toolJSON[ev.Index])
+		// Reparse only when argument JSON streamed in via deltas. Some
+		// Anthropic-compatible providers send the full input on content_block_start
+		// with no deltas; overwriting with the empty buffer would drop it.
+		if raw := state.toolJSON[ev.Index]; raw != "" {
+			content.Arguments = llm.ParseToolArguments(raw)
+		}
 		events <- llm.Event{
 			Type:         llm.EventToolCallEnd,
 			ContentIndex: contentIndex,
