@@ -88,6 +88,7 @@ func (a *Adapter) Stream(
 	if options.Temperature != nil && compat.supportsTemperature && !thinkingActive(model, options.Reasoning) {
 		params.Temperature = sdk.Float(*options.Temperature)
 	}
+	applyCacheControl(&params, compat)
 
 	events := make(chan llm.Event)
 	go consumeStream(ctx, client, params, model, events)

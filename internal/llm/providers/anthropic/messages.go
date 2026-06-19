@@ -12,15 +12,26 @@ import (
 
 // compat holds the resolved Anthropic-compatible quirks the adapter consumes.
 type compat struct {
-	supportsTemperature   bool
-	allowEmptySignature   bool
-	forceAdaptiveThinking bool
+	supportsTemperature       bool
+	supportsCacheControl      bool
+	supportsCacheControlTools bool
+	allowEmptySignature       bool
+	forceAdaptiveThinking     bool
 }
 
 // resolveCompat reads the model's optional Anthropic compatibility overrides.
 // Anthropic-compatible vendors usually need none; sensible defaults apply.
+//
+// Prompt caching defaults on only for real Anthropic; other Anthropic-compatible
+// vendors must opt in explicitly via compatibility, because some reject
+// cache_control. Explicit overrides always win.
 func resolveCompat(model llm.Model) compat {
-	resolved := compat{supportsTemperature: true}
+	isAnthropic := model.Provider == "anthropic" || strings.Contains(model.BaseURL, "api.anthropic.com")
+	resolved := compat{
+		supportsTemperature:       true,
+		supportsCacheControl:      isAnthropic,
+		supportsCacheControlTools: isAnthropic,
+	}
 
 	override, ok := model.Compatibility.(*llm.AnthropicMessagesCompatibility)
 	if !ok || override == nil {
@@ -29,6 +40,12 @@ func resolveCompat(model llm.Model) compat {
 	if override.SupportsTemperature != nil {
 		resolved.supportsTemperature = *override.SupportsTemperature
 	}
+	if override.SupportsCacheControl != nil {
+		resolved.supportsCacheControl = *override.SupportsCacheControl
+	}
+	if override.SupportsCacheControlTools != nil {
+		resolved.supportsCacheControlTools = *override.SupportsCacheControlTools
+	}
 	if override.AllowEmptySignature != nil {
 		resolved.allowEmptySignature = *override.AllowEmptySignature
 	}
@@ -36,6 +53,36 @@ func resolveCompat(model llm.Model) compat {
 		resolved.forceAdaptiveThinking = *override.ForceAdaptiveThinking
 	}
 	return resolved
+}
+
+// applyCacheControl marks ephemeral prompt-cache breakpoints, mirroring pi: the
+// system prompt, the final tool, and the last message's final content block.
+// Anthropic caches the prefix up to each breakpoint, so later turns reuse the
+// cached system, tools, and conversation history.
+func applyCacheControl(params *sdk.MessageNewParams, compat compat) {
+	if !compat.supportsCacheControl {
+		return
+	}
+	ephemeral := sdk.NewCacheControlEphemeralParam()
+
+	if n := len(params.System); n > 0 {
+		params.System[n-1].CacheControl = ephemeral
+	}
+	if n := len(params.Messages); n > 0 {
+		blocks := params.Messages[n-1].Content
+		if b := len(blocks); b > 0 {
+			if cacheControl := blocks[b-1].GetCacheControl(); cacheControl != nil {
+				*cacheControl = ephemeral
+			}
+		}
+	}
+	if compat.supportsCacheControlTools {
+		if n := len(params.Tools); n > 0 {
+			if cacheControl := params.Tools[n-1].GetCacheControl(); cacheControl != nil {
+				*cacheControl = ephemeral
+			}
+		}
+	}
 }
 
 // convertMessages prepares the transcript for the target model and translates it

@@ -2,9 +2,12 @@ package anthropic
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -181,6 +184,70 @@ func TestStreamWithoutStopReasonEmitsError(t *testing.T) {
 	if terminal.Message == nil || terminal.Message.StopReason != llm.StopReasonError {
 		t.Fatalf("terminal message = %#v", terminal.Message)
 	}
+}
+
+// Real Anthropic gets ephemeral cache_control breakpoints on system, the last
+// tool, and the last message so later turns reuse the cached prefix.
+func TestStreamAppliesCacheControlForAnthropic(t *testing.T) {
+	body := captureCacheControlRequest(t, "anthropic")
+	if got := strings.Count(body, `"cache_control"`); got != 3 {
+		t.Fatalf("cache_control breakpoints = %d, want 3 (system, tool, message)\nbody: %s", got, body)
+	}
+}
+
+// An Anthropic-compatible vendor that has not opted in must not receive
+// cache_control, since some reject it.
+func TestStreamOmitsCacheControlForCompatibleVendor(t *testing.T) {
+	body := captureCacheControlRequest(t, "minimax")
+	if strings.Contains(body, `"cache_control"`) {
+		t.Fatalf("compatible vendor request must not carry cache_control\nbody: %s", body)
+	}
+}
+
+// captureCacheControlRequest streams a request carrying a system prompt, a tool,
+// and a user message, and returns the raw request body the adapter sent.
+func captureCacheControlRequest(t *testing.T, provider string) string {
+	t.Helper()
+	var body string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		body = string(raw)
+		w.Header().Set("Content-Type", "text/event-stream")
+		anthropicSSE(w, "message_start", `{"type":"message_start","message":{"id":"msg_cc","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":0}}}`)
+		anthropicSSE(w, "content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`)
+		anthropicSSE(w, "content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hi"}}`)
+		anthropicSSE(w, "content_block_stop", `{"type":"content_block_stop","index":0}`)
+		anthropicSSE(w, "message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":1}}`)
+		anthropicSSE(w, "message_stop", `{"type":"message_stop"}`)
+	}))
+	defer server.Close()
+
+	model := llm.Model{
+		ID:        "test-model",
+		Protocol:  llm.ProtocolAnthropicMessages,
+		Provider:  provider,
+		BaseURL:   server.URL,
+		Input:     []llm.ModelInput{llm.Text},
+		MaxTokens: 128,
+	}
+	input := llm.Context{
+		SystemPrompt: "you are helpful",
+		Tools: []llm.ToolDefinition{{
+			Name:        "weather",
+			Description: "get weather",
+			Parameters:  json.RawMessage(`{"type":"object","properties":{"city":{"type":"string"}}}`),
+		}},
+		Messages: []llm.Message{&llm.UserMessage{
+			Content: []llm.UserContent{&llm.TextContent{Text: "hello"}},
+		}},
+	}
+	stream, err := NewAdapter(nil).Stream(context.Background(), model, input, llm.StreamOptions{APIKey: "test"})
+	if err != nil {
+		t.Fatalf("Stream() error = %v", err)
+	}
+	for range stream {
+	}
+	return body
 }
 
 func anthropicSSE(w http.ResponseWriter, event, data string) {
