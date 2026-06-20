@@ -20,7 +20,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.24.x'
+          go-version-file: go.mod
           cache: true
 
       - name: Check formatting
@@ -36,13 +36,25 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      - name: Check README Go version
+        run: |
+          mod=$(grep -E '^go [0-9]' go.mod | awk '{print $2}' | cut -d. -f1,2)
+          grep -qF "Go $mod or later" README.md || {
+            echo "README 'Go X or later' is out of sync with go.mod ($mod)"
+            exit 1
+          }
+
   test:
-    name: Test (Go ${{ matrix.go-version }})
+    name: Test (${{ matrix.label }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        go-version: ['1.24.x', 'stable']
+        include:
+          - label: go.mod
+            go-version-file: go.mod
+          - label: stable
+            go-version: stable
 
     steps:
       - name: Check out repository
@@ -52,6 +64,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go-version }}
+          go-version-file: ${{ matrix.go-version-file }}
           cache: true
 
       - name: Test
