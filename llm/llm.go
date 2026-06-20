@@ -37,7 +37,14 @@ type (
 	StopReason                     = core.StopReason
 	ProviderEnv                    = core.ProviderEnv
 	ProtocolStreamOptions          = core.ProtocolStreamOptions
+	AnthropicToolChoice            = core.AnthropicToolChoice
+	AnthropicToolChoiceMode        = core.AnthropicToolChoiceMode
+	AnthropicToolChoiceTool        = core.AnthropicToolChoiceTool
 	AnthropicStreamOptions         = core.AnthropicStreamOptions
+	OpenAIToolChoice               = core.OpenAIToolChoice
+	OpenAIToolChoiceMode           = core.OpenAIToolChoiceMode
+	OpenAIToolChoiceFunction       = core.OpenAIToolChoiceFunction
+	OpenAICompletionsStreamOptions = core.OpenAICompletionsStreamOptions
 	StreamOptions                  = core.StreamOptions
 	Client                         = core.Client
 	EventType                      = core.EventType
@@ -61,6 +68,14 @@ const (
 
 	ThinkingDisplaySummarized = core.ThinkingDisplaySummarized
 	ThinkingDisplayOmitted    = core.ThinkingDisplayOmitted
+
+	AnthropicToolChoiceAuto = core.AnthropicToolChoiceAuto
+	AnthropicToolChoiceAny  = core.AnthropicToolChoiceAny
+	AnthropicToolChoiceNone = core.AnthropicToolChoiceNone
+
+	OpenAIToolChoiceAuto     = core.OpenAIToolChoiceAuto
+	OpenAIToolChoiceNone     = core.OpenAIToolChoiceNone
+	OpenAIToolChoiceRequired = core.OpenAIToolChoiceRequired
 
 	StopReasonStop    = core.StopReasonStop
 	StopReasonLength  = core.StopReasonLength

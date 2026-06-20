@@ -91,6 +91,9 @@ func buildParams(
 	if len(tools) > 0 {
 		params.Tools = tools
 	}
+	if openAIOptions, ok := options.ProtocolOptions.(*llm.OpenAICompletionsStreamOptions); ok && openAIOptions != nil {
+		applyToolChoice(&params, openAIOptions.ToolChoice)
+	}
 	if options.MaxTokens > 0 {
 		if compat.maxTokensField == "max_tokens" {
 			params.MaxTokens = oai.Int(options.MaxTokens)

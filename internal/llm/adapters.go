@@ -18,8 +18,32 @@ type ProviderEnv map[string]string
 // package; the unexported validate method keeps the set closed and type-safe.
 type ProtocolStreamOptions interface {
 	Protocol() Protocol
-	validate() error
+	validate(tools []ToolDefinition) error
 }
+
+// AnthropicToolChoice is the native Anthropic tool_choice union. Use one of the
+// AnthropicToolChoice* mode constants or AnthropicToolChoiceTool.
+type AnthropicToolChoice interface {
+	isAnthropicToolChoice()
+}
+
+// AnthropicToolChoiceMode is one of Anthropic's string tool-choice modes.
+type AnthropicToolChoiceMode string
+
+const (
+	AnthropicToolChoiceAuto AnthropicToolChoiceMode = "auto"
+	AnthropicToolChoiceAny  AnthropicToolChoiceMode = "any"
+	AnthropicToolChoiceNone AnthropicToolChoiceMode = "none"
+)
+
+func (AnthropicToolChoiceMode) isAnthropicToolChoice() {}
+
+// AnthropicToolChoiceTool forces the model to call Name.
+type AnthropicToolChoiceTool struct {
+	Name string
+}
+
+func (AnthropicToolChoiceTool) isAnthropicToolChoice() {}
 
 // AnthropicStreamOptions contains settings understood only by the Anthropic
 // Messages protocol. Keeping them nested prevents provider-specific knobs from
@@ -28,6 +52,8 @@ type AnthropicStreamOptions struct {
 	// ThinkingDisplay controls how a reasoning model returns its thinking. Empty
 	// defaults to summarized.
 	ThinkingDisplay ThinkingDisplay
+	// ToolChoice controls Anthropic's native tool selection behavior.
+	ToolChoice AnthropicToolChoice
 }
 
 // Protocol identifies the protocol that accepts these options.
@@ -35,16 +61,58 @@ func (*AnthropicStreamOptions) Protocol() Protocol {
 	return ProtocolAnthropicMessages
 }
 
-func (options *AnthropicStreamOptions) validate() error {
+func (options *AnthropicStreamOptions) validate(tools []ToolDefinition) error {
 	if options == nil {
 		return errors.New("Anthropic stream options are nil")
 	}
 	switch options.ThinkingDisplay {
 	case "", ThinkingDisplaySummarized, ThinkingDisplayOmitted:
-		return nil
 	default:
 		return fmt.Errorf("unsupported Anthropic thinking display %q", options.ThinkingDisplay)
 	}
+	return validateAnthropicToolChoice(options.ToolChoice, tools)
+}
+
+// OpenAIToolChoice is the native OpenAI Chat Completions tool_choice union. Use
+// one of the OpenAIToolChoice* mode constants or OpenAIToolChoiceFunction.
+type OpenAIToolChoice interface {
+	isOpenAIToolChoice()
+}
+
+// OpenAIToolChoiceMode is one of OpenAI's string tool-choice modes.
+type OpenAIToolChoiceMode string
+
+const (
+	OpenAIToolChoiceAuto     OpenAIToolChoiceMode = "auto"
+	OpenAIToolChoiceNone     OpenAIToolChoiceMode = "none"
+	OpenAIToolChoiceRequired OpenAIToolChoiceMode = "required"
+)
+
+func (OpenAIToolChoiceMode) isOpenAIToolChoice() {}
+
+// OpenAIToolChoiceFunction forces the model to call the named function tool.
+type OpenAIToolChoiceFunction struct {
+	Name string
+}
+
+func (OpenAIToolChoiceFunction) isOpenAIToolChoice() {}
+
+// OpenAICompletionsStreamOptions contains settings understood only by the
+// OpenAI-compatible Chat Completions protocol.
+type OpenAICompletionsStreamOptions struct {
+	ToolChoice OpenAIToolChoice
+}
+
+// Protocol identifies the protocol that accepts these options.
+func (*OpenAICompletionsStreamOptions) Protocol() Protocol {
+	return ProtocolOpenAICompletions
+}
+
+func (options *OpenAICompletionsStreamOptions) validate(tools []ToolDefinition) error {
+	if options == nil {
+		return errors.New("OpenAI Completions stream options are nil")
+	}
+	return validateOpenAIToolChoice(options.ToolChoice, tools)
 }
 
 // StreamOptions contains shared request settings plus optional protocol-specific
@@ -84,12 +152,9 @@ type StreamOptions struct {
 
 // Validate checks that explicitly supplied protocol extensions match the target
 // protocol and contain supported values.
-func (options StreamOptions) Validate(protocol Protocol) error {
+func (options StreamOptions) Validate(protocol Protocol, tools []ToolDefinition) error {
 	if options.ProtocolOptions == nil {
 		return nil
-	}
-	if err := options.ProtocolOptions.validate(); err != nil {
-		return err
 	}
 	if optionProtocol := options.ProtocolOptions.Protocol(); optionProtocol != protocol {
 		return fmt.Errorf(
@@ -98,7 +163,75 @@ func (options StreamOptions) Validate(protocol Protocol) error {
 			protocol,
 		)
 	}
-	return nil
+	return options.ProtocolOptions.validate(tools)
+}
+
+func validateAnthropicToolChoice(choice AnthropicToolChoice, tools []ToolDefinition) error {
+	if choice == nil {
+		return nil
+	}
+	if len(tools) == 0 {
+		return errors.New("Anthropic tool choice requires at least one tool")
+	}
+
+	switch typed := choice.(type) {
+	case AnthropicToolChoiceMode:
+		switch typed {
+		case AnthropicToolChoiceAuto, AnthropicToolChoiceAny, AnthropicToolChoiceNone:
+			return nil
+		default:
+			return fmt.Errorf("unsupported Anthropic tool choice %q", typed)
+		}
+	case AnthropicToolChoiceTool:
+		return validateNamedToolChoice("Anthropic", typed.Name, tools)
+	case *AnthropicToolChoiceTool:
+		if typed == nil {
+			return errors.New("Anthropic named tool choice is nil")
+		}
+		return validateNamedToolChoice("Anthropic", typed.Name, tools)
+	default:
+		return fmt.Errorf("unsupported Anthropic tool choice type %T", choice)
+	}
+}
+
+func validateOpenAIToolChoice(choice OpenAIToolChoice, tools []ToolDefinition) error {
+	if choice == nil {
+		return nil
+	}
+	if len(tools) == 0 {
+		return errors.New("OpenAI tool choice requires at least one tool")
+	}
+
+	switch typed := choice.(type) {
+	case OpenAIToolChoiceMode:
+		switch typed {
+		case OpenAIToolChoiceAuto, OpenAIToolChoiceNone, OpenAIToolChoiceRequired:
+			return nil
+		default:
+			return fmt.Errorf("unsupported OpenAI tool choice %q", typed)
+		}
+	case OpenAIToolChoiceFunction:
+		return validateNamedToolChoice("OpenAI", typed.Name, tools)
+	case *OpenAIToolChoiceFunction:
+		if typed == nil {
+			return errors.New("OpenAI named tool choice is nil")
+		}
+		return validateNamedToolChoice("OpenAI", typed.Name, tools)
+	default:
+		return fmt.Errorf("unsupported OpenAI tool choice type %T", choice)
+	}
+}
+
+func validateNamedToolChoice(provider, name string, tools []ToolDefinition) error {
+	if name == "" {
+		return fmt.Errorf("%s named tool choice has an empty name", provider)
+	}
+	for _, tool := range tools {
+		if tool.Name == name {
+			return nil
+		}
+	}
+	return fmt.Errorf("%s tool choice names unknown tool %q", provider, name)
 }
 
 // ProtocolAdapter translates between a concrete LLM protocol and the package streaming interface.

@@ -395,6 +395,40 @@ func getWeather(arguments WeatherArgs) string {
 Fields without `omitempty` are required. The generated schema is fully inline
 and omits document metadata such as `$schema`, `$id`, `$ref`, and `$defs`.
 
+### Protocol-specific tool choice
+
+Tool choice keeps each protocol's native vocabulary, matching the underlying
+APIs. Supply it through `ProtocolOptions`; the client validates that the option
+type matches the selected model protocol and that named tools exist in the
+request context.
+
+OpenAI-compatible Chat Completions uses `required` and function choices:
+
+```go
+options := llm.StreamOptions{
+	ProtocolOptions: &llm.OpenAICompletionsStreamOptions{
+		ToolChoice: llm.OpenAIToolChoiceRequired,
+		// To force one function instead:
+		// ToolChoice: llm.OpenAIToolChoiceFunction{Name: "get_weather"},
+	},
+}
+```
+
+Anthropic Messages uses `any` and tool choices:
+
+```go
+options := llm.StreamOptions{
+	ProtocolOptions: &llm.AnthropicStreamOptions{
+		ToolChoice: llm.AnthropicToolChoiceAny,
+		// To force one tool instead:
+		// ToolChoice: llm.AnthropicToolChoiceTool{Name: "get_weather"},
+	},
+}
+```
+
+Both protocols also expose `Auto` and `None` mode constants. An explicit tool
+choice requires at least one tool in `Context.Tools`.
+
 ## Acknowledgements
 
 This project is inspired by and partially adapted from

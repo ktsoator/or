@@ -58,6 +58,23 @@ func TestDefaultClientRejectsMismatchedProtocolOptions(t *testing.T) {
 	}
 }
 
+func TestDefaultClientAcceptsPublicOpenAIToolChoice(t *testing.T) {
+	_, err := llm.Stream(context.Background(), llm.Model{
+		ID:       "test-model",
+		Protocol: llm.ProtocolOpenAICompletions,
+		Provider: "facade-test",
+	}, llm.Context{
+		Tools: []llm.ToolDefinition{{Name: "weather"}},
+	}, llm.StreamOptions{
+		ProtocolOptions: &llm.OpenAICompletionsStreamOptions{
+			ToolChoice: llm.OpenAIToolChoiceRequired,
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "OpenAI API key is empty") {
+		t.Fatalf("Stream() error = %v, want validation to reach OpenAI adapter", err)
+	}
+}
+
 func TestGetModelUsesBuiltInCatalog(t *testing.T) {
 	model := llm.GetModel("deepseek", "deepseek-chat")
 	if model.Provider != "deepseek" || model.Protocol != llm.ProtocolOpenAICompletions {
