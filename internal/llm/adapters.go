@@ -37,6 +37,11 @@ type StreamOptions struct {
 	// response before its body is consumed. It fires once per attempt, so a
 	// retried request invokes it for each try, making retries observable.
 	OnResponse func(status int, headers http.Header)
+	// OnRequest, when set, is called with the method, URL, and full body of every
+	// HTTP request before it is sent. The body is the exact JSON serialized for
+	// the provider. It fires once per attempt, so a retried request invokes it
+	// for each try, making retries observable.
+	OnRequest func(method, url string, body []byte)
 }
 
 // ProtocolAdapter translates between a concrete LLM protocol and the package streaming interface.

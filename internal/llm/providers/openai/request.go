@@ -1,6 +1,8 @@
 package openai
 
 import (
+	"bytes"
+	"io"
 	"maps"
 	"net/http"
 
@@ -29,6 +31,9 @@ func buildClient(httpClient *http.Client, model llm.Model, options llm.StreamOpt
 	if options.Timeout > 0 {
 		clientOptions = append(clientOptions, option.WithRequestTimeout(options.Timeout))
 	}
+	if options.OnRequest != nil {
+		clientOptions = append(clientOptions, option.WithMiddleware(onRequestMiddleware(options.OnRequest)))
+	}
 	if options.OnResponse != nil {
 		clientOptions = append(clientOptions, option.WithMiddleware(onResponseMiddleware(options.OnResponse)))
 	}
@@ -36,6 +41,22 @@ func buildClient(httpClient *http.Client, model llm.Model, options llm.StreamOpt
 		clientOptions = append(clientOptions, option.WithHeader(name, value))
 	}
 	return oai.NewClient(clientOptions...)
+}
+
+// onRequestMiddleware reports each HTTP request's method, URL, and body to hook
+// before it is sent. The body is read and restored so the request still streams
+// to the provider. The SDK re-runs middleware on every retry, so the hook
+// observes each attempt.
+func onRequestMiddleware(hook func(string, string, []byte)) option.Middleware {
+	return func(req *http.Request, next option.MiddlewareNext) (*http.Response, error) {
+		var body []byte
+		if req.Body != nil {
+			body, _ = io.ReadAll(req.Body)
+			req.Body = io.NopCloser(bytes.NewReader(body))
+		}
+		hook(req.Method, req.URL.String(), body)
+		return next(req)
+	}
 }
 
 // onResponseMiddleware reports each HTTP response's status and headers to hook
