@@ -429,6 +429,242 @@ options := llm.StreamOptions{
 Both protocols also expose `Auto` and `None` mode constants. An explicit tool
 choice requires at least one tool in `Context.Tools`.
 
+## Reasoning and thinking
+
+`Reasoning` is a provider-neutral effort level. Each adapter maps it to the
+target provider's native form — Anthropic adaptive or budget thinking, the
+OpenAI-compatible reasoning fields — and clamps it to the levels the model
+supports. Non-reasoning models ignore it.
+
+```go
+options := llm.StreamOptions{Reasoning: llm.ModelThinkingHigh}
+```
+
+The accepted levels are `ModelThinkingOff`, `ModelThinkingMinimal`,
+`ModelThinkingLow`, `ModelThinkingMedium`, `ModelThinkingHigh`, and
+`ModelThinkingXHigh`. `SupportedThinkingLevels` reports the levels a model
+accepts and `ClampThinkingLevel` adjusts a requested level to the nearest
+supported one.
+
+On the Anthropic protocol, `ThinkingDisplay` controls how the reasoning is
+returned without changing whether the model reasons. `ThinkingDisplayOmitted`
+withholds the thinking text while still returning the signature required for
+multi-turn tool use, which suits backends that never surface reasoning:
+
+```go
+options := llm.StreamOptions{
+	Reasoning: llm.ModelThinkingHigh,
+	ProtocolOptions: &llm.AnthropicStreamOptions{
+		ThinkingDisplay: llm.ThinkingDisplayOmitted,
+	},
+}
+```
+
+While streaming, reasoning arrives as `EventThinkingDelta` events before the
+answer text.
+
+## Image input
+
+Multimodal models accept images alongside text in a user message. Provide the
+raw bytes as base64 with their MIME type:
+
+```go
+raw, err := os.ReadFile("screenshot.png")
+if err != nil {
+	log.Fatal(err)
+}
+input := llm.Context{Messages: []llm.Message{
+	&llm.UserMessage{Content: []llm.UserContent{
+		&llm.TextContent{Text: "Describe the problem shown in this screenshot."},
+		&llm.ImageContent{
+			MIMEType: "image/png",
+			Data:     base64.StdEncoding.EncodeToString(raw),
+		},
+	}},
+}}
+```
+
+A model declares image support through `Model.Input`. When a conversation that
+contains images is sent to a text-only model, the images are replaced with a
+short placeholder automatically, so the same history remains valid across models
+of differing capabilities.
+
+## Switching models between turns
+
+The conversation history is provider-neutral, so the target model may change
+from one turn to the next — for example, drafting with an inexpensive model and
+reviewing with a stronger one. Before each request the library adapts the stored
+history for the target model: it downgrades images for text-only models,
+preserves reasoning signatures for the same model while downgrading or dropping
+them across models, and normalizes tool-call identifiers. No history rebuilding
+is required.
+
+<details>
+<summary>Complete model-switching example</summary>
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/joho/godotenv"
+	"github.com/ktsoator/or/llm"
+)
+
+func main() {
+	_ = godotenv.Load()
+
+	ctx := context.Background()
+	draft := llm.GetModel("deepseek", "deepseek-v4-flash")
+	review := llm.GetModel("anthropic", "claude-opus-4-8")
+
+	messages := []llm.Message{
+		&llm.UserMessage{Content: []llm.UserContent{
+			&llm.TextContent{Text: "Compute 25 * 18 and explain the steps."},
+		}},
+	}
+
+	first, err := llm.Complete(ctx, draft, llm.Context{Messages: messages}, llm.StreamOptions{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	messages = append(messages, &first)
+	messages = append(messages, &llm.UserMessage{Content: []llm.UserContent{
+		&llm.TextContent{Text: "Check the calculation above for mistakes."},
+	}})
+
+	second, err := llm.Complete(ctx, review, llm.Context{Messages: messages}, llm.StreamOptions{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, content := range second.Content {
+		if text, ok := content.(*llm.TextContent); ok {
+			fmt.Println(text.Text)
+		}
+	}
+}
+```
+
+</details>
+
+`TransformMessages` performs this adaptation and is exported for callers that
+need to inspect the exact history a model would receive.
+
+## Saving and restoring conversations
+
+A `Context` serializes to self-describing JSON: messages carry a role and
+content blocks carry a type, so the document round-trips back into concrete
+message and content types without manual dispatch. This makes it suitable for
+persisting chat history or passing a conversation between services.
+
+```go
+data, err := json.MarshalIndent(llm.Context{Messages: messages}, "", "  ")
+if err != nil {
+	log.Fatal(err)
+}
+if err := os.WriteFile("conversation.json", data, 0o644); err != nil {
+	log.Fatal(err)
+}
+
+raw, err := os.ReadFile("conversation.json")
+if err != nil {
+	log.Fatal(err)
+}
+var restored llm.Context
+if err := json.Unmarshal(raw, &restored); err != nil {
+	log.Fatal(err)
+}
+// restored.Messages is ready to extend and replay against any model.
+```
+
+## Discovering providers and models
+
+The built-in catalog is queryable, which is useful for model pickers or
+capability filters:
+
+```go
+for _, provider := range llm.GetProviders() {
+	for _, model := range llm.GetModels(provider) {
+		fmt.Printf("%s/%s reasoning=%t vision=%t context=%d\n",
+			model.Provider, model.ID, model.Reasoning,
+			slices.Contains(model.Input, llm.Image), model.ContextWindow)
+	}
+}
+```
+
+`LookupModel` returns a model and a found flag; `GetModel` returns it directly
+and panics when the model is unknown.
+
+## Custom and OpenAI-compatible endpoints
+
+Any endpoint that implements one of the two protocols can be used by
+constructing a `Model` directly and pointing `BaseURL` at it. This covers local
+servers such as Ollama, vLLM, and LM Studio, as well as private model gateways:
+
+```go
+model := llm.Model{
+	ID:            "qwen2.5-coder:7b",
+	Name:          "Qwen2.5 Coder 7B",
+	Provider:      "ollama",
+	Protocol:      llm.ProtocolOpenAICompletions,
+	BaseURL:       "http://localhost:11434/v1",
+	Input:         []llm.ModelInput{llm.Text},
+	ContextWindow: 32768,
+	MaxTokens:     4096,
+}
+
+events, err := llm.Stream(ctx, model, input, llm.StreamOptions{APIKey: "ollama"})
+```
+
+Endpoint-specific quirks — reasoning field names, cache-control support, and
+similar differences — are configured through `Model.Compatibility` with
+`OpenAICompletionsCompatibility` or `AnthropicMessagesCompatibility`.
+
+## Cancelling a request
+
+Cancelling the request context stops an in-flight request. The stream emits a
+single `EventError` whose message reports `StopReasonAborted`, then closes.
+
+```go
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+
+events, err := llm.Stream(ctx, model, input, llm.StreamOptions{})
+if err != nil {
+	log.Fatal(err)
+}
+// Call cancel() from elsewhere, for example when the user presses Stop.
+for event := range events {
+	switch event.Type {
+	case llm.EventTextDelta:
+		fmt.Print(event.Delta)
+	case llm.EventError:
+		fmt.Printf("\nstopped: %s\n", event.Message.StopReason)
+	}
+}
+```
+
+## Observing requests and responses
+
+Two optional hooks expose the raw HTTP exchange for logging or debugging. Both
+fire once per attempt, so retries are observable. `OnRequest` receives the exact
+request body serialized for the provider, including protocol-specific fields
+that the neutral types do not show directly.
+
+```go
+options := llm.StreamOptions{
+	OnRequest: func(method, url string, body []byte) {
+		log.Printf("→ %s %s\n%s", method, url, body)
+	},
+	OnResponse: func(status int, headers http.Header) {
+		log.Printf("← %d", status)
+	},
+}
+```
+
 ## Acknowledgements
 
 This project is inspired by and partially adapted from
