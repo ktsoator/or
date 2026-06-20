@@ -665,6 +665,87 @@ options := llm.StreamOptions{
 }
 ```
 
+## Custom protocol adapters
+
+The two built-in protocols cover most needs, and any OpenAI- or
+Anthropic-compatible endpoint is reachable by pointing a `Model` at its
+`BaseURL`. To serve a genuinely different wire protocol, implement
+`ProtocolAdapter` and register it alongside the built-ins.
+
+An adapter implements two methods: `Protocol` returns the registry key, and
+`Stream` translates the request and emits events. `NewStreamWriter` provides the
+event-stream machinery the built-in adapters use — a single `EventStart`, a
+`Partial` snapshot on every event, a single terminal event, and cancellation
+reported as `StopReasonAborted` — so the adapter only builds the message and
+emits deltas.
+
+<details>
+<summary>Minimal custom adapter</summary>
+
+```go
+type myAdapter struct{ http *http.Client }
+
+func (myAdapter) Protocol() llm.Protocol { return "my-protocol" }
+
+func (a myAdapter) Stream(
+	ctx context.Context, model llm.Model, input llm.Context, options llm.StreamOptions,
+) (<-chan llm.Event, error) {
+	events := make(chan llm.Event)
+	go func() {
+		defer close(events)
+
+		message := llm.AssistantMessage{
+			Protocol: model.Protocol, Provider: model.Provider, Model: model.ID,
+		}
+		writer := llm.NewStreamWriter(ctx, events, &message)
+
+		// Translate input into the wire request, call the endpoint, and stream the
+		// response. On any failure, writer.Fail(err) emits the terminal error.
+		reply, usage, err := callMyEndpoint(ctx, a.http, model, input, options)
+		if err != nil {
+			writer.Fail(err)
+			return
+		}
+
+		text := &llm.TextContent{}
+		message.Content = append(message.Content, text)
+		writer.Emit(llm.Event{Type: llm.EventTextStart, ContentIndex: 0})
+		for chunk := range reply {
+			text.Text += chunk
+			writer.Emit(llm.Event{Type: llm.EventTextDelta, ContentIndex: 0, Delta: chunk})
+		}
+		writer.Emit(llm.Event{Type: llm.EventTextEnd, ContentIndex: 0, Content: text.Text})
+
+		message.Usage = usage
+		message.StopReason = llm.StopReasonStop
+		writer.Done()
+	}()
+	return events, nil
+}
+```
+
+Register it on a client that keeps the built-in protocols:
+
+```go
+registry := llm.NewRegistry()
+llm.RegisterBuiltins(registry)
+if err := registry.Register(myAdapter{http: http.DefaultClient}); err != nil {
+	log.Fatal(err)
+}
+client := llm.NewClientWithRegistry(registry)
+
+model := llm.Model{ID: "x", Provider: "me", Protocol: "my-protocol", MaxTokens: 1024}
+message, err := client.Complete(ctx, model, input, llm.StreamOptions{})
+```
+
+</details>
+
+The adapter is responsible for the full translation in both directions —
+building the wire request from `Context`, framing the response, and emitting
+deltas. `CloneToolCall` deep-copies a tool call for an event's `ToolCall` field;
+`ParseToolArgumentsMode` recovers truncated argument JSON the same way the
+built-in adapters do.
+
 ## Acknowledgements
 
 This project is inspired by and partially adapted from

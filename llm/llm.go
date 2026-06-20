@@ -47,6 +47,10 @@ type (
 	EventType                      = core.EventType
 	Event                          = core.Event
 	Diagnostic                     = core.Diagnostic
+	// Extension points for registering a custom protocol adapter.
+	Registry        = core.Registry
+	ProtocolAdapter = core.ProtocolAdapter
+	StreamWriter    = core.StreamWriter
 )
 
 const (
@@ -100,10 +104,45 @@ var defaultClient = NewClient()
 // registered. Most callers can use the package-level Stream and Complete
 // functions instead.
 func NewClient() *Client {
-	registry := core.NewRegistry()
+	registry := NewRegistry()
+	RegisterBuiltins(registry)
+	return NewClientWithRegistry(registry)
+}
+
+// NewRegistry returns an empty protocol-adapter registry. Use it with
+// RegisterBuiltins and Register to assemble a client that also serves a custom
+// protocol. Most callers want NewClient instead.
+func NewRegistry() *Registry {
+	return core.NewRegistry()
+}
+
+// RegisterBuiltins registers the OpenAI-compatible and Anthropic adapters into
+// registry, so a custom client keeps the built-in protocols alongside any added
+// ones.
+func RegisterBuiltins(registry *Registry) {
 	mustRegister(registry, openai.NewAdapter(nil))
 	mustRegister(registry, anthropic.NewAdapter(nil))
+}
+
+// NewClientWithRegistry returns a client backed by the given registry. Combine
+// it with NewRegistry, RegisterBuiltins, and Registry.Register to serve a custom
+// ProtocolAdapter.
+func NewClientWithRegistry(registry *Registry) *Client {
 	return core.NewClient(registry)
+}
+
+// NewStreamWriter helps a custom ProtocolAdapter emit a well-formed event
+// stream: it sends a single EventStart, attaches a Partial snapshot to each
+// event, guarantees one terminal event, and turns context cancellation into an
+// aborted terminal error. output is the assistant message the adapter builds.
+func NewStreamWriter(ctx context.Context, events chan<- Event, output *AssistantMessage) *StreamWriter {
+	return core.NewStreamWriter(ctx, events, output)
+}
+
+// CloneToolCall returns a deep copy of a tool call for use in an event's
+// ToolCall field while streaming.
+func CloneToolCall(toolCall *ToolCall) *ToolCall {
+	return core.CloneToolCall(toolCall)
 }
 
 // Stream uses the default client to start a streaming model request.

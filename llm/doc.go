@@ -92,4 +92,12 @@
 // ClampThinkingLevel report and adjust a model's reasoning levels. A caller may
 // also construct a [Model] directly, pointing BaseURL at any OpenAI-compatible or
 // Anthropic-compatible endpoint.
+//
+// # Custom protocols
+//
+// A genuinely different wire protocol is added by implementing [ProtocolAdapter]
+// and registering it: build a [Registry] with NewRegistry, add the built-ins
+// with RegisterBuiltins and the custom adapter with Registry.Register, then
+// construct a client with NewClientWithRegistry. NewStreamWriter gives the
+// adapter the same event-stream machinery the built-ins use.
 package llm
