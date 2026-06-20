@@ -1,6 +1,3 @@
-// Package llm provides the batteries-included entry point for model inference.
-// It keeps a ready-to-use default client for common calls while the lower-level
-// implementation remains internal to the module.
 package llm
 
 import (
