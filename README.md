@@ -3,6 +3,7 @@
 Choose the path from intent to action.
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/ktsoator/or/llm.svg)](https://pkg.go.dev/github.com/ktsoator/or/llm)
+[![CI](https://github.com/ktsoator/or/actions/workflows/ci.yml/badge.svg)](https://github.com/ktsoator/or/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/ktsoator/or)](https://goreportcard.com/report/github.com/ktsoator/or)
 [![Release](https://img.shields.io/github/v/release/ktsoator/or)](https://github.com/ktsoator/or/releases/latest)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/ktsoator/or)](go.mod)
@@ -34,7 +35,7 @@ without turning the root package into a single large API.
 
 ## Requirements
 
-- Go 1.25 or later
+- Go 1.24 or later
 - An API key for the selected hosted provider, or a compatible local endpoint
 
 ## Install
