@@ -178,6 +178,49 @@ func TestConvertMessagesReplaysRedactedThinking(t *testing.T) {
 	}
 }
 
+// thinkingDisplay "omitted" returns reasoning as redacted_thinking blocks (empty
+// text, signature carried as the opaque payload). The real use for omitted is a
+// tool-use backend, so the replayed redacted block must survive ahead of the
+// tool_use it precedes — the empty-text skip that downgrades unsigned thinking
+// must not catch it, since the redacted branch runs first.
+func TestConvertMessagesReplaysRedactedThinkingBeforeToolUse(t *testing.T) {
+	model := anthropicReplayModel()
+	input := llm.Context{Messages: []llm.Message{
+		&llm.UserMessage{Content: []llm.UserContent{&llm.TextContent{Text: "weather in Paris?"}}},
+		&llm.AssistantMessage{
+			Provider:   model.Provider,
+			Protocol:   model.Protocol,
+			Model:      model.ID,
+			StopReason: llm.StopReasonToolUse,
+			Content: []llm.AssistantContent{
+				&llm.ThinkingContent{Thinking: "[Reasoning redacted]", ThinkingSignature: "encrypted", Redacted: true},
+				&llm.ToolCall{ID: "toolu_1", Name: "weather", Arguments: map[string]any{"city": "Paris"}},
+			},
+		},
+		&llm.ToolResultMessage{
+			ToolCallID: "toolu_1",
+			ToolName:   "weather",
+			Content:    []llm.ToolResultContent{&llm.TextContent{Text: "sunny"}},
+		},
+		&llm.UserMessage{Content: []llm.UserContent{&llm.TextContent{Text: "thanks"}}},
+	}}
+
+	messages, err := convertMessages(input, model, compat{})
+	if err != nil {
+		t.Fatalf("convertMessages() error = %v", err)
+	}
+	blocks := messages[1].Content
+	if len(blocks) != 2 {
+		t.Fatalf("assistant block count = %d, want 2 (redacted_thinking, tool_use)", len(blocks))
+	}
+	if blocks[0].OfRedactedThinking == nil || blocks[0].OfRedactedThinking.Data != "encrypted" {
+		t.Fatalf("first assistant block = %#v, want redacted_thinking data=encrypted", blocks[0])
+	}
+	if blocks[1].OfToolUse == nil || blocks[1].OfToolUse.ID != "toolu_1" {
+		t.Fatalf("second assistant block = %#v, want tool_use toolu_1", blocks[1])
+	}
+}
+
 // Latent risk: without allowEmptySignature, an unsigned reasoning block in a
 // tool-use turn is downgraded to a text block, so the thinking block the
 // Messages API requires before tool_use disappears. This test pins the current
