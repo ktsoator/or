@@ -139,6 +139,64 @@ func TestStreamMalformedToolArgumentsDegradesToBestEffort(t *testing.T) {
 	}
 }
 
+// OpenRouter streams encrypted reasoning in a reasoning_details array keyed by
+// tool-call id. The matching entry's raw JSON must land on that tool call's
+// thought signature so it can be replayed verbatim on the next turn.
+func TestStreamCapturesEncryptedReasoningDetails(t *testing.T) {
+	entry := `{"type":"reasoning.encrypted","id":"call_1","data":"ENC"}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		chunks := []string{
+			`{"id":"c1","object":"chat.completion.chunk","model":"test-model","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"weather","arguments":"{\"city\":\"Paris\"}"}}]},"finish_reason":null}]}`,
+			`{"id":"c1","object":"chat.completion.chunk","model":"test-model","choices":[{"index":0,"delta":{"reasoning_details":[` + entry + `]},"finish_reason":null}]}`,
+			`{"id":"c1","object":"chat.completion.chunk","model":"test-model","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`,
+		}
+		for _, chunk := range chunks {
+			fmt.Fprintf(w, "data: %s\n\n", chunk)
+		}
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	events := streamOpenAITest(t, server.URL+"/v1")
+	assertSingleTerminalEvent(t, events, llm.EventDone)
+	message := events[len(events)-1].Message
+	call, ok := message.Content[0].(*llm.ToolCall)
+	if !ok {
+		t.Fatalf("first content = %#v, want tool call", message.Content[0])
+	}
+	if call.ThoughtSignature != entry {
+		t.Fatalf("thought signature = %q, want %q", call.ThoughtSignature, entry)
+	}
+}
+
+// A reasoning_details entry whose id matches no tool call is dropped rather than
+// attached to an unrelated call.
+func TestStreamIgnoresUnmatchedReasoningDetails(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		chunks := []string{
+			`{"id":"c1","object":"chat.completion.chunk","model":"test-model","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"weather","arguments":"{}"}}]},"finish_reason":null}]}`,
+			`{"id":"c1","object":"chat.completion.chunk","model":"test-model","choices":[{"index":0,"delta":{"reasoning_details":[{"type":"reasoning.encrypted","id":"other","data":"ENC"}]},"finish_reason":null}]}`,
+			`{"id":"c1","object":"chat.completion.chunk","model":"test-model","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`,
+		}
+		for _, chunk := range chunks {
+			fmt.Fprintf(w, "data: %s\n\n", chunk)
+		}
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	events := streamOpenAITest(t, server.URL+"/v1")
+	call, ok := events[len(events)-1].Message.Content[0].(*llm.ToolCall)
+	if !ok {
+		t.Fatalf("first content = %#v, want tool call", events[len(events)-1].Message.Content[0])
+	}
+	if call.ThoughtSignature != "" {
+		t.Fatalf("thought signature = %q, want empty for unmatched entry", call.ThoughtSignature)
+	}
+}
+
 func streamOpenAITest(t *testing.T, baseURL string) []llm.Event {
 	t.Helper()
 	stream, err := NewAdapter(nil).Stream(

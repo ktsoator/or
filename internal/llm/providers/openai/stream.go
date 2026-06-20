@@ -175,6 +175,10 @@ func (state *streamState) processChunk(chunk oai.ChatCompletionChunk, events cha
 		}
 	}
 
+	if err := applyReasoningDetails(choice.Delta.JSON.ExtraFields, state.toolCallsByID); err != nil {
+		return err
+	}
+
 	if choice.FinishReason != "" {
 		state.finishReason = choice.FinishReason
 	}
@@ -436,6 +440,39 @@ func extraReasoning(fields map[string]respjson.Field) (string, string, error) {
 		}
 	}
 	return "", "", nil
+}
+
+// applyReasoningDetails binds OpenRouter-style encrypted reasoning to the tool
+// call it belongs to. The delta's reasoning_details array carries entries keyed
+// by tool-call id; each "reasoning.encrypted" entry's raw JSON is stored on the
+// matching tool call's thought signature so it can be replayed verbatim on the
+// next turn. Entries without a matching call, or of other types, are ignored.
+func applyReasoningDetails(fields map[string]respjson.Field, byID map[string]*llm.ToolCall) error {
+	field, ok := fields["reasoning_details"]
+	if !ok || field.Raw() == "" || field.Raw() == "null" {
+		return nil
+	}
+	var details []json.RawMessage
+	if err := json.Unmarshal([]byte(field.Raw()), &details); err != nil {
+		return fmt.Errorf("decode OpenAI reasoning_details field: %w", err)
+	}
+	for _, raw := range details {
+		var entry struct {
+			Type string `json:"type"`
+			ID   string `json:"id"`
+			Data string `json:"data"`
+		}
+		if err := json.Unmarshal(raw, &entry); err != nil {
+			return fmt.Errorf("decode OpenAI reasoning_details entry: %w", err)
+		}
+		if entry.Type != "reasoning.encrypted" || entry.ID == "" || entry.Data == "" {
+			continue
+		}
+		if call, ok := byID[entry.ID]; ok && call != nil {
+			call.ThoughtSignature = string(raw)
+		}
+	}
+	return nil
 }
 
 func extraString(fields map[string]respjson.Field, name string) (string, error) {

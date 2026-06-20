@@ -103,6 +103,75 @@ func TestConvertMessagesReplaysReasoningFieldVerbatim(t *testing.T) {
 	}
 }
 
+// A tool call carrying encrypted reasoning on its thought signature is replayed
+// as a reasoning_details array entry, so the provider can continue the prior
+// reasoning across the tool-use loop.
+func TestConvertMessagesReplaysEncryptedReasoningDetails(t *testing.T) {
+	model := openAIReplayModel()
+	signature := `{"type":"reasoning.encrypted","id":"call_1","data":"ENC"}`
+	input := llm.Context{Messages: []llm.Message{
+		&llm.UserMessage{Content: []llm.UserContent{&llm.TextContent{Text: "weather in Paris?"}}},
+		&llm.AssistantMessage{
+			Provider:   model.Provider,
+			Protocol:   model.Protocol,
+			Model:      model.ID,
+			StopReason: llm.StopReasonToolUse,
+			Content: []llm.AssistantContent{
+				&llm.ToolCall{ID: "call_1", Name: "weather", Arguments: map[string]any{"city": "Paris"}, ThoughtSignature: signature},
+			},
+		},
+		&llm.ToolResultMessage{
+			ToolCallID: "call_1",
+			ToolName:   "weather",
+			Content:    []llm.ToolResultContent{&llm.TextContent{Text: "sunny"}},
+		},
+		&llm.UserMessage{Content: []llm.UserContent{&llm.TextContent{Text: "thanks"}}},
+	}}
+	assistant := assistantWire(t, input, model, resolvedCompat{})
+
+	details, ok := assistant["reasoning_details"].([]any)
+	if !ok || len(details) != 1 {
+		t.Fatalf("reasoning_details = %#v, want one entry", assistant["reasoning_details"])
+	}
+	entry, ok := details[0].(map[string]any)
+	if !ok || entry["type"] != "reasoning.encrypted" || entry["data"] != "ENC" {
+		t.Fatalf("reasoning_details[0] = %#v", details[0])
+	}
+}
+
+// Crossing models, the thought signature has been cleared upstream, so no
+// encrypted reasoning is replayed to a model that cannot decrypt it.
+func TestConvertMessagesDropsEncryptedReasoningCrossModel(t *testing.T) {
+	source := openAIReplayModel()
+	signature := `{"type":"reasoning.encrypted","id":"call_1","data":"ENC"}`
+	input := llm.Context{Messages: []llm.Message{
+		&llm.UserMessage{Content: []llm.UserContent{&llm.TextContent{Text: "weather in Paris?"}}},
+		&llm.AssistantMessage{
+			Provider:   source.Provider,
+			Protocol:   source.Protocol,
+			Model:      source.ID,
+			StopReason: llm.StopReasonToolUse,
+			Content: []llm.AssistantContent{
+				&llm.ToolCall{ID: "call_1", Name: "weather", Arguments: map[string]any{"city": "Paris"}, ThoughtSignature: signature},
+			},
+		},
+		&llm.ToolResultMessage{
+			ToolCallID: "call_1",
+			ToolName:   "weather",
+			Content:    []llm.ToolResultContent{&llm.TextContent{Text: "sunny"}},
+		},
+		&llm.UserMessage{Content: []llm.UserContent{&llm.TextContent{Text: "thanks"}}},
+	}}
+	// A different model id makes TransformMessages treat the turn as cross-model.
+	target := source
+	target.ID = "other-model"
+	assistant := assistantWire(t, input, target, resolvedCompat{})
+
+	if _, present := assistant["reasoning_details"]; present {
+		t.Fatalf("reasoning_details must be absent cross-model: %#v", assistant)
+	}
+}
+
 // With requiresReasoningContentOnAssistantMessages, a reasoning-capable model
 // gets an empty reasoning_content injected even on a turn that carried no
 // reasoning, so the provider does not reject the replayed assistant message.

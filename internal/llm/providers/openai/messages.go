@@ -305,6 +305,13 @@ func convertAssistantMessage(
 			extras["reasoning_content"] = ""
 		}
 	}
+	// Replay OpenRouter-style encrypted reasoning. Each tool call's thought
+	// signature holds the raw reasoning_details entry it arrived with; emit them
+	// as one array so the provider can continue the prior reasoning. Cross-model
+	// replays have already had the signature cleared upstream.
+	if details := reasoningDetails(message.Content); len(details) > 0 {
+		extras["reasoning_details"] = details
+	}
 	if len(extras) > 0 {
 		assistant.SetExtraFields(extras)
 	}
@@ -312,6 +319,24 @@ func convertAssistantMessage(
 		return nil, nil
 	}
 	return assistant, nil
+}
+
+// reasoningDetails collects the encrypted reasoning entries stored on each tool
+// call's thought signature, preserving order. A signature is included only when
+// it is valid JSON, mirroring the capture format and dropping anything a
+// non-OpenRouter source may have left, so the request body stays well-formed.
+func reasoningDetails(content []llm.AssistantContent) []json.RawMessage {
+	var details []json.RawMessage
+	for _, rawContent := range content {
+		call, ok := rawContent.(*llm.ToolCall)
+		if !ok || call == nil || call.ThoughtSignature == "" {
+			continue
+		}
+		if json.Valid([]byte(call.ThoughtSignature)) {
+			details = append(details, json.RawMessage(call.ThoughtSignature))
+		}
+	}
+	return details
 }
 
 func encodeToolArguments(arguments map[string]any) (string, error) {
