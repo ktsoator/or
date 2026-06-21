@@ -50,14 +50,28 @@ type AfterToolCallCtx struct {
 	Context          Context
 }
 
+// AfterToolCallResult overrides parts of an executed tool result. Each field
+// overrides the corresponding result value only when set; a nil field keeps the
+// original. Content replaces the whole content slice when non-nil; Details
+// replaces the details when non-nil.
+type AfterToolCallResult struct {
+	Content   []llm.ToolResultContent
+	Details   any
+	IsError   *bool
+	Terminate *bool
+}
+
 // LoopConfig configures a run. All extension points are function fields; the
 // zero value of each is "no hook". Given a Model and ConvertToLLM, the zero
 // config is a plain tool loop with no interception.
 type LoopConfig struct {
 	// Model is the model used for turns until PrepareNextTurn replaces it.
 	Model llm.Model
-	// StreamOptions are the per-request options passed to llm.Stream.
+	// StreamOptions are the per-request options passed to the stream function.
 	StreamOptions llm.StreamOptions
+	// StreamFn reaches a model for one turn. A nil value uses llm.Stream. It
+	// exists mainly as a seam for tests and custom transports.
+	StreamFn StreamFn
 	// ConvertToLLM projects the transcript into llm.Message values for one
 	// request. A nil value uses the default, which unwraps FromLLM messages and
 	// drops everything else.
@@ -71,7 +85,7 @@ type LoopConfig struct {
 
 	// AfterToolCall runs after a tool finishes. A non-nil return overrides the
 	// executed result field by field; nil keeps it unchanged.
-	AfterToolCall func(AfterToolCallCtx) *ToolResult
+	AfterToolCall func(AfterToolCallCtx) *AfterToolCallResult
 
 	// ShouldStopAfterTurn requests a graceful stop after the current turn,
 	// before another model request starts.

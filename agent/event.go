@@ -39,6 +39,8 @@ type AgentEvent struct {
 	Message AgentMessage
 	// LLMEvent is the underlying llm event, set on MessageUpdate.
 	LLMEvent *llm.Event
+	// ToolResults are the tool results produced during a turn, set on TurnEnd.
+	ToolResults []llm.ToolResultMessage
 
 	// ToolCallID and ToolName identify the tool on tool execution events.
 	ToolCallID string
