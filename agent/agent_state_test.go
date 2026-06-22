@@ -195,6 +195,90 @@ func TestAgentContinueRejectsAssistantLast(t *testing.T) {
 	}
 }
 
+func TestAgentContinueDrainsSteeringFromAssistant(t *testing.T) {
+	rec := &recorder{turns: [][]llm.Event{{done(textAssistant("after steer"))}}}
+	a := New(Options{
+		Model:    testModel,
+		StreamFn: rec.fn(),
+		Messages: []AgentMessage{userPrompt("hi"), FromLLM(textAssistant("done"))},
+	})
+	a.Steer(userPrompt("s1"))
+
+	if err := a.Continue(context.Background()); err != nil {
+		t.Fatalf("continue: %v", err)
+	}
+	if rec.calls != 1 {
+		t.Fatalf("stream calls = %d, want 1", rec.calls)
+	}
+	messages := a.Snapshot().Messages
+	if len(messages) != 4 {
+		t.Fatalf("transcript = %d messages, want 4 (user, assistant, steered, assistant)", len(messages))
+	}
+	if got := userText(t, messages[2]); got != "s1" {
+		t.Fatalf("injected message = %q, want %q", got, "s1")
+	}
+	if a.HasQueuedMessages() {
+		t.Fatal("steering queue should be drained after continue")
+	}
+}
+
+func TestAgentContinueDrainsFollowUpWhenNoSteering(t *testing.T) {
+	rec := &recorder{turns: [][]llm.Event{{done(textAssistant("after follow-up"))}}}
+	a := New(Options{
+		Model:    testModel,
+		StreamFn: rec.fn(),
+		Messages: []AgentMessage{userPrompt("hi"), FromLLM(textAssistant("done"))},
+	})
+	a.FollowUp(userPrompt("f1"))
+
+	if err := a.Continue(context.Background()); err != nil {
+		t.Fatalf("continue: %v", err)
+	}
+	if rec.calls != 1 {
+		t.Fatalf("stream calls = %d, want 1", rec.calls)
+	}
+	messages := a.Snapshot().Messages
+	if len(messages) != 4 {
+		t.Fatalf("transcript = %d messages, want 4 (user, assistant, follow-up, assistant)", len(messages))
+	}
+	if got := userText(t, messages[2]); got != "f1" {
+		t.Fatalf("injected message = %q, want %q", got, "f1")
+	}
+	if a.HasQueuedMessages() {
+		t.Fatal("follow-up queue should be drained after continue")
+	}
+}
+
+func TestAgentContinuePrefersSteeringOverFollowUp(t *testing.T) {
+	rec := &recorder{turns: [][]llm.Event{
+		{done(textAssistant("r1"))},
+		{done(textAssistant("r2"))},
+	}}
+	a := New(Options{
+		Model:    testModel,
+		StreamFn: rec.fn(),
+		Messages: []AgentMessage{userPrompt("hi"), FromLLM(textAssistant("done"))},
+	})
+	a.Steer(userPrompt("s1"))
+	a.FollowUp(userPrompt("f1"))
+
+	if err := a.Continue(context.Background()); err != nil {
+		t.Fatalf("continue: %v", err)
+	}
+	// Steering is chosen as the continuation prompt; the follow-up is then
+	// consumed by the loop's follow-up poll within the same run.
+	messages := a.Snapshot().Messages
+	if len(messages) != 6 {
+		t.Fatalf("transcript = %d messages, want 6 (user, assistant, s1, r1, f1, r2)", len(messages))
+	}
+	if got := userText(t, messages[2]); got != "s1" {
+		t.Fatalf("first injected message = %q, want steering %q", got, "s1")
+	}
+	if got := userText(t, messages[4]); got != "f1" {
+		t.Fatalf("later injected message = %q, want follow-up %q", got, "f1")
+	}
+}
+
 // streamingTurn emits a start, one text delta, and a done event so the loop
 // produces message_start/message_update/message_end for an assistant response.
 func streamingTurn(text string) []llm.Event {

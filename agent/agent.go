@@ -141,16 +141,25 @@ func (a *Agent) Prompt(ctx context.Context, input any) error {
 	if err != nil {
 		return err
 	}
-	return a.run(ctx, prompts)
+	return a.run(ctx, prompts, false)
 }
 
 // Continue resumes a run from the current transcript without adding a new
 // message, blocking until it completes. Use it to retry or to respond after
-// messages were appended out of band. The transcript must be non-empty and must
-// not end with an assistant message, since a provider needs a user or tool
-// result as the latest turn.
+// messages were appended out of band.
+//
+// The transcript must be non-empty. A provider needs a user or tool result as
+// the latest turn, so when the transcript ends with an assistant message,
+// Continue falls back to queued messages: it drains the steering queue first,
+// then the follow-up queue, and runs whatever it finds as the next prompt. It
+// returns an error only when the last message is an assistant and both queues
+// are empty.
 func (a *Agent) Continue(ctx context.Context) error {
 	a.mu.Lock()
+	if a.isStreaming {
+		a.mu.Unlock()
+		return errBusy
+	}
 	count := len(a.messages)
 	lastIsAssistant := false
 	if count > 0 {
@@ -162,14 +171,24 @@ func (a *Agent) Continue(ctx context.Context) error {
 		return errors.New("agent: cannot continue an empty transcript")
 	}
 	if lastIsAssistant {
+		// Drained steering messages already become the run's prompt, so the
+		// loop's first steering poll is skipped to avoid injecting them twice.
+		if steering := a.steering.drain(); len(steering) > 0 {
+			return a.run(ctx, steering, true)
+		}
+		if followUp := a.followUp.drain(); len(followUp) > 0 {
+			return a.run(ctx, followUp, false)
+		}
 		return errors.New("agent: cannot continue from an assistant message")
 	}
-	return a.run(ctx, nil)
+	return a.run(ctx, nil, false)
 }
 
 // run drives one RunLoop invocation from prompts and the current state, then
-// commits the appended messages to the transcript.
-func (a *Agent) run(ctx context.Context, prompts []AgentMessage) error {
+// commits the appended messages to the transcript. skipInitialSteering omits the
+// loop's first steering poll, used when the prompts were themselves drained from
+// the steering queue.
+func (a *Agent) run(ctx context.Context, prompts []AgentMessage, skipInitialSteering bool) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -190,7 +209,7 @@ func (a *Agent) run(ctx context.Context, prompts []AgentMessage) error {
 		Messages:     append([]AgentMessage(nil), a.messages...),
 		Tools:        append([]AgentTool(nil), a.tools...),
 	}
-	cfg := a.loopConfigLocked()
+	cfg := a.loopConfigLocked(skipInitialSteering)
 	a.mu.Unlock()
 
 	defer cancel()
@@ -307,7 +326,20 @@ func (a *Agent) Reset() {
 }
 
 // loopConfigLocked builds the LoopConfig for one run. The caller holds a.mu.
-func (a *Agent) loopConfigLocked() LoopConfig {
+// When skipInitialSteering is set, the first steering poll returns nothing, so
+// messages already drained into the run's prompt are not injected a second time.
+func (a *Agent) loopConfigLocked(skipInitialSteering bool) LoopConfig {
+	getSteering := a.steering.drain
+	if skipInitialSteering {
+		skipped := false
+		getSteering = func() []AgentMessage {
+			if !skipped {
+				skipped = true
+				return nil
+			}
+			return a.steering.drain()
+		}
+	}
 	return LoopConfig{
 		Model:               a.model,
 		StreamOptions:       llm.StreamOptions{Reasoning: a.thinkingLevel},
@@ -320,7 +352,7 @@ func (a *Agent) loopConfigLocked() LoopConfig {
 		AfterToolCall:       a.afterToolCall,
 		ShouldStopAfterTurn: a.shouldStopAfterTurn,
 		PrepareNextTurn:     a.prepareNextTurn,
-		GetSteeringMessages: a.steering.drain,
+		GetSteeringMessages: getSteering,
 		GetFollowUpMessages: a.followUp.drain,
 	}
 }
