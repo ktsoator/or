@@ -33,6 +33,13 @@ type State struct {
 	Messages      []AgentMessage
 	// IsStreaming reports whether a prompt or continuation is in progress.
 	IsStreaming bool
+	// StreamingMessage is the partial message for the response currently
+	// streaming, or nil when none is in flight. It updates as deltas arrive and
+	// clears when the message completes.
+	StreamingMessage AgentMessage
+	// PendingToolCalls holds the ids of tool calls currently executing, in the
+	// order they started.
+	PendingToolCalls []string
 	// ErrorMessage holds the error from the most recent failed turn, if any.
 	ErrorMessage string
 }
@@ -77,11 +84,13 @@ type Agent struct {
 	systemPrompt  string
 	model         llm.Model
 	thinkingLevel llm.ModelThinkingLevel
-	tools         []AgentTool
-	messages      []AgentMessage
-	isStreaming   bool
-	errorMessage  string
-	cancel        context.CancelFunc
+	tools            []AgentTool
+	messages         []AgentMessage
+	isStreaming      bool
+	streamingMessage AgentMessage
+	pendingToolCalls []string
+	errorMessage     string
+	cancel           context.CancelFunc
 
 	convertToLLM        func([]AgentMessage) []llm.Message
 	transformContext    func([]AgentMessage) []AgentMessage
@@ -172,6 +181,8 @@ func (a *Agent) run(ctx context.Context, prompts []AgentMessage) error {
 	}
 	a.isStreaming = true
 	a.errorMessage = ""
+	a.streamingMessage = nil
+	a.pendingToolCalls = nil
 	runCtx, cancel := context.WithCancel(ctx)
 	a.cancel = cancel
 	base := Context{
@@ -189,16 +200,18 @@ func (a *Agent) run(ctx context.Context, prompts []AgentMessage) error {
 		if event.Type == AgentEnd {
 			appended = event.Messages
 		}
+		a.reduce(event)
 		a.dispatch(event)
 	}
 
 	errText := lastAssistantError(appended)
 
 	a.mu.Lock()
-	a.messages = append(a.messages, appended...)
 	a.isStreaming = false
 	a.cancel = nil
 	a.errorMessage = errText
+	a.streamingMessage = nil
+	a.pendingToolCalls = nil
 	a.mu.Unlock()
 
 	if errText != "" {
@@ -250,13 +263,15 @@ func (a *Agent) Snapshot() State {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return State{
-		SystemPrompt:  a.systemPrompt,
-		Model:         a.model,
-		ThinkingLevel: a.thinkingLevel,
-		Tools:         append([]AgentTool(nil), a.tools...),
-		Messages:      append([]AgentMessage(nil), a.messages...),
-		IsStreaming:   a.isStreaming,
-		ErrorMessage:  a.errorMessage,
+		SystemPrompt:     a.systemPrompt,
+		Model:            a.model,
+		ThinkingLevel:    a.thinkingLevel,
+		Tools:            append([]AgentTool(nil), a.tools...),
+		Messages:         append([]AgentMessage(nil), a.messages...),
+		IsStreaming:      a.isStreaming,
+		StreamingMessage: a.streamingMessage,
+		PendingToolCalls: append([]string(nil), a.pendingToolCalls...),
+		ErrorMessage:     a.errorMessage,
 	}
 }
 
@@ -286,6 +301,8 @@ func (a *Agent) Reset() {
 	a.mu.Lock()
 	a.messages = nil
 	a.errorMessage = ""
+	a.streamingMessage = nil
+	a.pendingToolCalls = nil
 	a.mu.Unlock()
 }
 
@@ -305,6 +322,29 @@ func (a *Agent) loopConfigLocked() LoopConfig {
 		PrepareNextTurn:     a.prepareNextTurn,
 		GetSteeringMessages: a.steering.drain,
 		GetFollowUpMessages: a.followUp.drain,
+	}
+}
+
+// reduce folds one run event into the agent's live state so a concurrent
+// Snapshot reflects progress mid-run: the transcript grows as messages
+// complete, StreamingMessage tracks the in-flight response, and
+// PendingToolCalls tracks executing tool calls. It runs in event order, before
+// dispatch, so listeners observe the updated state.
+func (a *Agent) reduce(event AgentEvent) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	switch event.Type {
+	case MessageStart, MessageUpdate:
+		a.streamingMessage = event.Message
+	case MessageEnd:
+		a.streamingMessage = nil
+		a.messages = append(a.messages, event.Message)
+	case ToolStart:
+		a.pendingToolCalls = append(a.pendingToolCalls, event.ToolCallID)
+	case ToolEnd:
+		a.pendingToolCalls = removeID(a.pendingToolCalls, event.ToolCallID)
+	case AgentEnd:
+		a.streamingMessage = nil
 	}
 }
 
@@ -365,6 +405,18 @@ func (q *messageQueue) drain() []AgentMessage {
 	drained := q.items
 	q.items = nil
 	return drained
+}
+
+// removeID returns ids with the first occurrence of id removed, preserving
+// order. It is called under a.mu; the returned slice may share backing with the
+// input, which is safe because Snapshot copies before exposing it.
+func removeID(ids []string, id string) []string {
+	for index, existing := range ids {
+		if existing == id {
+			return append(ids[:index], ids[index+1:]...)
+		}
+	}
+	return ids
 }
 
 // toPrompts normalizes Prompt input into messages.

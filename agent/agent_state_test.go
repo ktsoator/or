@@ -195,6 +195,76 @@ func TestAgentContinueRejectsAssistantLast(t *testing.T) {
 	}
 }
 
+// streamingTurn emits a start, one text delta, and a done event so the loop
+// produces message_start/message_update/message_end for an assistant response.
+func streamingTurn(text string) []llm.Event {
+	partial := &llm.AssistantMessage{
+		StopReason: llm.StopReasonStop,
+		Content:    []llm.AssistantContent{&llm.TextContent{Text: text}},
+	}
+	return []llm.Event{
+		{Type: llm.EventStart, Partial: partial},
+		{Type: llm.EventTextDelta, Partial: partial, Delta: text},
+		done(textAssistant(text)),
+	}
+}
+
+func TestAgentLiveStateDuringToolCall(t *testing.T) {
+	rec := &recorder{turns: [][]llm.Event{
+		{done(toolCallAssistant("c1", "echo", map[string]any{"text": "hi"}))},
+		{done(textAssistant("done"))},
+	}}
+	a := New(Options{Model: testModel, StreamFn: rec.fn(), Tools: []AgentTool{echoTool(nil)}})
+
+	// By the time a tool starts, the assistant turn that requested it has already
+	// completed, so its message is visible and the call id is pending.
+	var pendingAtStart []string
+	var messagesAtStart int
+	a.Subscribe(func(event AgentEvent) {
+		if event.Type == ToolStart {
+			snapshot := a.Snapshot()
+			pendingAtStart = snapshot.PendingToolCalls
+			messagesAtStart = len(snapshot.Messages)
+		}
+	})
+
+	if err := a.Prompt(context.Background(), "use echo"); err != nil {
+		t.Fatalf("prompt: %v", err)
+	}
+
+	if len(pendingAtStart) != 1 || pendingAtStart[0] != "c1" {
+		t.Fatalf("pending tool calls at tool start = %v, want [c1]", pendingAtStart)
+	}
+	if messagesAtStart != 2 {
+		t.Fatalf("messages visible at tool start = %d, want 2 (prompt, assistant)", messagesAtStart)
+	}
+	if got := a.Snapshot().PendingToolCalls; len(got) != 0 {
+		t.Fatalf("pending tool calls after run = %v, want empty", got)
+	}
+}
+
+func TestAgentStreamingMessageVisibleDuringRun(t *testing.T) {
+	rec := &recorder{turns: [][]llm.Event{streamingTurn("hello")}}
+	a := New(Options{Model: testModel, StreamFn: rec.fn()})
+
+	sawStreaming := false
+	a.Subscribe(func(event AgentEvent) {
+		if event.Type == MessageUpdate && a.Snapshot().StreamingMessage != nil {
+			sawStreaming = true
+		}
+	})
+
+	if err := a.Prompt(context.Background(), "hi"); err != nil {
+		t.Fatalf("prompt: %v", err)
+	}
+	if !sawStreaming {
+		t.Fatal("StreamingMessage was never visible during the stream")
+	}
+	if a.Snapshot().StreamingMessage != nil {
+		t.Fatal("StreamingMessage should be nil after the run completes")
+	}
+}
+
 func TestAgentAbortCancelsRun(t *testing.T) {
 	streamFn := func(ctx context.Context, _ llm.Model, _ llm.Context, _ llm.StreamOptions) (<-chan llm.Event, error) {
 		ch := make(chan llm.Event)

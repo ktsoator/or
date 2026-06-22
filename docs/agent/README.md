@@ -254,7 +254,9 @@ assistant := agent.New(agent.Options{
 ## Managing state
 
 ```go
-state := assistant.Snapshot() // read-only: Messages, Model, IsStreaming, ErrorMessage, ...
+state := assistant.Snapshot() // read-only snapshot, safe to call mid-run from another goroutine
+// state.Messages grows as a run progresses; state.StreamingMessage holds the
+// in-flight response, and state.PendingToolCalls lists executing tool calls.
 
 assistant.HasQueuedMessages()  // any steering or follow-up queued?
 assistant.ClearSteeringQueue() // drop queued steering messages
