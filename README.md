@@ -9,10 +9,11 @@ Choose the path from intent to action.
 [![Go Version](https://img.shields.io/github/go-mod/go-version/ktsoator/or)](go.mod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-`or` is a modular Go toolkit for building applications with language models
-and, over time, higher-level agents. It starts with a provider-neutral LLM
-package that keeps conversations, tools, reasoning, and streaming events stable
-while models and wire protocols change underneath.
+`or` is a modular Go toolkit for building applications with language models and
+higher-level agents. A provider-neutral LLM package keeps conversations, tools,
+reasoning, and streaming events stable while models and wire protocols change
+underneath, and an agent package builds the tool-call loop, state, and streaming
+events on top.
 
 ## Why `or`
 
@@ -23,13 +24,15 @@ while models and wire protocols change underneath.
 - Preserve provider metadata needed for multi-turn reasoning and tool use.
 - Switch models between turns without rebuilding conversation history.
 - Add custom model protocols without expanding the shared request API.
+- Run autonomous multi-step tool loops with streaming events, mid-run steering,
+  and per-turn model switching.
 
 ## Packages
 
 | Package | Status | Description |
 |---|---|---|
 | [`or/llm`](docs/llm/README.md) | Available | Unified model access, streaming, tools, reasoning, images, and conversation history |
-| [`or/agent`](agent) | Available | Stateful agent loop with tools, streaming events, steering, follow-ups, and abort |
+| [`or/agent`](docs/agent/README.md) | Available | Stateful agent loop with tools, streaming events, steering, follow-ups, and abort |
 
 Future packages can build higher-level orchestration on the same foundations
 without turning the root package into a single large API.
@@ -128,6 +131,12 @@ A runnable stateful Agent example is available in
 - [Request configuration and observability](docs/llm/configuration.md)
 - [Custom protocol adapters](docs/llm/extending.md)
 - [Go API reference](https://pkg.go.dev/github.com/ktsoator/or/llm)
+
+## Agent documentation
+
+- [Agent package](docs/agent/README.md) — the tool loop, hooks, events, steering, and state
+- [Runnable examples](example/agent/README.md) — a minimal program and an interactive session
+- [Go API reference](https://pkg.go.dev/github.com/ktsoator/or/agent)
 
 ## Supported protocols
 
