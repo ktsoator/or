@@ -29,6 +29,7 @@ while models and wire protocols change underneath.
 | Package | Status | Description |
 |---|---|---|
 | [`or/llm`](docs/llm/README.md) | Available | Unified model access, streaming, tools, reasoning, images, and conversation history |
+| [`or/agent`](agent) | Available | Stateful agent loop with tools, streaming events, steering, follow-ups, and abort |
 
 Future packages can build higher-level orchestration on the same foundations
 without turning the root package into a single large API.
@@ -112,6 +113,9 @@ for event := range events {
 
 Runnable examples for completions, streaming, tools, images, and model
 switching are available in [`example/llm`](example/llm/README.md).
+
+A runnable stateful Agent example is available in
+[`example/agent`](example/agent/README.md).
 
 ## LLM documentation
 
