@@ -16,6 +16,7 @@ body:
       description: Which package is affected?
       options:
         - llm
+        - agent
         - Documentation
         - Other
     validations:

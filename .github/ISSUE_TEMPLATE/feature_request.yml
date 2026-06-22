@@ -15,6 +15,7 @@ body:
       label: Area
       options:
         - llm
+        - agent
         - New package
         - Documentation
         - Repository tooling
