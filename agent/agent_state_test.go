@@ -141,6 +141,60 @@ func TestAgentSteerInjectsMessage(t *testing.T) {
 	}
 }
 
+func TestAgentContinueRunsWithoutNewPrompt(t *testing.T) {
+	rec := &recorder{turns: [][]llm.Event{{done(textAssistant("resumed"))}}}
+	a := New(Options{
+		Model:    testModel,
+		StreamFn: rec.fn(),
+		// Seed a transcript ending in a user message, as if a prior session left
+		// off here.
+		Messages: []AgentMessage{userPrompt("hi")},
+	})
+
+	if err := a.Continue(context.Background()); err != nil {
+		t.Fatalf("continue: %v", err)
+	}
+
+	if rec.calls != 1 {
+		t.Fatalf("stream calls = %d, want 1", rec.calls)
+	}
+	messages := a.Snapshot().Messages
+	if len(messages) != 2 {
+		t.Fatalf("transcript = %d messages, want 2 (seed, assistant)", len(messages))
+	}
+	if assistant := assistantOf(t, messages[1]); textOf(assistant) != "resumed" {
+		t.Fatalf("assistant text = %q, want %q", textOf(assistant), "resumed")
+	}
+}
+
+func TestAgentContinueRejectsEmptyTranscript(t *testing.T) {
+	rec := &recorder{}
+	a := New(Options{Model: testModel, StreamFn: rec.fn()})
+
+	if err := a.Continue(context.Background()); err == nil {
+		t.Fatal("continue on empty transcript returned nil, want error")
+	}
+	if rec.calls != 0 {
+		t.Fatalf("stream calls = %d, want 0", rec.calls)
+	}
+}
+
+func TestAgentContinueRejectsAssistantLast(t *testing.T) {
+	rec := &recorder{}
+	a := New(Options{
+		Model:    testModel,
+		StreamFn: rec.fn(),
+		Messages: []AgentMessage{userPrompt("hi"), FromLLM(textAssistant("done"))},
+	})
+
+	if err := a.Continue(context.Background()); err == nil {
+		t.Fatal("continue from assistant message returned nil, want error")
+	}
+	if rec.calls != 0 {
+		t.Fatalf("stream calls = %d, want 0", rec.calls)
+	}
+}
+
 func TestAgentAbortCancelsRun(t *testing.T) {
 	streamFn := func(ctx context.Context, _ llm.Model, _ llm.Context, _ llm.StreamOptions) (<-chan llm.Event, error) {
 		ch := make(chan llm.Event)
