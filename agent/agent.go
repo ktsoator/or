@@ -80,10 +80,10 @@ type Options struct {
 // want to Steer, FollowUp, or Abort concurrently. All methods are safe for
 // concurrent use.
 type Agent struct {
-	mu            sync.Mutex
-	systemPrompt  string
-	model         llm.Model
-	thinkingLevel llm.ModelThinkingLevel
+	mu               sync.Mutex
+	systemPrompt     string
+	model            llm.Model
+	thinkingLevel    llm.ModelThinkingLevel
 	tools            []AgentTool
 	messages         []AgentMessage
 	isStreaming      bool
