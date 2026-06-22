@@ -1,6 +1,6 @@
 # Agent examples
 
-Runnable examples for the stateful `agent.Agent`. Both call a live model API and
+Runnable examples for the stateful `agent.Agent`. They call a live model API and
 may incur provider charges. Set the DeepSeek API key and run them from the
 repository root:
 
@@ -8,6 +8,7 @@ repository root:
 export DEEPSEEK_API_KEY=your-deepseek-api-key
 go run ./example/agent/basic   # smallest: one tool, one prompt
 go run ./example/agent/tool    # interactive terminal session
+go run ./example/agent/hooks   # interception points (needs MINIMAX_CN_API_KEY too)
 ```
 
 ## basic
@@ -41,3 +42,12 @@ For example, switch from DeepSeek V4 Flash to V4 Pro after an answer:
 You › /model deepseek deepseek-v4-pro
 ↻ MODEL Switched to deepseek/deepseek-v4-pro · 2 messages preserved
 ```
+
+## hooks
+
+A non-interactive program showing the agent's interception points: `BeforeToolCall`
+gates each call and blocks one tool, `AfterToolCall` annotates results,
+`PrepareNextTurn` switches to a different model — across wire protocols — after the
+tool turn, and `ShouldStopAfterTurn` guards against a runaway loop. It runs tools
+on DeepSeek (OpenAI-compatible) and answers on MiniMax (Anthropic-compatible), so
+it needs both `DEEPSEEK_API_KEY` and `MINIMAX_CN_API_KEY`.
