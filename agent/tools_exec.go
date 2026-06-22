@@ -3,21 +3,93 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/ktsoator/or/llm"
 )
 
 // executeToolCalls runs a batch of tool calls and returns one result message per
-// call. The batch terminates the run only when every result sets Terminate.
+// call, in source order. The batch terminates the run only when every result
+// sets Terminate.
 //
-// Tools currently run sequentially regardless of ExecutionMode. Concurrent
-// execution for the parallel mode is a planned follow-up; the mode field is
-// accepted now so the API does not change when it lands.
+// A batch runs concurrently by default. It runs sequentially when ToolExecution
+// is ExecutionSequential or when any tool in the batch declares
+// ExecutionSequential. In a concurrent batch only the tools' Execute functions
+// run in parallel: ToolStart events and BeforeToolCall run in source order
+// before execution, and AfterToolCall, ToolEnd, and result-message events run in
+// source order after the whole batch finishes. Hooks are therefore never called
+// concurrently, while result events stay deterministic.
 func (e *engine) executeToolCalls(current Context, assistant llm.AssistantMessage, toolCalls []llm.ToolCall) ([]llm.ToolResultMessage, bool) {
+	if e.runsConcurrently(current, toolCalls) {
+		return e.executeParallel(current, assistant, toolCalls)
+	}
+	return e.executeSequential(current, assistant, toolCalls)
+}
+
+// runsConcurrently reports whether a batch may run its tools in parallel. A
+// sequential loop default or any sequential tool forces the whole batch
+// sequential.
+func (e *engine) runsConcurrently(current Context, toolCalls []llm.ToolCall) bool {
+	if e.cfg.ToolExecution == ExecutionSequential {
+		return false
+	}
+	for index := range toolCalls {
+		if tool := findTool(current.Tools, toolCalls[index].Name); tool != nil && tool.ExecutionMode == ExecutionSequential {
+			return false
+		}
+	}
+	return true
+}
+
+func (e *engine) executeSequential(current Context, assistant llm.AssistantMessage, toolCalls []llm.ToolCall) ([]llm.ToolResultMessage, bool) {
 	messages := make([]llm.ToolResultMessage, 0, len(toolCalls))
 	allTerminate := true
 	for index := range toolCalls {
 		message, terminate := e.runTool(current, assistant, toolCalls[index])
+		messages = append(messages, message)
+		if !terminate {
+			allTerminate = false
+		}
+	}
+	return messages, allTerminate && len(messages) > 0
+}
+
+func (e *engine) executeParallel(current Context, assistant llm.AssistantMessage, toolCalls []llm.ToolCall) ([]llm.ToolResultMessage, bool) {
+	// Preflight in source order: emit ToolStart and run BeforeToolCall.
+	prepared := make([]preparedToolCall, len(toolCalls))
+	for index := range toolCalls {
+		call := toolCalls[index]
+		e.emit(AgentEvent{Type: ToolStart, ToolCallID: call.ID, ToolName: call.Name, Args: call.Arguments})
+		prepared[index] = e.preflight(current, assistant, call)
+	}
+
+	// Execute the tools that passed preflight concurrently.
+	executed := make([]executedToolCall, len(toolCalls))
+	var wait sync.WaitGroup
+	for index := range prepared {
+		if prepared[index].errText != "" {
+			continue
+		}
+		wait.Add(1)
+		go func(index int) {
+			defer wait.Done()
+			result, isError := e.executePrepared(prepared[index])
+			executed[index] = executedToolCall{result: result, isError: isError}
+		}(index)
+	}
+	wait.Wait()
+
+	// Finalize in source order: run AfterToolCall and emit end events.
+	messages := make([]llm.ToolResultMessage, 0, len(toolCalls))
+	allTerminate := true
+	for index := range toolCalls {
+		var message llm.ToolResultMessage
+		var terminate bool
+		if prepared[index].errText != "" {
+			message, terminate = e.finishError(prepared[index].call, prepared[index].errText)
+		} else {
+			message, terminate = e.finalize(current, assistant, prepared[index], executed[index].result, executed[index].isError)
+		}
 		messages = append(messages, message)
 		if !terminate {
 			allTerminate = false
@@ -32,17 +104,50 @@ func (e *engine) executeToolCalls(current Context, assistant llm.AssistantMessag
 func (e *engine) runTool(current Context, assistant llm.AssistantMessage, call llm.ToolCall) (llm.ToolResultMessage, bool) {
 	e.emit(AgentEvent{Type: ToolStart, ToolCallID: call.ID, ToolName: call.Name, Args: call.Arguments})
 
+	prepared := e.preflight(current, assistant, call)
+	if prepared.errText != "" {
+		return e.finishError(call, prepared.errText)
+	}
+	result, isError := e.executePrepared(prepared)
+	return e.finalize(current, assistant, prepared, result, isError)
+}
+
+// preparedToolCall is the result of preflighting one tool call. A non-empty
+// errText means the call failed validation or was blocked and must not execute.
+type preparedToolCall struct {
+	call      llm.ToolCall
+	tool      *AgentTool
+	validated map[string]any
+	rawArgs   json.RawMessage
+	errText   string
+}
+
+// executedToolCall is the raw outcome of one Execute call.
+type executedToolCall struct {
+	result  ToolResult
+	isError bool
+}
+
+// preflight resolves the tool, validates arguments, and runs BeforeToolCall. It
+// does not execute the tool. It must run in source order because BeforeToolCall
+// is a caller hook that should not be invoked concurrently.
+func (e *engine) preflight(current Context, assistant llm.AssistantMessage, call llm.ToolCall) preparedToolCall {
+	prepared := preparedToolCall{call: call}
+
 	tool := findTool(current.Tools, call.Name)
 	if tool == nil {
-		return e.finishError(call, fmt.Sprintf("unknown tool %q", call.Name))
+		prepared.errText = fmt.Sprintf("unknown tool %q", call.Name)
+		return prepared
 	}
 	if tool.Execute == nil {
-		return e.finishError(call, fmt.Sprintf("tool %q has no Execute function", call.Name))
+		prepared.errText = fmt.Sprintf("tool %q has no Execute function", call.Name)
+		return prepared
 	}
 
 	validated, err := llm.ValidateToolArguments(tool.Definition, call)
 	if err != nil {
-		return e.finishError(call, fmt.Sprintf("invalid tool arguments: %v", err))
+		prepared.errText = fmt.Sprintf("invalid tool arguments: %v", err)
+		return prepared
 	}
 
 	if e.cfg.BeforeToolCall != nil {
@@ -56,37 +161,53 @@ func (e *engine) runTool(current Context, assistant llm.AssistantMessage, call l
 			if reason == "" {
 				reason = "tool call blocked"
 			}
-			return e.finishError(call, reason)
+			prepared.errText = reason
+			return prepared
 		}
 	}
 
 	rawArgs, err := json.Marshal(validated)
 	if err != nil {
-		return e.finishError(call, fmt.Sprintf("encode tool arguments: %v", err))
+		prepared.errText = fmt.Sprintf("encode tool arguments: %v", err)
+		return prepared
 	}
 
+	prepared.tool = tool
+	prepared.validated = validated
+	prepared.rawArgs = rawArgs
+	return prepared
+}
+
+// executePrepared runs a preflighted tool. It is safe to call concurrently for
+// distinct calls: it reads only the prepared value and emits through the event
+// channel, which is concurrency-safe.
+func (e *engine) executePrepared(prepared preparedToolCall) (ToolResult, bool) {
 	onUpdate := func(partial ToolResult) {
 		e.emit(AgentEvent{
 			Type:       ToolUpdate,
-			ToolCallID: call.ID,
-			ToolName:   call.Name,
-			Args:       validated,
+			ToolCallID: prepared.call.ID,
+			ToolName:   prepared.call.Name,
+			Args:       prepared.validated,
 			Result:     partial,
 		})
 	}
 
-	result, execErr := tool.Execute(e.ctx, call.ID, rawArgs, onUpdate)
-	isError := false
-	if execErr != nil {
-		isError = true
-		result = ToolResult{Content: []llm.ToolResultContent{&llm.TextContent{Text: execErr.Error()}}}
+	result, err := prepared.tool.Execute(e.ctx, prepared.call.ID, prepared.rawArgs, onUpdate)
+	if err != nil {
+		return ToolResult{Content: []llm.ToolResultContent{&llm.TextContent{Text: err.Error()}}}, true
 	}
+	return result, false
+}
 
+// finalize applies AfterToolCall and emits the end-of-tool and result-message
+// events. It must run in source order so AfterToolCall is not invoked
+// concurrently.
+func (e *engine) finalize(current Context, assistant llm.AssistantMessage, prepared preparedToolCall, result ToolResult, isError bool) (llm.ToolResultMessage, bool) {
 	if e.cfg.AfterToolCall != nil {
 		override := e.cfg.AfterToolCall(AfterToolCallCtx{
 			AssistantMessage: assistant,
-			ToolCall:         call,
-			Args:             validated,
+			ToolCall:         prepared.call,
+			Args:             prepared.validated,
 			Result:           result,
 			IsError:          isError,
 			Context:          current,
@@ -106,8 +227,7 @@ func (e *engine) runTool(current Context, assistant llm.AssistantMessage, call l
 			}
 		}
 	}
-
-	return e.finish(call, result, isError)
+	return e.finish(prepared.call, result, isError)
 }
 
 // finish emits the end-of-tool and result-message events and returns the result
