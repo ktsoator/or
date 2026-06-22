@@ -12,6 +12,18 @@ import (
 // errBusy is returned by Prompt when a run is already in progress.
 var errBusy = errors.New("agent: a prompt is already in progress")
 
+// QueueMode controls how many queued steering or follow-up messages are injected
+// at one drain point.
+type QueueMode string
+
+const (
+	// QueueAll injects every queued message at the drain point. It is the default.
+	QueueAll QueueMode = "all"
+	// QueueOneAtATime injects only the oldest queued message, leaving the rest for
+	// later drain points.
+	QueueOneAtATime QueueMode = "one-at-a-time"
+)
+
 // State is a read-only snapshot of an Agent's runtime state.
 type State struct {
 	SystemPrompt  string
@@ -37,6 +49,10 @@ type Options struct {
 	ConvertToLLM     func([]AgentMessage) []llm.Message
 	TransformContext func([]AgentMessage) []AgentMessage
 	ToolExecution    ExecutionMode
+	// SteeringMode and FollowUpMode control how many queued messages are injected
+	// at one drain point. The zero value is QueueAll.
+	SteeringMode QueueMode
+	FollowUpMode QueueMode
 	// StreamFn reaches a model for one turn. A nil value uses llm.Stream. It
 	// exists mainly as a seam for tests and custom transports.
 	StreamFn StreamFn
@@ -96,8 +112,8 @@ func New(opts Options) *Agent {
 		afterToolCall:       opts.AfterToolCall,
 		shouldStopAfterTurn: opts.ShouldStopAfterTurn,
 		prepareNextTurn:     opts.PrepareNextTurn,
-		steering:            &messageQueue{},
-		followUp:            &messageQueue{},
+		steering:            &messageQueue{mode: opts.SteeringMode},
+		followUp:            &messageQueue{mode: opts.FollowUpMode},
 		listeners:           make(map[int]func(AgentEvent)),
 	}
 }
@@ -252,8 +268,8 @@ func (a *Agent) loopConfigLocked() LoopConfig {
 		AfterToolCall:       a.afterToolCall,
 		ShouldStopAfterTurn: a.shouldStopAfterTurn,
 		PrepareNextTurn:     a.prepareNextTurn,
-		GetSteeringMessages: a.steering.drainAll,
-		GetFollowUpMessages: a.followUp.drainAll,
+		GetSteeringMessages: a.steering.drain,
+		GetFollowUpMessages: a.followUp.drain,
 	}
 }
 
@@ -273,9 +289,10 @@ func (a *Agent) dispatch(event AgentEvent) {
 }
 
 // messageQueue is a concurrency-safe FIFO backing the steering and follow-up
-// queues.
+// queues. Its mode decides how many messages one drain returns.
 type messageQueue struct {
 	mu    sync.Mutex
+	mode  QueueMode
 	items []AgentMessage
 }
 
@@ -285,11 +302,18 @@ func (q *messageQueue) enqueue(message AgentMessage) {
 	q.mu.Unlock()
 }
 
-func (q *messageQueue) drainAll() []AgentMessage {
+// drain returns queued messages: the oldest one when the mode is
+// QueueOneAtATime, otherwise all of them.
+func (q *messageQueue) drain() []AgentMessage {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if len(q.items) == 0 {
 		return nil
+	}
+	if q.mode == QueueOneAtATime {
+		next := q.items[0]
+		q.items = append([]AgentMessage(nil), q.items[1:]...)
+		return []AgentMessage{next}
 	}
 	drained := q.items
 	q.items = nil
