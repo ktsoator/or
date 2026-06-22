@@ -152,8 +152,8 @@ been live-tested; both wire adapters are covered by automated mock-server tests.
 
 ## Project status
 
-`v0.2.0` is the first feature-complete public release and the recommended
-baseline for new integrations. The project remains pre-1.0, so APIs may continue
+`v0.3.0` adds the `or/agent` package and is the recommended baseline for new
+integrations. The project remains pre-1.0, so APIs may continue
 to evolve between minor versions. Breaking changes will be called out in release
 notes.
 
