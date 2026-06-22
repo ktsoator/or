@@ -16,6 +16,7 @@ body:
       options:
         - llm
         - agent
+        - harness
         - New package
         - Documentation
         - Repository tooling
