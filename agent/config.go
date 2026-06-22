@@ -76,6 +76,10 @@ type LoopConfig struct {
 	// request. A nil value uses the default, which unwraps FromLLM messages and
 	// drops everything else.
 	ConvertToLLM func([]AgentMessage) []llm.Message
+	// GetAPIKey resolves the API key for the model's provider before each turn,
+	// for short-lived tokens that may expire during a long run. A non-empty
+	// return overrides StreamOptions.APIKey; nil or "" leaves it unchanged.
+	GetAPIKey func(provider string) string
 	// ToolExecution is the default batch execution mode. Empty means parallel.
 	ToolExecution ExecutionMode
 

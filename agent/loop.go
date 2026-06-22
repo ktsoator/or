@@ -187,7 +187,14 @@ func (e *engine) streamAssistant(current Context) llm.AssistantMessage {
 		Tools:        toolDefinitions(current.Tools),
 	}
 
-	stream, err := e.streamFn(e.ctx, e.cfg.Model, input, e.cfg.StreamOptions)
+	options := e.cfg.StreamOptions
+	if e.cfg.GetAPIKey != nil {
+		if key := e.cfg.GetAPIKey(e.cfg.Model.Provider); key != "" {
+			options.APIKey = key
+		}
+	}
+
+	stream, err := e.streamFn(e.ctx, e.cfg.Model, input, options)
 	if err != nil {
 		return e.emitErrorMessage(err.Error())
 	}

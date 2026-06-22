@@ -33,6 +33,13 @@ const (
 type AgentTool struct {
 	// Definition is the schema and description advertised to the model.
 	Definition llm.ToolDefinition
+	// Label is an optional human-readable name for UI display. It is metadata for
+	// callers and does not affect execution.
+	Label string
+	// PrepareArguments optionally rewrites the raw tool-call arguments before
+	// schema validation, for tolerating provider quirks or filling defaults. It
+	// returns the arguments to validate and execute. Nil leaves them unchanged.
+	PrepareArguments func(arguments map[string]any) map[string]any
 	// Execute runs the tool. It reports failure by returning an error, which the
 	// engine turns into an error tool result so one failing tool does not abort
 	// the run. onUpdate streams partial results and is valid only for the

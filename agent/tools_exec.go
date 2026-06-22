@@ -144,6 +144,12 @@ func (e *engine) preflight(current Context, assistant llm.AssistantMessage, call
 		return prepared
 	}
 
+	// Let the tool rewrite raw arguments before validation.
+	if tool.PrepareArguments != nil {
+		call.Arguments = tool.PrepareArguments(call.Arguments)
+		prepared.call = call
+	}
+
 	validated, err := llm.ValidateToolArguments(tool.Definition, call)
 	if err != nil {
 		prepared.errText = fmt.Sprintf("invalid tool arguments: %v", err)

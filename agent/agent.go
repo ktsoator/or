@@ -49,6 +49,9 @@ type Options struct {
 	ConvertToLLM     func([]AgentMessage) []llm.Message
 	TransformContext func([]AgentMessage) []AgentMessage
 	ToolExecution    ExecutionMode
+	// GetAPIKey resolves the provider API key before each turn, for short-lived
+	// tokens. A non-empty return overrides the key; nil or "" leaves it unchanged.
+	GetAPIKey func(provider string) string
 	// SteeringMode and FollowUpMode control how many queued messages are injected
 	// at one drain point. The zero value is QueueAll.
 	SteeringMode QueueMode
@@ -83,6 +86,7 @@ type Agent struct {
 	convertToLLM        func([]AgentMessage) []llm.Message
 	transformContext    func([]AgentMessage) []AgentMessage
 	toolExecution       ExecutionMode
+	getAPIKey           func(provider string) string
 	streamFn            StreamFn
 	beforeToolCall      func(BeforeToolCallCtx) (bool, string)
 	afterToolCall       func(AfterToolCallCtx) *AfterToolCallResult
@@ -107,6 +111,7 @@ func New(opts Options) *Agent {
 		convertToLLM:        opts.ConvertToLLM,
 		transformContext:    opts.TransformContext,
 		toolExecution:       opts.ToolExecution,
+		getAPIKey:           opts.GetAPIKey,
 		streamFn:            opts.StreamFn,
 		beforeToolCall:      opts.BeforeToolCall,
 		afterToolCall:       opts.AfterToolCall,
@@ -255,12 +260,42 @@ func (a *Agent) Snapshot() State {
 	}
 }
 
+// HasQueuedMessages reports whether any steering or follow-up message is queued.
+func (a *Agent) HasQueuedMessages() bool {
+	return a.steering.hasItems() || a.followUp.hasItems()
+}
+
+// ClearSteeringQueue drops all queued steering messages.
+func (a *Agent) ClearSteeringQueue() { a.steering.clear() }
+
+// ClearFollowUpQueue drops all queued follow-up messages.
+func (a *Agent) ClearFollowUpQueue() { a.followUp.clear() }
+
+// ClearQueues drops all queued steering and follow-up messages.
+func (a *Agent) ClearQueues() {
+	a.steering.clear()
+	a.followUp.clear()
+}
+
+// Reset clears the transcript, the last error, and both queues, keeping the
+// configuration (model, tools, system prompt, hooks). It is meant to be called
+// when the agent is idle.
+func (a *Agent) Reset() {
+	a.steering.clear()
+	a.followUp.clear()
+	a.mu.Lock()
+	a.messages = nil
+	a.errorMessage = ""
+	a.mu.Unlock()
+}
+
 // loopConfigLocked builds the LoopConfig for one run. The caller holds a.mu.
 func (a *Agent) loopConfigLocked() LoopConfig {
 	return LoopConfig{
 		Model:               a.model,
 		StreamOptions:       llm.StreamOptions{Reasoning: a.thinkingLevel},
 		StreamFn:            a.streamFn,
+		GetAPIKey:           a.getAPIKey,
 		ConvertToLLM:        a.convertToLLM,
 		TransformContext:    a.transformContext,
 		ToolExecution:       a.toolExecution,
@@ -300,6 +335,18 @@ func (q *messageQueue) enqueue(message AgentMessage) {
 	q.mu.Lock()
 	q.items = append(q.items, message)
 	q.mu.Unlock()
+}
+
+func (q *messageQueue) clear() {
+	q.mu.Lock()
+	q.items = nil
+	q.mu.Unlock()
+}
+
+func (q *messageQueue) hasItems() bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return len(q.items) > 0
 }
 
 // drain returns queued messages: the oldest one when the mode is
