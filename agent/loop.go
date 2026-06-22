@@ -96,10 +96,12 @@ func (e *engine) run(prompts []AgentMessage, base Context) {
 			pending = nil
 
 			message := e.streamAssistant(current)
-			newMessages = append(newMessages, FromLLM(&message))
+			assistant := FromLLM(&message)
+			current.Messages = append(current.Messages, assistant)
+			newMessages = append(newMessages, assistant)
 
 			if message.StopReason == llm.StopReasonError || message.StopReason == llm.StopReasonAborted {
-				e.emit(AgentEvent{Type: TurnEnd, Message: FromLLM(&message)})
+				e.emit(AgentEvent{Type: TurnEnd, Message: assistant})
 				e.emit(AgentEvent{Type: AgentEnd, Messages: newMessages})
 				return
 			}

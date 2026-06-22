@@ -190,6 +190,22 @@ func TestRunLoopToolCallThenText(t *testing.T) {
 	if rec.calls != 2 {
 		t.Fatalf("stream calls = %d, want 2", rec.calls)
 	}
+	if len(rec.inputs) != 2 {
+		t.Fatalf("recorded inputs = %d, want 2", len(rec.inputs))
+	}
+	secondTurn := rec.inputs[1].Messages
+	if len(secondTurn) != 3 {
+		t.Fatalf("second-turn history = %d messages, want 3 (user, assistant tool call, tool result)", len(secondTurn))
+	}
+	if _, ok := secondTurn[0].(*llm.UserMessage); !ok {
+		t.Fatalf("second-turn message 0 = %T, want *llm.UserMessage", secondTurn[0])
+	}
+	if _, ok := secondTurn[1].(*llm.AssistantMessage); !ok {
+		t.Fatalf("second-turn message 1 = %T, want *llm.AssistantMessage", secondTurn[1])
+	}
+	if _, ok := secondTurn[2].(*llm.ToolResultMessage); !ok {
+		t.Fatalf("second-turn message 2 = %T, want *llm.ToolResultMessage", secondTurn[2])
+	}
 	if !hasType(events, ToolStart) || !hasType(events, ToolEnd) {
 		t.Fatal("missing tool execution events")
 	}
