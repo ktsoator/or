@@ -107,12 +107,41 @@ func New(opts Options) *Agent {
 // transcript and returns an error if the run ended in failure or cancellation.
 // Calling Prompt while a run is in progress returns an error.
 func (a *Agent) Prompt(ctx context.Context, input any) error {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	prompts, err := toPrompts(input)
 	if err != nil {
 		return err
+	}
+	return a.run(ctx, prompts)
+}
+
+// Continue resumes a run from the current transcript without adding a new
+// message, blocking until it completes. Use it to retry or to respond after
+// messages were appended out of band. The transcript must be non-empty and must
+// not end with an assistant message, since a provider needs a user or tool
+// result as the latest turn.
+func (a *Agent) Continue(ctx context.Context) error {
+	a.mu.Lock()
+	count := len(a.messages)
+	lastIsAssistant := false
+	if count > 0 {
+		_, lastIsAssistant = assistantMessage(a.messages[count-1])
+	}
+	a.mu.Unlock()
+
+	if count == 0 {
+		return errors.New("agent: cannot continue an empty transcript")
+	}
+	if lastIsAssistant {
+		return errors.New("agent: cannot continue from an assistant message")
+	}
+	return a.run(ctx, nil)
+}
+
+// run drives one RunLoop invocation from prompts and the current state, then
+// commits the appended messages to the transcript.
+func (a *Agent) run(ctx context.Context, prompts []AgentMessage) error {
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
 	a.mu.Lock()
