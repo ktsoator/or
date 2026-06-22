@@ -189,8 +189,11 @@ ShouldStopAfterTurn: func(c agent.TurnCtx) bool {
 ```
 
 `Continue` resumes from the current transcript without a new prompt — for retries,
-or after appending messages out of band. The transcript must not end with an
-assistant message.
+or after appending messages out of band. A provider needs a user or tool result
+as the latest turn, so when the transcript ends with an assistant message,
+`Continue` falls back to queued messages: it drains the steering queue first, then
+the follow-up queue, and runs whatever it finds. It errors only when the last
+message is an assistant and both queues are empty.
 
 ```go
 if err := assistant.Continue(ctx); err != nil {
