@@ -67,10 +67,10 @@ type Options struct {
 	// exists mainly as a seam for tests and custom transports.
 	StreamFn StreamFn
 	// StreamOptions are the base per-request options passed to the stream
-	// function on every turn, for knobs like Temperature, MaxTokens, Headers, or
-	// the OnRequest and OnResponse observers. The agent sets Reasoning from
-	// ThinkingLevel and resolves APIKey via GetAPIKey, so values in those two
-	// fields are ignored here.
+	// function on every turn, for knobs like Temperature, MaxTokens, Headers, the
+	// OnRequest and OnResponse observers, or the RewriteRequest hook. The agent
+	// sets Reasoning from ThinkingLevel and resolves APIKey via GetAPIKey, so
+	// values in those two fields are ignored here.
 	StreamOptions llm.StreamOptions
 
 	BeforeToolCall      func(BeforeToolCallCtx) (block bool, reason string)

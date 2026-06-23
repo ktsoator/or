@@ -34,7 +34,14 @@ import (
 A tool pairs an `llm.ToolDefinition` (a JSON schema derived from a Go struct) with
 an `Execute` function. `Execute` reports failure by returning an error, which the
 loop turns into an error result rather than aborting the run. The optional
-`onUpdate` callback streams partial progress.
+`onUpdate` callback streams partial progress. An optional `PrepareArguments`
+rewrites the raw arguments before schema validation — use it to tolerate provider
+quirks or fill defaults.
+
+A panicking tool does not crash the process: the loop recovers it into an error
+result and keeps going. A panic from a caller hook (`ConvertToLLM`,
+`TransformContext`, `PrepareNextTurn`, `ShouldStopAfterTurn`, or the tool-call
+hooks) is recovered too, ending the run cleanly with a terminal error event.
 
 ```go
 type weatherArgs struct {
@@ -244,9 +251,11 @@ GetAPIKey: func(provider string) string {
 ## Tuning requests
 
 `StreamOptions` is the base set of per-request options passed to the model on
-every turn — `Temperature`, `MaxTokens`, `Headers`, and the `OnRequest` /
-`OnResponse` observers. The agent fills in `Reasoning` from `ThinkingLevel` and
-`APIKey` from `GetAPIKey`, so those two fields are ignored.
+every turn — `Temperature`, `MaxTokens`, `Headers`, the `OnRequest` /
+`OnResponse` observers, and the `RewriteRequest` hook that patches the serialized
+request body before it is sent (for provider-specific fields the typed API does
+not expose). The agent fills in `Reasoning` from `ThinkingLevel` and `APIKey`
+from `GetAPIKey`, so those two fields are ignored.
 
 ```go
 temperature := 0.2
