@@ -17,6 +17,20 @@ func FromLLM(m llm.Message) AgentMessage {
 	return llmMessage{Message: m}
 }
 
+// UserMessage builds a user AgentMessage from text and optional images — the
+// common case for a multimodal prompt. The text block comes first, followed by
+// each image in order. Pass the result to Prompt, Steer, FollowUp, or use it as
+// a seed message.
+func UserMessage(text string, images ...llm.ImageContent) AgentMessage {
+	content := make([]llm.UserContent, 0, 1+len(images))
+	content = append(content, &llm.TextContent{Text: text})
+	for index := range images {
+		image := images[index]
+		content = append(content, &image)
+	}
+	return FromLLM(&llm.UserMessage{Content: content})
+}
+
 // llmMessage wraps a standard llm.Message so it satisfies AgentMessage.
 type llmMessage struct {
 	Message llm.Message

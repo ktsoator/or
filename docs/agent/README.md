@@ -60,7 +60,13 @@ weatherTool := agent.AgentTool{
 
 `New` builds a stateful agent; `Prompt` runs one task to completion and appends
 the result to its transcript. `Prompt` accepts a string, a single `AgentMessage`,
-or a slice.
+or a slice. For a multimodal prompt, `agent.UserMessage` builds a user message
+from text and images:
+
+```go
+assistant.Prompt(ctx, agent.UserMessage("What is in this picture?",
+	llm.ImageContent{Data: base64PNG, MIMEType: "image/png"}))
+```
 
 ```go
 assistant := agent.New(agent.Options{
@@ -233,6 +239,26 @@ that may expire during a long run.
 GetAPIKey: func(provider string) string {
 	return currentOAuthToken(provider) // refreshed out of band
 },
+```
+
+## Tuning requests
+
+`StreamOptions` is the base set of per-request options passed to the model on
+every turn — `Temperature`, `MaxTokens`, `Headers`, and the `OnRequest` /
+`OnResponse` observers. The agent fills in `Reasoning` from `ThinkingLevel` and
+`APIKey` from `GetAPIKey`, so those two fields are ignored.
+
+```go
+temperature := 0.2
+assistant := agent.New(agent.Options{
+	Model:         model,
+	ThinkingLevel: llm.ModelThinkingHigh,
+	StreamOptions: llm.StreamOptions{
+		Temperature: &temperature,
+		MaxTokens:   4096,
+		OnRequest:   func(method, url string, body []byte) { log.Println(method, url) },
+	},
+})
 ```
 
 ## Custom messages

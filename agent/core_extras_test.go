@@ -110,3 +110,83 @@ func TestAgentReset(t *testing.T) {
 		t.Fatal("Reset should clear queues")
 	}
 }
+
+func TestAgentStreamOptionsReachStream(t *testing.T) {
+	var seen llm.StreamOptions
+	streamFn := func(_ context.Context, _ llm.Model, _ llm.Context, options llm.StreamOptions) (<-chan llm.Event, error) {
+		seen = options
+		ch := make(chan llm.Event, 1)
+		ch <- done(textAssistant("ok"))
+		close(ch)
+		return ch, nil
+	}
+	temperature := 0.5
+	a := New(Options{
+		Model:         testModel,
+		ThinkingLevel: "high",
+		StreamFn:      streamFn,
+		StreamOptions: llm.StreamOptions{
+			Temperature: &temperature,
+			MaxTokens:   1024,
+			OnRequest:   func(string, string, []byte) {},
+			Reasoning:   "low", // ThinkingLevel should win over this
+		},
+	})
+
+	if err := a.Prompt(context.Background(), "hi"); err != nil {
+		t.Fatalf("prompt: %v", err)
+	}
+
+	if seen.Temperature == nil || *seen.Temperature != 0.5 {
+		t.Fatalf("Temperature = %v, want 0.5", seen.Temperature)
+	}
+	if seen.MaxTokens != 1024 {
+		t.Fatalf("MaxTokens = %d, want 1024", seen.MaxTokens)
+	}
+	if seen.OnRequest == nil {
+		t.Fatal("OnRequest was not passed through")
+	}
+	if seen.Reasoning != "high" {
+		t.Fatalf("Reasoning = %q, want %q (ThinkingLevel overrides StreamOptions)", seen.Reasoning, "high")
+	}
+}
+
+func TestUserMessageBuildsTextAndImages(t *testing.T) {
+	message := UserMessage("look", llm.ImageContent{Data: "abc", MIMEType: "image/png"})
+
+	wrapped, ok := message.(llmMessage)
+	if !ok {
+		t.Fatalf("message is %T, want llmMessage", message)
+	}
+	user, ok := wrapped.Message.(*llm.UserMessage)
+	if !ok {
+		t.Fatalf("wraps %T, want *llm.UserMessage", wrapped.Message)
+	}
+	if len(user.Content) != 2 {
+		t.Fatalf("content blocks = %d, want 2 (text, image)", len(user.Content))
+	}
+	if text, ok := user.Content[0].(*llm.TextContent); !ok || text.Text != "look" {
+		t.Fatalf("content[0] = %#v, want text %q", user.Content[0], "look")
+	}
+	image, ok := user.Content[1].(*llm.ImageContent)
+	if !ok {
+		t.Fatalf("content[1] = %T, want *llm.ImageContent", user.Content[1])
+	}
+	if image.Data != "abc" || image.MIMEType != "image/png" {
+		t.Fatalf("image = %+v, want {abc image/png}", image)
+	}
+}
+
+func TestUserMessageImagesDoNotAlias(t *testing.T) {
+	message := UserMessage("two",
+		llm.ImageContent{Data: "a", MIMEType: "image/png"},
+		llm.ImageContent{Data: "b", MIMEType: "image/png"},
+	)
+	user := message.(llmMessage).Message.(*llm.UserMessage)
+
+	first := user.Content[1].(*llm.ImageContent)
+	second := user.Content[2].(*llm.ImageContent)
+	if first.Data != "a" || second.Data != "b" {
+		t.Fatalf("images aliased: got %q and %q, want a and b", first.Data, second.Data)
+	}
+}

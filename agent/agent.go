@@ -66,6 +66,12 @@ type Options struct {
 	// StreamFn reaches a model for one turn. A nil value uses llm.Stream. It
 	// exists mainly as a seam for tests and custom transports.
 	StreamFn StreamFn
+	// StreamOptions are the base per-request options passed to the stream
+	// function on every turn, for knobs like Temperature, MaxTokens, Headers, or
+	// the OnRequest and OnResponse observers. The agent sets Reasoning from
+	// ThinkingLevel and resolves APIKey via GetAPIKey, so values in those two
+	// fields are ignored here.
+	StreamOptions llm.StreamOptions
 
 	BeforeToolCall      func(BeforeToolCallCtx) (block bool, reason string)
 	AfterToolCall       func(AfterToolCallCtx) *AfterToolCallResult
@@ -97,6 +103,7 @@ type Agent struct {
 	toolExecution       ExecutionMode
 	getAPIKey           func(provider string) string
 	streamFn            StreamFn
+	streamOptions       llm.StreamOptions
 	beforeToolCall      func(BeforeToolCallCtx) (bool, string)
 	afterToolCall       func(AfterToolCallCtx) *AfterToolCallResult
 	shouldStopAfterTurn func(TurnCtx) bool
@@ -122,6 +129,7 @@ func New(opts Options) *Agent {
 		toolExecution:       opts.ToolExecution,
 		getAPIKey:           opts.GetAPIKey,
 		streamFn:            opts.StreamFn,
+		streamOptions:       opts.StreamOptions,
 		beforeToolCall:      opts.BeforeToolCall,
 		afterToolCall:       opts.AfterToolCall,
 		shouldStopAfterTurn: opts.ShouldStopAfterTurn,
@@ -340,9 +348,11 @@ func (a *Agent) loopConfigLocked(skipInitialSteering bool) LoopConfig {
 			return a.steering.drain()
 		}
 	}
+	streamOptions := a.streamOptions
+	streamOptions.Reasoning = a.thinkingLevel
 	return LoopConfig{
 		Model:               a.model,
-		StreamOptions:       llm.StreamOptions{Reasoning: a.thinkingLevel},
+		StreamOptions:       streamOptions,
 		StreamFn:            a.streamFn,
 		GetAPIKey:           a.getAPIKey,
 		ConvertToLLM:        a.convertToLLM,
