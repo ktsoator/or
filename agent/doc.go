@@ -12,7 +12,7 @@
 // and projects them to llm.Message only at the request boundary via
 // ConvertToLLM. Extension points are function fields on LoopConfig.
 //
-// This package is an early skeleton. The exported types and signatures are the
-// agreed targets from docs/agent/design.md; their bodies are not yet
-// implemented.
+// The package bundles no concrete tools, persistence, or system prompt, and
+// leaves history storage and context compaction to the caller; the
+// TransformContext hook is where compaction would attach.
 package agent

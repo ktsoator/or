@@ -45,7 +45,18 @@ func (e *engine) executeSequential(current Context, assistant llm.AssistantMessa
 	messages := make([]llm.ToolResultMessage, 0, len(toolCalls))
 	allTerminate := true
 	for index := range toolCalls {
-		message, terminate := e.runTool(current, assistant, toolCalls[index])
+		call := toolCalls[index]
+		var message llm.ToolResultMessage
+		var terminate bool
+		if err := e.ctx.Err(); err != nil {
+			// The run was cancelled mid-batch. Skip executing the remaining
+			// tools, but still answer each call so every tool call has a result
+			// and the transcript stays valid for any later request.
+			e.emit(AgentEvent{Type: ToolStart, ToolCallID: call.ID, ToolName: call.Name, Args: call.Arguments})
+			message, terminate = e.finishError(call, "tool execution aborted")
+		} else {
+			message, terminate = e.runTool(current, assistant, call)
+		}
 		messages = append(messages, message)
 		if !terminate {
 			allTerminate = false
@@ -187,7 +198,17 @@ func (e *engine) preflight(current Context, assistant llm.AssistantMessage, call
 // executePrepared runs a preflighted tool. It is safe to call concurrently for
 // distinct calls: it reads only the prepared value and emits through the event
 // channel, which is concurrency-safe.
-func (e *engine) executePrepared(prepared preparedToolCall) (ToolResult, bool) {
+func (e *engine) executePrepared(prepared preparedToolCall) (result ToolResult, isError bool) {
+	// A panicking tool becomes an error result rather than crashing the process.
+	// This recover lives here, not only on the loop goroutine, because parallel
+	// batches run Execute on separate goroutines that the loop cannot recover.
+	defer func() {
+		if r := recover(); r != nil {
+			result = ToolResult{Content: []llm.ToolResultContent{&llm.TextContent{Text: fmt.Sprintf("tool %q panicked: %v", prepared.call.Name, r)}}}
+			isError = true
+		}
+	}()
+
 	onUpdate := func(partial ToolResult) {
 		e.emit(AgentEvent{
 			Type:       ToolUpdate,
@@ -198,11 +219,11 @@ func (e *engine) executePrepared(prepared preparedToolCall) (ToolResult, bool) {
 		})
 	}
 
-	result, err := prepared.tool.Execute(e.ctx, prepared.call.ID, prepared.rawArgs, onUpdate)
+	out, err := prepared.tool.Execute(e.ctx, prepared.call.ID, prepared.rawArgs, onUpdate)
 	if err != nil {
 		return ToolResult{Content: []llm.ToolResultContent{&llm.TextContent{Text: err.Error()}}}, true
 	}
-	return result, false
+	return out, false
 }
 
 // finalize applies AfterToolCall and emits the end-of-tool and result-message

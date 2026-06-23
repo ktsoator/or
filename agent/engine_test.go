@@ -391,6 +391,85 @@ func TestDefaultConvertToLLMFiltersCustom(t *testing.T) {
 	}
 }
 
+func TestRunLoopRecoversFromCallbackPanic(t *testing.T) {
+	rec := &recorder{turns: [][]llm.Event{{done(textAssistant("hi"))}}}
+	cfg := LoopConfig{
+		Model:    testModel,
+		StreamFn: rec.fn(),
+		PrepareNextTurn: func(TurnCtx) *TurnUpdate {
+			panic("boom")
+		},
+	}
+
+	events := collect(RunLoop(context.Background(), []AgentMessage{userPrompt("hi")}, Context{}, cfg))
+
+	if last := events[len(events)-1]; last.Type != AgentEnd {
+		t.Fatalf("last event = %q, want agent_end (a panicking hook must not crash the loop)", last.Type)
+	}
+	messages := agentEndMessages(t, events)
+	if len(messages) != 1 {
+		t.Fatalf("agent_end messages = %d, want 1 (the error message)", len(messages))
+	}
+	if failed := assistantOf(t, messages[0]); failed.StopReason != llm.StopReasonError {
+		t.Fatalf("stop reason = %q, want error", failed.StopReason)
+	}
+}
+
+func TestRunLoopRecoversFromToolPanic(t *testing.T) {
+	panicTool := AgentTool{
+		Definition: llm.MustTool[echoArgs]("echo", "echo"),
+		Execute: func(context.Context, string, json.RawMessage, func(ToolResult)) (ToolResult, error) {
+			panic("tool boom")
+		},
+	}
+	rec := &recorder{turns: [][]llm.Event{
+		{done(toolCallAssistant("c1", "echo", map[string]any{"text": "x"}))},
+		{done(textAssistant("recovered"))},
+	}}
+	cfg := LoopConfig{Model: testModel, StreamFn: rec.fn()}
+	base := Context{Tools: []AgentTool{panicTool}}
+
+	events := collect(RunLoop(context.Background(), []AgentMessage{userPrompt("go")}, base, cfg))
+
+	result := toolResultOf(t, agentEndMessages(t, events)[2])
+	if !result.IsError {
+		t.Fatal("a panicking tool should produce an error result")
+	}
+	if rec.calls != 2 {
+		t.Fatalf("stream calls = %d, want 2 (the run should continue past a tool panic)", rec.calls)
+	}
+}
+
+func TestRunLoopSequentialAbortSkipsRemainingTools(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	secondRan := false
+	tool := AgentTool{
+		Definition:    llm.MustTool[echoArgs]("echo", "echo"),
+		ExecutionMode: ExecutionSequential,
+		Execute: func(_ context.Context, callID string, _ json.RawMessage, _ func(ToolResult)) (ToolResult, error) {
+			if callID == "a" {
+				cancel() // cancel the run after the first tool runs
+			}
+			if callID == "b" {
+				secondRan = true
+			}
+			return ToolResult{Content: []llm.ToolResultContent{&llm.TextContent{Text: "ok"}}}, nil
+		},
+	}
+	rec := &recorder{turns: [][]llm.Event{
+		{done(twoEchoCalls())}, // tool calls "a" then "b"
+		{{Type: llm.EventError, Message: &llm.AssistantMessage{StopReason: llm.StopReasonAborted, ErrorMessage: "aborted"}}},
+	}}
+	cfg := LoopConfig{Model: testModel, StreamFn: rec.fn()}
+	base := Context{Tools: []AgentTool{tool}}
+
+	collect(RunLoop(ctx, []AgentMessage{userPrompt("go")}, base, cfg))
+
+	if secondRan {
+		t.Fatal("second sequential tool ran after the run was cancelled, want it skipped")
+	}
+}
+
 // --- small local helpers --------------------------------------------------
 
 func equalTypes(a, b []AgentEventType) bool {

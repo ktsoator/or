@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/ktsoator/or/llm"
 )
@@ -43,6 +44,7 @@ func RunLoop(ctx context.Context, prompts []AgentMessage, base Context, cfg Loop
 
 	go func() {
 		defer close(events)
+		defer e.recoverPanic()
 		e.run(prompts, base)
 	}()
 
@@ -245,4 +247,17 @@ func (e *engine) emitErrorMessage(text string) llm.AssistantMessage {
 	e.emit(AgentEvent{Type: MessageStart, Message: FromLLM(&message)})
 	e.emit(AgentEvent{Type: MessageEnd, Message: FromLLM(&message)})
 	return message
+}
+
+// recoverPanic turns a panic on the loop goroutine — from the engine itself or
+// from a caller-supplied hook like ConvertToLLM, TransformContext,
+// PrepareNextTurn, ShouldStopAfterTurn, or the tool-call hooks — into a terminal
+// error event, so a misbehaving callback ends the run cleanly instead of
+// crashing the process. Tool execution panics are handled closer to the tool in
+// executePrepared, since those may run on their own goroutines.
+func (e *engine) recoverPanic() {
+	if r := recover(); r != nil {
+		message := e.emitErrorMessage(fmt.Sprintf("agent: recovered from panic: %v", r))
+		e.emit(AgentEvent{Type: AgentEnd, Messages: []AgentMessage{FromLLM(&message)}})
+	}
 }
