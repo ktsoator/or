@@ -310,6 +310,46 @@ func (a *Agent) Snapshot() State {
 	}
 }
 
+// The setters below reconfigure the agent between runs. Each takes effect on
+// the next run; it does not change a run already in progress, which captured its
+// configuration when it started. All are safe to call concurrently.
+
+// SetSystemPrompt replaces the system prompt used on the next run.
+func (a *Agent) SetSystemPrompt(prompt string) {
+	a.mu.Lock()
+	a.systemPrompt = prompt
+	a.mu.Unlock()
+}
+
+// SetModel replaces the model used on the next run. To switch models within a
+// single run, use PrepareNextTurn instead.
+func (a *Agent) SetModel(model llm.Model) {
+	a.mu.Lock()
+	a.model = model
+	a.mu.Unlock()
+}
+
+// SetThinkingLevel replaces the reasoning level used on the next run.
+func (a *Agent) SetThinkingLevel(level llm.ModelThinkingLevel) {
+	a.mu.Lock()
+	a.thinkingLevel = level
+	a.mu.Unlock()
+}
+
+// SetTools replaces the tools available on the next run. The slice is copied.
+func (a *Agent) SetTools(tools []AgentTool) {
+	a.mu.Lock()
+	a.tools = append([]AgentTool(nil), tools...)
+	a.mu.Unlock()
+}
+
+// SetToolExecution sets the default tool execution mode for the next run.
+func (a *Agent) SetToolExecution(mode ExecutionMode) {
+	a.mu.Lock()
+	a.toolExecution = mode
+	a.mu.Unlock()
+}
+
 // HasQueuedMessages reports whether any steering or follow-up message is queued.
 func (a *Agent) HasQueuedMessages() bool {
 	return a.steering.hasItems() || a.followUp.hasItems()

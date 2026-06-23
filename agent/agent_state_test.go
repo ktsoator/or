@@ -349,6 +349,52 @@ func TestAgentStreamingMessageVisibleDuringRun(t *testing.T) {
 	}
 }
 
+func TestAgentSettersReconfigureNextRun(t *testing.T) {
+	rec := &recorder{turns: [][]llm.Event{{done(textAssistant("ok"))}}}
+	a := New(Options{Model: testModel, StreamFn: rec.fn()})
+
+	model2 := llm.Model{ID: "m2", Provider: "p2", Protocol: llm.ProtocolAnthropicMessages}
+	a.SetModel(model2)
+	a.SetSystemPrompt("be terse")
+	a.SetThinkingLevel("high")
+	a.SetTools([]AgentTool{echoTool(nil)})
+	a.SetToolExecution(ExecutionSequential)
+
+	state := a.Snapshot()
+	if state.Model.ID != "m2" || state.SystemPrompt != "be terse" || state.ThinkingLevel != "high" || len(state.Tools) != 1 {
+		t.Fatalf("snapshot did not reflect setters: model=%q prompt=%q thinking=%q tools=%d",
+			state.Model.ID, state.SystemPrompt, state.ThinkingLevel, len(state.Tools))
+	}
+
+	if err := a.Prompt(context.Background(), "hi"); err != nil {
+		t.Fatalf("prompt: %v", err)
+	}
+
+	// The run picked up every reconfigured value.
+	if rec.models[0].ID != "m2" {
+		t.Fatalf("run used model %q, want m2", rec.models[0].ID)
+	}
+	if rec.inputs[0].SystemPrompt != "be terse" {
+		t.Fatalf("run used system prompt %q, want %q", rec.inputs[0].SystemPrompt, "be terse")
+	}
+	if len(rec.inputs[0].Tools) != 1 {
+		t.Fatalf("run advertised %d tools, want 1", len(rec.inputs[0].Tools))
+	}
+}
+
+func TestAgentSetToolsCopiesSlice(t *testing.T) {
+	rec := &recorder{turns: [][]llm.Event{{done(textAssistant("ok"))}}}
+	a := New(Options{Model: testModel, StreamFn: rec.fn()})
+
+	tools := []AgentTool{echoTool(nil)}
+	a.SetTools(tools)
+	tools[0] = AgentTool{} // mutating the caller's slice must not affect the agent
+
+	if got := a.Snapshot().Tools; len(got) != 1 || got[0].Definition.Name != "echo" {
+		t.Fatalf("SetTools did not copy the slice: %+v", got)
+	}
+}
+
 func TestAgentAbortCancelsRun(t *testing.T) {
 	streamFn := func(ctx context.Context, _ llm.Model, _ llm.Context, _ llm.StreamOptions) (<-chan llm.Event, error) {
 		ch := make(chan llm.Event)

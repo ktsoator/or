@@ -294,6 +294,17 @@ assistant.Abort()              // cancel the current run
 assistant.Reset()              // clear transcript, error, and queues; keep config
 ```
 
+To reconfigure the agent between runs, use the setters. Each takes effect on the
+next run and does not disturb a run already in progress:
+
+```go
+assistant.SetModel(llm.GetModel("minimax-cn", "MiniMax-M3"))
+assistant.SetSystemPrompt("Answer in one sentence.")
+assistant.SetThinkingLevel(llm.ModelThinkingHigh)
+assistant.SetTools([]agent.AgentTool{weatherTool}) // slice is copied
+assistant.SetToolExecution(agent.ExecutionSequential)
+```
+
 Runnable programs are in [`example/agent`](../../example/agent/README.md): `basic`
 (one tool, one prompt) and `tool` (an interactive session with reasoning, tool
 progress, and mid-session model switching).
