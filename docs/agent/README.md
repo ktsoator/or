@@ -223,11 +223,11 @@ assistant.Steer(agent.FromLLM(&llm.UserMessage{
 ```
 
 `SteeringMode` and `FollowUpMode` control how many queued messages drain at once:
-`QueueAll` (default) injects all of them; `QueueOneAtATime` injects only the
-oldest, leaving the rest for later turns.
+`QueueOneAtATime` (default) injects only the oldest, leaving the rest for later
+turns; `QueueAll` injects all of them at once.
 
 ```go
-agent.New(agent.Options{SteeringMode: agent.QueueOneAtATime /* ... */})
+agent.New(agent.Options{SteeringMode: agent.QueueAll /* ... */})
 ```
 
 ## Dynamic API keys

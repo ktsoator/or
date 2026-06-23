@@ -79,7 +79,7 @@ func TestAgentSteeringAllInjectsTogether(t *testing.T) {
 	rec := &recorder{turns: [][]llm.Event{
 		{done(textAssistant("a1"))},
 	}}
-	a := New(Options{Model: testModel, StreamFn: rec.fn()}) // default mode = all
+	a := New(Options{Model: testModel, StreamFn: rec.fn(), SteeringMode: QueueAll})
 	a.Steer(userPrompt("s1"))
 	a.Steer(userPrompt("s2"))
 
@@ -88,5 +88,22 @@ func TestAgentSteeringAllInjectsTogether(t *testing.T) {
 	}
 	if rec.calls != 1 {
 		t.Fatalf("stream calls = %d, want 1 (all steering injected at once)", rec.calls)
+	}
+}
+
+func TestAgentDefaultSteeringModeIsOneAtATime(t *testing.T) {
+	rec := &recorder{turns: [][]llm.Event{
+		{done(textAssistant("a1"))},
+		{done(textAssistant("a2"))},
+	}}
+	a := New(Options{Model: testModel, StreamFn: rec.fn()}) // no mode set → default
+	a.Steer(userPrompt("s1"))
+	a.Steer(userPrompt("s2"))
+
+	if err := a.Prompt(context.Background(), "go"); err != nil {
+		t.Fatalf("prompt: %v", err)
+	}
+	if rec.calls != 2 {
+		t.Fatalf("stream calls = %d, want 2 (default one-at-a-time spreads steering over turns)", rec.calls)
 	}
 }

@@ -17,10 +17,10 @@ var errBusy = errors.New("agent: a prompt is already in progress")
 type QueueMode string
 
 const (
-	// QueueAll injects every queued message at the drain point. It is the default.
+	// QueueAll injects every queued message at the drain point.
 	QueueAll QueueMode = "all"
 	// QueueOneAtATime injects only the oldest queued message, leaving the rest for
-	// later drain points.
+	// later drain points. It is the default.
 	QueueOneAtATime QueueMode = "one-at-a-time"
 )
 
@@ -60,7 +60,7 @@ type Options struct {
 	// tokens. A non-empty return overrides the key; nil or "" leaves it unchanged.
 	GetAPIKey func(provider string) string
 	// SteeringMode and FollowUpMode control how many queued messages are injected
-	// at one drain point. The zero value is QueueAll.
+	// at one drain point. The zero value is QueueOneAtATime.
 	SteeringMode QueueMode
 	FollowUpMode QueueMode
 	// StreamFn reaches a model for one turn. A nil value uses llm.Stream. It
@@ -134,10 +134,18 @@ func New(opts Options) *Agent {
 		afterToolCall:       opts.AfterToolCall,
 		shouldStopAfterTurn: opts.ShouldStopAfterTurn,
 		prepareNextTurn:     opts.PrepareNextTurn,
-		steering:            &messageQueue{mode: opts.SteeringMode},
-		followUp:            &messageQueue{mode: opts.FollowUpMode},
+		steering:            &messageQueue{mode: queueModeOrDefault(opts.SteeringMode)},
+		followUp:            &messageQueue{mode: queueModeOrDefault(opts.FollowUpMode)},
 		listeners:           make(map[int]func(AgentEvent)),
 	}
+}
+
+// queueModeOrDefault resolves an unset QueueMode to the default, QueueOneAtATime.
+func queueModeOrDefault(mode QueueMode) QueueMode {
+	if mode == "" {
+		return QueueOneAtATime
+	}
+	return mode
 }
 
 // Prompt starts a run from a text string, a single AgentMessage, or a slice of
