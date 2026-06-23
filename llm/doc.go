@@ -33,9 +33,10 @@
 // # Options
 //
 // [StreamOptions] carries settings shared by every protocol — API key,
-// temperature, max tokens, headers, retries, timeout — plus two observation
-// hooks, OnRequest (the exact serialized request body) and OnResponse (status
-// and headers), each invoked once per attempt including retries.
+// temperature, max tokens, headers, retries, timeout — plus observation hooks,
+// OnRequest (the exact serialized request body) and OnResponse (status and
+// headers), and RewriteRequest, which replaces the serialized body before it is
+// sent. Each is invoked once per attempt including retries.
 //
 // Reasoning is a provider-neutral effort level ([ModelThinkingLevel]: off,
 // minimal, low, medium, high, xhigh). Each adapter maps it to that provider's

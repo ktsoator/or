@@ -31,6 +31,7 @@ The shared options are:
 | `MaxRetries` | Override SDK retries; `0` disables them |
 | `Timeout` | Cap each HTTP attempt independently of context cancellation |
 | `OnRequest` | Observe every serialized HTTP request attempt |
+| `RewriteRequest` | Replace the serialized request body before it is sent |
 | `OnResponse` | Observe every HTTP response attempt |
 
 ## Observe HTTP requests and responses
@@ -53,6 +54,31 @@ options := llm.StreamOptions{
 Hooks may expose prompts, tool arguments, credentials in URLs or headers, and
 provider response metadata. Redact sensitive data before sending it to logs or
 telemetry systems.
+
+## Rewrite the request body
+
+`RewriteRequest` transforms the serialized request body before it is sent, an
+escape hatch for provider-specific fields the typed API does not expose. It
+receives the same method, URL, and body as `OnRequest` and returns the body to
+send; returning `nil` leaves it unchanged. Like the observers it fires once per
+attempt and always rewrites the original body, so retries stay consistent.
+
+```go
+options := llm.StreamOptions{
+	RewriteRequest: func(method, url string, body []byte) []byte {
+		var payload map[string]any
+		if err := json.Unmarshal(body, &payload); err != nil {
+			return nil // leave the body unchanged on error
+		}
+		payload["custom_provider_field"] = true
+		patched, err := json.Marshal(payload)
+		if err != nil {
+			return nil
+		}
+		return patched
+	},
+}
+```
 
 See [Reasoning](reasoning.md) and [Tools](tools.md) for the protocol-specific
 option types currently included with the package.

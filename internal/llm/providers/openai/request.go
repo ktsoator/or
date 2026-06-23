@@ -34,6 +34,9 @@ func buildClient(httpClient *http.Client, model llm.Model, options llm.StreamOpt
 	if options.OnRequest != nil {
 		clientOptions = append(clientOptions, option.WithMiddleware(onRequestMiddleware(options.OnRequest)))
 	}
+	if options.RewriteRequest != nil {
+		clientOptions = append(clientOptions, option.WithMiddleware(rewriteRequestMiddleware(options.RewriteRequest)))
+	}
 	if options.OnResponse != nil {
 		clientOptions = append(clientOptions, option.WithMiddleware(onResponseMiddleware(options.OnResponse)))
 	}
@@ -55,6 +58,26 @@ func onRequestMiddleware(hook func(string, string, []byte)) option.Middleware {
 			req.Body = io.NopCloser(bytes.NewReader(body))
 		}
 		hook(req.Method, req.URL.String(), body)
+		return next(req)
+	}
+}
+
+// rewriteRequestMiddleware lets hook replace the serialized request body before
+// it is sent. Returning nil leaves the body unchanged. The original body is read
+// each attempt, so a retried request is rewritten consistently; ContentLength is
+// updated to match the rewritten body.
+func rewriteRequestMiddleware(hook func(string, string, []byte) []byte) option.Middleware {
+	return func(req *http.Request, next option.MiddlewareNext) (*http.Response, error) {
+		if req.Body == nil {
+			return next(req)
+		}
+		body, _ := io.ReadAll(req.Body)
+		rewritten := hook(req.Method, req.URL.String(), body)
+		if rewritten == nil {
+			rewritten = body
+		}
+		req.Body = io.NopCloser(bytes.NewReader(rewritten))
+		req.ContentLength = int64(len(rewritten))
 		return next(req)
 	}
 }

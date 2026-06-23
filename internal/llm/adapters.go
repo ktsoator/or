@@ -150,6 +150,13 @@ type StreamOptions struct {
 	// the provider. It fires once per attempt, so a retried request invokes it
 	// for each try, making retries observable.
 	OnRequest func(method, url string, body []byte)
+	// RewriteRequest, when set, transforms the serialized request body before it
+	// is sent. It receives the method, URL, and body, and returns the body to
+	// send; returning nil leaves the body unchanged. Use it to patch
+	// provider-specific fields the typed API does not expose. It fires once per
+	// attempt and always rewrites the original body, so a retried request is
+	// rewritten consistently.
+	RewriteRequest func(method, url string, body []byte) []byte
 }
 
 // Validate checks that explicitly supplied protocol extensions match the target
