@@ -93,6 +93,7 @@ type compatibility struct {
 type catalogModel struct {
 	ID               string             `json:"id"`
 	Name             string             `json:"name"`
+	Provider         string             `json:"provider"`
 	Protocol         string             `json:"protocol"`
 	BaseURL          string             `json:"baseUrl"`
 	Reasoning        bool               `json:"reasoning"`
@@ -486,11 +487,13 @@ func deduplicate(models []model) []model {
 }
 
 func render(models []model) ([]byte, error) {
-	providers := make(map[string][]catalogModel)
+	// models arrives deduplicated and sorted by provider then ID, so the flat
+	// catalog stays grouped and stable without an intermediate map.
+	catalog := make([]catalogModel, 0, len(models))
 	for _, source := range models {
-		providers[source.Provider] = append(providers[source.Provider], toCatalogModel(source))
+		catalog = append(catalog, toCatalogModel(source))
 	}
-	encoded, err := json.MarshalIndent(providers, "", "  ")
+	encoded, err := json.MarshalIndent(catalog, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("encode generated catalog: %w", err)
 	}
@@ -506,6 +509,7 @@ func toCatalogModel(source model) catalogModel {
 	return catalogModel{
 		ID:               source.ID,
 		Name:             source.Name,
+		Provider:         source.Provider,
 		Protocol:         source.Protocol,
 		BaseURL:          source.BaseURL,
 		Reasoning:        source.Reasoning,
