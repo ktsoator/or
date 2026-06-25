@@ -18,11 +18,7 @@ func main() {
 	events, err := llm.Stream(
 		context.Background(),
 		model,
-		llm.Context{Messages: []llm.Message{
-			&llm.UserMessage{Content: []llm.UserContent{
-				&llm.TextContent{Text: "Explain Go channels briefly."},
-			}},
-		}},
+		llm.Prompt("Explain Go channels briefly."),
 		llm.StreamOptions{Reasoning: llm.ModelThinkingHigh},
 	)
 	if err != nil {

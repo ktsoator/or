@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"strings"
 
 	"github.com/ktsoator/or/llm"
 )
@@ -17,9 +16,7 @@ func main() {
 	reviewModel := llm.GetModel("minimax-cn", "MiniMax-M3")
 
 	history := []llm.Message{
-		&llm.UserMessage{Content: []llm.UserContent{
-			&llm.TextContent{Text: "Draft a concise explanation of Go interfaces."},
-		}},
+		llm.UserText("Draft a concise explanation of Go interfaces."),
 	}
 
 	draft, err := llm.Complete(
@@ -36,13 +33,11 @@ func main() {
 		draftModel.Provider,
 		draftModel.ID,
 		draftModel.Protocol,
-		assistantText(draft),
+		draft.Text(),
 	)
 
 	history = append(history, &draft)
-	history = append(history, &llm.UserMessage{Content: []llm.UserContent{
-		&llm.TextContent{Text: "Review the explanation for accuracy and improve it."},
-	}})
+	history = append(history, llm.UserText("Review the explanation for accuracy and improve it."))
 
 	review, err := llm.Complete(
 		ctx,
@@ -58,16 +53,6 @@ func main() {
 		reviewModel.Provider,
 		reviewModel.ID,
 		reviewModel.Protocol,
-		assistantText(review),
+		review.Text(),
 	)
-}
-
-func assistantText(message llm.AssistantMessage) string {
-	var parts []string
-	for _, content := range message.Content {
-		if text, ok := content.(*llm.TextContent); ok && text != nil {
-			parts = append(parts, text.Text)
-		}
-	}
-	return strings.Join(parts, "")
 }

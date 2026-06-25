@@ -129,9 +129,7 @@ context, returns a channel of events, and leaves the transcript to you. The fina
 
 ```go
 events := agent.RunLoop(ctx,
-	[]agent.AgentMessage{agent.FromLLM(&llm.UserMessage{
-		Content: []llm.UserContent{&llm.TextContent{Text: "Weather in Shanghai?"}},
-	})},
+	[]agent.AgentMessage{agent.FromLLM(llm.UserText("Weather in Shanghai?"))},
 	agent.Context{Tools: []agent.AgentTool{weatherTool}},
 	agent.LoopConfig{Model: llm.GetModel("deepseek", "deepseek-v4-flash")},
 )
@@ -224,9 +222,7 @@ go func() {
 	_ = assistant.Prompt(ctx, "Summarize the repository")
 }()
 
-assistant.Steer(agent.FromLLM(&llm.UserMessage{
-	Content: []llm.UserContent{&llm.TextContent{Text: "Focus on the agent package."}},
-}))
+assistant.Steer(agent.FromLLM(llm.UserText("Focus on the agent package.")))
 ```
 
 `SteeringMode` and `FollowUpMode` control how many queued messages drain at once:
