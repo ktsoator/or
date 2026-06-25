@@ -7,9 +7,6 @@ copyright: Copyright &copy; ktsoator
 
 docs_dir: docs
 
-extra_css:
-  - stylesheets/extra.css
-
 plugins:
   - search
   - i18n:
@@ -38,9 +35,12 @@ plugins:
 
 theme:
   name: material
+  favicon: assets/favicon.svg
   icon:
     repo: fontawesome/brands/github
+    logo: material/infinity
   features:
+    - navigation.tabs
     - navigation.sections
     - navigation.top
     - navigation.tracking
