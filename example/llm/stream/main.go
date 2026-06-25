@@ -14,11 +14,7 @@ func main() {
 	events, err := llm.Stream(
 		context.Background(),
 		model,
-		llm.Context{Messages: []llm.Message{
-			&llm.UserMessage{Content: []llm.UserContent{
-				&llm.TextContent{Text: "Why does a Go channel send synchronize two goroutines?"},
-			}},
-		}},
+		llm.Prompt("Why does a Go channel send synchronize two goroutines?"),
 		llm.StreamOptions{Reasoning: llm.ModelThinkingHigh},
 	)
 	if err != nil {

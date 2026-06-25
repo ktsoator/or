@@ -29,23 +29,17 @@ func main() {
 	response, err := llm.Complete(
 		context.Background(),
 		model,
-		llm.Context{Messages: []llm.Message{
-			&llm.UserMessage{Content: []llm.UserContent{
-				&llm.TextContent{Text: "Describe this image in one paragraph."},
-				&image,
-			}},
-		}},
+		llm.NewContext(&llm.UserMessage{Content: []llm.UserContent{
+			&llm.TextContent{Text: "Describe this image in one paragraph."},
+			&image,
+		}}),
 		llm.StreamOptions{},
 	)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	for _, content := range response.Content {
-		if text, ok := content.(*llm.TextContent); ok {
-			fmt.Println(text.Text)
-		}
-	}
+	fmt.Println(response.Text())
 }
 
 func loadImage(path string) (llm.ImageContent, error) {

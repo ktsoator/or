@@ -14,20 +14,12 @@ func main() {
 	response, err := llm.Complete(
 		context.Background(),
 		model,
-		llm.Context{Messages: []llm.Message{
-			&llm.UserMessage{Content: []llm.UserContent{
-				&llm.TextContent{Text: "Explain Go channels in three sentences."},
-			}},
-		}},
+		llm.Prompt("Explain Go channels in three sentences."),
 		llm.StreamOptions{},
 	)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	for _, content := range response.Content {
-		if text, ok := content.(*llm.TextContent); ok {
-			fmt.Println(text.Text)
-		}
-	}
+	fmt.Println(response.Text())
 }

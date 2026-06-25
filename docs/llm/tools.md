@@ -32,9 +32,7 @@ func main() {
 	)
 
 	messages := []llm.Message{
-		&llm.UserMessage{Content: []llm.UserContent{
-			&llm.TextContent{Text: "What's the weather in Shanghai for the next 3 days?"},
-		}},
+		llm.UserText("What's the weather in Shanghai for the next 3 days?"),
 	}
 	input := llm.Context{
 		Messages: messages,
@@ -48,13 +46,12 @@ func main() {
 	messages = append(messages, &response)
 
 	toolUsed := false
-	for _, content := range response.Content {
-		toolCall, ok := content.(*llm.ToolCall)
-		if !ok || toolCall.Name != weatherTool.Name {
+	for _, toolCall := range response.ToolCalls() {
+		if toolCall.Name != weatherTool.Name {
 			continue
 		}
 
-		arguments, err := llm.DecodeToolCall[WeatherArgs](weatherTool, *toolCall)
+		arguments, err := llm.DecodeToolCall[WeatherArgs](weatherTool, toolCall)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -64,13 +61,7 @@ func main() {
 			arguments.Days,
 			arguments.Units,
 		)
-		messages = append(messages, &llm.ToolResultMessage{
-			ToolCallID: toolCall.ID,
-			ToolName:   toolCall.Name,
-			Content: []llm.ToolResultContent{
-				&llm.TextContent{Text: result},
-			},
-		})
+		messages = append(messages, llm.ToolResult(toolCall.ID, toolCall.Name, result))
 		toolUsed = true
 	}
 	if !toolUsed {
@@ -84,11 +75,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	for _, content := range response.Content {
-		if text, ok := content.(*llm.TextContent); ok {
-			fmt.Println(text.Text)
-		}
-	}
+	fmt.Println(response.Text())
 }
 ```
 

@@ -25,9 +25,9 @@ func main() {
 		"Get the current weather for a city",
 	)
 
-	messages := []llm.Message{&llm.UserMessage{Content: []llm.UserContent{
-		&llm.TextContent{Text: "What is the weather in Shanghai?"},
-	}}}
+	messages := []llm.Message{
+		llm.UserText("What is the weather in Shanghai?"),
+	}
 
 	answer, err := runToolLoop(
 		context.Background(),
@@ -39,7 +39,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("\nFinal answer:\n%s\n", assistantText(answer))
+	fmt.Printf("\nFinal answer:\n%s\n", answer.Text())
 }
 
 func runToolLoop(
@@ -108,14 +108,9 @@ func runToolLoop(
 			)
 
 			result, isError := executeWeatherTool(weatherTool, call, mode)
-			messages = append(messages, &llm.ToolResultMessage{
-				ToolCallID: call.ID,
-				ToolName:   call.Name,
-				IsError:    isError,
-				Content: []llm.ToolResultContent{
-					&llm.TextContent{Text: result},
-				},
-			})
+			toolResult := llm.ToolResult(call.ID, call.Name, result)
+			toolResult.IsError = isError
+			messages = append(messages, toolResult)
 			fmt.Printf("Tool result: %s (error=%t)\n", result, isError)
 		}
 	}
@@ -192,14 +187,4 @@ func toolArgumentModes(message llm.AssistantMessage) map[string]llm.ArgumentsMod
 		}
 	}
 	return modes
-}
-
-func assistantText(message llm.AssistantMessage) string {
-	var parts []string
-	for _, content := range message.Content {
-		if text, ok := content.(*llm.TextContent); ok && text != nil {
-			parts = append(parts, text.Text)
-		}
-	}
-	return strings.Join(parts, "")
 }

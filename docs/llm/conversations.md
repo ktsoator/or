@@ -3,6 +3,32 @@
 Conversation messages are provider-neutral. The same history can be persisted,
 extended, and sent to another compatible model without rebuilding it.
 
+## Build messages
+
+`Context`, `Message`, and the content blocks are fully general, but most calls
+just send some text. Convenience constructors remove the nesting for that path:
+
+```go
+llm.Prompt("Explain Go channels briefly.")        // Context with one user text message
+llm.PromptWithSystem("Be concise.", "Explain...") // ...with a system prompt
+llm.UserText("hello")                             // *UserMessage
+llm.AssistantText("hi there")                     // *AssistantMessage (seed history)
+llm.UserImage(data, "image/png")                  // *UserMessage with one image
+llm.ToolResult(callID, name, "result text")       // *ToolResultMessage
+llm.NewContext(msg1, msg2, ...)                   // Context from messages
+```
+
+Read a response back with the matching accessors on `AssistantMessage`:
+
+```go
+response.Text()      // all text blocks joined
+response.ToolCalls() // every tool call, in order
+```
+
+The longhand struct literals below remain valid; reach for them when you need
+content a constructor does not cover, such as mixing text and images in one
+message.
+
 ## Image input
 
 Multimodal models accept images alongside text in a user message. Provide the
@@ -41,9 +67,7 @@ draft := llm.GetModel("deepseek", "deepseek-v4-flash")
 review := llm.GetModel("anthropic", "claude-opus-4-8")
 
 messages := []llm.Message{
-	&llm.UserMessage{Content: []llm.UserContent{
-		&llm.TextContent{Text: "Compute 25 * 18 and explain the steps."},
-	}},
+	llm.UserText("Compute 25 * 18 and explain the steps."),
 }
 
 first, err := llm.Complete(ctx, draft,
@@ -52,9 +76,7 @@ if err != nil {
 	log.Fatal(err)
 }
 messages = append(messages, &first)
-messages = append(messages, &llm.UserMessage{Content: []llm.UserContent{
-	&llm.TextContent{Text: "Check the calculation above for mistakes."},
-}})
+messages = append(messages, llm.UserText("Check the calculation above for mistakes."))
 
 second, err := llm.Complete(ctx, review,
 	llm.Context{Messages: messages}, llm.StreamOptions{})
