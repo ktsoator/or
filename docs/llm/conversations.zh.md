@@ -4,8 +4,8 @@
 
 ## 构建消息
 
-`Context`、`Message` 以及内容块都是完全通用的，但大多数调用只是发送一些文本。便捷
-构造器为这条路径省去了嵌套：
+`Context`、`Message` 以及内容块都是完全通用的，但多数调用只是发送一些文本。便捷构造器
+为这种场景省去了嵌套：
 
 ```go
 llm.Prompt("Explain Go channels briefly.")        // 含一条用户文本消息的 Context
@@ -17,7 +17,7 @@ llm.ToolResult(callID, name, "result text")       // *ToolResultMessage
 llm.NewContext(msg1, msg2, ...)                   // 由若干消息构成的 Context
 ```
 
-用 `AssistantMessage` 上相应的访问器读回响应：
+用 `AssistantMessage` 上对应的访问器读回响应：
 
 ```go
 response.Text()      // 拼接所有文本块
@@ -25,11 +25,11 @@ response.ToolCalls() // 按顺序返回每一个工具调用
 ```
 
 下面这种完整的结构体字面量写法仍然有效；当你需要构造器未覆盖的内容时（例如在一条消息
-里混合文本和图像）再用它。
+中混合文本和图像），再使用它。
 
 ## 图像输入
 
-多模态模型在用户消息中接受图像与文本并存。以 base64 提供原始字节及其 MIME 类型：
+多模态模型支持在用户消息中图文并存。以 base64 提供原始字节及其 MIME 类型：
 
 ```go
 raw, err := os.ReadFile("screenshot.png")
@@ -47,13 +47,13 @@ input := llm.Context{Messages: []llm.Message{
 }}
 ```
 
-模型通过 `Model.Input` 声明图像支持。当包含图像的历史被发送给仅支持文本的模型时，
+模型通过 `Model.Input` 声明是否支持图像。当包含图像的历史被发送给仅支持文本的模型时，
 图像会被自动替换为一个简短的占位符。
 
 ## 在不同轮次间切换模型
 
-每次请求前，本库都会为目标模型适配已存储的历史。它会为仅支持文本的模型降级图像、在
-兼容时保留推理签名、降级或移除不兼容的推理，并规范化工具调用标识符。
+每次请求前，本库都会为目标模型适配已存储的历史：为仅支持文本的模型降级图像、在兼容时
+保留推理签名、降级或移除不兼容的推理，并规范化工具调用标识符。
 
 ```go
 ctx := context.Background()
@@ -79,7 +79,7 @@ if err != nil {
 }
 ```
 
-`TransformMessages` 执行这项适配，并对外导出，供需要检查模型实际会收到的确切历史的
+`TransformMessages` 执行这项适配，并已对外导出，供需要查看模型实际会收到的确切历史的
 调用方使用。
 
 ## 保存与恢复对话
@@ -106,4 +106,4 @@ if err := json.Unmarshal(raw, &restored); err != nil {
 }
 ```
 
-`restored.Messages` 已可用于扩展并针对任意模型重放。
+`restored.Messages` 已可用于扩展，并针对任意模型重放。
