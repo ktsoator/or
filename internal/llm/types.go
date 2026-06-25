@@ -3,7 +3,6 @@ package llm
 import (
 	"encoding/json"
 	"fmt"
-	"time"
 )
 
 // Protocol identifies the API protocol used to communicate with a model.
@@ -48,95 +47,6 @@ const (
 	// time-to-first-token and a lighter response.
 	ThinkingDisplayOmitted ThinkingDisplay = "omitted"
 )
-
-// UserContent is content that can appear in a user message.
-type UserContent interface {
-	isUserContent()
-}
-
-// AssistantContent is content that can appear in an assistant message.
-type AssistantContent interface {
-	isAssistantContent()
-}
-
-// ToolResultContent is content that can appear in a tool result message.
-type ToolResultContent interface {
-	isToolResultContent()
-}
-
-// TextContent represents plain text.
-type TextContent struct {
-	Text          string `json:"text"`
-	TextSignature string `json:"textSignature,omitempty"`
-}
-
-func (*TextContent) isUserContent()       {}
-func (*TextContent) isAssistantContent()  {}
-func (*TextContent) isToolResultContent() {}
-
-// ThinkingContent represents model reasoning content.
-type ThinkingContent struct {
-	Thinking          string `json:"thinking"`
-	ThinkingSignature string `json:"thinkingSignature,omitempty"`
-	Redacted          bool   `json:"redacted,omitempty"`
-}
-
-func (*ThinkingContent) isAssistantContent() {}
-
-// ImageContent represents a base64-encoded image.
-type ImageContent struct {
-	Data     string `json:"data"`
-	MIMEType string `json:"mimeType"`
-}
-
-func (*ImageContent) isUserContent()       {}
-func (*ImageContent) isToolResultContent() {}
-
-// ToolCall describes a request to invoke a named tool with JSON arguments.
-type ToolCall struct {
-	ID               string         `json:"id"`
-	Name             string         `json:"name"`
-	Arguments        map[string]any `json:"arguments"`
-	ThoughtSignature string         `json:"thoughtSignature,omitempty"`
-}
-
-func (*ToolCall) isAssistantContent() {}
-
-// Message is one item in the conversation context.
-type Message interface {
-	isMessage()
-}
-
-// UserMessage contains content supplied by the user.
-type UserMessage struct {
-	Content []UserContent `json:"content"`
-}
-
-func (*UserMessage) isMessage() {}
-
-// ToolResultMessage contains the result of an assistant tool call.
-type ToolResultMessage struct {
-	ToolCallID string              `json:"toolCallId"`
-	ToolName   string              `json:"toolName"`
-	Content    []ToolResultContent `json:"content"`
-	IsError    bool                `json:"isError"`
-}
-
-func (*ToolResultMessage) isMessage() {}
-
-// ToolDefinition describes a tool that the model may call.
-type ToolDefinition struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Parameters  json.RawMessage `json:"parameters"`
-}
-
-// Context contains the prompt, conversation history, and available tools.
-type Context struct {
-	SystemPrompt string           `json:"systemPrompt,omitempty"`
-	Messages     []Message        `json:"messages"`
-	Tools        []ToolDefinition `json:"tools,omitempty"`
-}
 
 // ModelCost stores prices in US dollars per million tokens.
 type ModelCost struct {
@@ -200,19 +110,34 @@ type ModelCompatibility interface {
 // pricing. ThinkingLevelMap values are provider-specific; nil marks a level as
 // unsupported while a missing key uses the provider default.
 type Model struct {
-	ID               string                         `json:"id"`
-	Name             string                         `json:"name"`
-	Protocol         Protocol                       `json:"protocol"`
-	Provider         string                         `json:"provider"`
-	BaseURL          string                         `json:"baseUrl"`
-	Reasoning        bool                           `json:"reasoning"`
+	// Identity: how the model is named and grouped.
+	ID       string `json:"id"`       // stable identifier sent to the provider
+	Name     string `json:"name"`     // human-readable display name
+	Provider string `json:"provider"` // vendor key, e.g. "anthropic", "openai"
+
+	// Routing: how to talk to the model. Protocol is the discriminator the
+	// Client uses to pick an adapter (see Client.Stream); BaseURL and Headers
+	// let a compatible vendor reuse a protocol against its own endpoint.
+	Protocol Protocol          `json:"protocol"`
+	BaseURL  string            `json:"baseUrl"`
+	Headers  map[string]string `json:"headers,omitempty"`
+
+	// Capabilities: what the model can do and its size limits.
+	Reasoning bool `json:"reasoning"` // whether the model can produce thinking
+	// ThinkingLevelMap maps a provider-independent level to the provider's own
+	// value; a nil value marks a level as unsupported, a missing key falls back
+	// to the provider default.
 	ThinkingLevelMap map[ModelThinkingLevel]*string `json:"thinkingLevelMap,omitempty"`
-	Input            []ModelInput                   `json:"input"`
-	Cost             ModelCost                      `json:"cost"`
-	ContextWindow    int64                          `json:"contextWindow"`
-	MaxTokens        int64                          `json:"maxTokens"`
-	Headers          map[string]string              `json:"headers,omitempty"`
-	Compatibility    ModelCompatibility             `json:"compat,omitempty"`
+	Input            []ModelInput                   `json:"input"`         // accepted modalities: text, image
+	ContextWindow    int64                          `json:"contextWindow"` // max total tokens (input + output)
+	MaxTokens        int64                          `json:"maxTokens"`     // max tokens the model may generate
+
+	// Pricing and per-provider quirks.
+	Cost ModelCost `json:"cost"`
+	// Compatibility carries protocol-specific overrides for vendors that
+	// deviate from the reference API. Its concrete type is selected at decode
+	// time by Protocol (see UnmarshalJSON below).
+	Compatibility ModelCompatibility `json:"compat,omitempty"`
 }
 
 // UnmarshalJSON restores the concrete compatibility type selected by Protocol.
@@ -255,70 +180,5 @@ func (model *Model) UnmarshalJSON(data []byte) error {
 		return nil
 	default:
 		return fmt.Errorf("decode model: unsupported compatibility protocol %q", model.Protocol)
-	}
-}
-
-// Usage records token consumption for one assistant response.
-type Usage struct {
-	Input       int64     `json:"input"`
-	Output      int64     `json:"output"`
-	CacheRead   int64     `json:"cacheRead"`
-	CacheWrite  int64     `json:"cacheWrite"`
-	TotalTokens int64     `json:"totalTokens"`
-	Cost        UsageCost `json:"cost"`
-}
-
-// UsageCost breaks down the US dollar cost of one response by token category.
-type UsageCost struct {
-	Input      float64 `json:"input"`
-	Output     float64 `json:"output"`
-	CacheRead  float64 `json:"cacheRead"`
-	CacheWrite float64 `json:"cacheWrite"`
-	Total      float64 `json:"total"`
-}
-
-// StopReason explains why the model stopped generating a response.
-type StopReason string
-
-const (
-	// StopReasonStop marks a normal completion.
-	StopReasonStop StopReason = "stop"
-	// StopReasonLength marks truncation by the max output token limit.
-	StopReasonLength StopReason = "length"
-	// StopReasonToolUse marks a stop to let the caller execute tool calls.
-	StopReasonToolUse StopReason = "toolUse"
-	// StopReasonError marks a provider or runtime failure.
-	StopReasonError StopReason = "error"
-	// StopReasonAborted marks a cancelled request.
-	StopReasonAborted StopReason = "aborted"
-)
-
-// AssistantMessage is the final or partial response returned by a provider.
-type AssistantMessage struct {
-	Content       []AssistantContent `json:"content"`
-	Protocol      Protocol           `json:"protocol"`
-	Provider      string             `json:"provider"`
-	Model         string             `json:"model"`
-	ResponseModel string             `json:"responseModel,omitempty"`
-	ResponseID    string             `json:"responseId,omitempty"`
-	Usage         Usage              `json:"usage"`
-	StopReason    StopReason         `json:"stopReason"`
-	ErrorMessage  string             `json:"errorMessage,omitempty"`
-	// Diagnostics records non-fatal events (failures recovered from, degraded
-	// results) that occurred while producing this response. It is nil for a
-	// clean response.
-	Diagnostics []Diagnostic `json:"diagnostics,omitempty"`
-	Timestamp   int64        `json:"timestamp"`
-}
-
-func (*AssistantMessage) isMessage() {}
-
-// NewAssistantMessage initializes provider-independent response metadata.
-func NewAssistantMessage(model Model) AssistantMessage {
-	return AssistantMessage{
-		Protocol:  model.Protocol,
-		Provider:  model.Provider,
-		Model:     model.ID,
-		Timestamp: time.Now().UnixMilli(),
 	}
 }
