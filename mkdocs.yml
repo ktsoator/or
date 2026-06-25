@@ -22,16 +22,28 @@ plugins:
           nav_translations:
             Home: 首页
             LLM: LLM
+            Basics: 入门
+            Core: 核心
+            Advanced: 进阶
             Overview: 概述
             Getting started: 快速开始
             Providers and models: 提供方与模型
-            Streaming: 流式
+            Streaming: 流式响应
             Tools: 工具
-            Reasoning: 推理
+            Reasoning: 推理与思考
             Conversations: 对话
-            Configuration: 配置
+            Configuration: 请求配置
             Custom protocols: 自定义协议
             Agent: Agent
+            Internals: 源码解析
+            Foundations: 基础概念
+            Execution: 运行机制
+            Architecture overview: 架构总览
+            Models and protocols: 模型与协议
+            Message types: 消息类型系统
+            Protocol adapters: 协议适配器
+            Streaming internals: 流式机制
+            Switching models: 模型切换
 
 theme:
   name: material
@@ -42,6 +54,7 @@ theme:
   features:
     - navigation.tabs
     - navigation.sections
+    - navigation.expand
     - navigation.top
     - navigation.tracking
     - toc.follow
@@ -72,11 +85,18 @@ markdown_extensions:
   - tables
   - toc:
       permalink: true
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
   - pymdownx.snippets
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.tabbed:
       alternate_style: true
   - pymdownx.details
@@ -84,14 +104,27 @@ markdown_extensions:
 nav:
   - Home: index.md
   - LLM:
-      - Overview: llm/README.md
-      - Getting started: llm/getting-started.md
-      - Providers and models: llm/providers.md
-      - Streaming: llm/streaming.md
-      - Tools: llm/tools.md
-      - Reasoning: llm/reasoning.md
-      - Conversations: llm/conversations.md
-      - Configuration: llm/configuration.md
-      - Custom protocols: llm/extending.md
+      - Basics:
+          - Overview: llm/README.md
+          - Getting started: llm/getting-started.md
+          - Providers and models: llm/providers.md
+      - Core:
+          - Streaming: llm/streaming.md
+          - Tools: llm/tools.md
+          - Reasoning: llm/reasoning.md
+      - Advanced:
+          - Conversations: llm/conversations.md
+          - Configuration: llm/configuration.md
+          - Custom protocols: llm/extending.md
   - Agent:
       - Overview: agent/README.md
+  - Internals:
+      - LLM:
+          - Architecture overview: internals/overview.md
+          - Foundations:
+              - Models and protocols: internals/models.md
+              - Message types: internals/messages.md
+          - Execution:
+              - Protocol adapters: internals/adapters.md
+              - Streaming internals: internals/streaming.md
+              - Switching models: internals/transform.md

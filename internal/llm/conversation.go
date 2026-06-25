@@ -6,6 +6,41 @@ import (
 	"time"
 )
 
+// Usage records token consumption for one assistant response.
+type Usage struct {
+	Input       int64     `json:"input"`
+	Output      int64     `json:"output"`
+	CacheRead   int64     `json:"cacheRead"`
+	CacheWrite  int64     `json:"cacheWrite"`
+	TotalTokens int64     `json:"totalTokens"`
+	Cost        UsageCost `json:"cost"`
+}
+
+// UsageCost breaks down the US dollar cost of one response by token category.
+type UsageCost struct {
+	Input      float64 `json:"input"`
+	Output     float64 `json:"output"`
+	CacheRead  float64 `json:"cacheRead"`
+	CacheWrite float64 `json:"cacheWrite"`
+	Total      float64 `json:"total"`
+}
+
+// StopReason explains why the model stopped generating a response.
+type StopReason string
+
+const (
+	// StopReasonStop marks a normal completion.
+	StopReasonStop StopReason = "stop"
+	// StopReasonLength marks truncation by the max output token limit.
+	StopReasonLength StopReason = "length"
+	// StopReasonToolUse marks a stop to let the caller execute tool calls.
+	StopReasonToolUse StopReason = "toolUse"
+	// StopReasonError marks a provider or runtime failure.
+	StopReasonError StopReason = "error"
+	// StopReasonAborted marks a cancelled request.
+	StopReasonAborted StopReason = "aborted"
+)
+
 /*
 Content roles
 
@@ -50,15 +85,6 @@ func (*TextContent) isUserContent()       {}
 func (*TextContent) isAssistantContent()  {}
 func (*TextContent) isToolResultContent() {}
 
-// ThinkingContent represents model reasoning content.
-type ThinkingContent struct {
-	Thinking          string `json:"thinking"`
-	ThinkingSignature string `json:"thinkingSignature,omitempty"`
-	Redacted          bool   `json:"redacted,omitempty"`
-}
-
-func (*ThinkingContent) isAssistantContent() {}
-
 // ImageContent represents a base64-encoded image.
 type ImageContent struct {
 	Data     string `json:"data"`
@@ -67,6 +93,15 @@ type ImageContent struct {
 
 func (*ImageContent) isUserContent()       {}
 func (*ImageContent) isToolResultContent() {}
+
+// ThinkingContent represents model reasoning content.
+type ThinkingContent struct {
+	Thinking          string `json:"thinking"`
+	ThinkingSignature string `json:"thinkingSignature,omitempty"`
+	Redacted          bool   `json:"redacted,omitempty"`
+}
+
+func (*ThinkingContent) isAssistantContent() {}
 
 // ToolCall describes a request to invoke a named tool with JSON arguments.
 type ToolCall struct {
@@ -77,41 +112,6 @@ type ToolCall struct {
 }
 
 func (*ToolCall) isAssistantContent() {}
-
-// Usage records token consumption for one assistant response.
-type Usage struct {
-	Input       int64     `json:"input"`
-	Output      int64     `json:"output"`
-	CacheRead   int64     `json:"cacheRead"`
-	CacheWrite  int64     `json:"cacheWrite"`
-	TotalTokens int64     `json:"totalTokens"`
-	Cost        UsageCost `json:"cost"`
-}
-
-// UsageCost breaks down the US dollar cost of one response by token category.
-type UsageCost struct {
-	Input      float64 `json:"input"`
-	Output     float64 `json:"output"`
-	CacheRead  float64 `json:"cacheRead"`
-	CacheWrite float64 `json:"cacheWrite"`
-	Total      float64 `json:"total"`
-}
-
-// StopReason explains why the model stopped generating a response.
-type StopReason string
-
-const (
-	// StopReasonStop marks a normal completion.
-	StopReasonStop StopReason = "stop"
-	// StopReasonLength marks truncation by the max output token limit.
-	StopReasonLength StopReason = "length"
-	// StopReasonToolUse marks a stop to let the caller execute tool calls.
-	StopReasonToolUse StopReason = "toolUse"
-	// StopReasonError marks a provider or runtime failure.
-	StopReasonError StopReason = "error"
-	// StopReasonAborted marks a cancelled request.
-	StopReasonAborted StopReason = "aborted"
-)
 
 /*
 Message turns are the conversation items passed between callers and adapters.
