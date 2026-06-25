@@ -68,4 +68,4 @@ adapters; `llm.NewClient` creates an isolated client with the same adapters.
 - Choose a model from the [provider catalog](providers.md).
 - Render responses incrementally with [streaming events](streaming.md).
 - Give the model structured capabilities with [typed tools](tools.md).
-- Explore the runnable [`llm` examples](../../example/llm/README.md).
+- Explore the runnable [`llm` examples](https://github.com/ktsoator/or/tree/main/example/llm).
