@@ -1,12 +1,11 @@
 # 自定义协议
 
-内置适配器覆盖了 OpenAI 兼容和 Anthropic 兼容的端点。要支持一种不同的线缆协议，
-实现 `ProtocolAdapter` 并把它注册到客户端上。
+内置适配器覆盖了 OpenAI 兼容和 Anthropic 兼容的端点。要支持另一种通信协议，实现
+`ProtocolAdapter` 并将它注册到客户端上即可。
 
-一个适配器实现两个方法：`Protocol` 返回它的注册表键，`Stream` 把提供方响应翻译成
-包事件。`StreamWriter` 提供与内置适配器相同的生命周期机制：一个 `EventStart`、
-非终止事件上的 `Partial` 快照、恰好一个终止事件，以及报告为 `StopReasonAborted`
-的取消。
+一个适配器实现两个方法：`Protocol` 返回它的注册表键，`Stream` 将提供方响应翻译成包
+事件。`StreamWriter` 提供与内置适配器相同的生命周期机制：一个 `EventStart`、非终止
+事件上的 `Partial` 快照、恰好一个终止事件，以及报告为 `StopReasonAborted` 的取消。
 
 ```go
 type myAdapter struct{ http *http.Client }
@@ -57,7 +56,7 @@ func (a myAdapter) Stream(
 }
 ```
 
-把它与内置协议一并注册：
+将它与内置协议一并注册：
 
 ```go
 registry := llm.NewRegistry()
@@ -73,13 +72,13 @@ model := llm.Model{
 message, err := client.Complete(ctx, model, input, llm.StreamOptions{})
 ```
 
-适配器负责双向翻译：构建线缆请求、对响应分帧、更新用量和停止原因，以及发出增量。
+适配器负责双向翻译：构建底层请求、切分响应、更新用量和停止原因，以及发出增量。
 `CloneToolCall` 为事件深拷贝工具调用。`ParseToolArgumentsMode` 提供与内置适配器
 相同的不完整 JSON 恢复能力。
 
 ## 自定义协议选项
 
-具有协议特定语义的设置可以使用这个共享扩展点，而无需改动 `StreamOptions`：
+具有协议特定语义的设置，可以使用这个共享扩展点，而无需改动 `StreamOptions`：
 
 ```go
 type myProtocolOptions struct {
@@ -100,5 +99,5 @@ options := llm.StreamOptions{
 }
 ```
 
-`Client.Stream` 会校验 `ProtocolOptions.Protocol()` 与目标模型匹配，然后在调用
+`Client.Stream` 会先校验 `ProtocolOptions.Protocol()` 与目标模型匹配，再在调用
 适配器之前调用 `Validate`。

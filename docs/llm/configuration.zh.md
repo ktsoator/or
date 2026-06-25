@@ -1,7 +1,7 @@
 # 请求配置
 
-`StreamOptions` 包含所有协议共享的设置。语义因协议而异的设置则嵌套在
-`ProtocolOptions` 之下。
+`StreamOptions` 包含所有协议共享的设置。语义因协议而异的设置则嵌套在 `ProtocolOptions`
+之下。
 
 ```go
 temperature := 0.2
@@ -17,17 +17,17 @@ options := llm.StreamOptions{
 }
 ```
 
-共享选项有：
+共享选项如下：
 
 | 选项 | 用途 |
 |---|---|
 | `APIKey` | 为本次请求覆盖凭证查找 |
 | `Env` | 覆盖具名的环境值，而不改动进程环境 |
 | `Temperature` | 覆盖模型采样温度 |
-| `MaxTokens` | 限制输出 token；为零则使用模型默认值 |
+| `MaxTokens` | 限制输出 token；为零则采用模型默认值 |
 | `Headers` | 在模型默认值之上合并自定义 HTTP 请求头 |
-| `Reasoning` | 请求一个与厂商无关的推理努力级别 |
-| `ProtocolOptions` | 携带专属于某一种线缆协议的设置 |
+| `Reasoning` | 请求一个与厂商无关的推理强度 |
+| `ProtocolOptions` | 携带专属于某一种通信协议的设置 |
 | `MaxRetries` | 覆盖 SDK 重试次数；`0` 表示禁用 |
 | `Timeout` | 独立于 context 取消之外，限制每次 HTTP 尝试 |
 | `OnRequest` | 观察每一次序列化后的 HTTP 请求尝试 |
@@ -36,7 +36,7 @@ options := llm.StreamOptions{
 
 ## 观察 HTTP 请求与响应
 
-这些钩子可用于日志、追踪和调试。两者都按每次尝试触发一次，因此重试始终可见。
+这些钩子适用于日志、追踪和调试。两者都会在每次尝试时各触发一次，因此重试始终可见。
 `OnRequest` 收到的是为提供方序列化的确切请求体，包含协议特定字段。
 
 ```go
@@ -55,10 +55,10 @@ options := llm.StreamOptions{
 
 ## 重写请求体
 
-`RewriteRequest` 在请求体发送前对其进行变换，是一个针对类型化 API 未暴露的提供方
-特定字段的逃生口。它接收与 `OnRequest` 相同的方法、URL 和请求体，并返回要发送的
-请求体；返回 `nil` 表示保持不变。与观察器一样，它按每次尝试触发一次，并且总是对原始
-请求体进行重写，因此重试保持一致。
+`RewriteRequest` 在请求体发送前对其进行变换，是针对类型化 API 未暴露的提供方特定字段
+的一个应急手段。它接收与 `OnRequest` 相同的方法、URL 和请求体，并返回要发送的请求体；
+返回 `nil` 表示保持不变。与观察器一样，它在每次尝试时触发一次，并且始终基于原始请求体
+进行重写，因此重试结果保持一致。
 
 ```go
 options := llm.StreamOptions{
