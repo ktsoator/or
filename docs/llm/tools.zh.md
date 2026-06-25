@@ -82,7 +82,7 @@ func main() {
 `$ref`、`$defs` 等文档元数据。
 
 提供方流式传来的工具参数可能从不完整的 JSON 中恢复而来。在执行带副作用的工具前，
-请先阅读[流式诊断](streaming.md#tool-call-deltas-and-diagnostics)。
+请先阅读[流式诊断](streaming.md#工具调用增量与诊断)。
 
 ## 协议特定的工具选择
 
