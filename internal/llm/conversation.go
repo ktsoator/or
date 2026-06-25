@@ -2,6 +2,7 @@ package llm
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 )
 
@@ -163,6 +164,36 @@ type AssistantMessage struct {
 }
 
 func (*AssistantMessage) isMessage() {}
+
+// Text concatenates the text from every text block in the message, in order. It
+// ignores thinking and tool-call blocks, returning "" when there is no text.
+func (message *AssistantMessage) Text() string {
+	if message == nil {
+		return ""
+	}
+	var builder strings.Builder
+	for _, content := range message.Content {
+		if text, ok := content.(*TextContent); ok && text != nil {
+			builder.WriteString(text.Text)
+		}
+	}
+	return builder.String()
+}
+
+// ToolCalls returns every tool call in the message, in order. It returns nil
+// when the message requested no tools.
+func (message *AssistantMessage) ToolCalls() []ToolCall {
+	if message == nil {
+		return nil
+	}
+	var calls []ToolCall
+	for _, content := range message.Content {
+		if call, ok := content.(*ToolCall); ok && call != nil {
+			calls = append(calls, *call)
+		}
+	}
+	return calls
+}
 
 // NewAssistantMessage initializes provider-independent response metadata.
 func NewAssistantMessage(model Model) AssistantMessage {
