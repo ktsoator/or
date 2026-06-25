@@ -3,6 +3,7 @@ package llm
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
 	"sync"
@@ -75,7 +76,15 @@ func ClampThinkingLevel(model Model, level ModelThinkingLevel) ModelThinkingLeve
 // ModelRegistry stores models by provider and model ID. It is safe for
 // concurrent access and returns defensive copies of registered models.
 type ModelRegistry struct {
-	mu     sync.RWMutex
+	mu sync.RWMutex
+	// models is keyed by provider, then by model ID. Providers are grouped
+	// independently of protocol, so a provider's own model IDs nest under it:
+	//
+	//   models ┌─ "anthropic" ─┬─ "claude-opus-4-8"     → Model{protocol: anthropic-messages}
+	//          │               └─ "claude-sonnet-4-6"   → Model{protocol: anthropic-messages}
+	//          │
+	//          └─ "deepseek" ──┬─ "deepseek-v4-flash"   → Model{protocol: openai-completions}
+	//                          └─ "deepseek-v4-pro"     → Model{protocol: openai-completions}
 	models map[string]map[string]Model
 }
 
@@ -212,39 +221,37 @@ func cloneModel(model Model) Model {
 	clone.Input = append([]ModelInput(nil), model.Input...)
 	if model.Headers != nil {
 		clone.Headers = make(map[string]string, len(model.Headers))
-		for name, value := range model.Headers {
-			clone.Headers[name] = value
-		}
+		maps.Copy(clone.Headers, model.Headers)
 	}
 	if model.ThinkingLevelMap != nil {
 		clone.ThinkingLevelMap = make(map[ModelThinkingLevel]*string, len(model.ThinkingLevelMap))
 		for level, value := range model.ThinkingLevelMap {
-			clone.ThinkingLevelMap[level] = cloneStringPointer(value)
+			clone.ThinkingLevelMap[level] = clonePointer(value)
 		}
 	}
 	switch compatibility := model.Compatibility.(type) {
 	case *OpenAICompletionsCompatibility:
 		if compatibility != nil {
 			compatibilityClone := *compatibility
-			compatibilityClone.SupportsStore = cloneBoolPointer(compatibility.SupportsStore)
-			compatibilityClone.SupportsDeveloperRole = cloneBoolPointer(compatibility.SupportsDeveloperRole)
-			compatibilityClone.SupportsReasoningEffort = cloneBoolPointer(compatibility.SupportsReasoningEffort)
-			compatibilityClone.SupportsStrictMode = cloneBoolPointer(compatibility.SupportsStrictMode)
-			compatibilityClone.RequiresThinkingAsText = cloneBoolPointer(compatibility.RequiresThinkingAsText)
-			compatibilityClone.RequiresReasoningContentOnAssistantMessages = cloneBoolPointer(
+			compatibilityClone.SupportsStore = clonePointer(compatibility.SupportsStore)
+			compatibilityClone.SupportsDeveloperRole = clonePointer(compatibility.SupportsDeveloperRole)
+			compatibilityClone.SupportsReasoningEffort = clonePointer(compatibility.SupportsReasoningEffort)
+			compatibilityClone.SupportsStrictMode = clonePointer(compatibility.SupportsStrictMode)
+			compatibilityClone.RequiresThinkingAsText = clonePointer(compatibility.RequiresThinkingAsText)
+			compatibilityClone.RequiresReasoningContentOnAssistantMessages = clonePointer(
 				compatibility.RequiresReasoningContentOnAssistantMessages,
 			)
-			compatibilityClone.ZAIToolStream = cloneBoolPointer(compatibility.ZAIToolStream)
+			compatibilityClone.ZAIToolStream = clonePointer(compatibility.ZAIToolStream)
 			clone.Compatibility = &compatibilityClone
 		}
 	case *AnthropicMessagesCompatibility:
 		if compatibility != nil {
 			compatibilityClone := *compatibility
-			compatibilityClone.SupportsTemperature = cloneBoolPointer(compatibility.SupportsTemperature)
-			compatibilityClone.SupportsCacheControl = cloneBoolPointer(compatibility.SupportsCacheControl)
-			compatibilityClone.SupportsCacheControlTools = cloneBoolPointer(compatibility.SupportsCacheControlTools)
-			compatibilityClone.ForceAdaptiveThinking = cloneBoolPointer(compatibility.ForceAdaptiveThinking)
-			compatibilityClone.AllowEmptySignature = cloneBoolPointer(compatibility.AllowEmptySignature)
+			compatibilityClone.SupportsTemperature = clonePointer(compatibility.SupportsTemperature)
+			compatibilityClone.SupportsCacheControl = clonePointer(compatibility.SupportsCacheControl)
+			compatibilityClone.SupportsCacheControlTools = clonePointer(compatibility.SupportsCacheControlTools)
+			compatibilityClone.ForceAdaptiveThinking = clonePointer(compatibility.ForceAdaptiveThinking)
+			compatibilityClone.AllowEmptySignature = clonePointer(compatibility.AllowEmptySignature)
 			clone.Compatibility = &compatibilityClone
 		}
 	}
@@ -279,15 +286,11 @@ func validateModelCompatibility(model Model) error {
 	return nil
 }
 
-func cloneStringPointer(value *string) *string {
-	if value == nil {
-		return nil
-	}
-	clone := *value
-	return &clone
-}
-
-func cloneBoolPointer(value *bool) *bool {
+// clonePointer copies a pointer to a value-semantic type. It is intended for
+// scalar configuration fields such as *string, *bool, and numeric pointers. Do
+// not use it as a deep copy for slices, maps, or structs that contain reference
+// fields; clone those explicitly instead.
+func clonePointer[T any](value *T) *T {
 	if value == nil {
 		return nil
 	}
