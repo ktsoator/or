@@ -310,7 +310,7 @@ assistant.SetTools([]agent.AgentTool{weatherTool}) // slice is copied
 assistant.SetToolExecution(agent.ExecutionSequential)
 ```
 
-Runnable programs are in [`example/agent`](../../example/agent/README.md): `basic`
+Runnable programs are in [`example/agent`](https://github.com/ktsoator/or/tree/main/example/agent): `basic`
 (one tool, one prompt) and `tool` (an interactive session with reasoning, tool
 progress, and mid-session model switching).
 
