@@ -1,22 +1,34 @@
 # or
 
-Choose the path from intent to action.
+Choose the path from intent to action — a modular Go toolkit for building
+applications with language models and higher-level agents.
 
-`or` is a modular Go toolkit for building applications with language models and
-higher-level agents. A provider-neutral LLM package keeps conversations, tools,
-reasoning, and streaming events stable while models and wire protocols change
-underneath, and an agent package builds the tool-call loop, state, and streaming
-events on top.
+[Get started](llm/getting-started.md){ .md-button .md-button--primary }
+[View on GitHub](https://github.com/ktsoator/or){ .md-button }
 
-## Why `or`
+<div class="grid cards" markdown>
 
-- Use one conversation model across OpenAI-compatible and Anthropic-compatible providers.
-- Stream text, reasoning, tool calls, usage, and errors through typed events.
-- Define tools from Go structs and validate model-generated arguments.
-- Preserve provider metadata needed for multi-turn reasoning and tool use.
-- Switch models between turns without rebuilding conversation history.
-- Add custom model protocols without expanding the shared request API.
-- Run autonomous multi-step tool loops with streaming events, mid-run steering, and per-turn model switching.
+- __Provider-neutral__
+
+    One conversation model across OpenAI-compatible and Anthropic-compatible
+    providers. Switch models between turns without rebuilding history.
+
+- __Typed streaming__
+
+    Stream text, reasoning, tool calls, usage, and errors through typed events,
+    each carrying a partial snapshot of the response.
+
+- __Structured tools__
+
+    Define tools from Go structs and validate model-generated arguments, with
+    best-effort recovery for truncated streams.
+
+- __Reasoning aware__
+
+    A provider-neutral effort level maps onto each provider's native thinking,
+    preserving the metadata needed for multi-turn continuity.
+
+</div>
 
 ## Packages
 

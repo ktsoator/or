@@ -1,5 +1,0 @@
-/* Hide the default Material logo icon in the top-left header (and the mobile
-   navigation drawer), leaving just the site name. */
-.md-logo {
-  display: none;
-}
