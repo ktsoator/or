@@ -34,6 +34,24 @@ options := llm.StreamOptions{
 | `RewriteRequest` | 在发送前替换序列化的请求体 |
 | `OnResponse` | 观察每一次 HTTP 响应尝试 |
 
+## 按请求提供凭证
+
+默认情况下,本包从进程环境读取所选提供方的 key。若要针对单次请求覆盖它——例如一个持有
+各用户 key 的多租户服务——可直接设置 `APIKey`,或通过 `Env` 提供具名的环境值而不改动
+进程环境。
+
+```go
+// 仅用于本次请求的字面 key。
+options := llm.StreamOptions{APIKey: userKey}
+
+// 或者从每请求来源解析提供方的环境变量。
+options := llm.StreamOptions{
+	Env: llm.ProviderEnv{"DEEPSEEK_API_KEY": userKey},
+}
+```
+
+`APIKey` 优先级最高;`Env` 会先于进程环境被查询。
+
 ## 观察 HTTP 请求与响应
 
 这些钩子适用于日志、追踪和调试。两者都会在每次尝试时各触发一次，因此重试始终可见。

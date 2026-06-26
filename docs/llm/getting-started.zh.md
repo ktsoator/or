@@ -60,6 +60,37 @@ go run .
 处理，则改用 [`llm.Stream`](streaming.md)。包级函数使用的客户端内置了两种协议适配器；
 `llm.NewClient` 可创建一个使用相同适配器、但相互隔离的客户端。
 
+## 自定义请求
+
+第一个示例发送的是空的 `StreamOptions{}`。用 `PromptWithSystem` 加上 system 提示,
+并设置温度、输出上限等常用选项。这些选项适用于任意模型,与协议无关。
+
+```go
+temperature := 0.2
+response, err := llm.Complete(
+	context.Background(),
+	model,
+	llm.PromptWithSystem("You are a concise Go tutor.", "Explain Go channels."),
+	llm.StreamOptions{
+		Temperature: &temperature,
+		MaxTokens:   512,
+	},
+)
+```
+
+完整的选项集合参见[请求配置](configuration.md)。
+
+## 查看用量与成本
+
+每个响应都会报告它消耗的 token 及其成本:
+
+```go
+fmt.Printf("tokens=%d cost=$%.6f\n",
+	response.Usage.TotalTokens, response.Usage.Cost.Total)
+```
+
+停止原因、用量与诊断详见[读取响应](results.md)。
+
 ## 下一步
 
 - 从[提供方目录](providers.md)中选择一个模型。

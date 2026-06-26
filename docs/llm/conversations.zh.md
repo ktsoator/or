@@ -27,6 +27,30 @@ response.ToolCalls() // 按顺序返回每一个工具调用
 下面这种完整的结构体字面量写法仍然有效；当你需要构造器未覆盖的内容时（例如在一条消息
 中混合文本和图像），再使用它。
 
+## 延续对话
+
+多轮对话就是一个不断增长的 `[]llm.Message`。追加助手的回复,再追加下一条用户消息,
+然后把整个切片再次发送。本库是无状态的,你保存的历史就是这段对话。
+
+```go
+messages := []llm.Message{
+	llm.UserText("Name a Go web framework."),
+}
+
+for _, turn := range []string{"And one for CLIs?", "Which is older?"} {
+	reply, err := llm.Complete(ctx, model,
+		llm.Context{Messages: messages}, llm.StreamOptions{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	messages = append(messages, &reply)            // 记录回答
+	messages = append(messages, llm.UserText(turn)) // 追问
+}
+```
+
+追加 `&reply`(指针),让助手这一轮保留本库重放所需的类型。设在 `Context` 上的
+`SystemPrompt` 对每一轮都生效,且不会被存进消息历史。
+
 ## 图像输入
 
 多模态模型支持在用户消息中图文并存。以 base64 提供原始字节及其 MIME 类型：
