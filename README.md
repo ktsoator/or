@@ -112,23 +112,13 @@ switching are available in [`example/llm`](example/llm/README.md).
 A runnable stateful Agent example is available in
 [`example/agent`](example/agent/README.md).
 
-## LLM documentation
+## Documentation
 
-- [Getting started](docs/llm/getting-started.md)
-- [Providers and models](docs/llm/providers.md)
-- [Streaming](docs/llm/streaming.md)
-- [Typed tools and tool choice](docs/llm/tools.md)
-- [Reasoning and thinking](docs/llm/reasoning.md)
-- [Images, model switching, and persistence](docs/llm/conversations.md)
-- [Request configuration and observability](docs/llm/configuration.md)
-- [Custom protocol adapters](docs/llm/extending.md)
-- [Go API reference](https://pkg.go.dev/github.com/ktsoator/or/llm)
+Guides for both packages live at
+**[ktsoator.github.io/or](https://ktsoator.github.io/or/)**.
 
-## Agent documentation
-
-- [Agent package](docs/agent/README.md) — the tool loop, hooks, events, steering, and state
-- [Runnable examples](example/agent/README.md) — a minimal program and an interactive session
-- [Go API reference](https://pkg.go.dev/github.com/ktsoator/or/agent)
+API reference: [`or/llm`](https://pkg.go.dev/github.com/ktsoator/or/llm) ·
+[`or/agent`](https://pkg.go.dev/github.com/ktsoator/or/agent)
 
 ## Supported protocols
 
