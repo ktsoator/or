@@ -1,25 +1,25 @@
 # 消息类型系统
 
 [`conversation.go`](https://github.com/ktsoator/or/blob/main/internal/llm/conversation.go)
-定义了对话模型，即每个适配器都要读写的那套类型。其中不含任何与具体厂商绑定的内容：出站时，
-适配器将这些中立类型翻译为某家厂商的通信格式；入站时，再从响应流中重建出相同的类型。
+定义了对话模型——所有适配器共同读写的一组中立类型，不与任何厂商绑定。出站时，适配器将它们翻译为某一厂商的通信格式；入站时，再从响应流中重建出相同的类型。
 
-## 两级结构
+## 结构总览
 
-一个 [`Context`](#context) 持有一组消息，每条消息再持有一组内容块。消息对应对话的「一轮」，
-内容块则是这一轮中的具体内容。
+[`Context`](#context) 由系统提示、对话消息和可用工具组成。每条消息是对话历史中的一个条目——用户输入、助手回复或工具返回——条目内部由若干内容块承载具体片段。
 
 ```text
 Context
-└── Messages: []Message
-        ├── UserMessage        → []UserContent
-        ├── AssistantMessage   → []AssistantContent
-        └── ToolResultMessage  → []ToolResultContent
+├── SystemPrompt: string
+├── Messages: []Message
+│       ├── UserMessage        → []UserContent
+│       ├── AssistantMessage   → []AssistantContent
+│       └── ToolResultMessage  → []ToolResultContent
+└── Tools: []ToolDefinition
 ```
 
-## 以标记接口约束固定集合
+## 用标记接口封闭类型
 
-Go 没有 sum type，因此这里为接口附加一个未导出方法，将其实现集合限定为固定的几种：
+Go 没有原生的联合类型（sum type），无法直接声明一个封闭的类型集合。这里的替代做法是给接口加一个未导出方法：包外类型无从实现，可选的实现便被限定在当前包内的几种：
 
 ```go
 type Message interface {
@@ -31,19 +31,38 @@ func (*AssistantMessage) isMessage()  {}
 func (*ToolResultMessage) isMessage() {}
 ```
 
-由于 `isMessage` 未导出，包外的任何类型都无法满足 `Message`。消息的种类因此构成一个封闭
-集合，对其进行 type switch 在实践中即是穷尽的。这些方法定义在指针接收者上，因此包内流转的
-具体值始终是 `*UserMessage`、`*AssistantMessage` 与 `*ToolResultMessage`。
+消息的种类因此构成一个封闭集合：对它做 type switch 时，你能确信分支已经列全——包外无法
+再添新类型。这些方法定义在指针接收者上，所以包内流转的具体值始终是 `*UserMessage`、
+`*AssistantMessage` 与 `*ToolResultMessage`。
 
-同一手法对内容块还承担了第二重作用：内容块通过实现对应的角色接口，声明自己可以出现在哪种
-消息中——并且只实现被允许的那几个：
+同一套接口对内容块还多一层用途：内容块按角色分成三个接口，每种块实现哪个接口，就声明了
+自己能出现在哪种消息里——没实现的那种，放进去就编译不过：
 
 ```go
+// UserContent 可出现在用户消息中
+type UserContent interface {
+	isUserContent()
+}
+
+// AssistantContent 可出现在助手消息中
+type AssistantContent interface {
+	isAssistantContent()
+}
+
+// ToolResultContent 可出现在工具结果消息中
+type ToolResultContent interface {
+	isToolResultContent()
+}
+
 func (*TextContent) isUserContent()       {}
-func (*TextContent) isAssistantContent()  {}
+func (*TextContent) isAssistantContent()  {} // 三种消息都可
 func (*TextContent) isToolResultContent() {}
 
-func (*ThinkingContent) isAssistantContent() {} // 仅限 assistant 消息
+func (*ImageContent) isUserContent()       {} // 仅用户与工具结果
+func (*ImageContent) isToolResultContent() {}
+
+func (*ThinkingContent) isAssistantContent() {} // 仅助手
+func (*ToolCall) isAssistantContent()        {} // 仅助手
 ```
 
 ## 放置规则
@@ -85,46 +104,20 @@ type ToolCall struct {
 }
 ```
 
-有几个字段的分量超出表面所载的内容：
+有几个字段的实际分量重于字面：
 
-- `ToolCall.ID` 是关联键。`ToolResultMessage` 通过在 `ToolCallID` 中回填它来应答一次
-  调用，结果与请求正是借此在一轮内对应起来。
+- `ToolCall.ID` 是关联键。`ToolResultMessage` 在 `ToolCallID` 中回填它来应答一次调用，
+  结果与请求正是借此在一轮内对应起来。
 - `ToolCall.Arguments` 是已解码的 JSON 对象（`map[string]any`），而非原始字符串。流式
-  传来的参数文本会先经过解析——尽力而为，因此即便流被截断也能得出一个值——再落入此处。
+  传来的参数文本会先经过一次尽力解析，即便流被截断也能得出一个值，再存入此字段。
 - `ThinkingContent.Redacted` 标记厂商以删节形式返回的推理：文本被隐去，但内容块予以保留，
-  以使该轮保持完整，其签名也得以回传。
+  使该轮保持完整，其签名也得以回传。
 
 !!! note "关于 signature 字段"
     `TextSignature`、`ThinkingSignature`、`ThoughtSignature` 是不透明的厂商元数据。
-    本包不解读其内容，仅将其原样保存，并在后续轮次中原样回传，以便厂商验证其推理与工具
-    调用在多次请求之间的连贯性。目标模型变化时这些字段如何被保留或丢弃，参见
+    本包不解读其内容，仅原样保存，并在后续轮次中原样回传，使厂商得以跨请求验证其推理与
+    工具调用的连贯性。目标模型变化时这些字段如何被保留或丢弃，参见
     [模型切换](transform.md)。
-
-## token 用量与停止原因
-
-每条 assistant 响应上都附带两个小型值类型。`Usage` 按类别统计 token，并携带算得的
-`UsageCost`；其类别与 [`ModelCost`](models.md#定价) 对应，故成本即逐类相乘：
-
-```go
-type Usage struct {
-	Input, Output, CacheRead, CacheWrite, TotalTokens int64
-	Cost UsageCost
-}
-
-type UsageCost struct {
-	Input, Output, CacheRead, CacheWrite, Total float64
-}
-```
-
-`StopReason` 是一个封闭集合，将各厂商的停止信号归一为同一套中立词汇：
-
-| 取值 | 含义 |
-|---|---|
-| `stop` | 正常完成 |
-| `length` | 因输出 token 上限被截断 |
-| `toolUse` | 为让调用方执行工具调用而停止 |
-| `error` | 厂商或运行时故障 |
-| `aborted` | 请求被取消 |
 
 ## 三种消息
 
@@ -164,6 +157,33 @@ type AssistantMessage struct {
 适配器并不从零填写这些字段。`NewAssistantMessage(model)` 会先植入与厂商无关的元数据——
 `Protocol`、`Provider`、`Model` 与 `Timestamp`——因此适配器是从一条半成品消息起步，
 只需追加内容以及与本次响应相关的字段。
+
+## token 用量与停止原因
+
+`AssistantMessage` 上的 `Usage` 与 `StopReason` 各是一个小型值类型。`Usage` 按类别统计
+token，并携带算得的 `UsageCost`；其类别与 [`ModelCost`](models.md#定价) 对应，故成本即
+逐类相乘：
+
+```go
+type Usage struct {
+	Input, Output, CacheRead, CacheWrite, TotalTokens int64
+	Cost UsageCost
+}
+
+type UsageCost struct {
+	Input, Output, CacheRead, CacheWrite, Total float64
+}
+```
+
+`StopReason` 是一组固定取值，将各厂商不同的停止信号统一映射为同一套中立取值：
+
+| 取值 | 含义 |
+|---|---|
+| `stop` | 正常完成 |
+| `length` | 因输出 token 上限被截断 |
+| `toolUse` | 为让调用方执行工具调用而停止 |
+| `error` | 厂商或运行时故障 |
+| `aborted` | 请求被取消 |
 
 ## 读取响应
 

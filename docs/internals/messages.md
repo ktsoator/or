@@ -6,24 +6,29 @@ here is tied to a provider. An adapter turns these neutral types into a provider
 wire format on the way out, and rebuilds the same types from the response stream
 on the way in.
 
-## Two levels
+## Structure overview
 
-A [`Context`](#context) holds a list of messages; each message holds a list of
-content blocks. Messages are the conversation turns; content blocks are the
-payloads inside them.
+A [`Context`](#context) is made up of a system prompt, the conversation messages,
+and the available tools. Each message is one entry in the conversation history —
+user input, an assistant reply, or a tool result — and inside each entry, content
+blocks carry the actual payload.
 
 ```text
 Context
-└── Messages: []Message
-        ├── UserMessage        → []UserContent
-        ├── AssistantMessage   → []AssistantContent
-        └── ToolResultMessage  → []ToolResultContent
+├── SystemPrompt: string
+├── Messages: []Message
+│       ├── UserMessage        → []UserContent
+│       ├── AssistantMessage   → []AssistantContent
+│       └── ToolResultMessage  → []ToolResultContent
+└── Tools: []ToolDefinition
 ```
 
-## Closed sets built from marker interfaces
+## Closing types with marker interfaces
 
-Go has no sum types, so the package uses interfaces with an unexported marker
-method to fence off a fixed set of implementations:
+Go has no native sum types, so there is no way to declare a closed set of types
+directly. The workaround is to give an interface an unexported method: no type
+outside the package can implement it, so the possible implementations are limited
+to the few inside this package:
 
 ```go
 type Message interface {
@@ -35,21 +40,41 @@ func (*AssistantMessage) isMessage()  {}
 func (*ToolResultMessage) isMessage() {}
 ```
 
-Because `isMessage` is unexported, no type outside this package can satisfy
-`Message`. The set of message kinds is closed, and a type switch over it is
-exhaustive in practice. The methods sit on pointer receivers, so the concrete
-values flowing through the package are always `*UserMessage`, `*AssistantMessage`,
-and `*ToolResultMessage`.
+The set of message kinds is therefore closed: when you type-switch over it, you
+can be sure every branch is listed — no new type can be added from outside. The
+methods sit on pointer receivers, so the concrete values flowing through the
+package are always `*UserMessage`, `*AssistantMessage`, and `*ToolResultMessage`.
 
-The same trick does double duty for content. A block declares which roles it may
-appear in by implementing the matching role interface — and only that one:
+The same interfaces do double duty for content blocks: blocks are split into
+three role interfaces, and which one a block implements declares which messages
+it may appear in — the ones it does not implement will not compile if placed
+there:
 
 ```go
+// UserContent can appear in a user message
+type UserContent interface {
+	isUserContent()
+}
+
+// AssistantContent can appear in an assistant message
+type AssistantContent interface {
+	isAssistantContent()
+}
+
+// ToolResultContent can appear in a tool result message
+type ToolResultContent interface {
+	isToolResultContent()
+}
+
 func (*TextContent) isUserContent()       {}
-func (*TextContent) isAssistantContent()  {}
+func (*TextContent) isAssistantContent()  {} // all three messages
 func (*TextContent) isToolResultContent() {}
 
+func (*ImageContent) isUserContent()       {} // user and tool result only
+func (*ImageContent) isToolResultContent() {}
+
 func (*ThinkingContent) isAssistantContent() {} // assistant only
+func (*ToolCall) isAssistantContent()        {} // assistant only
 ```
 
 ## Placement rules
@@ -112,34 +137,6 @@ A few fields carry weight beyond the obvious payload:
     [Switching models](transform.md) for how they are preserved or dropped when
     the target model changes.
 
-## Token usage and stop reasons
-
-Two small value types travel on every assistant response. `Usage` counts tokens
-by category and carries the calculated `UsageCost`; the categories line up with
-[`ModelCost`](models.md#pricing) so cost is a per-category multiply:
-
-```go
-type Usage struct {
-	Input, Output, CacheRead, CacheWrite, TotalTokens int64
-	Cost UsageCost
-}
-
-type UsageCost struct {
-	Input, Output, CacheRead, CacheWrite, Total float64
-}
-```
-
-`StopReason` is a closed set that normalizes each provider's stop signal into one
-neutral vocabulary:
-
-| Value | Meaning |
-|---|---|
-| `stop` | normal completion |
-| `length` | truncated by the output-token cap |
-| `toolUse` | stopped so the caller can run tool calls |
-| `error` | provider or runtime failure |
-| `aborted` | the request was cancelled |
-
 ## The three messages
 
 `UserMessage` and `ToolResultMessage` are small. A user message is just a content
@@ -181,6 +178,35 @@ An adapter does not fill these fields from scratch. `NewAssistantMessage(model)`
 seeds the provider-independent metadata — `Protocol`, `Provider`, `Model`, and
 `Timestamp` — so an adapter starts from a half-built message and only appends
 content and the response-specific fields.
+
+## Token usage and stop reasons
+
+`Usage` and `StopReason` on an `AssistantMessage` are each a small value type.
+`Usage` counts tokens by category and carries the calculated `UsageCost`; the
+categories line up with [`ModelCost`](models.md#pricing) so cost is a per-category
+multiply:
+
+```go
+type Usage struct {
+	Input, Output, CacheRead, CacheWrite, TotalTokens int64
+	Cost UsageCost
+}
+
+type UsageCost struct {
+	Input, Output, CacheRead, CacheWrite, Total float64
+}
+```
+
+`StopReason` is a fixed set of values that maps each provider's stop signal onto
+one neutral set:
+
+| Value | Meaning |
+|---|---|
+| `stop` | normal completion |
+| `length` | truncated by the output-token cap |
+| `toolUse` | stopped so the caller can run tool calls |
+| `error` | provider or runtime failure |
+| `aborted` | the request was cancelled |
 
 ## Reading a response
 
