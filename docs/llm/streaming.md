@@ -1,6 +1,55 @@
 # Streaming
 
-Use `Stream` to process text and reasoning as they are generated:
+Use `Stream` to process text and reasoning as they are generated.
+
+**1. Start the stream.** `Stream` returns a channel immediately; the request
+runs in the background and delivers events as they arrive.
+
+```go
+events, err := llm.Stream(
+	context.Background(),
+	model,
+	llm.Prompt("Explain Go channels briefly."),
+	llm.StreamOptions{Reasoning: llm.ModelThinkingHigh},
+)
+if err != nil {
+	log.Fatal(err)
+}
+```
+
+**2. Consume events with a type switch.** Print text and reasoning deltas as
+they come, capture the final message on `EventDone`, and stop on `EventError`.
+
+```go
+var finalMessage *llm.AssistantMessage
+for event := range events {
+	switch event.Type {
+	case llm.EventThinkingDelta, llm.EventTextDelta:
+		fmt.Print(event.Delta)
+	case llm.EventDone:
+		finalMessage = event.Message
+	case llm.EventError:
+		log.Fatal(event.Err)
+	}
+}
+```
+
+**3. Read the final message** for the stop reason, token usage, and cost once
+the channel closes.
+
+```go
+fmt.Printf("\nstop=%s tokens=%d cost=$%.6f\n",
+	finalMessage.StopReason,
+	finalMessage.Usage.TotalTokens,
+	finalMessage.Usage.Cost.Total,
+)
+```
+
+Thinking events are emitted only when the selected model and provider expose
+reasoning content.
+
+<details>
+<summary>Full program</summary>
 
 ```go
 package main
@@ -49,8 +98,7 @@ func main() {
 }
 ```
 
-Thinking events are emitted only when the selected model and provider expose
-reasoning content.
+</details>
 
 ## Event reference
 
@@ -71,7 +119,9 @@ reasoning content.
 
 `EventDone.Message` is the final assistant message and contains content, usage,
 cost, and stop reason. `EventError.Message` may contain partial content and
-usage. The channel emits exactly one terminal event and then closes.
+usage. The channel emits exactly one terminal event and then closes. See
+[Reading responses](results.md) for how to interpret the final message: stop
+reasons, token usage and cost, diagnostics, and context-overflow detection.
 
 Events from different content blocks may be interleaved. Use `ContentIndex` to
 associate deltas with their block. Every non-terminal event carries a `Partial`

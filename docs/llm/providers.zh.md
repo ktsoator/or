@@ -45,8 +45,46 @@ if !ok {
 ```
 
 `LookupModel` 返回模型和一个表示是否找到的标志。`GetModel` 适用于已知的目录条目，
-在提供方或模型 ID 不存在时会 panic。模型元数据包含推理与图像支持、上下文窗口、输出
-上限和定价信息。
+在提供方或模型 ID 不存在时会 panic。
+
+## 模型元数据
+
+`Model` 同时是一份只读的元数据记录。可在请求前读取它来驱动 UI、施加限制或估算成本:
+
+| 字段 | 类型 | 含义 |
+|---|---|---|
+| `ID` | `string` | 发送给提供方的标识符 |
+| `Name` | `string` | 可读的展示名 |
+| `Provider` | `string` | 厂商键,如 `anthropic` |
+| `Protocol` | `Protocol` | 由哪个适配器处理 |
+| `BaseURL` | `string` | 端点基础 URL |
+| `Headers` | `map[string]string` | 合并进每次请求的默认请求头 |
+| `Reasoning` | `bool` | 模型能否产生思考内容 |
+| `Input` | `[]ModelInput` | 接受的模态:`Text`、`Image` |
+| `ContextWindow` | `int64` | 最大总 token 数(输入 + 输出) |
+| `MaxTokens` | `int64` | 模型可生成的最大 token 数 |
+| `Cost` | `ModelCost` | 每百万 token 的定价 |
+| `Compatibility` | `ModelCompatibility` | 协议特定的覆盖项(见下文) |
+
+`Reasoning` 只表明是否支持思考;要读取模型实际接受的精确等级,请用
+[`SupportedThinkingLevels`](reasoning.md),而不是直接读 `ThinkingLevelMap`。
+
+`Cost` 中的价格是**每百万 token** 的单价,与 `CalculateCost` 的计费方式一致:
+
+| 字段 | 含义 |
+|---|---|
+| `Input` | 每百万输入 token 的价格 |
+| `Output` | 每百万输出 token 的价格 |
+| `CacheRead` | 每百万缓存读取 token 的价格 |
+| `CacheWrite` | 每百万缓存写入 token 的价格 |
+
+```go
+model, _ := llm.LookupModel("deepseek", "deepseek-v4-flash")
+fmt.Printf("%s: %d-token window, $%.2f/M in, $%.2f/M out\n",
+	model.Name, model.ContextWindow, model.Cost.Input, model.Cost.Output)
+```
+
+已完成请求上对应的 `Usage` 与 `UsageCost` 记录参见[读取响应](results.md)。
 
 ## 自定义与兼容端点
 
@@ -69,7 +107,23 @@ events, err := llm.Stream(ctx, model, input, llm.StreamOptions{APIKey: "ollama"}
 ```
 
 端点特定的行为——推理字段名、cache-control 支持以及类似差异——通过 `Model.Compatibility`
-配合 `OpenAICompletionsCompatibility` 或 `AnthropicMessagesCompatibility` 配置。
+配合 `OpenAICompletionsCompatibility` 或 `AnthropicMessagesCompatibility` 配置。只需设置
+与默认不同的字段;每个字段都是指针,未设置时保持适配器原有行为不变。
+
+```go
+supports := func(b bool) *bool { return &b }
+
+// OpenAI 兼容端点:其上限字段名为 "max_completion_tokens",并接受推理强度字段。
+model.Compatibility = &llm.OpenAICompletionsCompatibility{
+	MaxTokensField:          "max_completion_tokens",
+	SupportsReasoningEffort: supports(true),
+}
+
+// Anthropic 兼容端点:不支持 cache control。
+model.Compatibility = &llm.AnthropicMessagesCompatibility{
+	SupportsCacheControl: supports(false),
+}
+```
 
 如果某个通信协议既非 OpenAI 兼容也非 Anthropic 兼容，请实现一个
 [自定义协议适配器](extending.md)。

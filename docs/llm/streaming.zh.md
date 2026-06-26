@@ -1,6 +1,52 @@
 # 流式响应
 
-使用 `Stream` 在文本和推理生成的同时进行处理：
+使用 `Stream` 在文本和推理生成的同时进行处理。
+
+**1. 启动流。** `Stream` 会立即返回一个通道;请求在后台运行,事件到达时随即送出。
+
+```go
+events, err := llm.Stream(
+	context.Background(),
+	model,
+	llm.Prompt("Explain Go channels briefly."),
+	llm.StreamOptions{Reasoning: llm.ModelThinkingHigh},
+)
+if err != nil {
+	log.Fatal(err)
+}
+```
+
+**2. 用类型分支消费事件。** 文本和推理增量随到随打印,在 `EventDone` 时捕获最终消息,
+在 `EventError` 时停止。
+
+```go
+var finalMessage *llm.AssistantMessage
+for event := range events {
+	switch event.Type {
+	case llm.EventThinkingDelta, llm.EventTextDelta:
+		fmt.Print(event.Delta)
+	case llm.EventDone:
+		finalMessage = event.Message
+	case llm.EventError:
+		log.Fatal(event.Err)
+	}
+}
+```
+
+**3. 读取最终消息**——通道关闭后,从中读出停止原因、token 用量和成本。
+
+```go
+fmt.Printf("\nstop=%s tokens=%d cost=$%.6f\n",
+	finalMessage.StopReason,
+	finalMessage.Usage.TotalTokens,
+	finalMessage.Usage.Cost.Total,
+)
+```
+
+只有当所选模型和提供方暴露推理内容时，才会发出 thinking 事件。
+
+<details>
+<summary>完整程序</summary>
 
 ```go
 package main
@@ -49,27 +95,29 @@ func main() {
 }
 ```
 
-只有当所选模型和提供方暴露推理内容时，才会发出 thinking 事件。
+</details>
 
 ## 事件参考
 
 | 事件 | 含义 | 主要字段 |
 |---|---|---|
 | `EventStart` | 提供方流已开始 | `Partial` |
-| `EventTextStart` | 一个文本块开始 | `ContentIndex`、`Partial` |
-| `EventTextDelta` | 一段文本片段到达 | `ContentIndex`、`Delta`、`Partial` |
-| `EventTextEnd` | 一个文本块完成 | `ContentIndex`、`Content`、`Partial` |
-| `EventThinkingStart` | 一个推理块开始 | `ContentIndex`、`Partial` |
-| `EventThinkingDelta` | 一段推理片段到达 | `ContentIndex`、`Delta`、`Partial` |
-| `EventThinkingEnd` | 一个推理块完成 | `ContentIndex`、`Content`、`Partial` |
-| `EventToolCallStart` | 一个工具调用块开始 | `ContentIndex`、`ToolCall`、`Partial` |
-| `EventToolCallDelta` | 一段原始的工具参数 JSON 片段到达 | `ContentIndex`、`Delta`、`ToolCall`、`Partial` |
-| `EventToolCallEnd` | 一个工具调用流式结束，参数已尽力解析 | `ContentIndex`、`ToolCall`、`Partial` |
+| `EventTextStart` | 文本块开始 | `ContentIndex`、`Partial` |
+| `EventTextDelta` | 文本片段到达 | `ContentIndex`、`Delta`、`Partial` |
+| `EventTextEnd` | 文本块完成 | `ContentIndex`、`Content`、`Partial` |
+| `EventThinkingStart` | 推理块开始 | `ContentIndex`、`Partial` |
+| `EventThinkingDelta` | 推理片段到达 | `ContentIndex`、`Delta`、`Partial` |
+| `EventThinkingEnd` | 推理块完成 | `ContentIndex`、`Content`、`Partial` |
+| `EventToolCallStart` | 工具调用块开始 | `ContentIndex`、`ToolCall`、`Partial` |
+| `EventToolCallDelta` | 工具参数 JSON 原始片段到达 | `ContentIndex`、`Delta`、`ToolCall`、`Partial` |
+| `EventToolCallEnd` | 工具调用流式结束，参数已尽力解析 | `ContentIndex`、`ToolCall`、`Partial` |
 | `EventDone` | 请求成功完成 | `Message` |
 | `EventError` | 请求失败或被取消 | `Err`、`Message` |
 
 `EventDone.Message` 是最终的 assistant 消息，包含内容、用量、成本和停止原因。
 `EventError.Message` 可能包含部分内容和用量。通道只会发出恰好一个终止事件，随后关闭。
+如何解读这个最终消息——停止原因、token 用量与成本、诊断,以及上下文溢出检测——参见
+[读取响应](results.md)。
 
 来自不同内容块的事件可能交错出现。用 `ContentIndex` 将增量关联到对应的块。每个非终止
 事件都携带一份迄今为止已构建的 assistant 消息的 `Partial` 快照。

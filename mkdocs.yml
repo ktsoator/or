@@ -31,6 +31,7 @@ plugins:
             Streaming: 流式响应
             Tools: 工具
             Reasoning: 推理与思考
+            Reading responses: 读取响应
             Conversations: 对话
             Configuration: 请求配置
             Custom protocols: 自定义协议
@@ -113,6 +114,7 @@ nav:
           - Streaming: llm/streaming.md
           - Tools: llm/tools.md
           - Reasoning: llm/reasoning.md
+          - Reading responses: llm/results.md
       - Advanced:
           - Conversations: llm/conversations.md
           - Configuration: llm/configuration.md
