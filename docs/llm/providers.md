@@ -49,8 +49,49 @@ if !ok {
 
 `LookupModel` returns a model and a found flag. `GetModel` is convenient for a
 known catalog entry and panics when the provider or model ID does not exist.
-Model metadata includes reasoning and image support, context windows, output
-limits, and pricing information.
+
+## Model metadata
+
+A `Model` is also a read-only metadata record. Inspect it to drive UI, enforce
+limits, or estimate cost before a request:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `ID` | `string` | Identifier sent to the provider |
+| `Name` | `string` | Human-readable display name |
+| `Provider` | `string` | Vendor key, e.g. `anthropic` |
+| `Protocol` | `Protocol` | Which adapter handles the model |
+| `BaseURL` | `string` | Endpoint base URL |
+| `Headers` | `map[string]string` | Default headers merged into each request |
+| `Reasoning` | `bool` | Whether the model can produce thinking |
+| `Input` | `[]ModelInput` | Accepted modalities: `Text`, `Image` |
+| `ContextWindow` | `int64` | Maximum total tokens (input + output) |
+| `MaxTokens` | `int64` | Maximum tokens the model may generate |
+| `Cost` | `ModelCost` | Per-million-token pricing |
+| `Compatibility` | `ModelCompatibility` | Protocol-specific overrides (see below) |
+
+`Reasoning` reports only whether thinking is possible; use
+[`SupportedThinkingLevels`](reasoning.md) to read the exact levels a model
+accepts rather than the raw `ThinkingLevelMap`.
+
+`Cost` holds prices **per million tokens**, matching how `CalculateCost`
+computes a charge:
+
+| Field | Meaning |
+|---|---|
+| `Input` | Price per million input tokens |
+| `Output` | Price per million output tokens |
+| `CacheRead` | Price per million cache-read tokens |
+| `CacheWrite` | Price per million cache-write tokens |
+
+```go
+model, _ := llm.LookupModel("deepseek", "deepseek-v4-flash")
+fmt.Printf("%s: %d-token window, $%.2f/M in, $%.2f/M out\n",
+	model.Name, model.ContextWindow, model.Cost.Input, model.Cost.Output)
+```
+
+See [Reading responses](results.md) for the matching `Usage` and `UsageCost`
+records on a completed request.
 
 ## Custom and compatible endpoints
 
@@ -75,7 +116,25 @@ events, err := llm.Stream(ctx, model, input, llm.StreamOptions{APIKey: "ollama"}
 
 Endpoint-specific behavior—reasoning field names, cache-control support, and
 similar differences—is configured through `Model.Compatibility` with
-`OpenAICompletionsCompatibility` or `AnthropicMessagesCompatibility`.
+`OpenAICompletionsCompatibility` or `AnthropicMessagesCompatibility`. Set only
+the fields that differ from the default; each is a pointer so an unset field
+leaves the adapter's behavior unchanged.
+
+```go
+supports := func(b bool) *bool { return &b }
+
+// OpenAI-compatible endpoint that names its cap "max_completion_tokens"
+// and accepts a reasoning effort field.
+model.Compatibility = &llm.OpenAICompletionsCompatibility{
+	MaxTokensField:          "max_completion_tokens",
+	SupportsReasoningEffort: supports(true),
+}
+
+// Anthropic-compatible endpoint that does not support cache control.
+model.Compatibility = &llm.AnthropicMessagesCompatibility{
+	SupportsCacheControl: supports(false),
+}
+```
 
 For a wire protocol that is neither OpenAI-compatible nor
 Anthropic-compatible, implement a [custom protocol adapter](extending.md).

@@ -7,6 +7,73 @@
 事件。`StreamWriter` 提供与内置适配器相同的生命周期机制：一个 `EventStart`、非终止
 事件上的 `Partial` 快照、恰好一个终止事件，以及报告为 `StopReasonAborted` 的取消。
 
+**1. 声明适配器及其注册表键。** `Protocol` 返回客户端用来把模型路由到本适配器的键。
+
+```go
+type myAdapter struct{ http *http.Client }
+
+func (myAdapter) Protocol() llm.Protocol { return "my-protocol" }
+```
+
+**2. 准备响应消息和一个 `StreamWriter`。** `Stream` 会立即返回通道,实际工作在
+goroutine 中进行。`NewStreamWriter` 替你发出开头的 `EventStart` 并跟踪 `Partial` 快照。
+
+```go
+events := make(chan llm.Event)
+go func() {
+	defer close(events)
+
+	message := llm.AssistantMessage{
+		Protocol: model.Protocol,
+		Provider: model.Provider,
+		Model:    model.ID,
+	}
+	writer := llm.NewStreamWriter(ctx, events, &message)
+```
+
+**3. 调用端点;失败时通过 writer 上报。** `writer.Fail` 会发出唯一的终止事件
+`EventError`,使失败的请求仍能正确关闭流。
+
+```go
+	reply, usage, err := callMyEndpoint(ctx, a.http, model, input, options)
+	if err != nil {
+		writer.Fail(err)
+		return
+	}
+```
+
+**4. 发出内容块的生命周期事件。** 把内容块追加进 `message.Content`,再依次发出 start
+事件、每个分片的 delta,以及携带最终文本的 end 事件。
+
+```go
+	text := &llm.TextContent{}
+	message.Content = append(message.Content, text)
+	writer.Emit(llm.Event{Type: llm.EventTextStart, ContentIndex: 0})
+	for chunk := range reply {
+		text.Text += chunk
+		writer.Emit(llm.Event{
+			Type: llm.EventTextDelta, ContentIndex: 0, Delta: chunk,
+		})
+	}
+	writer.Emit(llm.Event{
+		Type: llm.EventTextEnd, ContentIndex: 0, Content: text.Text,
+	})
+```
+
+**5. 记录用量与停止原因,然后收尾。** `writer.Done` 发出唯一的终止事件 `EventDone`,
+携带组装好的消息。
+
+```go
+	message.Usage = usage
+	message.StopReason = llm.StopReasonStop
+	writer.Done()
+}()
+return events, nil
+```
+
+<details>
+<summary>完整适配器</summary>
+
 ```go
 type myAdapter struct{ http *http.Client }
 
@@ -55,6 +122,8 @@ func (a myAdapter) Stream(
 	return events, nil
 }
 ```
+
+</details>
 
 将它与内置协议一并注册：
 

@@ -34,6 +34,25 @@ The shared options are:
 | `RewriteRequest` | Replace the serialized request body before it is sent |
 | `OnResponse` | Observe every HTTP response attempt |
 
+## Supply credentials per request
+
+By default the package reads the selected provider's key from the process
+environment. To override that for a single request—for example a multi-tenant
+server holding each user's key—set `APIKey` directly, or supply named
+environment values through `Env` without mutating the process environment.
+
+```go
+// A literal key for this request only.
+options := llm.StreamOptions{APIKey: userKey}
+
+// Or resolve the provider's environment variable from a per-request source.
+options := llm.StreamOptions{
+	Env: llm.ProviderEnv{"DEEPSEEK_API_KEY": userKey},
+}
+```
+
+`APIKey` takes precedence; `Env` is consulted before the process environment.
+
 ## Observe HTTP requests and responses
 
 The hooks are useful for logging, tracing, and debugging. Both fire once per

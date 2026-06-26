@@ -37,18 +37,9 @@ applications with language models and higher-level agents.
 | [`or/llm`](llm/README.md) | Available | Unified model access, streaming, tools, reasoning, images, and conversation history |
 | [`or/agent`](agent/README.md) | Available | Stateful agent loop with tools, streaming events, steering, follow-ups, and abort |
 
-## Install
-
-```sh
-go get github.com/ktsoator/or/llm@latest
-```
-
-## A first request
-
-```go
-model := llm.GetModel("anthropic", "claude-opus-4-8")
-msg, err := llm.Complete(ctx, model, llm.Prompt("Hello"), llm.StreamOptions{})
-```
+Beyond the package guides, the [Internals](internals/overview.md) section walks
+through how the `llm` package works inside, and [Notes](notes/README.md) gathers
+patterns and open questions collected while building with the toolkit.
 
 For exported types and functions, see the package documentation on
 [pkg.go.dev](https://pkg.go.dev/github.com/ktsoator/or/llm).

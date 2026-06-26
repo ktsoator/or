@@ -63,6 +63,38 @@ go run .
 The package-level functions use a client containing both built-in protocol
 adapters; `llm.NewClient` creates an isolated client with the same adapters.
 
+## Customize the request
+
+The first example sends an empty `StreamOptions{}`. Add a system prompt with
+`PromptWithSystem`, and set common options such as temperature and an output
+cap. Options apply to any model regardless of protocol.
+
+```go
+temperature := 0.2
+response, err := llm.Complete(
+	context.Background(),
+	model,
+	llm.PromptWithSystem("You are a concise Go tutor.", "Explain Go channels."),
+	llm.StreamOptions{
+		Temperature: &temperature,
+		MaxTokens:   512,
+	},
+)
+```
+
+See [Request configuration](configuration.md) for the full option set.
+
+## Inspect usage and cost
+
+Every response reports the tokens it consumed and their cost:
+
+```go
+fmt.Printf("tokens=%d cost=$%.6f\n",
+	response.Usage.TotalTokens, response.Usage.Cost.Total)
+```
+
+[Reading responses](results.md) covers stop reasons, usage, and diagnostics.
+
 ## Next steps
 
 - Choose a model from the [provider catalog](providers.md).

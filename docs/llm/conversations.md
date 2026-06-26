@@ -29,6 +29,32 @@ The longhand struct literals below remain valid; reach for them when you need
 content a constructor does not cover, such as mixing text and images in one
 message.
 
+## Continue a conversation
+
+A multi-turn conversation is a growing `[]llm.Message`. Append the assistant's
+reply, then the next user message, and send the whole slice again. The library
+is stateless, so the history you keep is the conversation.
+
+```go
+messages := []llm.Message{
+	llm.UserText("Name a Go web framework."),
+}
+
+for _, turn := range []string{"And one for CLIs?", "Which is older?"} {
+	reply, err := llm.Complete(ctx, model,
+		llm.Context{Messages: messages}, llm.StreamOptions{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	messages = append(messages, &reply)            // record the answer
+	messages = append(messages, llm.UserText(turn)) // ask the follow-up
+}
+```
+
+Append `&reply` (a pointer) so the assistant turn keeps the type the library
+needs to replay it. A `SystemPrompt` set on the `Context` applies to every turn
+without being stored in the message history.
+
 ## Image input
 
 Multimodal models accept images alongside text in a user message. Provide the
