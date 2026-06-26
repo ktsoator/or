@@ -44,6 +44,7 @@ plugins:
             Protocol adapters: 协议适配器
             Streaming internals: 流式机制
             Switching models: 模型切换
+            Notes: 笔记
 
 theme:
   name: material
@@ -128,3 +129,5 @@ nav:
               - Protocol adapters: internals/adapters.md
               - Streaming internals: internals/streaming.md
               - Switching models: internals/transform.md
+  - Notes:
+      - Overview: notes/README.md
