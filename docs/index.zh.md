@@ -35,18 +35,8 @@ agent 的应用。
 | [`or/llm`](llm/README.md) | 可用 | 统一的模型访问、流式、工具、推理、图像与对话历史 |
 | [`or/agent`](agent/README.md) | 可用 | 带工具、流式事件、干预、追加消息和中止能力的有状态 agent 循环 |
 
-## 安装
-
-```sh
-go get github.com/ktsoator/or/llm@latest
-```
-
-## 第一个请求
-
-```go
-model := llm.GetModel("anthropic", "claude-opus-4-8")
-msg, err := llm.Complete(ctx, model, llm.Prompt("Hello"), llm.StreamOptions{})
-```
+除包使用指南外，[源码解析](internals/overview.md)章节深入讲解 `llm` 包的内部工作原理，
+[笔记](notes/README.md)则收集了用本工具包构建过程中沉淀的模式与开放问题。
 
 完整的导出类型和函数，参见
 [pkg.go.dev](https://pkg.go.dev/github.com/ktsoator/or/llm) 上的包文档。
