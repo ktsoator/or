@@ -36,6 +36,11 @@ plugins:
             Configuration: 请求配置
             Custom protocols: 自定义协议
             Agent: Agent
+            Events and state: 事件与状态
+            Steering and follow-ups: 引导与追加
+            Lifecycle hooks: 生命周期钩子
+            Messages and custom types: 消息与自定义类型
+            The run-loop engine: 运行循环引擎
             Internals: 源码解析
             Foundations: 基础概念
             Execution: 运行机制
@@ -120,7 +125,18 @@ nav:
           - Configuration: llm/configuration.md
           - Custom protocols: llm/extending.md
   - Agent:
-      - Overview: agent/README.md
+      - Basics:
+          - Overview: agent/README.md
+          - Getting started: agent/getting-started.md
+          - Tools: agent/tools.md
+      - Core:
+          - Events and state: agent/events.md
+          - Steering and follow-ups: agent/steering.md
+          - Lifecycle hooks: agent/hooks.md
+      - Advanced:
+          - Messages and custom types: agent/messages.md
+          - Configuration: agent/configuration.md
+          - The run-loop engine: agent/loop.md
   - Internals:
       - LLM:
           - Architecture overview: internals/overview.md

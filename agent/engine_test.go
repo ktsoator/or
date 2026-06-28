@@ -391,6 +391,26 @@ func TestDefaultConvertToLLMFiltersCustom(t *testing.T) {
 	}
 }
 
+func TestToLLMUnwrapsAdaptedMessages(t *testing.T) {
+	type note struct {
+		Custom
+		Text string
+	}
+	original := &llm.UserMessage{Content: []llm.UserContent{&llm.TextContent{Text: "hi"}}}
+
+	got, ok := ToLLM(FromLLM(original))
+	if !ok {
+		t.Fatal("ToLLM(FromLLM(...)) ok = false, want true")
+	}
+	if got != original {
+		t.Fatalf("ToLLM returned %#v, want the wrapped message", got)
+	}
+
+	if _, ok := ToLLM(note{Text: "ui"}); ok {
+		t.Fatal("ToLLM(custom) ok = true, want false")
+	}
+}
+
 func TestRunLoopRecoversFromCallbackPanic(t *testing.T) {
 	rec := &recorder{turns: [][]llm.Event{{done(textAssistant("hi"))}}}
 	cfg := LoopConfig{

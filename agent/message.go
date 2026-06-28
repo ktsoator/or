@@ -17,6 +17,18 @@ func FromLLM(m llm.Message) AgentMessage {
 	return llmMessage{Message: m}
 }
 
+// ToLLM returns the standard llm.Message wrapped by FromLLM, reporting false for
+// a custom (UI-only) AgentMessage that has no llm projection. It is the inverse
+// of FromLLM, intended for use inside a custom ConvertToLLM that needs to pass
+// the adapted messages through while projecting its own message types.
+func ToLLM(m AgentMessage) (llm.Message, bool) {
+	wrapped, ok := m.(llmMessage)
+	if !ok {
+		return nil, false
+	}
+	return wrapped.Message, true
+}
+
 // UserMessage builds a user AgentMessage from text and optional images — the
 // common case for a multimodal prompt. The text block comes first, followed by
 // each image in order. Pass the result to Prompt, Steer, FollowUp, or use it as
