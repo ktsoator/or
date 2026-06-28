@@ -7,6 +7,8 @@ import (
 	"log"
 
 	"github.com/ktsoator/or/llm"
+
+	_ "github.com/ktsoator/or/llm/openai" // registers the OpenAI-compatible protocol
 )
 
 func main() {

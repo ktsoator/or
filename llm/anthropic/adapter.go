@@ -14,7 +14,7 @@ import (
 
 	sdk "github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
-	"github.com/ktsoator/or/internal/llm"
+	"github.com/ktsoator/or/llm"
 )
 
 // Adapter translates the Anthropic Messages protocol.

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ktsoator/or/internal/llm"
+	"github.com/ktsoator/or/llm"
 )
 
 func TestStreamAggregatesThinkingToolCallAndUsage(t *testing.T) {

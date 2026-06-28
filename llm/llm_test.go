@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/ktsoator/or/llm"
+	"github.com/ktsoator/or/llm/anthropic"
+	"github.com/ktsoator/or/llm/openai"
 )
 
 func TestDefaultClientIncludesBuiltInAdapters(t *testing.T) {
@@ -127,11 +129,16 @@ func (echoAdapter) Stream(
 // alongside the built-ins, and NewStreamWriter produces a well-formed stream.
 func TestCustomProtocolAdapterViaRegistry(t *testing.T) {
 	registry := llm.NewRegistry()
-	llm.RegisterBuiltins(registry)
+	if err := registry.Register(openai.NewAdapter(nil)); err != nil {
+		t.Fatalf("Register(openai) error = %v", err)
+	}
+	if err := registry.Register(anthropic.NewAdapter(nil)); err != nil {
+		t.Fatalf("Register(anthropic) error = %v", err)
+	}
 	if err := registry.Register(echoAdapter{}); err != nil {
 		t.Fatalf("Register() error = %v", err)
 	}
-	client := llm.NewClientWithRegistry(registry)
+	client := llm.NewClient(registry)
 
 	message, err := client.Complete(context.Background(), llm.Model{
 		ID: "echo-1", Provider: "echo", Protocol: "echo",

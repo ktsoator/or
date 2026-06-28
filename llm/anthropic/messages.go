@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	sdk "github.com/anthropics/anthropic-sdk-go"
-	"github.com/ktsoator/or/internal/llm"
+	"github.com/ktsoator/or/llm"
 )
 
 // compat holds the resolved Anthropic-compatible quirks the adapter consumes.

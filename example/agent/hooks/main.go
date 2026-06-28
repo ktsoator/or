@@ -20,6 +20,8 @@ import (
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/llm"
+
+	_ "github.com/ktsoator/or/llm/all" // registers all built-in protocols
 )
 
 type weatherArgs struct {

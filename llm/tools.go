@@ -7,54 +7,7 @@ import (
 	"strings"
 
 	"github.com/invopop/jsonschema"
-
-	core "github.com/ktsoator/or/internal/llm"
 )
-
-// Tool-related conversation types are aliased here so callers only need this
-// package.
-type (
-	ToolDefinition    = core.ToolDefinition
-	ToolCall          = core.ToolCall
-	ToolResultContent = core.ToolResultContent
-	ToolResultMessage = core.ToolResultMessage
-	ArgumentsMode     = core.ArgumentsMode
-)
-
-const (
-	ArgumentsStrict   = core.ArgumentsStrict
-	ArgumentsRepaired = core.ArgumentsRepaired
-	ArgumentsPartial  = core.ArgumentsPartial
-	ArgumentsInvalid  = core.ArgumentsInvalid
-
-	DiagnosticToolArgumentsRecovered = core.DiagnosticToolArgumentsRecovered
-)
-
-// ValidateToolCall validates and coerces a tool call against its definition.
-func ValidateToolCall(tools []ToolDefinition, toolCall ToolCall) (map[string]any, error) {
-	return core.ValidateToolCall(tools, toolCall)
-}
-
-// ValidateToolArguments validates and coerces one tool call against tool.
-func ValidateToolArguments(tool ToolDefinition, toolCall ToolCall) (map[string]any, error) {
-	return core.ValidateToolArguments(tool, toolCall)
-}
-
-// ParseToolArguments parses streamed tool argument JSON on a best-effort basis,
-// repairing malformed string escapes and closing truncated input. It always
-// returns a non-nil map, falling back to an empty object when nothing can be
-// salvaged, so a recoverable but invalid tool call never aborts the stream.
-// Enforce correctness separately with ValidateToolArguments before dispatching.
-func ParseToolArguments(raw string) map[string]any {
-	return core.ParseToolArguments(raw)
-}
-
-// ParseToolArgumentsMode is ParseToolArguments with the recovery mode it used,
-// so a caller can decline to execute a tool whose arguments were not strictly
-// parsed (ArgumentsPartial or ArgumentsInvalid).
-func ParseToolArgumentsMode(raw string) (map[string]any, ArgumentsMode) {
-	return core.ParseToolArgumentsMode(raw)
-}
 
 // NewTool creates a tool definition whose parameters are generated from T.
 // T must be a struct or pointer to a struct. Fields without json omitempty are

@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/ktsoator/or/internal/llm"
+	"github.com/ktsoator/or/llm"
 	oai "github.com/openai/openai-go/v3"
 )
 

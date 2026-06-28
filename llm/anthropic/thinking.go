@@ -2,7 +2,7 @@ package anthropic
 
 import (
 	sdk "github.com/anthropics/anthropic-sdk-go"
-	"github.com/ktsoator/or/internal/llm"
+	"github.com/ktsoator/or/llm"
 )
 
 // defaultThinkingBudgets maps a thinking level to a token budget for providers

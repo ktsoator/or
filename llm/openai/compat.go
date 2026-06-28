@@ -3,7 +3,7 @@ package openai
 import (
 	"strings"
 
-	"github.com/ktsoator/or/internal/llm"
+	"github.com/ktsoator/or/llm"
 )
 
 // resolvedCompat holds the OpenAI-compatible quirks for a model with every value

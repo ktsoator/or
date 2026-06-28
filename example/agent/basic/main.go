@@ -12,6 +12,8 @@ import (
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/llm"
+
+	_ "github.com/ktsoator/or/llm/openai" // registers the OpenAI-compatible protocol
 )
 
 type weatherArgs struct {

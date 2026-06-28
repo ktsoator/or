@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/ktsoator/or/llm"
+
+	_ "github.com/ktsoator/or/llm/openai" // registers the OpenAI-compatible protocol
 )
 
 const maxToolRounds = 8

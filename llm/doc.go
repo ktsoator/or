@@ -11,12 +11,24 @@
 // # Entry points
 //
 // Stream returns a channel of [Event] values; Complete consumes that stream and
-// returns the final [AssistantMessage]. Both dispatch to the adapter registered
-// for the model's protocol. The package keeps a default client; NewClient
-// returns an isolated one with the built-in adapters registered.
+// returns the final [AssistantMessage]. Both dispatch through the package
+// default client to the adapter registered for the model's protocol.
+//
+// Protocol adapters live in provider sub-packages and register themselves on
+// import. Pull in the protocols an application needs — and only their vendor
+// SDKs — by importing the matching provider package for its side effects, or
+// import github.com/ktsoator/or/llm/all for every built-in protocol at once:
+//
+//	import (
+//		"github.com/ktsoator/or/llm"
+//		_ "github.com/ktsoator/or/llm/anthropic"
+//	)
 //
 //	model := llm.GetModel("anthropic", "claude-opus-4-8")
-//	msg, err := llm.Complete(ctx, model, input, llm.StreamOptions{})
+//	msg, err := llm.Complete(ctx, model, llm.Prompt("hello"), llm.StreamOptions{})
+//
+// A caller that prefers explicit wiring can build its own registry and client
+// with NewRegistry, Registry.Register, and NewClient instead of the default.
 //
 // # Building a request
 //
@@ -28,7 +40,8 @@
 //   - content blocks: [TextContent], [ThinkingContent], [ImageContent], [ToolCall]
 //
 // Text-only models that receive image content have it downgraded to a
-// placeholder automatically.
+// placeholder automatically. The Prompt, UserText, and related helpers build the
+// common text-only cases without the nesting boilerplate.
 //
 // # Options
 //
@@ -97,8 +110,7 @@
 // # Custom protocols
 //
 // A genuinely different wire protocol is added by implementing [ProtocolAdapter]
-// and registering it: build a [Registry] with NewRegistry, add the built-ins
-// with RegisterBuiltins and the custom adapter with Registry.Register, then
-// construct a client with NewClientWithRegistry. NewStreamWriter gives the
+// and registering it — with Register for the package default registry, or with
+// Registry.Register on a registry passed to NewClient. NewStreamWriter gives the
 // adapter the same event-stream machinery the built-ins use.
 package llm

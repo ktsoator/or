@@ -3,7 +3,7 @@ package openai
 import (
 	"testing"
 
-	"github.com/ktsoator/or/internal/llm"
+	"github.com/ktsoator/or/llm"
 )
 
 func boolPtr(b bool) *bool { return &b }

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ktsoator/or/internal/llm"
+	"github.com/ktsoator/or/llm"
 )
 
 // toolUseHistory is a multi-turn tool-use transcript whose assistant turn

@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	sdk "github.com/anthropics/anthropic-sdk-go"
-	"github.com/ktsoator/or/internal/llm"
+	"github.com/ktsoator/or/llm"
 )
 
 // streamState accumulates the partial assistant message while consuming one

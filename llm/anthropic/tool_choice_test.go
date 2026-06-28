@@ -1,29 +1,29 @@
-package openai
+package anthropic
 
 import (
 	"encoding/json"
 	"reflect"
 	"testing"
 
-	"github.com/ktsoator/or/internal/llm"
-	oai "github.com/openai/openai-go/v3"
+	sdk "github.com/anthropics/anthropic-sdk-go"
+	"github.com/ktsoator/or/llm"
 )
 
 func TestApplyToolChoice(t *testing.T) {
 	tests := []struct {
 		name   string
-		choice llm.OpenAIToolChoice
+		choice llm.AnthropicToolChoice
 		want   string
 	}{
-		{name: "auto", choice: llm.OpenAIToolChoiceAuto, want: `"auto"`},
-		{name: "none", choice: llm.OpenAIToolChoiceNone, want: `"none"`},
-		{name: "required", choice: llm.OpenAIToolChoiceRequired, want: `"required"`},
-		{name: "named", choice: llm.OpenAIToolChoiceFunction{Name: "weather"}, want: `{"type":"function","function":{"name":"weather"}}`},
+		{name: "auto", choice: llm.AnthropicToolChoiceAuto, want: `{"type":"auto"}`},
+		{name: "any", choice: llm.AnthropicToolChoiceAny, want: `{"type":"any"}`},
+		{name: "none", choice: llm.AnthropicToolChoiceNone, want: `{"type":"none"}`},
+		{name: "named", choice: llm.AnthropicToolChoiceTool{Name: "weather"}, want: `{"type":"tool","name":"weather"}`},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			params := oai.ChatCompletionNewParams{}
+			params := sdk.MessageNewParams{}
 			applyToolChoice(&params, test.choice)
 			assertToolChoiceJSON(t, params.ToolChoice, test.want)
 		})

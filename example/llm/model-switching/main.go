@@ -8,6 +8,8 @@ import (
 	"log"
 
 	"github.com/ktsoator/or/llm"
+
+	_ "github.com/ktsoator/or/llm/all" // registers all built-in protocols
 )
 
 func main() {

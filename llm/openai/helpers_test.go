@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ktsoator/or/internal/llm"
+	"github.com/ktsoator/or/llm"
 	oai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/packages/respjson"
 )
