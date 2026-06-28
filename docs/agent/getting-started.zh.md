@@ -76,7 +76,16 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Println(assistant.Snapshot().Messages) // 提示、工具调用、工具结果、回答
+	messages := assistant.Snapshot().Messages
+	last, ok := agent.ToLLM(messages[len(messages)-1])
+	if !ok {
+		log.Fatal("last message is not an llm message")
+	}
+	answer, ok := last.(*llm.AssistantMessage)
+	if !ok {
+		log.Fatalf("last message is %T, want assistant message", last)
+	}
+	fmt.Println(answer.Text())
 }
 ```
 
