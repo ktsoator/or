@@ -50,5 +50,5 @@ known error-message patterns, successful responses whose usage exceeds the
 context window, and length stops where input filled almost the whole window and
 no output was produced.
 
-Source: [`internal/llm/transform.go`](https://github.com/ktsoator/or/blob/main/internal/llm/transform.go),
-[`internal/llm/overflow.go`](https://github.com/ktsoator/or/blob/main/internal/llm/overflow.go).
+Source: [`llm/transform.go`](https://github.com/ktsoator/or/blob/main/llm/transform.go),
+[`llm/overflow.go`](https://github.com/ktsoator/or/blob/main/llm/overflow.go).

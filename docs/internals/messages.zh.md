@@ -1,6 +1,6 @@
 # 消息类型系统
 
-[`conversation.go`](https://github.com/ktsoator/or/blob/main/internal/llm/conversation.go)
+[`conversation.go`](https://github.com/ktsoator/or/blob/main/llm/conversation.go)
 定义了对话模型——所有适配器共同读写的一组中立类型，不与任何厂商绑定。出站时，适配器将它们翻译为某一厂商的通信格式；入站时，再从响应流中重建出相同的类型。
 
 ## 结构总览
@@ -215,4 +215,4 @@ type Context struct {
 schema 可原样透传。
 
 这些类型如何序列化为自描述的 JSON、又如何无需手写分派表即可解码还原，参见
-[`messages.go`](https://github.com/ktsoator/or/blob/main/internal/llm/messages.go)。
+[`messages.go`](https://github.com/ktsoator/or/blob/main/llm/messages.go)。

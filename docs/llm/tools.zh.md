@@ -69,6 +69,7 @@ import (
 	"log"
 
 	"github.com/ktsoator/or/llm"
+	_ "github.com/ktsoator/or/llm/openai" // 注册 OpenAI 兼容协议
 )
 
 type WeatherArgs struct {

@@ -29,9 +29,11 @@ adapter, ok := c.registry.Get(model.Protocol)
 return adapter.Stream(ctx, model, input, options)
 ```
 
-公开的 `llm.NewClient` 会创建注册表，并通过 `RegisterBuiltins` 注册
-`openai.NewAdapter(nil)` 和 `anthropic.NewAdapter(nil)`。自定义 client 可以继续注册
-新的适配器，而不需要改变 `StreamOptions` 或共享的对话类型。
+`llm.NewClient(registry)` 基于一个注册表构建 client。内置的 provider 包
+（`llm/openai`、`llm/anthropic`）在 `init` 函数里把各自的适配器注册进包级默认注册表，
+因此只要导入某个 provider（或导入 `llm/all` 一次性注册全部），它的协议就能被
+`llm.Stream` 和 `llm.Complete` 使用。自定义 client 可以继续注册新的适配器，而不需要
+改变 `StreamOptions` 或共享的对话类型。
 
 ## 适配器翻译什么
 
@@ -57,5 +59,5 @@ return adapter.Stream(ctx, model, input, options)
 因此，新增一个兼容厂商通常只是 catalog 改动，而不是新增适配器。只有真正不同的线缆协议
 才需要新的 `ProtocolAdapter`。
 
-源码：[`internal/llm/adapters.go`](https://github.com/ktsoator/or/blob/main/internal/llm/adapters.go)、
-[`internal/llm/providers/`](https://github.com/ktsoator/or/tree/main/internal/llm/providers)。
+源码：[`llm/adapters.go`](https://github.com/ktsoator/or/blob/main/llm/adapters.go)、
+[`llm/`](https://github.com/ktsoator/or/tree/main/llm/)。

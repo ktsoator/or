@@ -48,5 +48,5 @@ escapes or close a truncated object. Recovered arguments do not fail the whole
 response; instead, the final `AssistantMessage.Diagnostics` records the recovery
 mode so a caller can decline to execute unsafe tool calls.
 
-Source: [`internal/llm/stream.go`](https://github.com/ktsoator/or/blob/main/internal/llm/stream.go),
-[`internal/llm/events.go`](https://github.com/ktsoator/or/blob/main/internal/llm/events.go).
+Source: [`llm/stream.go`](https://github.com/ktsoator/or/blob/main/llm/stream.go),
+[`llm/events.go`](https://github.com/ktsoator/or/blob/main/llm/events.go).

@@ -31,10 +31,12 @@ adapter, ok := c.registry.Get(model.Protocol)
 return adapter.Stream(ctx, model, input, options)
 ```
 
-The public `llm.NewClient` creates a registry and calls `RegisterBuiltins`, which
-registers `openai.NewAdapter(nil)` and `anthropic.NewAdapter(nil)`. A custom
-client can register another adapter without changing `StreamOptions` or the
-shared conversation types.
+`llm.NewClient(registry)` builds a client over a registry. The built-in provider
+packages (`llm/openai`, `llm/anthropic`) register their adapters into the package
+default registry from an `init` function, so importing a provider — or `llm/all`
+for every built-in — makes its protocol available to `llm.Stream` and
+`llm.Complete`. A custom client can register another adapter without changing
+`StreamOptions` or the shared conversation types.
 
 ## What an adapter translates
 
@@ -65,5 +67,5 @@ The result is that adding a compatible provider is usually a catalog change, not
 a new adapter. A genuinely different wire protocol needs a new
 `ProtocolAdapter`.
 
-Source: [`internal/llm/adapters.go`](https://github.com/ktsoator/or/blob/main/internal/llm/adapters.go),
-[`internal/llm/providers/`](https://github.com/ktsoator/or/tree/main/internal/llm/providers).
+Source: [`llm/adapters.go`](https://github.com/ktsoator/or/blob/main/llm/adapters.go),
+[`llm/`](https://github.com/ktsoator/or/tree/main/llm/).

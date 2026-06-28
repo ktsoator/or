@@ -125,21 +125,24 @@ func (a myAdapter) Stream(
 
 </details>
 
-将它与内置协议一并注册：
+注册它并构建 client：
 
 ```go
 registry := llm.NewRegistry()
-llm.RegisterBuiltins(registry)
 if err := registry.Register(myAdapter{http: http.DefaultClient}); err != nil {
 	log.Fatal(err)
 }
-client := llm.NewClientWithRegistry(registry)
+client := llm.NewClient(registry)
 
 model := llm.Model{
 	ID: "x", Provider: "me", Protocol: "my-protocol", MaxTokens: 1024,
 }
 message, err := client.Complete(ctx, model, input, llm.StreamOptions{})
 ```
+
+若想让同一个 client 也支持内置协议，把 `openai.NewAdapter(nil)` 和
+`anthropic.NewAdapter(nil)`（来自 `github.com/ktsoator/or/llm/openai` 和
+`github.com/ktsoator/or/llm/anthropic`）一并注册进注册表。
 
 适配器负责双向翻译：构建底层请求、切分响应、更新用量和停止原因，以及发出增量。
 `CloneToolCall` 为事件深拷贝工具调用。`ParseToolArgumentsMode` 提供与内置适配器

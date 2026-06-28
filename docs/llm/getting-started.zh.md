@@ -32,6 +32,7 @@ import (
 	"log"
 
 	"github.com/ktsoator/or/llm"
+	_ "github.com/ktsoator/or/llm/openai" // 注册 OpenAI 兼容协议（DeepSeek、Groq、xAI…）
 )
 
 func main() {
@@ -57,8 +58,9 @@ go run .
 ```
 
 `llm.Complete` 会将整个流收集成一个 `AssistantMessage`。当应用需要在增量到达时即时
-处理，则改用 [`llm.Stream`](streaming.md)。包级函数使用的客户端内置了两种协议适配器；
-`llm.NewClient` 可创建一个使用相同适配器、但相互隔离的客户端。
+处理，则改用 [`llm.Stream`](streaming.md)。包级函数通过一个默认注册表分发；上面那行空导入
+`llm/openai` 会把 OpenAI 兼容协议注册进去。你用到哪个协议就导入对应的 provider 包——或者
+导入 `llm/all` 一次性注册全部——这样二进制里只链接你需要的 SDK。
 
 ## 自定义请求
 

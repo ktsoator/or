@@ -70,6 +70,7 @@ import (
 	"log"
 
 	"github.com/ktsoator/or/llm"
+	_ "github.com/ktsoator/or/llm/openai" // registers the OpenAI-compatible protocol (DeepSeek, Groq, xAI, ...)
 )
 
 func main() {
@@ -87,6 +88,11 @@ func main() {
 	fmt.Println(response.Text())
 }
 ```
+
+Each protocol lives in a provider package that registers itself on import. Pull
+in the protocols you use — and only their vendor SDKs — by importing the matching
+provider package for its side effects (`llm/openai`, `llm/anthropic`), or import
+`llm/all` for every built-in protocol at once.
 
 Use `llm.Stream` instead of `llm.Complete` to consume deltas while the model is
 generating:

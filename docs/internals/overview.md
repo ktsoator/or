@@ -14,7 +14,7 @@ context compaction, and tool-loop orchestration to the caller.
 | Layer | Location | Responsibility |
 |---|---|---|
 | Public facade | [`llm/`](https://github.com/ktsoator/or/tree/main/llm) | Type aliases and thin forwarding so callers import one package |
-| Internal core | [`internal/llm/`](https://github.com/ktsoator/or/tree/main/internal/llm) | The real implementation, plus per-protocol adapters under `providers/` |
+| Internal core | [`llm/`](https://github.com/ktsoator/or/tree/main/llm) | The real implementation, plus per-protocol adapters under `providers/` |
 
 ## Request data flow
 
@@ -47,7 +47,7 @@ func (c *Client) Stream(ctx context.Context, model Model, input Context, options
 1.  `Protocol` selects the adapter. The same conversation can target either
     protocol; the library re-adapts the history per request.
 
-Source: [`internal/llm/client.go`](https://github.com/ktsoator/or/blob/main/internal/llm/client.go).
+Source: [`llm/client.go`](https://github.com/ktsoator/or/blob/main/llm/client.go).
 
 ## Where to go next
 

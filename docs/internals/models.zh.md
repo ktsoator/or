@@ -1,10 +1,10 @@
 # 模型与协议
 
-[`types.go`](https://github.com/ktsoator/or/blob/main/internal/llm/types.go)
+[`types.go`](https://github.com/ktsoator/or/blob/main/llm/types.go)
 定义了描述一个模型所需的类型：协议、调用方可设置的中立选项，以及把端点同其能力与价格
 绑定在一起的 `Model`。模型本身存放于何处、又如何注册与取用，则由
-[`models.go`](https://github.com/ktsoator/or/blob/main/internal/llm/models.go)
-与 [`catalog.go`](https://github.com/ktsoator/or/blob/main/internal/llm/catalog.go)
+[`models.go`](https://github.com/ktsoator/or/blob/main/llm/models.go)
+与 [`catalog.go`](https://github.com/ktsoator/or/blob/main/llm/catalog.go)
 实现。本页先讲单个模型如何定义、如何随协议解码、能力如何查询，再讲这些模型如何集中存放
 与取用。
 
@@ -264,7 +264,7 @@ func GetModels(provider string) []Model                  // 对应 Models
 ## 内置模型
 
 上述注册表中的内置模型并非在运行时拉取，而是随二进制一同发布。
-[`catalog.generated.json`](https://github.com/ktsoator/or/blob/main/internal/llm/catalog.generated.json)
+[`catalog.generated.json`](https://github.com/ktsoator/or/blob/main/llm/catalog.generated.json)
 由 `go generate`（`cmd/genmodels`）从上游目录数据生成——以
 [Models.dev](https://models.dev) 为主，辅以 OpenRouter 与 Vercel AI Gateway 的实时目录
 与定价，且只输出本包已实现协议（`openai-completions` 与 `anthropic-messages`）的模型。
@@ -294,6 +294,6 @@ func builtInModels() []Model {
 此处对解码与注册失败一律 `panic`，而非返回错误。内嵌目录是编译期产物：到了运行时，它要么
 完好，要么意味着构建本身有误，二者之间并无可供降级运行的中间状态，因此让程序尽早终止。
 
-源码：[`types.go`](https://github.com/ktsoator/or/blob/main/internal/llm/types.go)、
-[`catalog.go`](https://github.com/ktsoator/or/blob/main/internal/llm/catalog.go)
-与 [`models.go`](https://github.com/ktsoator/or/blob/main/internal/llm/models.go)。
+源码：[`types.go`](https://github.com/ktsoator/or/blob/main/llm/types.go)、
+[`catalog.go`](https://github.com/ktsoator/or/blob/main/llm/catalog.go)
+与 [`models.go`](https://github.com/ktsoator/or/blob/main/llm/models.go)。

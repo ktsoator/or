@@ -34,6 +34,7 @@ import (
 	"log"
 
 	"github.com/ktsoator/or/llm"
+	_ "github.com/ktsoator/or/llm/openai" // registers the OpenAI-compatible protocol (DeepSeek, Groq, xAI, ...)
 )
 
 func main() {
@@ -60,8 +61,10 @@ go run .
 
 `llm.Complete` collects the stream into one `AssistantMessage`. Use
 [`llm.Stream`](streaming.md) when the application needs deltas as they arrive.
-The package-level functions use a client containing both built-in protocol
-adapters; `llm.NewClient` creates an isolated client with the same adapters.
+The package-level functions dispatch through a default registry; the blank
+`llm/openai` import above registers the OpenAI-compatible protocol into it. Import
+the provider package for each protocol you use — or `llm/all` for every built-in —
+so only the SDKs you need are linked into your binary.
 
 ## Customize the request
 

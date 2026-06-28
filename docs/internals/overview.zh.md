@@ -12,7 +12,7 @@
 | 层 | 位置 | 职责 |
 |---|---|---|
 | 公开门面 | [`llm/`](https://github.com/ktsoator/or/tree/main/llm) | 类型别名与薄转发，让调用方只需 import 一个包 |
-| 内部核心 | [`internal/llm/`](https://github.com/ktsoator/or/tree/main/internal/llm) | 真正的实现，以及 `providers/` 下的各协议适配器 |
+| 内部核心 | [`llm/`](https://github.com/ktsoator/or/tree/main/llm) | 真正的实现，以及 `providers/` 下的各协议适配器 |
 
 ## 请求的数据流
 
@@ -43,7 +43,7 @@ func (c *Client) Stream(ctx context.Context, model Model, input Context, options
 
 1.  `Protocol` 选定适配器。同一段对话可以发往任意一种协议；本库会按请求重新适配历史。
 
-源码：[`internal/llm/client.go`](https://github.com/ktsoator/or/blob/main/internal/llm/client.go)。
+源码：[`llm/client.go`](https://github.com/ktsoator/or/blob/main/llm/client.go)。
 
 ## 延伸阅读
 

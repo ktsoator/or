@@ -132,21 +132,25 @@ func (a myAdapter) Stream(
 
 </details>
 
-Register it alongside the built-in protocols:
+Register it and build a client:
 
 ```go
 registry := llm.NewRegistry()
-llm.RegisterBuiltins(registry)
 if err := registry.Register(myAdapter{http: http.DefaultClient}); err != nil {
 	log.Fatal(err)
 }
-client := llm.NewClientWithRegistry(registry)
+client := llm.NewClient(registry)
 
 model := llm.Model{
 	ID: "x", Provider: "me", Protocol: "my-protocol", MaxTokens: 1024,
 }
 message, err := client.Complete(ctx, model, input, llm.StreamOptions{})
 ```
+
+To serve the built-in protocols from the same client, also register
+`openai.NewAdapter(nil)` and `anthropic.NewAdapter(nil)` (from
+`github.com/ktsoator/or/llm/openai` and `github.com/ktsoator/or/llm/anthropic`)
+into the registry.
 
 The adapter owns translation in both directions: building the wire request,
 framing the response, updating usage and stop reason, and emitting deltas.

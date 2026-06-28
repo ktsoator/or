@@ -1,11 +1,11 @@
 # Models and protocols
 
-[`types.go`](https://github.com/ktsoator/or/blob/main/internal/llm/types.go)
+[`types.go`](https://github.com/ktsoator/or/blob/main/llm/types.go)
 defines the types needed to describe a model: the protocols, the neutral options
 callers set, and the `Model` that ties an endpoint to its capabilities and price.
 Where those models live and how they are registered and retrieved is implemented
-in [`models.go`](https://github.com/ktsoator/or/blob/main/internal/llm/models.go)
-and [`catalog.go`](https://github.com/ktsoator/or/blob/main/internal/llm/catalog.go).
+in [`models.go`](https://github.com/ktsoator/or/blob/main/llm/models.go)
+and [`catalog.go`](https://github.com/ktsoator/or/blob/main/llm/catalog.go).
 This page covers a single model first — how it is defined, how it decodes by
 protocol, and how its capabilities are queried — then how those models are stored
 and retrieved together.
@@ -311,7 +311,7 @@ that implicit coupling.
 
 The built-in models in that registry are not fetched at runtime; they ship with
 the binary.
-[`catalog.generated.json`](https://github.com/ktsoator/or/blob/main/internal/llm/catalog.generated.json)
+[`catalog.generated.json`](https://github.com/ktsoator/or/blob/main/llm/catalog.generated.json)
 is produced by `go generate` (`cmd/genmodels`) from upstream catalog data —
 [Models.dev](https://models.dev) as the primary source, plus the live catalogs and
 pricing from OpenRouter and Vercel AI Gateway — and emits only models whose
@@ -346,6 +346,6 @@ catalog is a build-time artifact: at runtime it is either intact or the build
 itself is broken, with no degraded state to run in between — so the program is made
 to fail early.
 
-Source: [`types.go`](https://github.com/ktsoator/or/blob/main/internal/llm/types.go),
-[`catalog.go`](https://github.com/ktsoator/or/blob/main/internal/llm/catalog.go),
-and [`models.go`](https://github.com/ktsoator/or/blob/main/internal/llm/models.go).
+Source: [`types.go`](https://github.com/ktsoator/or/blob/main/llm/types.go),
+[`catalog.go`](https://github.com/ktsoator/or/blob/main/llm/catalog.go),
+and [`models.go`](https://github.com/ktsoator/or/blob/main/llm/models.go).
