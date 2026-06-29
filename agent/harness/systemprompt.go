@@ -19,6 +19,9 @@ type TurnInfo struct {
 	// first turn of a run it does not yet include the prompt being submitted; on
 	// later turns it includes every message appended so far.
 	Messages []agent.AgentMessage
+	// Skills are the registered skills. Pass them to FormatSkillsForSystemPrompt
+	// to advertise the model-invocable ones in the prompt.
+	Skills []Skill
 }
 
 // SystemPromptFunc builds the system prompt for an upcoming turn. When set on

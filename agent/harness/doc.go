@@ -16,4 +16,9 @@
 // A run can be reconfigured between turns via the Set* methods — model, thinking
 // level, system prompt, the tool registry, and which registered tools are active
 // (advertised to the model). Changes apply from the next run.
+//
+// Skills and prompt templates are named, reusable prompts: Skill injects a
+// skill's instructions as a turn, PromptFromTemplate expands a template's
+// arguments, and FormatSkillsForSystemPrompt advertises the model-invocable
+// skills inside a system prompt.
 package harness
