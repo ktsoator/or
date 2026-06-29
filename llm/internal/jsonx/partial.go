@@ -1,18 +1,18 @@
-package llm
+package jsonx
 
 import "strings"
 
-// completeJSON closes the open containers and string of a truncated JSON
-// document, returning a syntactically complete string. It tracks the longest
-// prefix that, once its open containers are closed, parses as valid JSON, and
-// discards any trailing partial token (an unterminated number, literal, key, or
-// dangling separator). An unterminated string in a value position is closed in
-// place so its received characters are kept. ok is false when no non-empty
-// closeable prefix exists.
+// Complete closes the open containers and string of a truncated JSON document,
+// returning a syntactically complete string. It tracks the longest prefix that,
+// once its open containers are closed, parses as valid JSON, and discards any
+// trailing partial token (an unterminated number, literal, key, or dangling
+// separator). An unterminated string in a value position is closed in place so
+// its received characters are kept. ok is false when no non-empty closeable
+// prefix exists.
 //
 // It salvages tool arguments whose JSON stream was cut short. Callers must still
 // decode the result, which rejects any completion that does not parse.
-func completeJSON(raw string) (string, bool) {
+func Complete(raw string) (string, bool) {
 	const (
 		topVal   = iota // expecting the single top-level value
 		topDone         // top-level value consumed
