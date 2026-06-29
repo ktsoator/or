@@ -282,6 +282,21 @@ func (input *Context) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// MarshalMessage encodes a single message to JSON, tagged with its role so
+// UnmarshalMessage can decode it back to the right concrete type. It is the
+// per-message counterpart to Context's JSON round-tripping, for persisting
+// conversation history one message at a time (e.g. as JSON Lines).
+func MarshalMessage(message Message) ([]byte, error) {
+	return marshalMessage(message)
+}
+
+// UnmarshalMessage decodes a message produced by MarshalMessage, dispatching on
+// the role tag to the concrete UserMessage, AssistantMessage, or
+// ToolResultMessage.
+func UnmarshalMessage(data []byte) (Message, error) {
+	return unmarshalMessage(data)
+}
+
 func marshalMessage(message Message) (json.RawMessage, error) {
 	switch typed := message.(type) {
 	case *UserMessage:
