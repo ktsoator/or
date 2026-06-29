@@ -3,14 +3,14 @@
 Run from the repository root:
 
 ```sh
-go generate ./internal/llm
+go generate ./llm
 ```
 
-The generated `internal/llm/catalog.generated.json` is committed and embedded
+The generated `llm/catalog.generated.json` is committed and embedded
 by `catalog.go`, so normal builds and application startup do not need network
 or filesystem access.
 
-The generator uses the same catalog layers as pi-ai:
+The generator draws on several public catalog layers:
 
 - [Models.dev](https://models.dev) is the primary source. It is an open-source
   database created by OpenCode and maintained as provider/model TOML files in

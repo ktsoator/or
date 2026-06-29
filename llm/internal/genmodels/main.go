@@ -1,6 +1,6 @@
-// Command genmodels builds llm's checked-in model catalog from the same public
-// catalogs used by pi-ai. The generated catalog intentionally includes only
-// protocols implemented by this Go package.
+// Command genmodels builds llm's checked-in model catalog from public model
+// catalogs. The generated catalog intentionally includes only protocols
+// implemented by this Go package.
 package main
 
 import (
