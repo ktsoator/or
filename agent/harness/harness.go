@@ -33,11 +33,13 @@ type Harness struct {
 	persistedLen int
 	runCtx       context.Context
 
-	// cfgMu guards the tool registry and active set, which the Set* methods may
-	// change between runs.
+	// cfgMu guards the registries the Set* methods may change between runs: the
+	// tool set and active subset, plus skills and prompt templates.
 	cfgMu       sync.Mutex
 	toolset     []agent.AgentTool
 	activeNames map[string]bool // nil means every registered tool is active
+	skills      []Skill
+	templates   []PromptTemplate
 }
 
 // New builds a Harness. When a Session is configured, its stored transcript is
@@ -60,6 +62,8 @@ func New(ctx context.Context, opts Options) (*Harness, error) {
 		persistedLen: len(seed),
 		toolset:      append([]agent.AgentTool(nil), opts.Tools...),
 		activeNames:  namesSet(opts.ActiveTools),
+		skills:       append([]Skill(nil), opts.Skills...),
+		templates:    append([]PromptTemplate(nil), opts.PromptTemplates...),
 	}
 
 	agentOpts := agent.Options{
@@ -113,6 +117,7 @@ func (h *Harness) prepareNextTurn(turn agent.TurnCtx) *agent.TurnUpdate {
 		ThinkingLevel: snapshot.ThinkingLevel,
 		Tools:         turn.Context.Tools,
 		Messages:      turn.Context.Messages,
+		Skills:        h.skillsSnapshot(),
 	}
 	next := turn.Context
 	next.SystemPrompt = h.buildPrompt(info)
@@ -131,6 +136,7 @@ func (h *Harness) applyInitialSystemPrompt() {
 		ThinkingLevel: snapshot.ThinkingLevel,
 		Tools:         snapshot.Tools,
 		Messages:      snapshot.Messages,
+		Skills:        h.skillsSnapshot(),
 	}
 	h.agent.SetSystemPrompt(h.buildPrompt(info))
 }
