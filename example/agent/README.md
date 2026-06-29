@@ -9,7 +9,7 @@ export DEEPSEEK_API_KEY=your-deepseek-api-key
 go run ./example/agent/basic   # smallest: one tool, one prompt
 go run ./example/agent/tool    # interactive terminal session
 go run ./example/agent/hooks   # interception points (needs MINIMAX_CN_API_KEY too)
-go run ./example/agent/harness        # harness session + dynamic prompt demo
+go run ./example/agent/harness        # file-backed session (run twice to resume) + dynamic prompt
 go run ./example/agent/harness-skills # harness skills + prompt templates demo
 ```
 
@@ -56,9 +56,10 @@ it needs both `DEEPSEEK_API_KEY` and `MINIMAX_CN_API_KEY`.
 
 ## harness
 
-A small example for `agent/harness`. It uses an in-memory `Session`, recreates
-the harness over that same session to resume prior messages, and builds a fresh
-system prompt from `TurnInfo` before each run. It uses DeepSeek V4 Flash, so set
+A small example for `agent/harness`. It uses a file-backed `JSONLSession`, so
+running it twice resumes the prior conversation across processes, and it builds a
+fresh system prompt from `TurnInfo` before each run. The session file path is
+printed on each run; delete it to start over. It uses DeepSeek V4 Flash, so set
 `DEEPSEEK_API_KEY` before running it.
 
 ## harness-skills
