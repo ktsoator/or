@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-//go:generate go run ../internal/genmodels -output catalog.generated.json
+//go:generate go run ./internal/genmodels -output catalog.generated.json
 
 // generatedCatalogJSON is checked into the repository and embedded so normal
 // builds and application startup never depend on the network or working directory.
