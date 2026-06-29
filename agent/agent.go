@@ -350,6 +350,15 @@ func (a *Agent) SetToolExecution(mode ExecutionMode) {
 	a.mu.Unlock()
 }
 
+// SetMessages replaces the transcript, for rewriting history out of band — for
+// example to install a compacted transcript. The slice is copied. It is meant to
+// be called when the agent is idle.
+func (a *Agent) SetMessages(messages []AgentMessage) {
+	a.mu.Lock()
+	a.messages = append([]AgentMessage(nil), messages...)
+	a.mu.Unlock()
+}
+
 // HasQueuedMessages reports whether any steering or follow-up message is queued.
 func (a *Agent) HasQueuedMessages() bool {
 	return a.steering.hasItems() || a.followUp.hasItems()

@@ -187,6 +187,49 @@ func (h *Harness) persistNew(ctx context.Context) error {
 	return nil
 }
 
+// Compact rewrites the transcript to a compacted form using the configured
+// Compactor, making the reduction permanent — unlike the projection-only
+// compaction that runs automatically during a turn, this frees stored history.
+// It compacts only when the Compactor decides it is warranted (e.g. over the
+// threshold) and reports whether it did.
+//
+// It requires an idle harness (returns ErrBusy otherwise) and a configured
+// Compactor. A configured Session must implement ReplaceableSession, since the
+// rewrite cannot be expressed as an append.
+func (h *Harness) Compact(ctx context.Context) (bool, error) {
+	if h.compactor == nil {
+		return false, errors.New("harness: no compactor configured")
+	}
+	if !h.runMu.TryLock() {
+		return false, ErrBusy
+	}
+	defer h.runMu.Unlock()
+
+	current := h.agent.Snapshot().Messages
+	compacted, err := h.compactor.Compact(ctx, current)
+	if err != nil {
+		return false, fmt.Errorf("harness: compact: %w", err)
+	}
+	if len(compacted) >= len(current) {
+		return false, nil // nothing was compacted
+	}
+
+	// Persist the rewrite before mutating in-memory state so the two stay
+	// consistent if persistence fails.
+	if h.session != nil {
+		replaceable, ok := h.session.(ReplaceableSession)
+		if !ok {
+			return false, errors.New("harness: session does not support Compact; implement ReplaceableSession")
+		}
+		if err := replaceable.Replace(ctx, compacted); err != nil {
+			return false, fmt.Errorf("harness: persist compaction: %w", err)
+		}
+	}
+	h.agent.SetMessages(compacted)
+	h.persistedLen = len(compacted)
+	return true, nil
+}
+
 // Steer queues a message to inject after the current turn's tool calls finish.
 func (h *Harness) Steer(text string, images ...llm.ImageContent) {
 	h.agent.Steer(agent.UserMessage(text, images...))

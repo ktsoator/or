@@ -21,6 +21,15 @@ type Session interface {
 	Append(ctx context.Context, messages ...agent.AgentMessage) error
 }
 
+// ReplaceableSession is a Session that can overwrite its whole transcript. The
+// harness requires it for Compact, which rewrites history to a compacted form;
+// a plain Session is append-only and cannot support that.
+type ReplaceableSession interface {
+	Session
+	// Replace overwrites the stored transcript with messages, in order.
+	Replace(ctx context.Context, messages []agent.AgentMessage) error
+}
+
 // InMemorySession is a Session backed by an in-process slice. It persists for
 // the lifetime of the value only, which makes it a useful default for tests and
 // ephemeral sessions. It is safe for concurrent use.
@@ -41,5 +50,13 @@ func (s *InMemorySession) Append(_ context.Context, messages ...agent.AgentMessa
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.messages = append(s.messages, messages...)
+	return nil
+}
+
+// Replace overwrites the retained transcript.
+func (s *InMemorySession) Replace(_ context.Context, messages []agent.AgentMessage) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.messages = append([]agent.AgentMessage(nil), messages...)
 	return nil
 }

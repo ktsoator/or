@@ -110,6 +110,91 @@ func TestCompactorSummarizesOlderPrefix(t *testing.T) {
 	}
 }
 
+func TestManualCompactRewritesTranscriptAndSession(t *testing.T) {
+	ctx := context.Background()
+
+	session := &harness.InMemorySession{}
+	seed := []agent.AgentMessage{
+		userMsg(strings.Repeat("a", 400)),
+		assistantMsg(strings.Repeat("b", 400)),
+		userMsg(strings.Repeat("c", 400)),
+		assistantMsg(strings.Repeat("d", 40)),
+	}
+	if err := session.Append(ctx, seed...); err != nil {
+		t.Fatalf("seed Append() error = %v", err)
+	}
+
+	h, err := harness.New(ctx, harness.Options{
+		Model:   smallWindowModel,
+		Session: session,
+		Compactor: &harness.SummarizingCompactor{
+			Model:     smallWindowModel,
+			Settings:  harness.CompactionSettings{ReserveTokens: 10, KeepRecentTokens: 20},
+			Summarize: stubSummarizer("SUMMARY"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	before := len(h.Snapshot().Messages)
+	compacted, err := h.Compact(ctx)
+	if err != nil {
+		t.Fatalf("Compact() error = %v", err)
+	}
+	if !compacted {
+		t.Fatal("Compact() = false, want true")
+	}
+
+	// The in-memory transcript shrank permanently...
+	after := len(h.Snapshot().Messages)
+	if after >= before {
+		t.Fatalf("transcript = %d after compact, want fewer than %d", after, before)
+	}
+	// ...and the session was rewritten to match, not appended to.
+	stored, err := session.Load(ctx)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if len(stored) != after {
+		t.Fatalf("session has %d messages, want %d (rewritten to match transcript)", len(stored), after)
+	}
+}
+
+func TestManualCompactBelowThresholdIsNoop(t *testing.T) {
+	ctx := context.Background()
+	h, err := harness.New(ctx, harness.Options{
+		Model: llm.Model{ContextWindow: 10000},
+		Compactor: &harness.SummarizingCompactor{
+			Model:     llm.Model{ContextWindow: 10000},
+			Summarize: stubSummarizer("SUMMARY"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	// Seed a short transcript via a run-free path: a manual compact with nothing
+	// over threshold should report no change.
+	compacted, err := h.Compact(ctx)
+	if err != nil {
+		t.Fatalf("Compact() error = %v", err)
+	}
+	if compacted {
+		t.Fatal("Compact() = true on an empty transcript, want false")
+	}
+}
+
+func TestManualCompactWithoutCompactorErrors(t *testing.T) {
+	ctx := context.Background()
+	h, err := harness.New(ctx, harness.Options{Model: smallWindowModel})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if _, err := h.Compact(ctx); err == nil {
+		t.Fatal("Compact() = nil error without a compactor, want error")
+	}
+}
+
 func TestCompactionShrinksProjectionThroughHarness(t *testing.T) {
 	ctx := context.Background()
 

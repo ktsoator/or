@@ -10,8 +10,9 @@
 // Each concern is a field on Options; leaving one nil disables it, so the
 // zero-configured Harness behaves like a plain Agent. It implements Session
 // (transcript persistence and resume), a per-turn system-prompt builder, and a
-// Compactor that shrinks the transcript projected to the model. Compaction is
-// projection-only: the Session and transcript keep the full history.
+// Compactor that shrinks the transcript projected to the model. Automatic
+// compaction is projection-only: the Session and transcript keep the full
+// history. Compact rewrites history permanently for explicit reclamation.
 //
 // A run can be reconfigured between turns via the Set* methods — model, thinking
 // level, system prompt, the tool registry, and which registered tools are active
