@@ -9,6 +9,7 @@ export DEEPSEEK_API_KEY=your-deepseek-api-key
 go run ./example/agent/basic   # smallest: one tool, one prompt
 go run ./example/agent/tool    # interactive terminal session
 go run ./example/agent/hooks   # interception points (needs MINIMAX_CN_API_KEY too)
+go run ./example/agent/harness # harness session + dynamic prompt demo
 ```
 
 ## basic
@@ -51,3 +52,10 @@ gates each call and blocks one tool, `AfterToolCall` annotates results,
 tool turn, and `ShouldStopAfterTurn` guards against a runaway loop. It runs tools
 on DeepSeek (OpenAI-compatible) and answers on MiniMax (Anthropic-compatible), so
 it needs both `DEEPSEEK_API_KEY` and `MINIMAX_CN_API_KEY`.
+
+## harness
+
+A small example for `agent/harness`. It uses an in-memory `Session`, recreates
+the harness over that same session to resume prior messages, and builds a fresh
+system prompt from `TurnInfo` before each run. It uses DeepSeek V4 Flash, so set
+`DEEPSEEK_API_KEY` before running it.
