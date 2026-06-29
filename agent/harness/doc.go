@@ -12,4 +12,8 @@
 // (transcript persistence and resume), a per-turn system-prompt builder, and a
 // Compactor that shrinks the transcript projected to the model. Compaction is
 // projection-only: the Session and transcript keep the full history.
+//
+// A run can be reconfigured between turns via the Set* methods — model, thinking
+// level, system prompt, the tool registry, and which registered tools are active
+// (advertised to the model). Changes apply from the next run.
 package harness

@@ -36,12 +36,18 @@ type recordingStream struct {
 	calls         int
 	prompts       []string
 	messageCounts []int
+	toolNames     [][]string
 }
 
 func (r *recordingStream) fn() agent.StreamFn {
 	return func(_ context.Context, _ llm.Model, input llm.Context, _ llm.StreamOptions) (<-chan llm.Event, error) {
 		r.prompts = append(r.prompts, input.SystemPrompt)
 		r.messageCounts = append(r.messageCounts, len(input.Messages))
+		names := make([]string, 0, len(input.Tools))
+		for _, tool := range input.Tools {
+			names = append(names, tool.Name)
+		}
+		r.toolNames = append(r.toolNames, names)
 		turn := r.turns[r.calls]
 		r.calls++
 		ch := make(chan llm.Event, len(turn))
@@ -69,9 +75,11 @@ func textTurn(text string) []llm.Event {
 	return []llm.Event{{Type: llm.EventDone, Message: message}}
 }
 
-func noopTool() agent.AgentTool {
+func noopTool() agent.AgentTool { return namedTool("noop") }
+
+func namedTool(name string) agent.AgentTool {
 	return agent.AgentTool{
-		Definition: llm.MustTool[struct{}]("noop", "does nothing"),
+		Definition: llm.MustTool[struct{}](name, name+" tool"),
 		Execute: func(context.Context, string, json.RawMessage, func(agent.ToolResult)) (agent.ToolResult, error) {
 			return agent.ToolResult{Content: []llm.ToolResultContent{&llm.TextContent{Text: "done"}}}, nil
 		},

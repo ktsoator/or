@@ -32,6 +32,12 @@ type Harness struct {
 	runMu        sync.Mutex
 	persistedLen int
 	runCtx       context.Context
+
+	// cfgMu guards the tool registry and active set, which the Set* methods may
+	// change between runs.
+	cfgMu       sync.Mutex
+	toolset     []agent.AgentTool
+	activeNames map[string]bool // nil means every registered tool is active
 }
 
 // New builds a Harness. When a Session is configured, its stored transcript is
@@ -52,13 +58,15 @@ func New(ctx context.Context, opts Options) (*Harness, error) {
 		buildPrompt:  opts.BuildSystemPrompt,
 		compactor:    opts.Compactor,
 		persistedLen: len(seed),
+		toolset:      append([]agent.AgentTool(nil), opts.Tools...),
+		activeNames:  namesSet(opts.ActiveTools),
 	}
 
 	agentOpts := agent.Options{
 		SystemPrompt:  opts.SystemPrompt,
 		Model:         opts.Model,
 		ThinkingLevel: opts.ThinkingLevel,
-		Tools:         opts.Tools,
+		Tools:         h.activeToolsLocked(),
 		Messages:      seed,
 		ConvertToLLM:  opts.ConvertToLLM,
 		ToolExecution: opts.ToolExecution,
@@ -200,3 +208,28 @@ func (h *Harness) Messages() []agent.AgentMessage { return h.agent.Snapshot().Me
 
 // Agent returns the wrapped agent for advanced callers that need direct access.
 func (h *Harness) Agent() *agent.Agent { return h.agent }
+
+// SetModel changes the model used for subsequent runs. A configured Compactor
+// keeps its own model and is unaffected.
+func (h *Harness) SetModel(model llm.Model) { h.agent.SetModel(model) }
+
+// SetThinkingLevel changes the reasoning level for subsequent runs.
+func (h *Harness) SetThinkingLevel(level llm.ModelThinkingLevel) { h.agent.SetThinkingLevel(level) }
+
+// SetSystemPrompt sets the static system prompt for subsequent runs. It has no
+// effect while BuildSystemPrompt is configured, which rebuilds the prompt each
+// turn.
+func (h *Harness) SetSystemPrompt(prompt string) { h.agent.SetSystemPrompt(prompt) }
+
+// namesSet builds a lookup set from tool names, returning nil for an empty list
+// so the zero state means "every tool is active".
+func namesSet(names []string) map[string]bool {
+	if len(names) == 0 {
+		return nil
+	}
+	set := make(map[string]bool, len(names))
+	for _, name := range names {
+		set[name] = true
+	}
+	return set
+}

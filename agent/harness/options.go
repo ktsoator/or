@@ -20,8 +20,12 @@ type Options struct {
 	BuildSystemPrompt SystemPromptFunc
 	// ThinkingLevel sets the reasoning effort for each turn.
 	ThinkingLevel llm.ModelThinkingLevel
-	// Tools are the tools advertised to the model.
+	// Tools is the full tool registry. The model is advertised the active subset
+	// (see ActiveTools and SetActiveTools).
 	Tools []agent.AgentTool
+	// ActiveTools restricts which registered tools are advertised initially, by
+	// name. A nil or empty slice activates every tool in Tools.
+	ActiveTools []string
 	// ToolExecution is the default batch execution mode. Empty means parallel.
 	ToolExecution agent.ExecutionMode
 
