@@ -156,7 +156,7 @@ func enabledText(enabled bool) string {
 
 func shouldExit(input string) bool {
 	switch strings.ToLower(input) {
-	case "退出", "exit", "quit", "/exit", "/quit":
+	case "exit", "quit", "/exit", "/quit":
 		return true
 	default:
 		return false
