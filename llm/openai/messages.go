@@ -374,9 +374,9 @@ func convertTools(tools []llm.ToolDefinition, compat resolvedCompat) ([]oai.Chat
 			function.Parameters = parameters
 		}
 		if compat.supportsStrictMode {
-			// Match pi: advertise the standard strict field while leaving strict
-			// schema enforcement disabled unless the public Tool API gains an
-			// explicit strict option.
+			// Advertise the standard strict field while leaving strict schema
+			// enforcement disabled unless the public Tool API gains an explicit
+			// strict option.
 			function.Strict = oai.Bool(false)
 		}
 

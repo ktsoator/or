@@ -76,8 +76,8 @@ func TestApplyThinkingOmittedAdaptive(t *testing.T) {
 	}
 }
 
-// Omitted display also reaches budget-based (non-adaptive) thinking, which pi
-// applies it to as well; the budget still travels.
+// Omitted display also reaches budget-based (non-adaptive) thinking; the budget
+// still travels.
 func TestApplyThinkingOmittedBudget(t *testing.T) {
 	thinking := captureThinkingRequest(t, false, llm.ThinkingDisplayOmitted)
 	if thinking["type"] != "enabled" {

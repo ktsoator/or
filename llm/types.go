@@ -141,7 +141,7 @@ type Model struct {
 }
 
 // UnmarshalJSON restores the concrete compatibility type selected by Protocol.
-// The protocol acts as the discriminator, mirroring pi's Model<TApi> conditional
+// The protocol acts as the discriminator, selecting the concrete per-protocol
 // compatibility type at runtime.
 func (model *Model) UnmarshalJSON(data []byte) error {
 	if model == nil {

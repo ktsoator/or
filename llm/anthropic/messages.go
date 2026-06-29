@@ -55,8 +55,8 @@ func resolveCompat(model llm.Model) compat {
 	return resolved
 }
 
-// applyCacheControl marks ephemeral prompt-cache breakpoints, mirroring pi: the
-// system prompt, the final tool, and the last message's final content block.
+// applyCacheControl marks ephemeral prompt-cache breakpoints: the system prompt,
+// the final tool, and the last message's final content block.
 // Anthropic caches the prefix up to each breakpoint, so later turns reuse the
 // cached system, tools, and conversation history.
 func applyCacheControl(params *sdk.MessageNewParams, compat compat) {

@@ -12,8 +12,8 @@ import (
 )
 
 // ValidateToolCall finds the tool named by the call and validates its arguments.
-// It mirrors pi's helper: a utility callers may invoke before dispatching a tool,
-// not something the library calls itself. It returns the coerced arguments.
+// It is a utility callers may invoke before dispatching a tool, not something the
+// library calls itself. It returns the coerced arguments.
 func ValidateToolCall(tools []ToolDefinition, toolCall ToolCall) (map[string]any, error) {
 	for _, tool := range tools {
 		if tool.Name == toolCall.Name {
@@ -28,9 +28,9 @@ func ValidateToolCall(tools []ToolDefinition, toolCall ToolCall) (map[string]any
 // validates them. It returns the coerced arguments, or a detailed error naming
 // the failing fields. The original toolCall.Arguments are left unchanged.
 //
-// The coercion mirrors pi's coerceWithJsonSchema. Validation covers the JSON
-// Schema features normally emitted for tool definitions, including composition
-// keywords and object, array, string, and numeric constraints.
+// The coercion is a best-effort pass toward the schema. Validation covers the
+// JSON Schema features normally emitted for tool definitions, including
+// composition keywords and object, array, string, and numeric constraints.
 func ValidateToolArguments(tool ToolDefinition, toolCall ToolCall) (map[string]any, error) {
 	schema, err := parseSchema(tool.Parameters)
 	if err != nil {
@@ -119,9 +119,8 @@ func matchesJSONType(value any, jsonType string) bool {
 	return false
 }
 
-// coercePrimitiveByType nudges a primitive toward the requested JSON type,
-// mirroring pi's coercePrimitiveByType. It returns the value unchanged when no
-// safe conversion applies.
+// coercePrimitiveByType nudges a primitive toward the requested JSON type. It
+// returns the value unchanged when no safe conversion applies.
 func coercePrimitiveByType(value any, jsonType string) any {
 	switch jsonType {
 	case "number":
@@ -198,9 +197,9 @@ func boolToFloat(flag bool) float64 {
 	return 0
 }
 
-// coerceWithJSONSchema recursively coerces a value toward a schema, mirroring
-// pi's function of the same name: apply allOf/anyOf/oneOf, then primitive type
-// coercion, then descend into object properties and array items.
+// coerceWithJSONSchema recursively coerces a value toward a schema: apply
+// allOf/anyOf/oneOf, then primitive type coercion, then descend into object
+// properties and array items.
 func coerceWithJSONSchema(value any, schema map[string]any) any {
 	next := value
 

@@ -470,8 +470,8 @@ func TestConvertTools(t *testing.T) {
 	if !strings.Contains(wire, `"name":"noop"`) || !strings.Contains(wire, `"name":"weather"`) {
 		t.Fatalf("tool names missing: %s", wire)
 	}
-	// Strict mode is advertised but defaulted to false (matching pi), so the wire
-	// must include the field with the value false.
+	// Strict mode is advertised but defaulted to false, so the wire must include
+	// the field with the value false.
 	if !strings.Contains(wire, `"strict":false`) {
 		t.Fatalf("expected strict=false in wire: %s", wire)
 	}
