@@ -9,7 +9,8 @@ export DEEPSEEK_API_KEY=your-deepseek-api-key
 go run ./example/agent/basic   # smallest: one tool, one prompt
 go run ./example/agent/tool    # interactive terminal session
 go run ./example/agent/hooks   # interception points (needs MINIMAX_CN_API_KEY too)
-go run ./example/agent/harness # harness session + dynamic prompt demo
+go run ./example/agent/harness        # harness session + dynamic prompt demo
+go run ./example/agent/harness-skills # harness skills + prompt templates demo
 ```
 
 ## basic
@@ -58,4 +59,12 @@ it needs both `DEEPSEEK_API_KEY` and `MINIMAX_CN_API_KEY`.
 A small example for `agent/harness`. It uses an in-memory `Session`, recreates
 the harness over that same session to resume prior messages, and builds a fresh
 system prompt from `TurnInfo` before each run. It uses DeepSeek V4 Flash, so set
+`DEEPSEEK_API_KEY` before running it.
+
+## harness-skills
+
+Shows `agent/harness` skills and prompt templates: it registers a skill and a
+template, advertises the model-invocable skills in the system prompt via
+`FormatSkillsForSystemPrompt`, invokes the skill explicitly with `Skill`, and
+runs a template with `PromptFromTemplate`. It uses DeepSeek V4 Flash, so set
 `DEEPSEEK_API_KEY` before running it.

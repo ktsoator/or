@@ -1,4 +1,6 @@
-// Command harness demonstrates the higher-level agent harness with DeepSeek.
+// Command harness demonstrates the agent harness: an in-memory session that
+// persists the transcript, a second harness that resumes from it, and a system
+// prompt rebuilt from TurnInfo before each run.
 package main
 
 import (
@@ -18,6 +20,7 @@ func main() {
 	ctx := context.Background()
 	session := &harness.InMemorySession{}
 
+	// The system prompt is rebuilt each run and reflects the live transcript.
 	buildPrompt := func(info harness.TurnInfo) string {
 		return fmt.Sprintf(
 			"You are a concise assistant. The transcript currently has %d message(s).",
@@ -36,11 +39,13 @@ func main() {
 	first.Subscribe(printAssistant)
 
 	fmt.Println("== first harness ==")
-	if err := first.Prompt(ctx, "用一句话介绍一下 agent harness 的作用。"); err != nil {
+	if err := first.Prompt(ctx, "In one sentence, what is an agent harness for?"); err != nil {
 		log.Fatal(err)
 	}
 	printStoredMessages(ctx, session)
 
+	// A fresh harness over the same session resumes the prior transcript, so the
+	// next prompt continues the conversation.
 	second, err := harness.New(ctx, harness.Options{
 		Model:             llm.GetModel("deepseek", "deepseek-v4-flash"),
 		Session:           session,
@@ -53,7 +58,7 @@ func main() {
 
 	fmt.Println("\n== second harness, same session ==")
 	fmt.Printf("resumed with %d message(s)\n", len(second.Messages()))
-	if err := second.Prompt(ctx, "基于刚才的回答，再补充一个使用场景。"); err != nil {
+	if err := second.Prompt(ctx, "Add one concrete use case to your previous answer."); err != nil {
 		log.Fatal(err)
 	}
 	printStoredMessages(ctx, session)
@@ -71,8 +76,7 @@ func printAssistant(event agent.AgentEvent) {
 	if !ok {
 		return
 	}
-	text := assistantText(assistant)
-	if text != "" {
+	if text := assistantText(assistant); text != "" {
 		fmt.Println("assistant:", text)
 	}
 }
