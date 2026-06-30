@@ -192,8 +192,7 @@ for {
 ```
 
 Bound the loop with a maximum round count so a misbehaving model cannot spin
-forever. The runnable [`tool` example](https://github.com/ktsoator/or/tree/main/example/llm/tool)
-shows the complete loop with diagnostics and error handling.
+forever.
 
 ## Validate before executing
 

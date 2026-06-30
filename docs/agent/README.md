@@ -26,11 +26,5 @@ go get github.com/ktsoator/or/agent@latest
 - [Configuration](configuration.md) — request options, reasoning, dynamic keys, and setters
 - [The run-loop engine](loop.md) — `RunLoop`, `LoopConfig`, and building your own wrapper
 
-Runnable programs are in
-[`example/agent`](https://github.com/ktsoator/or/tree/main/example/agent): `basic`
-(one tool, one prompt), `tool` (an interactive session with reasoning, tool
-progress, and mid-session model switching), and `hooks` (tool interception and
-per-turn model switching).
-
 For exported types and functions, see the package documentation on
 [pkg.go.dev](https://pkg.go.dev/github.com/ktsoator/or/agent).

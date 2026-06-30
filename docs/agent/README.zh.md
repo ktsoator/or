@@ -24,10 +24,5 @@ go get github.com/ktsoator/or/agent@latest
 - [配置](configuration.md) — 请求选项、推理、动态密钥与 setter
 - [运行循环引擎](loop.md) — `RunLoop`、`LoopConfig` 与自建封装
 
-可运行的程序在
-[`example/agent`](https://github.com/ktsoator/or/tree/main/example/agent)：`basic`
-（一个工具、一次提示）、`tool`（带推理、工具进度与会话中切换模型的交互式会话）、`hooks`
-（工具拦截与逐回合切换模型）。
-
 完整的导出类型和函数，参见
 [pkg.go.dev](https://pkg.go.dev/github.com/ktsoator/or/agent) 上的包文档。
