@@ -98,4 +98,3 @@ fmt.Printf("tokens=%d cost=$%.6f\n",
 - 从[提供方目录](providers.md)中选择一个模型。
 - 用[流式事件](streaming.md)增量渲染响应。
 - 用[类型化工具](tools.md)为模型加上结构化能力。
-- 浏览可运行的 [`llm` 示例](https://github.com/ktsoator/or/tree/main/example/llm)。

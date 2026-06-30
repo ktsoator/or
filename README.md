@@ -112,12 +112,6 @@ for event := range events {
 }
 ```
 
-Runnable examples for completions, streaming, tools, images, and model
-switching are available in [`example/llm`](example/llm/README.md).
-
-A runnable stateful Agent example is available in
-[`example/agent`](example/agent/README.md).
-
 ## Documentation
 
 Guides for both packages live at
