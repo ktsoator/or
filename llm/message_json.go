@@ -1,7 +1,6 @@
 package llm
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -526,8 +525,4 @@ func unmarshalContent(data json.RawMessage) (any, error) {
 	default:
 		return nil, fmt.Errorf("unknown content type %q", header.Type)
 	}
-}
-
-func isJSONNull(data []byte) bool {
-	return bytes.Equal(bytes.TrimSpace(data), []byte("null"))
 }

@@ -222,6 +222,28 @@ type ToolDefinition struct {
 	Parameters  json.RawMessage `json:"parameters"`
 }
 
+// Context
+//
+//	├── SystemPrompt
+//	├── Messages
+//	│   ├── UserMessage
+//	│   │   └── []UserContent
+//	│   │       ├── TextContent
+//	│   │       └── ImageContent
+//	│   │
+//	│   ├── AssistantMessage
+//	│   │   └── []AssistantContent
+//	│   │       ├── TextContent
+//	│   │       ├── ThinkingContent
+//	│   │       └── ToolCall
+//	│   │
+//	│   └── ToolResultMessage
+//	│       └── []ToolResultContent
+//	│           ├── TextContent
+//	│           └── ImageContent
+//	│
+//	└── Tools []ToolDefinition
+
 // Context contains the prompt, conversation history, and available tools.
 type Context struct {
 	SystemPrompt string           `json:"systemPrompt,omitempty"`

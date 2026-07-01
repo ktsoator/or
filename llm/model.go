@@ -2,7 +2,10 @@ package llm
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"maps"
+	"slices"
 )
 
 // Protocol identifies the API protocol used to communicate with a model.
@@ -182,4 +185,164 @@ func (model *Model) UnmarshalJSON(data []byte) error {
 	default:
 		return fmt.Errorf("decode model: unsupported compatibility protocol %q", model.Protocol)
 	}
+}
+
+// extendedThinkingLevels lists every thinking level from off to highest, in order.
+var extendedThinkingLevels = []ModelThinkingLevel{
+	ModelThinkingOff,
+	ModelThinkingMinimal,
+	ModelThinkingLow,
+	ModelThinkingMedium,
+	ModelThinkingHigh,
+	ModelThinkingXHigh,
+}
+
+// SupportedThinkingLevels returns the thinking levels a model accepts. A
+// non-reasoning model supports only "off". For reasoning models, a level mapped
+// to nil is unsupported, and "xhigh" is supported only when explicitly mapped.
+func SupportedThinkingLevels(model Model) []ModelThinkingLevel {
+	if !model.Reasoning {
+		return []ModelThinkingLevel{ModelThinkingOff}
+	}
+
+	var levels []ModelThinkingLevel
+	for _, level := range extendedThinkingLevels {
+		mapped, present := model.ThinkingLevelMap[level]
+		if present && mapped == nil {
+			continue
+		}
+		if level == ModelThinkingXHigh && !present {
+			continue
+		}
+		levels = append(levels, level)
+	}
+	return levels
+}
+
+// ClampThinkingLevel adjusts a requested level to the nearest one the model
+// supports: it prefers the requested level, then steps up, then down, and falls
+// back to the lowest supported level (or "off").
+func ClampThinkingLevel(model Model, level ModelThinkingLevel) ModelThinkingLevel {
+	available := SupportedThinkingLevels(model)
+	if slices.Contains(available, level) {
+		return level
+	}
+
+	requested := slices.Index(extendedThinkingLevels, level)
+	if requested == -1 {
+		if len(available) > 0 {
+			return available[0]
+		}
+		return ModelThinkingOff
+	}
+	for i := requested; i < len(extendedThinkingLevels); i++ {
+		if slices.Contains(available, extendedThinkingLevels[i]) {
+			return extendedThinkingLevels[i]
+		}
+	}
+	for i := requested - 1; i >= 0; i-- {
+		if slices.Contains(available, extendedThinkingLevels[i]) {
+			return extendedThinkingLevels[i]
+		}
+	}
+	if len(available) > 0 {
+		return available[0]
+	}
+	return ModelThinkingOff
+}
+
+// CalculateCost returns the US dollar cost of usage at the model's prices. Model
+// costs are quoted per million tokens.
+func CalculateCost(model Model, usage Usage) UsageCost {
+	const perMillion = 1_000_000.0
+	cost := UsageCost{
+		Input:      model.Cost.Input / perMillion * float64(usage.Input),
+		Output:     model.Cost.Output / perMillion * float64(usage.Output),
+		CacheRead:  model.Cost.CacheRead / perMillion * float64(usage.CacheRead),
+		CacheWrite: model.Cost.CacheWrite / perMillion * float64(usage.CacheWrite),
+	}
+	cost.Total = cost.Input + cost.Output + cost.CacheRead + cost.CacheWrite
+	return cost
+}
+
+func cloneModel(model Model) Model {
+	clone := model
+	clone.Input = append([]ModelInput(nil), model.Input...)
+	if model.Headers != nil {
+		clone.Headers = make(map[string]string, len(model.Headers))
+		maps.Copy(clone.Headers, model.Headers)
+	}
+	if model.ThinkingLevelMap != nil {
+		clone.ThinkingLevelMap = make(map[ModelThinkingLevel]*string, len(model.ThinkingLevelMap))
+		for level, value := range model.ThinkingLevelMap {
+			clone.ThinkingLevelMap[level] = clonePointer(value)
+		}
+	}
+	switch compatibility := model.Compatibility.(type) {
+	case *OpenAICompletionsCompatibility:
+		if compatibility != nil {
+			compatibilityClone := *compatibility
+			compatibilityClone.SupportsStore = clonePointer(compatibility.SupportsStore)
+			compatibilityClone.SupportsDeveloperRole = clonePointer(compatibility.SupportsDeveloperRole)
+			compatibilityClone.SupportsReasoningEffort = clonePointer(compatibility.SupportsReasoningEffort)
+			compatibilityClone.SupportsStrictMode = clonePointer(compatibility.SupportsStrictMode)
+			compatibilityClone.RequiresThinkingAsText = clonePointer(compatibility.RequiresThinkingAsText)
+			compatibilityClone.RequiresReasoningContentOnAssistantMessages = clonePointer(
+				compatibility.RequiresReasoningContentOnAssistantMessages,
+			)
+			compatibilityClone.ZAIToolStream = clonePointer(compatibility.ZAIToolStream)
+			clone.Compatibility = &compatibilityClone
+		}
+	case *AnthropicMessagesCompatibility:
+		if compatibility != nil {
+			compatibilityClone := *compatibility
+			compatibilityClone.SupportsTemperature = clonePointer(compatibility.SupportsTemperature)
+			compatibilityClone.SupportsCacheControl = clonePointer(compatibility.SupportsCacheControl)
+			compatibilityClone.SupportsCacheControlTools = clonePointer(compatibility.SupportsCacheControlTools)
+			compatibilityClone.ForceAdaptiveThinking = clonePointer(compatibility.ForceAdaptiveThinking)
+			compatibilityClone.AllowEmptySignature = clonePointer(compatibility.AllowEmptySignature)
+			clone.Compatibility = &compatibilityClone
+		}
+	}
+	return clone
+}
+
+func validateModelCompatibility(model Model) error {
+	if model.Compatibility == nil {
+		return nil
+	}
+
+	switch compatibility := model.Compatibility.(type) {
+	case *OpenAICompletionsCompatibility:
+		if compatibility == nil {
+			return errors.New("model compatibility is a typed nil")
+		}
+	case *AnthropicMessagesCompatibility:
+		if compatibility == nil {
+			return errors.New("model compatibility is a typed nil")
+		}
+	default:
+		return fmt.Errorf("unsupported model compatibility type %T", model.Compatibility)
+	}
+
+	if model.Compatibility.Protocol() != model.Protocol {
+		return fmt.Errorf(
+			"model compatibility protocol %q does not match model protocol %q",
+			model.Compatibility.Protocol(),
+			model.Protocol,
+		)
+	}
+	return nil
+}
+
+// clonePointer copies a pointer to a value-semantic type. It is intended for
+// scalar configuration fields such as *string, *bool, and numeric pointers. Do
+// not use it as a deep copy for slices, maps, or structs that contain reference
+// fields; clone those explicitly instead.
+func clonePointer[T any](value *T) *T {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
 }

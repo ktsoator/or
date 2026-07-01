@@ -142,29 +142,3 @@ func cloneAssistantMessage(message AssistantMessage) *AssistantMessage {
 	}
 	return &clone
 }
-
-func cloneJSONObject(value map[string]any) map[string]any {
-	if value == nil {
-		return nil
-	}
-	clone := make(map[string]any, len(value))
-	for key, item := range value {
-		clone[key] = cloneJSONValue(item)
-	}
-	return clone
-}
-
-func cloneJSONValue(value any) any {
-	switch typed := value.(type) {
-	case map[string]any:
-		return cloneJSONObject(typed)
-	case []any:
-		clone := make([]any, len(typed))
-		for index, item := range typed {
-			clone[index] = cloneJSONValue(item)
-		}
-		return clone
-	default:
-		return value
-	}
-}
