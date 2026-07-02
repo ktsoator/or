@@ -55,8 +55,15 @@ if err := assistant.Prompt(ctx, "Explain goroutines in one sentence."); err != n
 }
 
 messages := assistant.Snapshot().Messages
-last, _ := agent.ToLLM(messages[len(messages)-1])
-fmt.Println(last.(*llm.AssistantMessage).Text())
+last, ok := agent.ToLLM(messages[len(messages)-1])
+if !ok {
+	log.Fatal("last message is not an llm message")
+}
+answer, ok := last.(*llm.AssistantMessage)
+if !ok {
+	log.Fatalf("last message is %T, want assistant message", last)
+}
+fmt.Println(answer.Text())
 ```
 
 加入工具后，同一个 `Prompt` 会自动变成完整的工具调用循环：
@@ -90,7 +97,9 @@ assistant := agent.New(agent.Options{
 	Tools:        []agent.AgentTool{weather},
 })
 
-err := assistant.Prompt(ctx, "What should I pack for Shanghai today?")
+if err := assistant.Prompt(ctx, "What should I pack for Shanghai today?"); err != nil {
+	log.Fatal(err)
+}
 ```
 
 完整可运行版本见[快速开始](getting-started.md)和仓库里的
