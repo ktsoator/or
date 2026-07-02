@@ -27,11 +27,15 @@ plugins:
             Advanced: 进阶
             Overview: 概述
             Getting started: 快速开始
+            Examples: 示例
             Providers and models: 提供方与模型
             Streaming: 流式响应
             Tools: 工具
             Reasoning: 推理与思考
             Reading responses: 读取响应
+            Error handling: 错误处理
+            Troubleshooting: 排障
+            Testing: 测试
             Conversations: 对话
             Configuration: 请求配置
             Custom protocols: 自定义协议
@@ -120,10 +124,14 @@ nav:
           - Tools: llm/tools.md
           - Reasoning: llm/reasoning.md
           - Reading responses: llm/results.md
-      - Advanced:
           - Conversations: llm/conversations.md
+          - Error handling: llm/errors.md
+      - Advanced:
           - Configuration: llm/configuration.md
+          - Troubleshooting: llm/troubleshooting.md
+          - Testing: llm/testing.md
           - Custom protocols: llm/extending.md
+      - Examples: llm/examples.md
   - Agent:
       - Basics:
           - Overview: agent/README.md

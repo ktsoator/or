@@ -100,6 +100,31 @@ func main() {
 
 ## 事件参考
 
+流以 `EventStart` 开始,每个内容块(文本、推理或工具调用,可能交错)发出一组
+`start → delta… → end`,并以恰好一个终止事件结束:
+
+```mermaid
+flowchart LR
+    start(["EventStart"]) --> blocks
+
+    subgraph blocks["每个内容块一组"]
+        direction LR
+        bs["…Start"] --> bd["…Delta<br/><small>× 多次</small>"] --> be["…End"]
+    end
+
+    blocks --> outcome{"结果"}
+    outcome -->|成功| done(["EventDone<br/><small>Message = 最终 AssistantMessage</small>"])
+    outcome -->|失败 / 取消| err(["EventError<br/><small>Err + 部分 Message</small>"])
+
+    classDef ok stroke:#16a34a,stroke-width:2px;
+    classDef bad stroke:#dc2626,stroke-width:2px;
+    class done ok;
+    class err bad;
+```
+
+每个非终止事件都带有 `Partial` 快照;`…` 前缀代表 `Text`、`Thinking` 或
+`ToolCall`。
+
 | 事件 | 含义 | 主要字段 |
 |---|---|---|
 | `EventStart` | 提供方流已开始 | `Partial` |

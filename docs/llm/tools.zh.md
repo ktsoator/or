@@ -145,6 +145,22 @@ func main() {
 再调用更多工具，最后才作答。`StopReason` 会告诉你当前处于哪种情况，因此应当依据它
 来控制循环，而不是仅凭是否存在工具调用。
 
+```mermaid
+flowchart TD
+    A(["Complete / Stream"]) --> B{"StopReason?"}
+    B -->|ToolUse| C["追加 assistant 消息"]
+    C --> D["对每个 ToolCall:<br/><small>DecodeToolCall → 执行 → ToolResult</small>"]
+    D --> E["追加工具结果"]
+    E --> A
+    B -->|Stop| F(["完成 —— 使用 Text()"])
+    B -->|Error / Aborted| G(["停止 —— 不要执行工具"])
+
+    classDef ok stroke:#16a34a,stroke-width:2px;
+    classDef bad stroke:#dc2626,stroke-width:2px;
+    class F ok;
+    class G bad;
+```
+
 - `StopReasonToolUse` — 模型需要工具结果。执行这些调用，逐个追加结果，再次调用模型。
 - `StopReasonStop` — 模型已作答。返回 `response.Text()`。
 - `StopReasonLength` — 输出触达 token 上限，本轮被截断。
@@ -184,6 +200,19 @@ for {
 ```
 
 用最大轮数为循环设置上界，避免行为异常的模型无限循环。
+
+!!! check "生产环境工具循环清单"
+    - **以 `StopReason` 为准,而非是否存在工具调用。** 当它为 `StopReasonToolUse`
+      时继续循环;为 `StopReasonStop` 时停止。
+    - **先追加 assistant 消息,再追加其工具结果。** 历史中的顺序必须是先 assistant
+      这一轮,然后是各个 `ToolResult`。
+    - **每个工具调用都要有对应结果。** 每个调用回传一个 `ToolResult`,不要让任何调用
+      在下次请求中悬空未答。
+    - **decode 失败时回传工具错误,不要崩溃。** 设置 `result.IsError = true` 并把该
+      消息回传,让模型纠正参数。
+    - **为循环设上界。** 限制轮数,避免行为异常的模型无限循环。
+    - **有副作用前先看诊断。** 在执行会写入或消耗资源的工具前,拒绝 `partial` 或
+      `invalid` 参数。见[流式诊断](streaming.md#工具调用增量与诊断)。
 
 ## 执行前校验
 

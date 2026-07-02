@@ -103,6 +103,32 @@ func main() {
 
 ## Event reference
 
+A stream opens with `EventStart`, emits one `start → delta… → end` group per
+content block (text, thinking, or tool call, possibly interleaved), and closes
+with exactly one terminal event:
+
+```mermaid
+flowchart LR
+    start(["EventStart"]) --> blocks
+
+    subgraph blocks["one group per content block"]
+        direction LR
+        bs["…Start"] --> bd["…Delta<br/><small>× many</small>"] --> be["…End"]
+    end
+
+    blocks --> outcome{"outcome"}
+    outcome -->|success| done(["EventDone<br/><small>Message = final AssistantMessage</small>"])
+    outcome -->|failure / cancel| err(["EventError<br/><small>Err + partial Message</small>"])
+
+    classDef ok stroke:#16a34a,stroke-width:2px;
+    classDef bad stroke:#dc2626,stroke-width:2px;
+    class done ok;
+    class err bad;
+```
+
+Every non-terminal event carries a `Partial` snapshot; the `…` prefix stands for
+`Text`, `Thinking`, or `ToolCall`.
+
 | Event | Meaning | Main fields |
 |---|---|---|
 | `EventStart` | The provider stream started | `Partial` |
