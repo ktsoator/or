@@ -11,20 +11,44 @@ options := llm.StreamOptions{Reasoning: llm.ModelThinkingHigh}
 response, err := llm.Complete(ctx, model, llm.Prompt("..."), options)
 ```
 
+## At a glance
+
+| Task | API |
+|---|---|
+| Set the effort level | `StreamOptions.Reasoning` (`ModelThinkingLevel`) |
+| Available levels | `ModelThinkingOff` / `Minimal` / `Low` / `Medium` / `High` / `XHigh` |
+| Check what a model supports | `SupportedThinkingLevels(model)`, `ClampThinkingLevel(model, level)` |
+| Whether a model can reason | `Model.Reasoning` (bool) |
+| Read thinking while streaming | `EventThinkingStart` / `Delta` / `End` |
+| Read thinking from the final message | `ThinkingContent` (`Thinking`, `ThinkingSignature`, `Redacted`) |
+| Control how thinking is returned (Anthropic) | `AnthropicStreamOptions.ThinkingDisplay` |
+
+Effort only decides *how much* the model thinks. Whether the thinking text is
+returned with the response is a separate, orthogonal knob — on Anthropic it is
+controlled by `ThinkingDisplay` (see [Anthropic thinking display](#anthropic-thinking-display)).
+
 ## Effort levels
 
 A higher level lets the model spend more tokens thinking before it answers,
 trading latency and cost for quality on hard problems. Leaving `Reasoning`
 empty uses the model's own default.
 
-| Level | Effect |
-|---|---|
-| `ModelThinkingOff` | Disable thinking entirely |
-| `ModelThinkingMinimal` | Smallest thinking budget |
-| `ModelThinkingLow` | Light reasoning |
-| `ModelThinkingMedium` | Balanced reasoning |
-| `ModelThinkingHigh` | Extended reasoning for hard tasks |
-| `ModelThinkingXHigh` | Maximum thinking budget |
+| Level | Effect | When to use |
+|---|---|---|
+| `ModelThinkingOff` | Disable thinking entirely | Simple tasks; latency- or cost-sensitive paths |
+| `ModelThinkingMinimal` | Smallest thinking budget | A light nudge to reason |
+| `ModelThinkingLow` | Light reasoning | Everyday tasks |
+| `ModelThinkingMedium` | Balanced reasoning | A safe default |
+| `ModelThinkingHigh` | Extended reasoning for hard tasks | Math, planning, multi-step problems |
+| `ModelThinkingXHigh` | Maximum thinking budget | The hardest problems, cost aside |
+
+Under the hood the level maps to each provider's own controls: on Anthropic a
+thinking-token budget (or adaptive thinking), on OpenAI-compatible providers a
+`reasoning_effort` field. The neutral level keeps your code the same across both.
+
+Thinking tokens count toward `Usage.Output` and bill at the same output rate as
+generated text, so a higher level makes each request cost more. See
+[Reading responses](results.md#token-usage-and-cost) for usage and cost.
 
 ## Check what a model supports
 
@@ -119,6 +143,10 @@ With `ThinkingDisplayOmitted`, no `EventThinkingDelta` events arrive and the
 
 Reasoning metadata needed by a provider—such as Anthropic signatures and
 OpenRouter encrypted reasoning—is retained in assistant messages and replayed
-when required by later tool calls. When the target model changes, the library
-preserves, downgrades, or omits reasoning content according to compatibility.
-See [Conversations](conversations.md) for model switching and persistence.
+when required by later tool calls. This matters most for tool use with thinking:
+some providers require the signed thinking block to be sent back verbatim before
+they will accept the next tool call, so dropping it can make the turn fail. The
+library keeps the block (even when `ThinkingDisplayOmitted` hides its text) so
+the history stays valid. When the target model changes, it preserves, downgrades,
+or omits reasoning content according to compatibility. See
+[Conversations](conversations.md) for model switching and persistence.
