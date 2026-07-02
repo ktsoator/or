@@ -2,6 +2,33 @@
 
 对话消息与厂商无关。同一段历史可以被持久化、扩展，并发送给另一个兼容模型，而无需重建。
 
+## 消息与内容模型
+
+一段历史就是一个 `[]llm.Message`。`Message` 是一个接口,有三个实现,每个角色一个。每个
+实现持有一组*内容块*,且角色限定了允许哪些块类型:
+
+| 消息 | 角色 | 允许的内容块 |
+|---|---|---|
+| `UserMessage` | 用户输入 | `TextContent`、`ImageContent` |
+| `AssistantMessage` | 模型输出 | `TextContent`、`ThinkingContent`、`ToolCall` |
+| `ToolResultMessage` | 工具结果 | `TextContent`、`ImageContent` |
+
+内容块是你读写的叶子类型:
+
+| 块 | 承载内容 |
+|---|---|
+| `TextContent` | 纯文本(任意消息中均可) |
+| `ImageContent` | base64 图像数据加 MIME 类型 |
+| `ThinkingContent` | 推理文本及其 provider 签名(仅 assistant) |
+| `ToolCall` | 工具名、ID 与解码后的参数(仅 assistant) |
+
+由于消息和块都是带类型的,已存对话可无需手动分派地通过 JSON 往返——见
+[保存与恢复](#保存与恢复对话)。
+
+对于常见的"只发文本"场景,请使用下面的便捷构造器。仅当需要构造器覆盖不到的内容时才手写
+结构体字面量——例如在一条用户消息里混合文本与图像(见[图像输入](#图像输入)),或播种一条
+携带工具调用的 assistant 轮次。
+
 ## 构建消息
 
 `Context`、`Message` 以及内容块都是完全通用的，但多数调用只是发送一些文本。便捷构造器
@@ -79,10 +106,20 @@ input := llm.Context{Messages: []llm.Message{
 每次请求前，本库都会为目标模型适配已存储的历史：为仅支持文本的模型降级图像、在兼容时
 保留推理签名、降级或移除不兼容的推理，并规范化工具调用标识符。
 
+下面这两个模型甚至使用不同的线协议——DeepSeek 是 OpenAI 兼容，MiniMax CN 是
+Anthropic 兼容——但历史切片可以原样复用。由于每种协议各有适配器，需同时注册两个
+provider 包:
+
 ```go
+import (
+	"github.com/ktsoator/or/llm"
+	_ "github.com/ktsoator/or/llm/anthropic" // MiniMax CN（Anthropic 兼容）
+	_ "github.com/ktsoator/or/llm/openai"    // DeepSeek（OpenAI 兼容）
+)
+
 ctx := context.Background()
-draft := llm.GetModel("deepseek", "deepseek-v4-flash")
-review := llm.GetModel("anthropic", "claude-opus-4-8")
+draft := llm.GetModel("deepseek", "deepseek-v4-flash")   // openai-completions
+review := llm.GetModel("minimax-cn", "MiniMax-M2.7")      // anthropic-messages
 
 messages := []llm.Message{
 	llm.UserText("Compute 25 * 18 and explain the steps."),
@@ -102,6 +139,10 @@ if err != nil {
 	log.Fatal(err)
 }
 ```
+
+这需要环境中设置 `DEEPSEEK_API_KEY` 与 `MINIMAX_CN_API_KEY`。完整程序见可运行的
+[`model_switch`](https://github.com/ktsoator/or/tree/main/example/llm/model_switch)
+示例。
 
 `TransformMessages` 执行这项适配，并已对外导出，供需要查看模型实际会收到的确切历史的
 调用方使用。
@@ -131,3 +172,8 @@ if err := json.Unmarshal(raw, &restored); err != nil {
 ```
 
 `restored.Messages` 已可用于扩展，并针对任意模型重放。
+
+!!! warning "序列化的历史是敏感数据"
+    序列化后的 `Context` 可能包含用户输入、工具结果(其中可能嵌入抓取到的文档或凭证)
+    以及提供方的推理签名。请把这份 JSON 当作敏感数据:不要整体打日志,存储或传输时应与
+    其中的底层数据同等对待。

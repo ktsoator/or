@@ -152,6 +152,22 @@ the model may call tools, read the results, then call more tools before it
 answers. `StopReason` tells you which case you are in, so gate the loop on it
 rather than on the presence of tool calls alone.
 
+```mermaid
+flowchart TD
+    A(["Complete / Stream"]) --> B{"StopReason?"}
+    B -->|ToolUse| C["append assistant message"]
+    C --> D["for each ToolCall:<br/><small>DecodeToolCall → run → ToolResult</small>"]
+    D --> E["append tool results"]
+    E --> A
+    B -->|Stop| F(["done — use Text()"])
+    B -->|Error / Aborted| G(["stop — do not run tools"])
+
+    classDef ok stroke:#16a34a,stroke-width:2px;
+    classDef bad stroke:#dc2626,stroke-width:2px;
+    class F ok;
+    class G bad;
+```
+
 - `StopReasonToolUse` — the model wants tool results. Execute the calls, append
   each result, and call the model again.
 - `StopReasonStop` — the model answered. Return `response.Text()`.
@@ -193,6 +209,22 @@ for {
 
 Bound the loop with a maximum round count so a misbehaving model cannot spin
 forever.
+
+!!! check "Production tool-loop checklist"
+    - **Gate on `StopReason`, not on the presence of tool calls.** Loop while it
+      is `StopReasonToolUse`; stop on `StopReasonStop`.
+    - **Append the assistant message before its tool results.** The order in the
+      history must be assistant turn, then each `ToolResult`.
+    - **Match every tool call with a result.** Send one `ToolResult` per call, so
+      no call is left unanswered in the next request.
+    - **On decode failure, return a tool error, don't crash.** Set
+      `result.IsError = true` and feed the message back so the model can correct
+      its arguments.
+    - **Bound the loop.** Cap the number of rounds so a misbehaving model cannot
+      spin forever.
+    - **Inspect diagnostics before side effects.** Decline `partial` or
+      `invalid` arguments before executing a tool that writes or spends. See
+      [stream diagnostics](streaming.md#tool-call-deltas-and-diagnostics).
 
 ## Validate before executing
 

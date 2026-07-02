@@ -100,6 +100,8 @@ fmt.Printf("tokens=%d cost=$%.6f\n",
 
 ## Next steps
 
+- Continue the exchange over several turns with [conversations](conversations.md).
 - Choose a model from the [provider catalog](providers.md).
 - Render responses incrementally with [streaming events](streaming.md).
 - Give the model structured capabilities with [typed tools](tools.md).
+- Browse runnable programs on the [examples](examples.md) page.
