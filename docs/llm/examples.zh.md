@@ -1,12 +1,12 @@
 # 示例
 
-可运行程序位于 [`example/llm`](https://github.com/ktsoator/or/tree/main/example/llm)。每个程序都从内置目录解析模型,并从环境读取其 API key,因此每条运行命令都带上了所需的 key。除 `model_switch` 外,都只用一个 DeepSeek key。
+可运行程序位于 [`example/llm`](https://github.com/ktsoator/or/tree/main/example/llm)。每个程序都从内置目录解析模型，并从环境读取其 API key，因此每条运行命令都带上了所需的 key。除 `model_switch` 外，都只用一个 DeepSeek key。
 
-每个示例的代码在下面默认折叠——点击对应块即可展开。建议从上往下读:先是请求基础,再是流式与推理,然后是工具、对话与更底层的控制。
+每个示例的代码在下面默认折叠——点击对应块即可展开。建议从上往下读：先是请求基础，再是流式与推理，然后是工具、对话与更底层的控制。
 
-## 最小请求(basic)
+## 最小请求（basic）
 
-端到端最小的程序。`GetModel` 从内置目录解析一个条目(一个 provider 加一个模型 id);`Prompt` 把单个字符串包成只含一条消息的 `Context`;`Complete` 执行整个请求,阻塞到模型完成,返回一个 `AssistantMessage`。传空的 `StreamOptions{}` 时,API key 从该 provider 的环境变量读取。先从这里跑通,确认 key 与网络无误,再叠加其它功能。
+端到端最小的程序。`GetModel` 从内置目录解析一个条目（一个 provider 加一个模型 id）；`Prompt` 把单个字符串包成只含一条消息的 `Context`；`Complete` 执行整个请求，阻塞到模型完成，返回一个 `AssistantMessage`。传空的 `StreamOptions{}` 时，API key 从该 provider 的环境变量读取。先从这里跑通，确认 key 与网络无误，再叠加其它功能。
 
 ```sh
 DEEPSEEK_API_KEY=… go run ./example/llm/basic
@@ -50,9 +50,9 @@ DEEPSEEK_API_KEY=… go run ./example/llm/basic
     }
     ```
 
-## 系统提示与选项(options)
+## 系统提示与选项（options）
 
-比 `basic` 进一步。`PromptWithSystem` 在前面加一条系统消息,用来设定语气与角色;`Temperature` 与 `MaxTokens` 约束生成方式;返回的消息也不只有文本——`Usage`(输入与输出 token)、`Usage.Cost.Total`(按目录计价)与 `StopReason`(生成为何结束)。生产环境应在每个响应上都读取这些,而不只在调试时。
+比 `basic` 进一步。`PromptWithSystem` 在前面加一条系统消息，用来设定语气与角色；`Temperature` 与 `MaxTokens` 约束生成方式；返回的消息也不只有文本——`Usage`（输入与输出 token）、`Usage.Cost.Total`（按目录计价）与 `StopReason`（生成为何结束）。生产环境应在每个响应上都读取这些，而不只在调试时。
 
 ```sh
 DEEPSEEK_API_KEY=… go run ./example/llm/options
@@ -113,9 +113,9 @@ DEEPSEEK_API_KEY=… go run ./example/llm/options
     }
     ```
 
-## 流式输出(streaming)
+## 流式输出（streaming）
 
-与 `basic` 是同一个请求,但增量消费。`Stream` 返回一个 `Event` 通道;每个 `EventTextDelta` 是一段可边到达边打印的文本,流以恰好一个终止事件 `EventDone`(其 `Message` 为拼装好的最终消息)或 `EventError` 结束。这就是所有流式 UI 背后的形态——`Complete` 就是把这个循环收拢成只返回最终消息。若需更细的结构,文本、推理与工具调用块各自还会发出 start 与 end 事件。
+与 `basic` 是同一个请求，但增量消费。`Stream` 返回一个 `Event` 通道；每个 `EventTextDelta` 是一段可边到达边打印的文本，流以恰好一个终止事件 `EventDone`（其 `Message` 为拼装好的最终消息）或 `EventError` 结束。这就是所有流式 UI 背后的形态——`Complete` 就是把这个循环收拢成只返回最终消息。若需更细的结构，文本、推理与工具调用块各自还会发出 start 与 end 事件。
 
 ```sh
 DEEPSEEK_API_KEY=… go run ./example/llm/streaming
@@ -170,9 +170,9 @@ DEEPSEEK_API_KEY=… go run ./example/llm/streaming
     }
     ```
 
-## 推理过程(reasoning)
+## 推理过程（reasoning）
 
-用协议无关的 `Reasoning` 强度(`off` 到 `xhigh`)开启思考。模型的思考以 `EventThinking*` 事件流出,与 `EventText*` 答案分开,因此你可以展示"思考中…"面板、记录它,或完全丢弃。各适配器会把强度映射到该 provider 的原生推理形式,并钳制到模型支持的范围;不具备推理的模型会直接忽略该设置,所以同一份代码在不同模型间都安全。
+用协议无关的 `Reasoning` 强度（`off` 到 `xhigh`）开启思考。模型的思考以 `EventThinking*` 事件流出，与 `EventText*` 答案分开，因此可以展示"思考中…"面板、记录它，或完全丢弃。各适配器会把强度映射到该 provider 的原生推理形式，并钳制到模型支持的范围；不具备推理的模型会直接忽略该设置，所以同一份代码在不同模型间都安全。
 
 ```sh
 DEEPSEEK_API_KEY=… go run ./example/llm/reasoning
@@ -236,18 +236,18 @@ DEEPSEEK_API_KEY=… go run ./example/llm/reasoning
     }
     ```
 
-## 工具循环(tools)
+## 工具循环（tools）
 
-最值得研究的一个——手写的工具循环,把 `or/agent` 替你自动化的东西摊开来看。模型可以调用类型化工具、读取结果,再继续,直到给出最终文本答案。每一轮:
+最值得研究的一个——手写的工具循环，把 `or/agent` 替调用方自动化的东西摊开来看。模型可以调用类型化工具、读取结果，再继续，直到给出最终文本答案。每一轮：
 
 - `MustTool[T]` 预先从 Go 结构体派生一次 JSON Schema。
 - `Stream` 实时呈现模型的思考与答案。
-- 在 `EventDone` 时,**先追加 assistant 消息**,再检查 `ToolCalls()`。
-- `DecodeToolCall[T]` 校验每个调用;失败时把错误作为 `ToolResult` 回传,让模型自我纠正参数。
-- 否则执行工具并追加其 `ToolResult`,然后继续循环。
-- 没有工具调用,说明流式输出的答案即为最终结果——停止。
+- 在 `EventDone` 时，**先追加 assistant 消息**，再检查 `ToolCalls()`。
+- `DecodeToolCall[T]` 校验每个调用；失败时把错误作为 `ToolResult` 回传，让模型自我纠正参数。
+- 否则执行工具并追加其 `ToolResult`，然后继续循环。
+- 没有工具调用，说明流式输出的答案即为最终结果——停止。
 
-给这个循环套上运行状态、引导与持久化,你就得到一个 agent——这正是为什么这段循环属于库的基础层,而不是被藏在它背后。
+给这个循环套上运行状态、引导与持久化，便得到一个 agent——这正是为什么这段循环属于库的基础层，而不是被藏在它背后。
 
 ```sh
 DEEPSEEK_API_KEY=… go run ./example/llm/tools
@@ -352,9 +352,9 @@ DEEPSEEK_API_KEY=… go run ./example/llm/tools
     }
     ```
 
-## 多轮对话(conversation)
+## 多轮对话（conversation）
 
-多轮交流,也是"本库无状态"最清晰的演示。历史是你自己持有的 `[]llm.Message`;每次回复后,你追加 assistant 这一轮(用指针,以保留重放所需的类型)与下一条用户消息,再重新发送整个切片。库不在服务端保存任何东西——后续追问("那个模式")能被解析,只因为前几轮随请求一起被带上。设在 `Context` 上的 `SystemPrompt` 每轮生效,且不属于历史。
+多轮交流，也是"本库无状态"最清晰的演示。历史由调用方自己持有 `[]llm.Message`；每次回复后，追加 assistant 这一轮（用指针，以保留重放所需的类型）与下一条用户消息，再重新发送整个切片。库不在服务端保存任何东西——后续追问（"那个模式"）能被解析，只因为前几轮随请求一起被带上。设在 `Context` 上的 `SystemPrompt` 每轮生效，且不属于历史。
 
 ```sh
 DEEPSEEK_API_KEY=… go run ./example/llm/conversation
@@ -424,9 +424,9 @@ DEEPSEEK_API_KEY=… go run ./example/llm/conversation
     }
     ```
 
-## 跨协议切换模型(model_switch)
+## 跨协议切换模型（model_switch）
 
-同一段对话横跨两种不同的线协议——库的核心价值浓缩在一个文件里。第 1 轮发给 DeepSeek(OpenAI 兼容的 Chat Completions);第 2 轮把*同一段、未改动*的历史发给 MiniMax CN(Anthropic 兼容的 Messages)。因为涉及两种协议,两个 provider 包都必须注册(空导入),且各需自己的 key。每次请求前,`llm` 会为目标协议重新适配已存历史——降级图像、协调工具调用 ID、处理推理签名——所以你从不需要手动重建对话。
+同一段对话横跨两种不同的线协议，库的核心价值浓缩在这一个文件里。第 1 轮发给 DeepSeek（OpenAI 兼容的 Chat Completions）；第 2 轮把*同一段、未改动*的历史发给 MiniMax CN（Anthropic 兼容的 Messages）。因为涉及两种协议，两个 provider 包都必须注册（空导入），且各需自己的 key。每次请求前，`llm` 会为目标协议重新适配已存历史（降级图像、协调工具调用 ID、处理推理签名），所以从不需要手动重建对话。
 
 ```sh
 DEEPSEEK_API_KEY=… MINIMAX_CN_API_KEY=… go run ./example/llm/model_switch
@@ -495,9 +495,9 @@ DEEPSEEK_API_KEY=… MINIMAX_CN_API_KEY=… go run ./example/llm/model_switch
     }
     ```
 
-## 底层控制(advanced)
+## 底层控制（advanced）
 
-在一个原本普通的请求上叠加两项更底层的控制。`OnRequest` 在请求发出前把实际序列化的请求体交给你(每次尝试一次,含重试)——便于调试、日志,或在测试里对线格式做断言。通过 `ProtocolOptions` 携带的协议特定 `ToolChoice` 强制模型本轮调用工具;它在发送前会针对目标协议校验,因此不匹配的选项会尽早失败,而不会到达 provider。若端点不在目录中,可手动构造 `llm.Model` 并把其 `BaseURL` 指向它。
+在一个原本普通的请求上叠加两项更底层的控制。`OnRequest` 在请求发出前把实际序列化的请求体交回调用方（每次尝试一次，含重试）——便于调试、日志，或在测试里对线格式做断言。通过 `ProtocolOptions` 携带的协议特定 `ToolChoice` 强制模型本轮调用工具；它在发送前会针对目标协议校验，因此不匹配的选项会尽早失败，而不会到达 provider。若端点不在目录中，可手动构造 `llm.Model` 并把其 `BaseURL` 指向它。
 
 ```sh
 DEEPSEEK_API_KEY=… go run ./example/llm/advanced

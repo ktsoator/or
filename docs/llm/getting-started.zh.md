@@ -17,9 +17,7 @@ go get github.com/ktsoator/or/llm@latest
 export DEEPSEEK_API_KEY=your-deepseek-api-key
 ```
 
-本地开发时，可以用 [`godotenv`](https://github.com/joho/godotenv) 这类 `.env`
-加载器在首次请求前加载凭证。记得将 `.env` 加入 `.gitignore`；生产环境则应通过部署
-环境注入凭证。
+本地开发时，可以用 [`godotenv`](https://github.com/joho/godotenv) 这类 `.env` 加载器在首次请求前加载凭证。记得将 `.env` 加入 `.gitignore`；生产环境则应通过部署环境注入凭证。
 
 ## 完成一次请求
 
@@ -57,15 +55,11 @@ func main() {
 go run .
 ```
 
-`llm.Complete` 会将整个流收集成一个 `AssistantMessage`。当应用需要在增量到达时即时
-处理，则改用 [`llm.Stream`](streaming.md)。包级函数通过一个默认注册表分发；上面那行空导入
-`llm/openai` 会把 OpenAI 兼容协议注册进去。你用到哪个协议就导入对应的 provider 包——或者
-导入 `llm/all` 一次性注册全部——这样二进制里只链接你需要的 SDK。
+`llm.Complete` 会将整个流收集成一个 `AssistantMessage`。当应用需要在增量到达时即时处理，则改用 [`llm.Stream`](streaming.md)。包级函数通过一个默认注册表分发；上面那行空导入 `llm/openai` 会把 OpenAI 兼容协议注册进去。用到哪个协议就导入对应的 provider 包（或者导入 `llm/all` 一次性注册全部），这样二进制里只链接需要的 SDK。
 
 ## 自定义请求
 
-第一个示例发送的是空的 `StreamOptions{}`。用 `PromptWithSystem` 加上 system 提示,
-并设置温度、输出上限等常用选项。这些选项适用于任意模型,与协议无关。
+第一个示例发送的是空的 `StreamOptions{}`。用 `PromptWithSystem` 加上 system 提示，并设置温度、输出上限等常用选项。这些选项适用于任意模型，与协议无关。
 
 ```go
 temperature := 0.2
@@ -84,7 +78,7 @@ response, err := llm.Complete(
 
 ## 查看用量与成本
 
-每个响应都会报告它消耗的 token 及其成本:
+每个响应都会报告它消耗的 token 及其成本：
 
 ```go
 fmt.Printf("tokens=%d cost=$%.6f\n",
