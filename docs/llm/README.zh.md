@@ -144,4 +144,11 @@ go get github.com/ktsoator/or/llm@latest
 
 完整的导出类型和函数，参见[pkg.go.dev](https://pkg.go.dev/github.com/ktsoator/or/llm) 上的包文档。
 
-若想了解本包的内部工作原理（消息转换、模型目录与适配器层）参见[内部实现指南](../internals/overview.md)。
+若想了解本包的内部工作原理，[源码解析](../internals/overview.md)一节是一份包的源码导览：
+
+- [架构总览](../internals/overview.md) —— 包结构、注册表/适配器/client 三元组与请求分派
+- [模型与协议](../internals/models.md) —— `Model`、它的能力、按协议解码与目录
+- [消息类型系统](../internals/messages.md) —— 与厂商无关的对话模型及其标记接口
+- [协议适配器](../internals/adapters.md) —— 适配器契约、注册与构建 SDK client
+- [流式机制](../internals/streaming.md) —— `Event` 联合体与 `StreamWriter` 的保证
+- [模型切换](../internals/transform.md) —— `TransformMessages` 与溢出检测

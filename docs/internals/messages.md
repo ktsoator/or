@@ -1,6 +1,6 @@
 # Message types
 
-[`conversation.go`](https://github.com/ktsoator/or/blob/main/llm/conversation.go)
+[`message.go`](https://github.com/ktsoator/or/blob/main/llm/message.go)
 defines the conversation model: the types every adapter reads and writes. Nothing
 here is tied to a provider. An adapter turns these neutral types into a provider's
 wire format on the way out, and rebuilds the same types from the response stream
@@ -240,4 +240,4 @@ schema generated elsewhere is passed through untouched.
 
 How these types serialize to self-describing JSON — and decode back without a
 manual dispatch table — is covered in
-[`messages.go`](https://github.com/ktsoator/or/blob/main/llm/messages.go).
+[`message.go`](https://github.com/ktsoator/or/blob/main/llm/message.go).

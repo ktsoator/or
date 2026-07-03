@@ -170,5 +170,12 @@ Runnable programs for each topic are listed on the [Examples](examples.md) page.
 For exported types and functions, see the package documentation on
 [pkg.go.dev](https://pkg.go.dev/github.com/ktsoator/or/llm).
 
-To understand how the package works internally—message transformation, model
-catalog, and the adapter layer—see the [internals guides](../internals/overview.md).
+To understand how the package works internally, the
+[Internals](../internals/overview.md) section is a source tour of the package:
+
+- [Architecture overview](../internals/overview.md) — package layout, the registry/adapter/client triad, and request dispatch
+- [Models and protocols](../internals/models.md) — the `Model`, its capabilities, decoding by protocol, and the catalog
+- [Message types](../internals/messages.md) — the provider-neutral conversation model and its marker interfaces
+- [Protocol adapters](../internals/adapters.md) — the adapter contract, registration, and building the SDK client
+- [Streaming internals](../internals/streaming.md) — the `Event` union and the `StreamWriter` guarantees
+- [Switching models](../internals/transform.md) — `TransformMessages` and overflow detection

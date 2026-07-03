@@ -1,10 +1,10 @@
 # Models and protocols
 
-[`types.go`](https://github.com/ktsoator/or/blob/main/llm/types.go)
+[`model.go`](https://github.com/ktsoator/or/blob/main/llm/model.go)
 defines the types needed to describe a model: the protocols, the neutral options
 callers set, and the `Model` that ties an endpoint to its capabilities and price.
 Where those models live and how they are registered and retrieved is implemented
-in [`models.go`](https://github.com/ktsoator/or/blob/main/llm/models.go)
+in [`model_registry.go`](https://github.com/ktsoator/or/blob/main/llm/model_registry.go)
 and [`catalog.go`](https://github.com/ktsoator/or/blob/main/llm/catalog.go).
 This page covers a single model first — how it is defined, how it decodes by
 protocol, and how its capabilities are queried — then how those models are stored
@@ -144,10 +144,14 @@ which protocol the configuration describes:
 ```go
 type ModelCompatibility interface {
 	Protocol() Protocol
+	clone() ModelCompatibility
 }
 ```
 
-This keeps `Model` independent of any one protocol. The cost is that the `compat`
+`Protocol()` reports which protocol the compatibility belongs to; `clone()`
+returns a fully independent deep copy. Keeping `clone()` on each concrete type
+means `cloneModel` never has to type-switch, and adding a field only touches the
+type it belongs to. This keeps `Model` independent of any one protocol. The cost is that the `compat`
 field has an interface type, and JSON carries no tag for which concrete struct it
 holds — so decoding has to choose. `Model.UnmarshalJSON` makes that choice with
 `Protocol` as the discriminator:
@@ -312,7 +316,7 @@ that implicit coupling.
 The built-in models in that registry are not fetched at runtime; they ship with
 the binary.
 [`catalog.generated.json`](https://github.com/ktsoator/or/blob/main/llm/catalog.generated.json)
-is produced by `go generate` (`cmd/genmodels`) from upstream catalog data —
+is produced by `go generate` (`internal/genmodels`) from upstream catalog data —
 [Models.dev](https://models.dev) as the primary source, plus the live catalogs and
 pricing from OpenRouter and Vercel AI Gateway — and emits only models whose
 protocol the package implements (`openai-completions` and `anthropic-messages`).
@@ -346,6 +350,6 @@ catalog is a build-time artifact: at runtime it is either intact or the build
 itself is broken, with no degraded state to run in between — so the program is made
 to fail early.
 
-Source: [`types.go`](https://github.com/ktsoator/or/blob/main/llm/types.go),
-[`catalog.go`](https://github.com/ktsoator/or/blob/main/llm/catalog.go),
-and [`models.go`](https://github.com/ktsoator/or/blob/main/llm/models.go).
+Source: [`model.go`](https://github.com/ktsoator/or/blob/main/llm/model.go),
+[`model_registry.go`](https://github.com/ktsoator/or/blob/main/llm/model_registry.go),
+and [`catalog.go`](https://github.com/ktsoator/or/blob/main/llm/catalog.go).
