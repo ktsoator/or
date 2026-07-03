@@ -36,6 +36,9 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      - name: Staticcheck
+        run: go run honnef.co/go/tools/cmd/staticcheck@2025.1.1 ./...
+
       - name: Check README Go version
         run: |
           mod=$(grep -E '^go [0-9]' go.mod | awk '{print $2}' | cut -d. -f1,2)
