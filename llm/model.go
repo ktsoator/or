@@ -64,6 +64,11 @@ type ModelCost struct {
 // while allowing registration and adapters to verify type/protocol agreement.
 type ModelCompatibility interface {
 	Protocol() Protocol
+	// clone returns a fully independent deep copy, including every pointer field,
+	// so a registered or returned Model shares no mutable state with its source.
+	// Keeping this next to each concrete type localizes the per-field cloning to
+	// the struct it belongs to and keeps cloneModel free of a protocol type switch.
+	clone() ModelCompatibility
 }
 
 // OpenAICompletionsCompatibility describes differences between providers that
@@ -90,6 +95,21 @@ func (*OpenAICompletionsCompatibility) Protocol() Protocol {
 	return ProtocolOpenAICompletions
 }
 
+func (compatibility *OpenAICompletionsCompatibility) clone() ModelCompatibility {
+	if compatibility == nil {
+		return nil
+	}
+	clone := *compatibility
+	clone.SupportsStore = clonePointer(compatibility.SupportsStore)
+	clone.SupportsDeveloperRole = clonePointer(compatibility.SupportsDeveloperRole)
+	clone.SupportsReasoningEffort = clonePointer(compatibility.SupportsReasoningEffort)
+	clone.SupportsStrictMode = clonePointer(compatibility.SupportsStrictMode)
+	clone.RequiresReasoningContentOnAssistantMessages = clonePointer(compatibility.RequiresReasoningContentOnAssistantMessages)
+	clone.RequiresThinkingAsText = clonePointer(compatibility.RequiresThinkingAsText)
+	clone.ZAIToolStream = clonePointer(compatibility.ZAIToolStream)
+	return &clone
+}
+
 // AnthropicMessagesCompatibility describes differences between providers that
 // implement an Anthropic Messages-compatible endpoint. Pointer booleans
 // distinguish an explicit false value from an unspecified provider default.
@@ -107,6 +127,19 @@ type AnthropicMessagesCompatibility struct {
 // compatibility configuration describes.
 func (*AnthropicMessagesCompatibility) Protocol() Protocol {
 	return ProtocolAnthropicMessages
+}
+
+func (compatibility *AnthropicMessagesCompatibility) clone() ModelCompatibility {
+	if compatibility == nil {
+		return nil
+	}
+	clone := *compatibility
+	clone.SupportsTemperature = clonePointer(compatibility.SupportsTemperature)
+	clone.SupportsCacheControl = clonePointer(compatibility.SupportsCacheControl)
+	clone.SupportsCacheControlTools = clonePointer(compatibility.SupportsCacheControlTools)
+	clone.ForceAdaptiveThinking = clonePointer(compatibility.ForceAdaptiveThinking)
+	clone.AllowEmptySignature = clonePointer(compatibility.AllowEmptySignature)
+	return &clone
 }
 
 // Model identifies a model, its provider endpoint, capabilities, limits, and
@@ -278,31 +311,8 @@ func cloneModel(model Model) Model {
 			clone.ThinkingLevelMap[level] = clonePointer(value)
 		}
 	}
-	switch compatibility := model.Compatibility.(type) {
-	case *OpenAICompletionsCompatibility:
-		if compatibility != nil {
-			compatibilityClone := *compatibility
-			compatibilityClone.SupportsStore = clonePointer(compatibility.SupportsStore)
-			compatibilityClone.SupportsDeveloperRole = clonePointer(compatibility.SupportsDeveloperRole)
-			compatibilityClone.SupportsReasoningEffort = clonePointer(compatibility.SupportsReasoningEffort)
-			compatibilityClone.SupportsStrictMode = clonePointer(compatibility.SupportsStrictMode)
-			compatibilityClone.RequiresThinkingAsText = clonePointer(compatibility.RequiresThinkingAsText)
-			compatibilityClone.RequiresReasoningContentOnAssistantMessages = clonePointer(
-				compatibility.RequiresReasoningContentOnAssistantMessages,
-			)
-			compatibilityClone.ZAIToolStream = clonePointer(compatibility.ZAIToolStream)
-			clone.Compatibility = &compatibilityClone
-		}
-	case *AnthropicMessagesCompatibility:
-		if compatibility != nil {
-			compatibilityClone := *compatibility
-			compatibilityClone.SupportsTemperature = clonePointer(compatibility.SupportsTemperature)
-			compatibilityClone.SupportsCacheControl = clonePointer(compatibility.SupportsCacheControl)
-			compatibilityClone.SupportsCacheControlTools = clonePointer(compatibility.SupportsCacheControlTools)
-			compatibilityClone.ForceAdaptiveThinking = clonePointer(compatibility.ForceAdaptiveThinking)
-			compatibilityClone.AllowEmptySignature = clonePointer(compatibility.AllowEmptySignature)
-			clone.Compatibility = &compatibilityClone
-		}
+	if model.Compatibility != nil {
+		clone.Compatibility = model.Compatibility.clone()
 	}
 	return clone
 }

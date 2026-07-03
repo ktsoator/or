@@ -202,7 +202,8 @@ func TestModelRegistryRegisterRejectsUnknownCompatibilityType(t *testing.T) {
 
 type bogusCompatibility struct{}
 
-func (bogusCompatibility) Protocol() Protocol { return ProtocolOpenAICompletions }
+func (bogusCompatibility) Protocol() Protocol          { return ProtocolOpenAICompletions }
+func (b bogusCompatibility) clone() ModelCompatibility { return b }
 
 func TestModelRegistryNilReceiverIsSafe(t *testing.T) {
 	var reg *ModelRegistry
