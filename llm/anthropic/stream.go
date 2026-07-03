@@ -72,7 +72,7 @@ func consumeStream(
 		return
 	}
 	if !state.sawStop {
-		writer.Fail(errors.New("Anthropic stream ended without a stop reason"))
+		writer.Fail(errors.New("anthropic stream ended without a stop reason"))
 		return
 	}
 

@@ -62,7 +62,7 @@ func (*AnthropicStreamOptions) Protocol() Protocol {
 // Validate checks the Anthropic-specific settings against the available tools.
 func (options *AnthropicStreamOptions) Validate(tools []ToolDefinition) error {
 	if options == nil {
-		return errors.New("Anthropic stream options are nil")
+		return errors.New("stream options for the Anthropic protocol are nil")
 	}
 	switch options.ThinkingDisplay {
 	case "", ThinkingDisplaySummarized, ThinkingDisplayOmitted:
@@ -110,7 +110,7 @@ func (*OpenAICompletionsStreamOptions) Protocol() Protocol {
 // Validate checks the OpenAI-specific settings against the available tools.
 func (options *OpenAICompletionsStreamOptions) Validate(tools []ToolDefinition) error {
 	if options == nil {
-		return errors.New("OpenAI Completions stream options are nil")
+		return errors.New("stream options for the OpenAI Completions protocol are nil")
 	}
 	return validateOpenAIToolChoice(options.ToolChoice, tools)
 }
@@ -178,7 +178,7 @@ func validateAnthropicToolChoice(choice AnthropicToolChoice, tools []ToolDefinit
 		return nil
 	}
 	if len(tools) == 0 {
-		return errors.New("Anthropic tool choice requires at least one tool")
+		return errors.New("tool choice for the Anthropic protocol requires at least one tool")
 	}
 
 	switch typed := choice.(type) {
@@ -193,7 +193,7 @@ func validateAnthropicToolChoice(choice AnthropicToolChoice, tools []ToolDefinit
 		return validateNamedToolChoice("Anthropic", typed.Name, tools)
 	case *AnthropicToolChoiceTool:
 		if typed == nil {
-			return errors.New("Anthropic named tool choice is nil")
+			return errors.New("named tool choice for the Anthropic protocol is nil")
 		}
 		return validateNamedToolChoice("Anthropic", typed.Name, tools)
 	default:
@@ -206,7 +206,7 @@ func validateOpenAIToolChoice(choice OpenAIToolChoice, tools []ToolDefinition) e
 		return nil
 	}
 	if len(tools) == 0 {
-		return errors.New("OpenAI tool choice requires at least one tool")
+		return errors.New("tool choice for the OpenAI protocol requires at least one tool")
 	}
 
 	switch typed := choice.(type) {
@@ -221,7 +221,7 @@ func validateOpenAIToolChoice(choice OpenAIToolChoice, tools []ToolDefinition) e
 		return validateNamedToolChoice("OpenAI", typed.Name, tools)
 	case *OpenAIToolChoiceFunction:
 		if typed == nil {
-			return errors.New("OpenAI named tool choice is nil")
+			return errors.New("named tool choice for the OpenAI protocol is nil")
 		}
 		return validateNamedToolChoice("OpenAI", typed.Name, tools)
 	default:
