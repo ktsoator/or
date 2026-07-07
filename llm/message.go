@@ -6,6 +6,15 @@ import (
 	"time"
 )
 
+// UsageCost breaks down the US dollar cost of one response by token category.
+type UsageCost struct {
+	Input      float64 `json:"input"`
+	Output     float64 `json:"output"`
+	CacheRead  float64 `json:"cacheRead"`
+	CacheWrite float64 `json:"cacheWrite"`
+	Total      float64 `json:"total"`
+}
+
 // Usage records token consumption for one assistant response.
 type Usage struct {
 	Input       int64     `json:"input"`
@@ -14,15 +23,6 @@ type Usage struct {
 	CacheWrite  int64     `json:"cacheWrite"`
 	TotalTokens int64     `json:"totalTokens"`
 	Cost        UsageCost `json:"cost"`
-}
-
-// UsageCost breaks down the US dollar cost of one response by token category.
-type UsageCost struct {
-	Input      float64 `json:"input"`
-	Output     float64 `json:"output"`
-	CacheRead  float64 `json:"cacheRead"`
-	CacheWrite float64 `json:"cacheWrite"`
-	Total      float64 `json:"total"`
 }
 
 // StopReason explains why the model stopped generating a response.
@@ -44,10 +44,20 @@ const (
 /*
 Content roles
 
-The three interfaces below are compile-time placement rules. A content block
-implements only the roles it is allowed to appear in.
+A message body is a slice of content blocks, and each message type accepts a
+different content interface as its element type:
 
-                 UserMessage   AssistantMessage   ToolResultMessage
+	UserMessage.Content        []UserContent
+	AssistantMessage.Content   []AssistantContent
+	ToolResultMessage.Content  []ToolResultContent
+
+The three interfaces below (UserContent, AssistantContent, ToolResultContent)
+are sealed: their marker methods are unexported, so only blocks in this package
+can implement them. A content block appears in a given message if and only if it
+implements that message's content interface — which makes the placement rules
+below compile-time guarantees rather than runtime checks.
+
+                 UserContent   AssistantContent   ToolResultContent
 TextContent          yes             yes                 yes
 ImageContent         yes             no                  yes
 ThinkingContent      no              yes                 no
@@ -77,7 +87,10 @@ history and rebuild the same block types while reading response streams.
 
 // TextContent represents plain text.
 type TextContent struct {
-	Text          string `json:"text"`
+	Text string `json:"text"`
+	// TextSignature is a provider-issued opaque token authenticating this text
+	// block. It is preserved only when the block is replayed to the same model
+	// and dropped on cross-model replay.
 	TextSignature string `json:"textSignature,omitempty"`
 }
 
@@ -96,19 +109,27 @@ func (*ImageContent) isToolResultContent() {}
 
 // ThinkingContent represents model reasoning content.
 type ThinkingContent struct {
-	Thinking          string `json:"thinking"`
+	Thinking string `json:"thinking"`
+	// ThinkingSignature authenticates the reasoning block on replay. For a
+	// redacted block it instead carries the encrypted reasoning payload.
 	ThinkingSignature string `json:"thinkingSignature,omitempty"`
-	Redacted          bool   `json:"redacted,omitempty"`
+	// Redacted marks reasoning that is an opaque encrypted payload only the
+	// original model can read; Thinking holds a placeholder and the payload
+	// lives in ThinkingSignature. Such blocks replay only to the same model.
+	Redacted bool `json:"redacted,omitempty"`
 }
 
 func (*ThinkingContent) isAssistantContent() {}
 
 // ToolCall describes a request to invoke a named tool with JSON arguments.
 type ToolCall struct {
-	ID               string         `json:"id"`
-	Name             string         `json:"name"`
-	Arguments        map[string]any `json:"arguments"`
-	ThoughtSignature string         `json:"thoughtSignature,omitempty"`
+	ID        string         `json:"id"`
+	Name      string         `json:"name"`
+	Arguments map[string]any `json:"arguments"`
+	// ThoughtSignature is a provider-specific signature carrying this call's
+	// reasoning provenance. It is dropped when the call is replayed to a
+	// different model.
+	ThoughtSignature string `json:"thoughtSignature,omitempty"`
 }
 
 func (*ToolCall) isAssistantContent() {}
@@ -207,10 +228,14 @@ func NewAssistantMessage(model Model) AssistantMessage {
 
 // ToolResultMessage contains the result of an assistant tool call.
 type ToolResultMessage struct {
-	ToolCallID string              `json:"toolCallId"`
-	ToolName   string              `json:"toolName"`
-	Content    []ToolResultContent `json:"content"`
-	IsError    bool                `json:"isError"`
+	// ToolCallID is the ID of the assistant ToolCall this message answers.
+	ToolCallID string `json:"toolCallId"`
+	// ToolName is the name of the tool that was invoked.
+	ToolName string              `json:"toolName"`
+	Content  []ToolResultContent `json:"content"`
+	// IsError reports that the tool invocation failed and Content holds the
+	// error detail rather than a successful result.
+	IsError bool `json:"isError"`
 }
 
 func (*ToolResultMessage) isMessage() {}
@@ -232,12 +257,14 @@ type ToolDefinition struct {
 //	│   │       └── ImageContent
 //	│   │
 //	│   ├── AssistantMessage
-//	│   │   └── []AssistantContent
-//	│   │       ├── TextContent
-//	│   │       ├── ThinkingContent
-//	│   │       └── ToolCall
+//	│   │   ├── []AssistantContent
+//	│   │   │   ├── TextContent
+//	│   │   │   ├── ThinkingContent
+//	│   │   │   └── ToolCall
+//	│   │   └── ... response metadata (Provider, Model, Usage, StopReason, ...)
 //	│   │
 //	│   └── ToolResultMessage
+//	│       ├── ToolCallID / ToolName / IsError
 //	│       └── []ToolResultContent
 //	│           ├── TextContent
 //	│           └── ImageContent
