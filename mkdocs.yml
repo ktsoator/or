@@ -58,10 +58,10 @@ plugins:
 
 theme:
   name: material
+  logo: assets/logo.svg
   favicon: assets/favicon.svg
   icon:
     repo: fontawesome/brands/github
-    logo: material/infinity
   features:
     - navigation.tabs
     - navigation.sections

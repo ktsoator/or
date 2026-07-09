@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>or</h1>
+  <img src="docs/assets/logo.svg" alt="or pixel logo" width="120">
   <p><strong>Choose the path from intent to action.</strong></p>
   <p>English | <a href="README.zh.md">简体中文</a></p>
   <p>
