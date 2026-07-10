@@ -130,6 +130,8 @@ var providerRules = []providerRule{
 	{Source: "groq", Provider: "groq", Protocol: "openai-completions", BaseURL: "https://api.groq.com/openai/v1"},
 	{Source: "cerebras", Provider: "cerebras", Protocol: "openai-completions", BaseURL: "https://api.cerebras.ai/v1"},
 	{Source: "xai", Provider: "xai", Protocol: "openai-completions", BaseURL: "https://api.x.ai/v1"},
+	{Source: "nvidia", Provider: "nvidia", Protocol: "openai-completions", BaseURL: "https://integrate.api.nvidia.com/v1"},
+	{Source: "togetherai", Provider: "together", Protocol: "openai-completions", BaseURL: "https://api.together.ai/v1"},
 	{Source: "huggingface", Provider: "huggingface", Protocol: "openai-completions", BaseURL: "https://router.huggingface.co/v1", Compat: openAICompat(withDeveloperRole(false))},
 	{Source: "fireworks-ai", Provider: "fireworks", Protocol: "anthropic-messages", BaseURL: "https://api.fireworks.ai/inference"},
 	{Source: "minimax", Provider: "minimax", Protocol: "anthropic-messages", BaseURL: "https://api.minimax.io/anthropic"},
