@@ -28,23 +28,25 @@
 
 | 文件 | 内容 |
 |---|---|
-| [`default.go`](default.go) | 包级 `Stream`/`Complete`/`Register`，基于默认 client；说明了「import 触发 init 注册」的用法。**建议从这里开始读。** |
-| [`client.go`](client.go) | `Client.Stream`/`Complete`：校验选项、选中 adapter、注入 API key、消费流 |
+| [`default.go`](default.go) | 包级 `Stream`/`Complete`/`Register`/`SupportsProtocol` 与 `DefaultProviderRegistry`，基于默认 client；说明了「import 触发 init 注册」的用法。**建议从这里开始读。** |
+| [`client.go`](client.go) | `Client.Stream`/`Complete`：校验选项、经 provider 注册表解析 provider 配置（API key、override、headers）、选中 adapter、消费流 |
 | [`adapters.go`](adapters.go) | `ProtocolAdapter`（provider 实现的扩展点）与 `AdapterRegistry`——并发安全的「协议 → adapter」映射 |
 | [`options.go`](options.go) | `StreamOptions`、协议特化扩展（`AnthropicStreamOptions`、`OpenAICompletionsStreamOptions`）、各家原生 tool-choice 类型及其校验 |
 
 **深入：** [架构总览](../docs/internals/overview.zh.md) · [协议适配器](../docs/internals/adapters.zh.md)
 
-### 3. 模型目录
+### 3. 模型目录与 provider
 
-内置模型从哪里来，以及运行期如何存储与查找。
+内置模型从哪里来、运行期如何查找，以及与之并列的另一张注册表——它回答「每个 provider 如何配置」（哪个 key 生效、有无 per-provider override），并把这些应用到每一次出站请求。`provider_registry.go` 与 `model_registry.go` 互补：前者存 per-vendor 配置，后者存 per-model 数据。
 
 | 文件 | 内容 |
 |---|---|
 | [`model_registry.go`](model_registry.go) | `ModelRegistry`（厂商 → 模型 ID → `Model`，返回深拷贝）及包级 `LookupModel`/`GetModel`/`GetProviders`/`GetModels` |
 | [`catalog.go`](catalog.go) | 通过 `//go:embed` 嵌入生成的目录，以及 `go:generate` 指令（数据由 [`internal/genmodels`](internal/genmodels) 生成），启动时解码进注册表 |
+| [`provider.go`](provider.go) | `Provider` 及其数据驱动的 `ProviderSpec`（ID、env keys、models、headers）、`ProviderOverride`（base URL、API key、headers、env），以及只读的 `AuthStatus`；`resolve` 把凭证/base-URL/header 的优先级套用到单次请求 |
+| [`provider_registry.go`](provider_registry.go) | `ProviderRegistry`（provider ID → `Provider` + override），提供 `ResolveRequest`、`SetOverride`/`ClearOverride` 与 `AuthStatus`；`NewBuiltInProviderRegistry` 从目录填充，并把每个 provider 接到它的 API-key 环境变量 |
 
-**深入：** [模型与协议](../docs/internals/models.zh.md)
+**深入：** [模型与协议](../docs/internals/models.zh.md) · [Provider 指南](../docs/llm/providers.zh.md)
 
 ### 4. 工具调用
 
@@ -81,7 +83,7 @@
 ```mermaid
 flowchart TD
     A["llm.Stream / llm.Complete<br/><small>default.go · 包级门面</small>"] --> B["Client.Stream<br/><small>client.go</small>"]
-    B -->|"校验 StreamOptions、<br/>解析 API key"| C["AdapterRegistry.Get(model.Protocol)<br/><small>adapters.go</small>"]
+    B -->|"校验 StreamOptions、<br/>解析 provider 配置<br/>（key、override、headers）"| C["AdapterRegistry.Get(model.Protocol)<br/><small>adapters.go</small>"]
     C --> D["ProtocolAdapter.Stream<br/><small>llm/openai · llm/anthropic</small>"]
     D -->|"TransformMessages → 序列化<br/>→ HTTP → 解析 SSE"| E["StreamWriter 发出 []Event<br/><small>stream.go</small>"]
     E --> F["Complete 消费至<br/>EventDone / EventError<br/>→ AssistantMessage"]
@@ -93,7 +95,7 @@ flowchart TD
 请求从包级门面进入，经校验、路由、适配，再流式返回：
 
 1. **`llm.Stream` / `llm.Complete`**（`default.go`）转发到默认 client。
-2. **`Client.Stream`**（`client.go`）校验 `StreamOptions`；当调用方未填 key 时，从 provider 环境变量解析。
+2. **`Client.Stream`**（`client.go`）校验 `StreamOptions`，再调用 `ProviderRegistry.ResolveRequest`（`provider_registry.go`）填充 API key——依次取自 `StreamOptions`、provider override、provider 环境变量——并套用 per-provider 的 base-URL 与 header override。若模型的 provider 未注册，则仅走旧版环境变量查找、原样透传。
 3. **`AdapterRegistry.Get(model.Protocol)`**（`adapters.go`）选出该模型协议对应的 adapter。
 4. **`ProtocolAdapter.Stream`**（`llm/openai`、`llm/anthropic`）先跑 `TransformMessages`，再序列化请求、经 HTTP 调用 provider、解析流式响应。
 5. **`StreamWriter`**（`stream.go`）把响应重建为一连串 `Event`，并保证恰好一个终止事件。

@@ -27,8 +27,10 @@
 //	model := llm.GetModel("anthropic", "claude-opus-4-8")
 //	msg, err := llm.Complete(ctx, model, llm.Prompt("hello"), llm.StreamOptions{})
 //
-// A caller that prefers explicit wiring can build its own registry and client
-// with NewAdapterRegistry, AdapterRegistry.Register, and NewClient instead of the default.
+// A caller that prefers explicit wiring can build its own registries and client
+// with NewAdapterRegistry, AdapterRegistry.Register, a provider registry from
+// NewProviderRegistry or NewBuiltInProviderRegistry, and NewClient instead of the
+// default.
 //
 // # Building a request
 //
@@ -108,6 +110,21 @@
 // and adjust a model's reasoning levels. A caller may also construct a [Model]
 // directly, pointing BaseURL at any OpenAI-compatible or Anthropic-compatible
 // endpoint.
+//
+// # Providers
+//
+// A [ProviderRegistry] holds per-vendor configuration beside the model catalog —
+// credential sources, static headers, and an optional [ProviderOverride] (base
+// URL, API key, headers, env) — and resolves it into every request before
+// dispatch. The default client uses NewBuiltInProviderRegistry, populated from
+// the catalog and wired to each provider's API-key environment variables;
+// DefaultProviderRegistry returns it. Through the registry an application can
+// register a custom vendor with NewSpecProvider, redirect an existing one through
+// a proxy with SetOverride (without editing any [Model]), or read credential
+// state with AuthStatus without sending a request. The API-key precedence is
+// [StreamOptions].APIKey, then the provider override, then the provider's
+// environment variables; a model whose provider is not registered still falls
+// back to the environment lookup, so hand-built models keep working.
 //
 // # Custom protocols
 //
