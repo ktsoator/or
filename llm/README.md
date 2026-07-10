@@ -44,24 +44,29 @@ streamed back — the package never talks to a provider directly.
 
 | File | Holds |
 |---|---|
-| [`default.go`](default.go) | Package-level `Stream`/`Complete`/`Register`/`SupportsProtocol` over a default client; documents the import-for-side-effects registration pattern. **Start reading here.** |
-| [`client.go`](client.go) | `Client.Stream`/`Complete`: validate options, pick the adapter, inject the API key, consume the stream |
+| [`default.go`](default.go) | Package-level `Stream`/`Complete`/`Register`/`SupportsProtocol` and `DefaultProviderRegistry` over a default client; documents the import-for-side-effects registration pattern. **Start reading here.** |
+| [`client.go`](client.go) | `Client.Stream`/`Complete`: validate options, resolve provider config (API key, overrides, headers) through the provider registry, pick the adapter, consume the stream |
 | [`adapters.go`](adapters.go) | `ProtocolAdapter` (the extension point providers implement) and `AdapterRegistry`, the concurrency-safe protocol→adapter map |
 | [`options.go`](options.go) | `StreamOptions`, protocol-specific extensions (`AnthropicStreamOptions`, `OpenAICompletionsStreamOptions`), native tool-choice types, and their validation |
 
 **Deep dive:** [Architecture overview](../docs/internals/overview.md) · [Protocol adapters](../docs/internals/adapters.md)
 
-### 3. Model catalog
+### 3. Model catalog & providers
 
-Where the built-in models come from, and how they are stored and looked up at
-runtime.
+Where the built-in models come from and how they are looked up at runtime, plus
+the parallel registry that answers how each provider is configured — which key
+resolves and any per-provider override — and applies that to every outgoing
+request. `provider_registry.go` complements `model_registry.go`: one stores
+per-model data, the other stores per-vendor configuration.
 
 | File | Holds |
 |---|---|
 | [`model_registry.go`](model_registry.go) | `ModelRegistry` (provider → model ID → `Model`, returning deep copies) and the package-level `LookupModel`/`GetModel`/`GetProviders`/`GetModels`/`GetRunnableModels` |
 | [`catalog.go`](catalog.go) | `//go:embed` of the generated catalog and the `go:generate` directive (data produced by [`internal/genmodels`](internal/genmodels)), decoded into the registry at startup |
+| [`provider.go`](provider.go) | `Provider` and its data-driven `ProviderSpec` (ID, env keys, models, headers), `ProviderOverride` (base URL, API key, headers, env), and the read-only `AuthStatus`; `resolve` applies the credential/base-URL/header precedence to one request |
+| [`provider_registry.go`](provider_registry.go) | `ProviderRegistry` (provider ID → `Provider` + override) with `ResolveRequest`, `SetOverride`/`ClearOverride`, and `AuthStatus`; `NewBuiltInProviderRegistry` populates it from the catalog and wires each provider to its API-key env vars |
 
-**Deep dive:** [Models and protocols](../docs/internals/models.md)
+**Deep dive:** [Models and protocols](../docs/internals/models.md) · [Providers guide](../docs/llm/providers.md)
 
 ### 4. Tool calls
 
@@ -99,7 +104,7 @@ Supporting machinery; none of it is needed to understand the main flow.
 ```mermaid
 flowchart TD
     A["llm.Stream / llm.Complete<br/><small>default.go · package facade</small>"] --> B["Client.Stream<br/><small>client.go</small>"]
-    B -->|"validate StreamOptions,<br/>resolve API key"| C["AdapterRegistry.Get(model.Protocol)<br/><small>adapters.go</small>"]
+    B -->|"validate StreamOptions,<br/>resolve provider config<br/>(key, override, headers)"| C["AdapterRegistry.Get(model.Protocol)<br/><small>adapters.go</small>"]
     C --> D["ProtocolAdapter.Stream<br/><small>llm/openai · llm/anthropic</small>"]
     D -->|"TransformMessages → serialize<br/>→ HTTP → parse SSE"| E["StreamWriter emits []Event<br/><small>stream.go</small>"]
     E --> F["Complete drains until<br/>EventDone / EventError<br/>→ AssistantMessage"]
@@ -112,7 +117,7 @@ A request enters through the package facade and is validated, routed, adapted,
 and streamed back:
 
 1. **`llm.Stream` / `llm.Complete`** (`default.go`) forward to the default client.
-2. **`Client.Stream`** (`client.go`) validates `StreamOptions` and resolves the API key from the provider environment when the caller left it empty.
+2. **`Client.Stream`** (`client.go`) validates `StreamOptions`, then calls `ProviderRegistry.ResolveRequest` (`provider_registry.go`) to fill the API key — from `StreamOptions`, a provider override, or the provider's environment variables, in that order — and apply any per-provider base-URL and header override. A model whose provider is not registered passes through with only the legacy environment key lookup.
 3. **`AdapterRegistry.Get(model.Protocol)`** (`adapters.go`) selects the adapter registered for the model's protocol.
 4. **`ProtocolAdapter.Stream`** (`llm/openai`, `llm/anthropic`) runs `TransformMessages`, serializes the request, calls the provider over HTTP, and parses the streamed response.
 5. **`StreamWriter`** (`stream.go`) rebuilds the response as a sequence of `Event`s, guaranteeing exactly one terminal event.
