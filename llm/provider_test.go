@@ -292,3 +292,90 @@ func TestProviderModelsReturnsCopies(t *testing.T) {
 		t.Fatal("Models() leaked internal state")
 	}
 }
+
+func TestNewSpecProviderCopiesSpec(t *testing.T) {
+	supportsStore := true
+	spec := ProviderSpec{
+		ID:      "snapshot",
+		Name:    "Snapshot",
+		EnvKeys: []string{"SNAPSHOT_API_KEY"},
+		Models: []Model{{
+			ID:       "snapshot-1",
+			Provider: "snapshot",
+			Protocol: ProtocolOpenAICompletions,
+			BaseURL:  "https://snapshot.test/v1",
+			Headers:  map[string]string{"X-Model": "original"},
+			Input:    []ModelInput{Text},
+			Compatibility: &OpenAICompletionsCompatibility{
+				SupportsStore: &supportsStore,
+			},
+		}},
+		Headers: map[string]string{"X-Spec": "original"},
+	}
+
+	provider := NewSpecProvider(spec)
+
+	spec.EnvKeys[0] = "MUTATED_API_KEY"
+	spec.Models[0].BaseURL = "https://mutated.test/v1"
+	spec.Models[0].Headers["X-Model"] = "mutated"
+	spec.Models[0].Input[0] = Image
+	*spec.Models[0].Compatibility.(*OpenAICompletionsCompatibility).SupportsStore = false
+	spec.Headers["X-Spec"] = "mutated"
+
+	if got := provider.EnvKeys(); !reflect.DeepEqual(got, []string{"SNAPSHOT_API_KEY"}) {
+		t.Fatalf("EnvKeys = %v, want original snapshot", got)
+	}
+	model := provider.Models()[0]
+	if model.BaseURL != "https://snapshot.test/v1" ||
+		model.Headers["X-Model"] != "original" ||
+		!reflect.DeepEqual(model.Input, []ModelInput{Text}) {
+		t.Fatalf("model snapshot was mutated: %#v", model)
+	}
+	compatibility, ok := model.Compatibility.(*OpenAICompletionsCompatibility)
+	if !ok || compatibility.SupportsStore == nil || !*compatibility.SupportsStore {
+		t.Fatalf("compatibility snapshot was mutated: %#v", model.Compatibility)
+	}
+	resolved, _ := provider.resolve(model, StreamOptions{}, ProviderOverride{})
+	if resolved.Headers["X-Spec"] != "original" {
+		t.Fatalf("spec headers = %v, want original snapshot", resolved.Headers)
+	}
+}
+
+func TestSetOverrideCopiesInput(t *testing.T) {
+	t.Setenv("ACME_API_KEY", "")
+	registry := registryWithProvider(t, testProvider())
+	model := testProvider().Models()[0]
+
+	baseURL := "https://proxy.test/v1"
+	apiKey := "override-key"
+	headers := map[string]string{"X-Override": "original"}
+	override := ProviderOverride{
+		BaseURL: &baseURL,
+		APIKey:  &apiKey,
+		Headers: headers,
+	}
+	registry.SetOverride("acme", override)
+
+	baseURL = "https://mutated.test/v1"
+	apiKey = "mutated-key"
+	headers["X-Override"] = "mutated"
+
+	resolved, options := registry.ResolveRequest(model, StreamOptions{})
+	if resolved.BaseURL != "https://proxy.test/v1" {
+		t.Fatalf("BaseURL = %q, want stored snapshot", resolved.BaseURL)
+	}
+	if options.APIKey != "override-key" {
+		t.Fatalf("APIKey = %q, want stored snapshot", options.APIKey)
+	}
+	if resolved.Headers["X-Override"] != "original" {
+		t.Fatalf("headers = %v, want stored snapshot", resolved.Headers)
+	}
+
+	env := ProviderEnv{"ACME_API_KEY": "env-key"}
+	registry.SetOverride("acme", ProviderOverride{Env: env})
+	env["ACME_API_KEY"] = "mutated-env-key"
+	_, options = registry.ResolveRequest(model, StreamOptions{})
+	if options.APIKey != "env-key" {
+		t.Fatalf("Env APIKey = %q, want stored snapshot", options.APIKey)
+	}
+}

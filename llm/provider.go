@@ -2,6 +2,7 @@ package llm
 
 import (
 	"maps"
+	"slices"
 	"strings"
 )
 
@@ -70,9 +71,33 @@ type AuthStatus struct {
 	Missing []string
 }
 
-// NewSpecProvider creates a provider from its spec.
+// NewSpecProvider creates a provider from an independent snapshot of spec.
+// Callers may safely reuse or mutate the slices, maps, and model configuration
+// passed in after this function returns.
 func NewSpecProvider(spec ProviderSpec) *Provider {
-	return &Provider{spec: spec}
+	return &Provider{spec: cloneProviderSpec(spec)}
+}
+
+func cloneProviderSpec(spec ProviderSpec) ProviderSpec {
+	clone := spec
+	clone.EnvKeys = slices.Clone(spec.EnvKeys)
+	clone.Headers = maps.Clone(spec.Headers)
+	if spec.Models != nil {
+		clone.Models = make([]Model, len(spec.Models))
+		for index, model := range spec.Models {
+			clone.Models[index] = cloneModel(model)
+		}
+	}
+	return clone
+}
+
+func cloneProviderOverride(override ProviderOverride) ProviderOverride {
+	clone := override
+	clone.BaseURL = clonePointer(override.BaseURL)
+	clone.APIKey = clonePointer(override.APIKey)
+	clone.Headers = maps.Clone(override.Headers)
+	clone.Env = maps.Clone(override.Env)
+	return clone
 }
 
 // ID returns the vendor key models reference via Model.Provider.

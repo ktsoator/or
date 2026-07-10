@@ -166,7 +166,8 @@ registry.SetOverride("deepseek", llm.ProviderOverride{
 // 此后所有 deepseek 模型都经代理流式请求。
 ```
 
-override 建议在启动阶段设置。完整的凭证优先级见[请求配置](configuration.md)。
+`SetOverride` 会保存一份独立快照，因此调用后可以安全复用或修改传入的值、map
+和请求级环境变量。条件允许时，override 仍建议在启动阶段设置。完整的凭证优先级见[请求配置](configuration.md)。
 
 ### 注册自定义 provider
 
@@ -187,4 +188,4 @@ registry.Register(llm.NewSpecProvider(llm.ProviderSpec{
 }))
 ```
 
-`NewSpecProvider` 仅靠数据构建 provider。若 provider 在请求时需要额外逻辑，例如 OAuth 刷新，spec 类型暂不支持。
+`NewSpecProvider` 会从传入数据（包括模型配置）创建一份独立快照。若 provider 在请求时需要额外逻辑，例如 OAuth 刷新，spec 类型暂不支持。
