@@ -9,6 +9,21 @@
   height: 2.4rem;
 }
 
+/*
+ * Hide the site-name text but keep the element in the header's flex row.
+ * display:none would drop its flex-grow:1 spacer, letting the repo source
+ * cluster in the center instead of aligning to the right edge.
+ */
 .md-header__title {
-  display: none;
+  visibility: hidden;
+}
+
+/*
+ * Drop the site-name text under the logo in the mobile drawer header; the logo
+ * already identifies the site. The name is a bare text node beside the logo
+ * link, so zeroing the label's font size hides it while the logo image keeps
+ * its own dimensions.
+ */
+.md-nav--primary > .md-nav__title {
+  font-size: 0;
 }
