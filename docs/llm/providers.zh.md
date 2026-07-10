@@ -43,6 +43,22 @@ if !ok {
 
 `LookupModel` 返回模型和一个表示是否找到的标志。`GetModel` 适用于已知的目录条目，在提供方或模型 ID 不存在时会 panic。
 
+目录也包含尚无内置适配器的协议模型。可用 `SupportsProtocol` 检查单个协议，或用
+`GetRunnableModels` 只列出当前应用已导入适配器、因而能够实际调用的模型：
+
+```go
+if !llm.SupportsProtocol(model.Protocol) {
+	log.Fatalf("协议 %q 尚未注册", model.Protocol)
+}
+
+for _, model := range llm.GetRunnableModels("deepseek") {
+	fmt.Println(model.ID)
+}
+```
+
+这两个函数查询包级默认 adapter 注册表。使用前应以副作用方式导入对应协议包，或导入
+`llm/all`。`GetModels` 仍然返回未经筛选的完整目录。
+
 ## 模型元数据
 
 `Model` 同时是一份只读的元数据记录。可在请求前读取它来驱动 UI、施加限制或估算成本：

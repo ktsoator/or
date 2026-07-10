@@ -42,6 +42,15 @@ func Register(adapter ProtocolAdapter) error {
 	return defaultRegistry.Register(adapter)
 }
 
+// SupportsProtocol reports whether the package default registry currently has
+// an adapter for protocol. Provider packages register adapters from init, so
+// the result reflects the protocol packages the application imported (or all
+// built-ins when it imports github.com/ktsoator/or/llm/all).
+func SupportsProtocol(protocol Protocol) bool {
+	_, ok := defaultRegistry.Get(protocol)
+	return ok
+}
+
 // Stream starts a streaming model request using the default client. The model's
 // protocol must have an adapter registered (import the matching provider
 // package); otherwise it returns a "no adapter registered" error.

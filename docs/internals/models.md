@@ -297,6 +297,7 @@ func LookupModel(provider, modelID string) (Model, bool) // Get; false when miss
 func GetModel(provider, modelID string) Model            // Get; panics when missing
 func GetProviders() []string                             // Providers
 func GetModels(provider string) []Model                  // Models
+func GetRunnableModels(provider string) []Model          // Models with a registered adapter
 ```
 
 Fetching a single model comes in two forms, `LookupModel` and `GetModel`,
@@ -304,7 +305,10 @@ differing only in how they handle a miss: `GetModel` suits identifiers hard-code
 in source that ought to exist, where a miss is a program error; `LookupModel` suits
 identifiers from config or external input, where the caller must handle a miss
 itself. `GetProviders` and `GetModels` pass straight through to `Providers` and
-`Models` with the same semantics.
+`Models` with the same semantics. `GetRunnableModels` filters that catalog
+through `SupportsProtocol`, so it returns only models whose protocol is present
+in the package default adapter registry. Its result therefore reflects the
+protocol packages imported by the application.
 
 Whichever entry point is used, what comes back is a deep copy. A `Model` holds
 slices, maps, and pointer fields; handing back the table's original would let a
@@ -318,10 +322,10 @@ the binary.
 [`catalog.generated.json`](https://github.com/ktsoator/or/blob/main/llm/catalog.generated.json)
 is produced by `go generate` (`internal/genmodels`) from upstream catalog data —
 [Models.dev](https://models.dev) as the primary source, plus the live catalogs and
-pricing from OpenRouter and Vercel AI Gateway — and emits only models whose
-protocol the package implements (`openai-completions` and `anthropic-messages`).
-The result is committed alongside the source and embedded into the binary with
-`//go:embed`:
+pricing from OpenRouter and Vercel AI Gateway. It contains models for the
+implemented protocols and selected catalog-only protocols planned for future
+adapters. The result is committed alongside the source and embedded into the
+binary with `//go:embed`:
 
 ```go
 //go:embed catalog.generated.json

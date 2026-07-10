@@ -44,7 +44,7 @@ streamed back — the package never talks to a provider directly.
 
 | File | Holds |
 |---|---|
-| [`default.go`](default.go) | Package-level `Stream`/`Complete`/`Register` over a default client; documents the import-for-side-effects registration pattern. **Start reading here.** |
+| [`default.go`](default.go) | Package-level `Stream`/`Complete`/`Register`/`SupportsProtocol` over a default client; documents the import-for-side-effects registration pattern. **Start reading here.** |
 | [`client.go`](client.go) | `Client.Stream`/`Complete`: validate options, pick the adapter, inject the API key, consume the stream |
 | [`adapters.go`](adapters.go) | `ProtocolAdapter` (the extension point providers implement) and `AdapterRegistry`, the concurrency-safe protocol→adapter map |
 | [`options.go`](options.go) | `StreamOptions`, protocol-specific extensions (`AnthropicStreamOptions`, `OpenAICompletionsStreamOptions`), native tool-choice types, and their validation |
@@ -58,7 +58,7 @@ runtime.
 
 | File | Holds |
 |---|---|
-| [`model_registry.go`](model_registry.go) | `ModelRegistry` (provider → model ID → `Model`, returning deep copies) and the package-level `LookupModel`/`GetModel`/`GetProviders`/`GetModels` |
+| [`model_registry.go`](model_registry.go) | `ModelRegistry` (provider → model ID → `Model`, returning deep copies) and the package-level `LookupModel`/`GetModel`/`GetProviders`/`GetModels`/`GetRunnableModels` |
 | [`catalog.go`](catalog.go) | `//go:embed` of the generated catalog and the `go:generate` directive (data produced by [`internal/genmodels`](internal/genmodels)), decoded into the registry at startup |
 
 **Deep dive:** [Models and protocols](../docs/internals/models.md)

@@ -135,3 +135,19 @@ func GetProviders() []string {
 func GetModels(provider string) []Model {
 	return builtInModelRegistry.Models(provider)
 }
+
+// GetRunnableModels returns the provider's built-in models whose protocols
+// have an adapter in the package default registry. The result therefore depends
+// on which protocol packages the application imported. It excludes catalog-only
+// models whose wire protocols are not implemented or registered in the current
+// process.
+func GetRunnableModels(provider string) []Model {
+	models := GetModels(provider)
+	runnable := make([]Model, 0, len(models))
+	for _, model := range models {
+		if SupportsProtocol(model.Protocol) {
+			runnable = append(runnable, model)
+		}
+	}
+	return runnable
+}

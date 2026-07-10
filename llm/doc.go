@@ -101,11 +101,13 @@
 //
 // # Models
 //
-// LookupModel and GetModel resolve models from the built-in catalog;
-// GetProviders and GetModels enumerate it. SupportedThinkingLevels and
-// ClampThinkingLevel report and adjust a model's reasoning levels. A caller may
-// also construct a [Model] directly, pointing BaseURL at any OpenAI-compatible or
-// Anthropic-compatible endpoint.
+// LookupModel and GetModel resolve models from the built-in catalog; GetProviders
+// and GetModels enumerate it. SupportsProtocol reports whether the default
+// registry can route a protocol, and GetRunnableModels filters the catalog by
+// that registration state. SupportedThinkingLevels and ClampThinkingLevel report
+// and adjust a model's reasoning levels. A caller may also construct a [Model]
+// directly, pointing BaseURL at any OpenAI-compatible or Anthropic-compatible
+// endpoint.
 //
 // # Custom protocols
 //

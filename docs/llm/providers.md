@@ -50,6 +50,25 @@ if !ok {
 `LookupModel` returns a model and a found flag. `GetModel` is convenient for a
 known catalog entry and panics when the provider or model ID does not exist.
 
+The catalog also contains models for protocols that do not have a built-in
+adapter yet. Use `SupportsProtocol` to test one protocol, or
+`GetRunnableModels` to list only models that the adapters imported by the
+current application can serve:
+
+```go
+if !llm.SupportsProtocol(model.Protocol) {
+	log.Fatalf("protocol %q is not registered", model.Protocol)
+}
+
+for _, model := range llm.GetRunnableModels("deepseek") {
+	fmt.Println(model.ID)
+}
+```
+
+Both functions inspect the package default adapter registry. Import the
+matching protocol package for side effects, or import `llm/all`, before using
+them. `GetModels` remains the unfiltered catalog query.
+
 ## Model metadata
 
 A `Model` is also a read-only metadata record. Inspect it to drive UI, enforce
