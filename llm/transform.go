@@ -31,8 +31,8 @@ const (
 // Shared transformations are applied in this order:
 //  1. Replace images with descriptive text when the target model is text-only.
 //  2. Reconcile assistant turns produced by a different model: keep reasoning for
-//     the same model, downgrade it to text otherwise, and normalize tool-call
-//     identifiers via normalizeToolCallID when crossing providers.
+//     the same model, drop it otherwise, and normalize tool-call identifiers via
+//     normalizeToolCallID when crossing providers.
 //  3. Drop assistant turns terminated by an error or cancellation because they
 //     may contain partial reasoning or half-streamed tool calls.
 //  4. Insert synthetic error results for tool calls with no matching result
@@ -121,31 +121,21 @@ func reconcileAssistantMessage(
 	return &clone
 }
 
-// reconcileThinking decides how a stored reasoning block is replayed. Redacted
-// reasoning is an opaque encrypted payload only the original model can consume.
-// A signed block is kept for the same model even when empty. Otherwise empty
-// reasoning is dropped, same-model reasoning is kept, and reasoning from another
-// model is downgraded to plain text so it survives without a valid signature.
+// reconcileThinking decides how a stored reasoning block is replayed. Reasoning
+// is model-specific and may contain sensitive information, so it is never sent
+// across model boundaries. For the same model, redacted or signed reasoning is
+// kept even when its text is empty; empty unsigned reasoning is dropped.
 func reconcileThinking(content *ThinkingContent, sameModel bool) AssistantContent {
-	if content == nil {
+	if content == nil || !sameModel {
 		return nil
 	}
-	if content.Redacted {
-		if sameModel {
-			return content
-		}
-		return nil
-	}
-	if sameModel && content.ThinkingSignature != "" {
+	if content.Redacted || content.ThinkingSignature != "" {
 		return content
 	}
 	if strings.TrimSpace(content.Thinking) == "" {
 		return nil
 	}
-	if sameModel {
-		return content
-	}
-	return &TextContent{Text: content.Thinking}
+	return content
 }
 
 // reconcileToolCall keeps a same-model tool call intact. Crossing models it drops

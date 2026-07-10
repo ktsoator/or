@@ -94,7 +94,7 @@
 //
 // TransformMessages adapts a stored history for a target model before replay:
 // it downgrades unsupported images, preserves reasoning signatures for the same
-// model while downgrading or dropping them across models, normalizes tool-call
+// model while dropping reasoning across models, normalizes tool-call
 // identifiers, and repairs unanswered tool calls. Stream and Complete apply it
 // automatically. IsContextOverflow reports whether a response exceeded the
 // model's context window.

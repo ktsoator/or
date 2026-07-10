@@ -115,7 +115,7 @@ placeholder automatically.
 
 Before each request, the library adapts stored history for the target model. It
 downgrades images for text-only models, preserves reasoning signatures where
-compatible, downgrades or removes incompatible reasoning, and normalizes tool
+compatible, drops reasoning produced by another model, and normalizes tool
 call identifiers.
 
 The two models below even speak different wire protocols — DeepSeek is

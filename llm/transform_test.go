@@ -39,7 +39,7 @@ func TestTransformMessagesDowngradesImagesWithoutMutatingHistory(t *testing.T) {
 	}
 }
 
-func TestTransformMessagesCleansCrossModelSignaturesAndRemapsToolResult(t *testing.T) {
+func TestTransformMessagesDropsCrossModelReasoningAndRemapsToolResult(t *testing.T) {
 	assistant := &AssistantMessage{
 		Protocol: ProtocolOpenAICompletions,
 		Provider: "source",
@@ -57,20 +57,16 @@ func TestTransformMessagesCleansCrossModelSignaturesAndRemapsToolResult(t *testi
 
 	transformed := TransformMessages([]Message{assistant, result}, target, func(string) string { return "normalized_call" })
 	gotAssistant := transformed[0].(*AssistantMessage)
-	if len(gotAssistant.Content) != 3 {
-		t.Fatalf("assistant content length = %d, want 3", len(gotAssistant.Content))
+	if len(gotAssistant.Content) != 2 {
+		t.Fatalf("assistant content length = %d, want 2", len(gotAssistant.Content))
 	}
-	thinkingAsText, ok := gotAssistant.Content[0].(*TextContent)
-	if !ok || thinkingAsText.Text != "reasoning" || thinkingAsText.TextSignature != "" {
-		t.Fatalf("downgraded thinking = %#v", gotAssistant.Content[0])
-	}
-	text, ok := gotAssistant.Content[1].(*TextContent)
+	text, ok := gotAssistant.Content[0].(*TextContent)
 	if !ok || text.TextSignature != "" {
-		t.Fatalf("cross-model text = %#v", gotAssistant.Content[1])
+		t.Fatalf("cross-model text = %#v", gotAssistant.Content[0])
 	}
-	call, ok := gotAssistant.Content[2].(*ToolCall)
+	call, ok := gotAssistant.Content[1].(*ToolCall)
 	if !ok || call.ID != "normalized_call" || call.ThoughtSignature != "" {
-		t.Fatalf("cross-model tool call = %#v", gotAssistant.Content[2])
+		t.Fatalf("cross-model tool call = %#v", gotAssistant.Content[1])
 	}
 	gotResult := transformed[1].(*ToolResultMessage)
 	if gotResult.ToolCallID != "normalized_call" {
@@ -78,6 +74,45 @@ func TestTransformMessagesCleansCrossModelSignaturesAndRemapsToolResult(t *testi
 	}
 	if assistant.Content[3].(*ToolCall).ID != "source|call" {
 		t.Fatal("canonical assistant history was mutated")
+	}
+}
+
+func TestTransformMessagesPreservesSameModelReasoning(t *testing.T) {
+	model := Model{
+		ID:       "model",
+		Provider: "provider",
+		Protocol: ProtocolAnthropicMessages,
+		Input:    []ModelInput{Text},
+	}
+	assistant := &AssistantMessage{
+		Protocol: model.Protocol,
+		Provider: model.Provider,
+		Model:    model.ID,
+		Content: []AssistantContent{
+			&ThinkingContent{Thinking: "reasoning", ThinkingSignature: "thinking-sig"},
+			&ThinkingContent{ThinkingSignature: "encrypted", Redacted: true},
+			&ThinkingContent{Thinking: "unsigned reasoning"},
+			&ThinkingContent{},
+		},
+		StopReason: StopReasonStop,
+	}
+
+	transformed := TransformMessages([]Message{assistant}, model, nil)
+	got := transformed[0].(*AssistantMessage)
+	if len(got.Content) != 3 {
+		t.Fatalf("assistant content length = %d, want 3", len(got.Content))
+	}
+	thinking, ok := got.Content[0].(*ThinkingContent)
+	if !ok || thinking.Thinking != "reasoning" || thinking.ThinkingSignature != "thinking-sig" {
+		t.Fatalf("same-model thinking = %#v", got.Content[0])
+	}
+	redacted, ok := got.Content[1].(*ThinkingContent)
+	if !ok || !redacted.Redacted || redacted.ThinkingSignature != "encrypted" {
+		t.Fatalf("same-model redacted thinking = %#v", got.Content[1])
+	}
+	unsigned, ok := got.Content[2].(*ThinkingContent)
+	if !ok || unsigned.Thinking != "unsigned reasoning" || unsigned.ThinkingSignature != "" {
+		t.Fatalf("same-model unsigned thinking = %#v", got.Content[2])
 	}
 }
 

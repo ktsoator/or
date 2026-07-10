@@ -17,7 +17,7 @@ func TransformMessages(messages []Message, model Model, normalizeToolCallID func
 ```
 
 1.  当目标模型的 `Model.Input` 不包含 `Image` 时，把图像块替换成占位文本。连续的图像会合并为一个占位符。
-2.  按目标模型重写历史 assistant 轮次：同一模型保留推理和签名，跨模型时降级，跨厂商时归一化工具调用 ID。
+2.  按目标模型重写历史 assistant 轮次：同一模型保留推理和签名，跨模型时删除推理，跨厂商时归一化工具调用 ID。
 3.  修复存在 assistant 工具调用但缺少对应工具结果的转录。
 
 ## 推理与签名
@@ -26,32 +26,23 @@ func TransformMessages(messages []Message, model Model, normalizeToolCallID func
 
 ```go
 func reconcileThinking(content *ThinkingContent, sameModel bool) AssistantContent {
-	if content == nil {
+	if content == nil || !sameModel { // (1)!
 		return nil
 	}
-	if content.Redacted { // (1)!
-		if sameModel {
-			return content
-		}
-		return nil
-	}
-	if sameModel && content.ThinkingSignature != "" { // (2)!
+	if content.Redacted || content.ThinkingSignature != "" { // (2)!
 		return content
 	}
 	if strings.TrimSpace(content.Thinking) == "" { // (3)!
 		return nil
 	}
-	if sameModel {
-		return content
-	}
-	return &TextContent{Text: content.Thinking} // (4)!
+	return content // (4)!
 }
 ```
 
-1.  redacted 推理是一段只有原模型能消费的不透明加密载荷：同一模型保留，否则丢弃。
-2.  带签名的块对同一模型原样重放，即便它的文本为空。
+1.  来自其他模型的推理直接删除，避免把它作为普通文本暴露给另一个模型或提供方。
+2.  带签名的块对同一模型原样重放，即便它的文本为空；同模型的 redacted 推理也基于相同原因保留。
 3.  空的、无签名的推理什么都没带，直接丢弃。
-4.  来自其他模型的推理降级为普通文本，让内容在没有目标会拒绝的签名的情况下也能留存。
+4.  非空、无签名的推理也只对同一模型保留。
 
 文本签名和工具调用签名遵循同样原则：不透明的厂商元数据只保留给产出它的模型。
 

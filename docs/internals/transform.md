@@ -26,7 +26,7 @@ func TransformMessages(messages []Message, model Model, normalizeToolCallID func
     list `Image` in `Model.Input`. Consecutive images collapse into one
     placeholder.
 2.  Rewrite prior assistant turns for the target model: keep reasoning and
-    signatures for the same model, downgrade them across models, and normalize
+    signatures for the same model, drop reasoning across models, and normalize
     tool-call IDs when crossing providers.
 3.  Repair transcripts where an assistant tool call has no matching tool result.
 
@@ -38,35 +38,25 @@ condition. `reconcileThinking` encodes the full decision for one reasoning block
 
 ```go
 func reconcileThinking(content *ThinkingContent, sameModel bool) AssistantContent {
-	if content == nil {
+	if content == nil || !sameModel { // (1)!
 		return nil
 	}
-	if content.Redacted { // (1)!
-		if sameModel {
-			return content
-		}
-		return nil
-	}
-	if sameModel && content.ThinkingSignature != "" { // (2)!
+	if content.Redacted || content.ThinkingSignature != "" { // (2)!
 		return content
 	}
 	if strings.TrimSpace(content.Thinking) == "" { // (3)!
 		return nil
 	}
-	if sameModel {
-		return content
-	}
-	return &TextContent{Text: content.Thinking} // (4)!
+	return content // (4)!
 }
 ```
 
-1.  Redacted reasoning is an opaque encrypted payload only the original model can
-    consume: kept for the same model, dropped otherwise.
+1.  Reasoning from another model is dropped rather than exposed as plain text to
+    a different model or provider.
 2.  A signed block is replayed intact for the same model, even when its text is
-    empty.
+    empty; same-model redacted reasoning is preserved for the same reason.
 3.  Empty, unsigned reasoning carries nothing and is dropped.
-4.  Reasoning from another model is downgraded to plain text, so its content
-    survives without a signature the target would reject.
+4.  Non-empty unsigned reasoning is retained only for the same model.
 
 Text and tool-call signatures follow the same principle: opaque provider metadata
 is kept only for the model that produced it.

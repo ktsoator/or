@@ -147,6 +147,6 @@ when required by later tool calls. This matters most for tool use with thinking:
 some providers require the signed thinking block to be sent back verbatim before
 they will accept the next tool call, so dropping it can make the turn fail. The
 library keeps the block (even when `ThinkingDisplayOmitted` hides its text) so
-the history stays valid. When the target model changes, it preserves, downgrades,
-or omits reasoning content according to compatibility. See
+the history stays valid. When the target model changes, reasoning content from
+the prior model is dropped rather than replayed as plain text. See
 [Conversations](conversations.md) for model switching and persistence.
