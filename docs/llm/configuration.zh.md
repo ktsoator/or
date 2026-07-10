@@ -47,7 +47,7 @@ options := llm.StreamOptions{
 }
 ```
 
-`APIKey` 优先级最高；`Env` 会先于进程环境被查询。
+`APIKey` 优先级最高；`Env` 会先于进程环境被查询。完整顺序从高到低为：`StreamOptions.APIKey`、provider [override](providers.zh.md) 的 key、`StreamOptions.Env`、override 的 `Env`、最后是进程环境。
 
 ## 观察 HTTP 请求与响应
 

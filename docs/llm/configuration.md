@@ -52,6 +52,9 @@ options := llm.StreamOptions{
 ```
 
 `APIKey` takes precedence; `Env` is consulted before the process environment.
+The full order, highest to lowest, is: `StreamOptions.APIKey`, a provider
+[override](providers.md#redirect-a-providers-requests) key, `StreamOptions.Env`,
+override `Env`, then the process environment.
 
 ## Observe HTTP requests and responses
 

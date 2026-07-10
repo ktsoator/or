@@ -125,7 +125,9 @@ registry := llm.NewAdapterRegistry()
 if err := registry.Register(myAdapter{http: http.DefaultClient}); err != nil {
 	log.Fatal(err)
 }
-client := llm.NewClient(registry)
+// 第二个参数传 nil 保留环境变量查 key 的行为；
+// 传 llm.NewBuiltInProviderRegistry() 则同时应用 provider override。
+client := llm.NewClient(registry, nil)
 
 model := llm.Model{
 	ID: "x", Provider: "me", Protocol: "my-protocol", MaxTokens: 1024,

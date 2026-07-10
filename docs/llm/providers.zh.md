@@ -118,3 +118,57 @@ model.Compatibility = &llm.AnthropicMessagesCompatibility{
 ```
 
 如果某个通信协议既非 OpenAI 兼容也非 Anthropic 兼容，请实现一个[自定义协议适配器](extending.md)。
+
+## 提供方配置与状态
+
+本包在模型目录之外维护一个 provider 注册表。目录存放 provider 的模型，注册表存放它的配置：提供 key 的环境变量，以及施加到其请求上的 override。包级 `Stream` 和 `Complete` 都经过默认注册表，因此无需自建 client，状态查询和 override 即可生效。
+
+### 检查 provider 是否已配置
+
+`AuthStatus` 无需发送请求，即可报告是否能解析出 key 以及来源。
+
+```go
+registry := llm.DefaultProviderRegistry()
+
+status, ok := registry.AuthStatus("deepseek", nil)
+if ok && !status.Configured {
+	fmt.Printf("%s 未配置；请设置 %v 之一\n", status.Label, status.Missing)
+}
+// 已配置的 provider 会报告来源，例如 "env:DEEPSEEK_API_KEY"。
+```
+
+### 为 provider 的请求改道
+
+`SetOverride` 为发往某个 provider 的每个请求设置 base URL、API key 或 headers，这样接入代理或网关就不必逐个改 `Model`。
+
+```go
+proxy := "https://proxy.example.com/deepseek/v1"
+registry.SetOverride("deepseek", llm.ProviderOverride{
+	BaseURL: &proxy,
+	Headers: map[string]string{"X-Team": "infra"},
+})
+// 此后所有 deepseek 模型都经代理流式请求。
+```
+
+override 建议在启动阶段设置。完整的凭证优先级见[请求配置](configuration.md)。
+
+### 注册自定义 provider
+
+`Register` 加入目录未内置的 provider。它从自己的环境变量解析 key，也能像内置 provider 一样被 override；这是除了直接传一个裸 `Model` 之外，接入本地服务器的另一种方式。
+
+```go
+registry.Register(llm.NewSpecProvider(llm.ProviderSpec{
+	ID:      "local",
+	Name:    "Local LLM",
+	EnvKeys: []string{"LOCAL_API_KEY"},
+	Models: []llm.Model{{
+		ID:       "qwen2.5-coder:7b",
+		Provider: "local",
+		Protocol: llm.ProtocolOpenAICompletions,
+		BaseURL:  "http://localhost:11434/v1",
+		Input:    []llm.ModelInput{llm.Text},
+	}},
+}))
+```
+
+`NewSpecProvider` 仅靠数据构建 provider。若 provider 在请求时需要额外逻辑，例如 OAuth 刷新，spec 类型暂不支持。

@@ -139,7 +139,9 @@ registry := llm.NewAdapterRegistry()
 if err := registry.Register(myAdapter{http: http.DefaultClient}); err != nil {
 	log.Fatal(err)
 }
-client := llm.NewClient(registry)
+// Pass nil for the provider registry to keep the environment API key lookup;
+// pass llm.NewBuiltInProviderRegistry() to also apply provider overrides.
+client := llm.NewClient(registry, nil)
 
 model := llm.Model{
 	ID: "x", Provider: "me", Protocol: "my-protocol", MaxTokens: 1024,

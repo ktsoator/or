@@ -138,3 +138,67 @@ model.Compatibility = &llm.AnthropicMessagesCompatibility{
 
 For a wire protocol that is neither OpenAI-compatible nor
 Anthropic-compatible, implement a [custom protocol adapter](extending.md).
+
+## Provider configuration and status
+
+The package keeps a provider registry next to the model catalog. The catalog
+lists a provider's models; the registry holds its configuration: the environment
+variables that supply its key, and any override applied to its requests. The
+package-level `Stream` and `Complete` route through the default registry, so
+status queries and overrides take effect without building your own client.
+
+### Check whether a provider is configured
+
+`AuthStatus` reports whether a key resolves and which source it came from,
+without sending a request.
+
+```go
+registry := llm.DefaultProviderRegistry()
+
+status, ok := registry.AuthStatus("deepseek", nil)
+if ok && !status.Configured {
+	fmt.Printf("%s not configured; set one of %v\n", status.Label, status.Missing)
+}
+// A configured provider reports its source, e.g. "env:DEEPSEEK_API_KEY".
+```
+
+### Redirect a provider's requests
+
+`SetOverride` sets a base URL, API key, or headers for every request to a
+provider, so a proxy or gateway needs no change to each `Model`.
+
+```go
+proxy := "https://proxy.example.com/deepseek/v1"
+registry.SetOverride("deepseek", llm.ProviderOverride{
+	BaseURL: &proxy,
+	Headers: map[string]string{"X-Team": "infra"},
+})
+// Every deepseek model now streams through the proxy.
+```
+
+Set overrides at startup. Credential precedence is listed in
+[request configuration](configuration.md).
+
+### Register a custom provider
+
+`Register` adds a provider the catalog does not ship. It resolves its key from
+its own environment variables and can be overridden like a built-in one, which
+is the alternative to passing a bare `Model` for a local server.
+
+```go
+registry.Register(llm.NewSpecProvider(llm.ProviderSpec{
+	ID:      "local",
+	Name:    "Local LLM",
+	EnvKeys: []string{"LOCAL_API_KEY"},
+	Models: []llm.Model{{
+		ID:       "qwen2.5-coder:7b",
+		Provider: "local",
+		Protocol: llm.ProtocolOpenAICompletions,
+		BaseURL:  "http://localhost:11434/v1",
+		Input:    []llm.ModelInput{llm.Text},
+	}},
+}))
+```
+
+`NewSpecProvider` builds a provider from data alone. Vendors that need
+per-request logic such as OAuth refresh are not covered by the spec type yet.
