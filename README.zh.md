@@ -5,7 +5,6 @@
   <p>
     <a href="https://pkg.go.dev/github.com/ktsoator/or/llm"><img alt="Go Reference" src="https://pkg.go.dev/badge/github.com/ktsoator/or/llm.svg"></a>
     <a href="https://github.com/ktsoator/or/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ktsoator/or/actions/workflows/ci.yml/badge.svg"></a>
-    <a href="https://goreportcard.com/report/github.com/ktsoator/or"><img alt="Go Report Card" src="https://goreportcard.com/badge/github.com/ktsoator/or"></a>
     <a href="https://github.com/ktsoator/or/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/ktsoator/or"></a>
     <a href="go.mod"><img alt="Go Version" src="https://img.shields.io/github/go-mod/go-version/ktsoator/or"></a>
     <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>
