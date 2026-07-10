@@ -20,7 +20,7 @@ vendor SDKs it actually uses.
 
 | Path | Role |
 |---|---|
-| [`llm/`](https://github.com/ktsoator/or/tree/main/llm) | The whole neutral core and public API: models, messages, options, streaming, transform, the registry, and the default client |
+| [`llm/`](https://github.com/ktsoator/or/tree/main/llm) | The whole neutral core and public API: models, messages, options, streaming, transform, the adapter and provider registries, and the default client |
 | [`llm/openai/`](https://github.com/ktsoator/or/tree/main/llm/openai) | The `openai-completions` adapter; registers itself from `init` |
 | [`llm/anthropic/`](https://github.com/ktsoator/or/tree/main/llm/anthropic) | The `anthropic-messages` adapter; registers itself from `init` |
 | [`llm/all/`](https://github.com/ktsoator/or/tree/main/llm/all) | Blank-imports both adapters, for callers that want every built-in protocol |
@@ -35,9 +35,9 @@ import (
 )
 ```
 
-## The registry, adapter, and client triad
+## The registries, adapter, and client
 
-Dispatch is built from three small pieces, all in the core package:
+Dispatch is built from a few small pieces, all in the core package:
 
 - **`ProtocolAdapter`** — an interface with `Protocol()` (its registry key) and
   `Stream()` (the request lifecycle for one protocol). See
@@ -46,18 +46,26 @@ Dispatch is built from three small pieces, all in the core package:
   Provider `init` functions call `llm.Register` to add themselves to the package
   default registry; a caller that prefers explicit wiring builds its own with
   `NewAdapterRegistry` and `AdapterRegistry.Register`.
-- **`Client`** — holds a registry and routes each request to the adapter for the
-  model's protocol. `llm.Stream` and `llm.Complete` are thin wrappers over a
-  default client bound to the default registry.
+- **`ProviderRegistry`** — a concurrency-safe map of per-vendor configuration:
+  credential sources, static headers, and any `ProviderOverride`. Its
+  `ResolveRequest` fills the API key and applies overrides to each request
+  before dispatch; the default is `NewBuiltInProviderRegistry`, populated from
+  the catalog. See [providers](../llm/providers.md).
+- **`Client`** — holds both registries and routes each request: it resolves
+  provider configuration through the `ProviderRegistry`, then dispatches to the
+  adapter for the model's protocol. `llm.Stream` and `llm.Complete` are thin
+  wrappers over a default client bound to the default registries.
 
 ```mermaid
 flowchart LR
     subgraph core["package llm"]
         R["AdapterRegistry"]
+        P["ProviderRegistry"]
         C["Client"]
     end
     OA["llm/openai · init()"] -->|Register| R
     AN["llm/anthropic · init()"] -->|Register| R
+    C -->|"ResolveRequest(model, options)"| P
     C -->|"Get(model.Protocol)"| R
 ```
 
@@ -67,7 +75,8 @@ flowchart LR
 flowchart TD
     A["llm.Complete / Stream"] --> B["Client.Stream"]
     B --> V["options.Validate(protocol, tools)"]
-    V --> C{"registry.Get(model.Protocol)"}
+    V --> RR["providers.ResolveRequest<br/>key · override · headers"]
+    RR --> C{"adapters.Get(model.Protocol)"}
     C -->|anthropic-messages| D["Anthropic adapter"]
     C -->|openai-completions| E["OpenAI adapter"]
     D --> T["TransformMessages → convert → SDK request"]
@@ -82,24 +91,24 @@ provider-neutral; everything inside it may speak one concrete wire protocol.
 
 ## Reading a request end to end
 
-```go linenums="1" hl_lines="9"
+```go linenums="1" hl_lines="10"
 func (c *Client) Stream(ctx context.Context, model Model, input Context, options StreamOptions) (<-chan Event, error) {
-	if c.registry == nil {
+	if c.adapters == nil {
 		return nil, errors.New("adapter registry is nil")
 	}
 	if err := options.Validate(model.Protocol, input.Tools); err != nil { // (1)!
 		return nil, err
 	}
 
-	adapter, ok := c.registry.Get(model.Protocol) // (2)!
+	// A nil provider registry still resolves the legacy environment API key.
+	model, options = c.providers.ResolveRequest(model, options) // (2)!
+
+	adapter, ok := c.adapters.Get(model.Protocol) // (3)!
 	if !ok {
 		return nil, fmt.Errorf(
 			"no adapter registered for protocol %q",
 			model.Protocol,
 		)
-	}
-	if strings.TrimSpace(options.APIKey) == "" {
-		options.APIKey = GetEnvAPIKeyWithEnv(model.Provider, options.Env) // (3)!
 	}
 
 	return adapter.Stream(ctx, model, input, options)
@@ -108,10 +117,12 @@ func (c *Client) Stream(ctx context.Context, model Model, input Context, options
 
 1.  Protocol-specific options are checked against the target protocol before any
     HTTP request is built, so a mismatch fails fast.
-2.  `Protocol` selects the adapter. The same conversation can target either
+2.  `ProviderRegistry.ResolveRequest` fills the API key — from `StreamOptions`, a
+    provider override, or the provider's environment variables, in that order —
+    and applies any per-provider base-URL and header override. A model whose
+    provider is not registered falls back to the legacy environment lookup.
+3.  `Protocol` selects the adapter. The same conversation can target either
     protocol; the library re-adapts the history per request.
-3.  The API key is resolved from the provider's environment variables only when
-    the caller did not supply one.
 
 Source: [`llm/client.go`](https://github.com/ktsoator/or/blob/main/llm/client.go),
 [`llm/adapters.go`](https://github.com/ktsoator/or/blob/main/llm/adapters.go),
