@@ -149,7 +149,7 @@ func TestCustomProtocolAdapterViaRegistry(t *testing.T) {
 	if err := registry.Register(echoAdapter{}); err != nil {
 		t.Fatalf("Register() error = %v", err)
 	}
-	client := llm.NewClient(registry)
+	client := llm.NewClient(registry, nil)
 
 	message, err := client.Complete(context.Background(), llm.Model{
 		ID: "echo-1", Provider: "echo", Protocol: "echo",

@@ -18,9 +18,21 @@ import "context"
 // once. A caller that prefers explicit wiring can skip the default registry and
 // build its own with NewAdapterRegistry, AdapterRegistry.Register, and NewClient.
 var (
-	defaultRegistry = NewAdapterRegistry()
-	defaultClient   = NewClient(defaultRegistry)
+	defaultRegistry         = NewAdapterRegistry()
+	defaultProviderRegistry = NewBuiltInProviderRegistry()
+	defaultClient           = NewClient(defaultRegistry, defaultProviderRegistry)
 )
+
+// DefaultProviderRegistry returns the provider registry backing the package
+// default client. Use it to check provider auth status, apply per-provider
+// overrides, or register custom providers:
+//
+//	llm.DefaultProviderRegistry().SetOverride("deepseek", llm.ProviderOverride{
+//		BaseURL: &proxyURL,
+//	})
+func DefaultProviderRegistry() *ProviderRegistry {
+	return defaultProviderRegistry
+}
 
 // Register adds adapter to the package default registry, replacing any adapter
 // already registered for its protocol. Provider packages call it from init; most

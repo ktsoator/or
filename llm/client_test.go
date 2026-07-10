@@ -84,7 +84,7 @@ func TestRegistryGetUnknownProtocol(t *testing.T) {
 }
 
 func TestClientStreamReturnsErrorWhenRegistryIsNil(t *testing.T) {
-	client := NewClient(nil)
+	client := NewClient(nil, nil)
 	_, err := client.Stream(context.Background(), Model{Protocol: ProtocolOpenAICompletions}, Context{}, StreamOptions{})
 	if err == nil || !strings.Contains(err.Error(), "registry is nil") {
 		t.Fatalf("Stream error = %v, want nil-registry error", err)
@@ -92,7 +92,7 @@ func TestClientStreamReturnsErrorWhenRegistryIsNil(t *testing.T) {
 }
 
 func TestClientStreamReturnsErrorForUnknownProtocol(t *testing.T) {
-	client := NewClient(NewAdapterRegistry())
+	client := NewClient(NewAdapterRegistry(), nil)
 	_, err := client.Stream(context.Background(), Model{Protocol: Protocol("nope")}, Context{}, StreamOptions{})
 	if err == nil || !strings.Contains(err.Error(), "no adapter") {
 		t.Fatalf("Stream error = %v, want no-adapter error", err)
@@ -104,7 +104,7 @@ func TestClientStreamSurfacesOptionsValidationError(t *testing.T) {
 		t.Fatalf("adapter must not be called when validation fails")
 		return nil, nil
 	})
-	client := NewClient(registryWith(t, adapter))
+	client := NewClient(registryWith(t, adapter), nil)
 	// Send Anthropic-shaped options into an OpenAI model — Validate must reject.
 	options := StreamOptions{ProtocolOptions: &AnthropicStreamOptions{}}
 	_, err := client.Stream(
@@ -128,7 +128,7 @@ func TestClientStreamDispatchesToAdapterMatchingModelProtocol(t *testing.T) {
 		called = "anthropic"
 		return doneChannel(), nil
 	})
-	client := NewClient(registryWith(t, oai, ant))
+	client := NewClient(registryWith(t, oai, ant), nil)
 	_, err := client.Stream(
 		context.Background(),
 		Model{Protocol: ProtocolAnthropicMessages, Provider: "anthropic"},
@@ -151,7 +151,7 @@ func TestClientStreamFillsAPIKeyFromProviderEnvWhenEmpty(t *testing.T) {
 		seen = opts
 		return doneChannel(), nil
 	})
-	client := NewClient(registryWith(t, adapter))
+	client := NewClient(registryWith(t, adapter), nil)
 	_, err := client.Stream(
 		context.Background(),
 		Model{Protocol: ProtocolOpenAICompletions, Provider: "deepseek"},
@@ -172,7 +172,7 @@ func TestClientStreamLeavesExplicitAPIKeyUnchanged(t *testing.T) {
 		seen = opts
 		return doneChannel(), nil
 	})
-	client := NewClient(registryWith(t, adapter))
+	client := NewClient(registryWith(t, adapter), nil)
 	_, err := client.Stream(
 		context.Background(),
 		Model{Protocol: ProtocolOpenAICompletions, Provider: "deepseek"},
@@ -203,7 +203,7 @@ func TestClientCompleteReturnsAssistantMessageFromDoneEvent(t *testing.T) {
 		close(events)
 		return events, nil
 	})
-	client := NewClient(registryWith(t, adapter))
+	client := NewClient(registryWith(t, adapter), nil)
 	got, err := client.Complete(context.Background(), Model{Protocol: ProtocolOpenAICompletions}, Context{}, StreamOptions{APIKey: "x"})
 	if err != nil {
 		t.Fatalf("Complete error = %v", err)
@@ -222,7 +222,7 @@ func TestClientCompleteReturnsErrorFromErrorEvent(t *testing.T) {
 		close(events)
 		return events, nil
 	})
-	client := NewClient(registryWith(t, adapter))
+	client := NewClient(registryWith(t, adapter), nil)
 	got, err := client.Complete(context.Background(), Model{Protocol: ProtocolOpenAICompletions}, Context{}, StreamOptions{APIKey: "x"})
 	if !errors.Is(err, want) {
 		t.Fatalf("Complete err = %v, want %v", err, want)
@@ -241,7 +241,7 @@ func TestClientCompleteHandlesErrorEventWithoutErr(t *testing.T) {
 		close(events)
 		return events, nil
 	})
-	client := NewClient(registryWith(t, adapter))
+	client := NewClient(registryWith(t, adapter), nil)
 	_, err := client.Complete(context.Background(), Model{Protocol: ProtocolOpenAICompletions}, Context{}, StreamOptions{APIKey: "x"})
 	if err == nil || !strings.Contains(err.Error(), "stream failed") {
 		t.Fatalf("Complete err = %v, want stream-failed default", err)
@@ -255,7 +255,7 @@ func TestClientCompleteDoneWithoutMessageIsError(t *testing.T) {
 		close(events)
 		return events, nil
 	})
-	client := NewClient(registryWith(t, adapter))
+	client := NewClient(registryWith(t, adapter), nil)
 	_, err := client.Complete(context.Background(), Model{Protocol: ProtocolOpenAICompletions}, Context{}, StreamOptions{APIKey: "x"})
 	if err == nil || !strings.Contains(err.Error(), "does not contain a message") {
 		t.Fatalf("Complete err = %v, want missing-message error", err)
@@ -269,7 +269,7 @@ func TestClientCompleteStreamClosedWithoutTerminalIsError(t *testing.T) {
 		close(events)
 		return events, nil
 	})
-	client := NewClient(registryWith(t, adapter))
+	client := NewClient(registryWith(t, adapter), nil)
 	_, err := client.Complete(context.Background(), Model{Protocol: ProtocolOpenAICompletions}, Context{}, StreamOptions{APIKey: "x"})
 	if err == nil || !strings.Contains(err.Error(), "closed without a final event") {
 		t.Fatalf("Complete err = %v, want closed-without-terminal error", err)
@@ -280,7 +280,7 @@ func TestClientCompletePropagatesStreamSetupError(t *testing.T) {
 	adapter := newFakeAdapter(ProtocolOpenAICompletions, func(StreamOptions) (<-chan Event, error) {
 		return nil, errors.New("setup failed")
 	})
-	client := NewClient(registryWith(t, adapter))
+	client := NewClient(registryWith(t, adapter), nil)
 	_, err := client.Complete(context.Background(), Model{Protocol: ProtocolOpenAICompletions}, Context{}, StreamOptions{APIKey: "x"})
 	if err == nil || !strings.Contains(err.Error(), "setup failed") {
 		t.Fatalf("Complete err = %v, want setup error", err)

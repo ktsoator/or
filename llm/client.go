@@ -4,39 +4,46 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 )
 
-// Client routes LLM requests to the adapter registered for a model protocol.
+// Client routes LLM requests to the adapter registered for a model protocol,
+// resolving provider configuration (API keys, overrides, headers) through an
+// optional provider registry first.
 type Client struct {
-	registry *AdapterRegistry
+	adapters  *AdapterRegistry
+	providers *ProviderRegistry
 }
 
-// NewClient creates a client backed by the given adapter registry.
-func NewClient(registry *AdapterRegistry) *Client {
+// NewClient creates a client backed by the given registries. providers may be
+// nil, in which case requests skip provider resolution and only fall back to
+// the environment API key lookup.
+func NewClient(adapters *AdapterRegistry, providers *ProviderRegistry) *Client {
 	return &Client{
-		registry: registry,
+		adapters:  adapters,
+		providers: providers,
 	}
 }
 
 // Stream starts a streaming completion request for the given model and input.
+// The request first passes through the provider registry, which fills the API
+// key and applies any provider override, then goes to the protocol adapter.
 func (c *Client) Stream(ctx context.Context, model Model, input Context, options StreamOptions) (<-chan Event, error) {
-	if c.registry == nil {
+	if c.adapters == nil {
 		return nil, errors.New("adapter registry is nil")
 	}
 	if err := options.Validate(model.Protocol, input.Tools); err != nil {
 		return nil, err
 	}
 
-	adapter, ok := c.registry.Get(model.Protocol)
+	// A nil provider registry still resolves the legacy environment API key.
+	model, options = c.providers.ResolveRequest(model, options)
+
+	adapter, ok := c.adapters.Get(model.Protocol)
 	if !ok {
 		return nil, fmt.Errorf(
 			"no adapter registered for protocol %q",
 			model.Protocol,
 		)
-	}
-	if strings.TrimSpace(options.APIKey) == "" {
-		options.APIKey = GetEnvAPIKeyWithEnv(model.Provider, options.Env)
 	}
 
 	return adapter.Stream(ctx, model, input, options)
