@@ -195,7 +195,9 @@ registry.SetOverride("deepseek", llm.ProviderOverride{
 // Every deepseek model now streams through the proxy.
 ```
 
-Set overrides at startup. Credential precedence is listed in
+`SetOverride` stores an independent snapshot, so the values, maps, and
+request-scoped environment passed to it may be reused or mutated after the call.
+Set overrides at startup when possible. Credential precedence is listed in
 [request configuration](configuration.md).
 
 ### Register a custom provider
@@ -219,5 +221,6 @@ registry.Register(llm.NewSpecProvider(llm.ProviderSpec{
 }))
 ```
 
-`NewSpecProvider` builds a provider from data alone. Vendors that need
-per-request logic such as OAuth refresh are not covered by the spec type yet.
+`NewSpecProvider` builds a provider from an independent snapshot of the supplied
+data, including model configuration. Vendors that need per-request logic such
+as OAuth refresh are not covered by the spec type yet.

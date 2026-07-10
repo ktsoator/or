@@ -93,9 +93,11 @@ func (registry *ProviderRegistry) Providers() []*Provider {
 	return providers
 }
 
-// SetOverride stores the override applied to every request routed through the
-// provider, replacing any previous override. In-flight requests keep the
-// override they resolved with; set overrides during startup when possible.
+// SetOverride stores an independent snapshot of the override applied to every
+// request routed through the provider, replacing any previous override.
+// Callers may safely reuse or mutate override after this function returns.
+// In-flight requests keep the override they resolved with; set overrides during
+// startup when possible.
 func (registry *ProviderRegistry) SetOverride(providerID string, override ProviderOverride) {
 	if registry == nil {
 		return
@@ -103,7 +105,7 @@ func (registry *ProviderRegistry) SetOverride(providerID string, override Provid
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 
-	registry.overrides[providerID] = override
+	registry.overrides[providerID] = cloneProviderOverride(override)
 }
 
 // ClearOverride removes the provider's override.
