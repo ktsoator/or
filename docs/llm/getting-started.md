@@ -62,16 +62,32 @@ Run the program:
 go run .
 ```
 
-`llm.Complete` collects the stream into one `AssistantMessage`. Use
-[`llm.Stream`](streaming.md) when the application needs deltas as they arrive.
-The package-level functions dispatch through a default registry; the blank
-`llm/openai` import above registers the OpenAI-compatible protocol into it. Import
-the provider package for each protocol you use — or `llm/all` for every built-in —
-so only the SDKs you need are linked into your binary.
+`llm.Complete` waits for generation to finish and returns the final
+`AssistantMessage`. Use [`llm.Stream`](streaming.md) when the application needs
+to process text, reasoning, or tool calls as they arrive.
 
-`LookupModel` checks catalog membership, while `SupportsProtocol` checks adapter
-registration in this process. Build model pickers from `GetRunnableModels`.
-`GetModels` also returns catalog-only protocol entries and is not a runnable list.
+### Register a protocol adapter
+
+Before calling package-level `Complete` or `Stream`, import the adapter package
+for the target model's protocol. The blank `llm/openai` import in the example
+registers the adapter for OpenAI Chat Completions-compatible APIs during program
+initialization. Import `llm/anthropic` for Anthropic Messages-compatible APIs;
+import `llm/all` when the application needs both built-in protocols.
+
+Importing only the adapters in use avoids linking unused provider SDKs into the
+binary.
+
+### Select a runnable model
+
+A catalog entry means that the framework knows about a model. It does not mean
+that the current process has the adapter required to call it.
+
+- `LookupModel` checks whether a provider and model ID exist in the catalog.
+- `SupportsProtocol` checks whether this process has registered the required adapter.
+- `GetRunnableModels` returns only catalog models that this process can call; use it for model pickers.
+- `GetModels` returns the complete catalog, which can include models without a built-in adapter and is not directly a runnable list.
+
+See [Protocol and provider status](support-matrix.md) for current implementation status.
 
 ## Customize the request
 
@@ -92,7 +108,7 @@ response, err := llm.Complete(
 )
 ```
 
-See [Request configuration](configuration.md) for the full option set.
+See [Request options](configuration.md) for the full option set.
 
 ## Inspect usage and cost
 
@@ -103,13 +119,13 @@ fmt.Printf("tokens=%d cost=$%.6f\n",
 	response.Usage.TotalTokens, response.Usage.Cost.Total)
 ```
 
-[Reading responses](results.md) covers stop reasons, usage, and diagnostics.
+[Responses and usage](results.md) covers stop reasons, usage, and diagnostics.
 
 ## Next steps
 
 - Continue the exchange over several turns with [conversations](conversations.md).
 - Choose a model from the [provider catalog](providers.md).
-- Confirm protocol and provider status in the [support matrix](support-matrix.md).
+- Confirm protocol and provider status in [Protocol and provider status](support-matrix.md).
 - Render responses incrementally with [streaming events](streaming.md).
 - Give the model structured capabilities with [typed tools](tools.md).
 - Browse runnable programs on the [examples](examples.md) page.

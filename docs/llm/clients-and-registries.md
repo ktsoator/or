@@ -43,7 +43,7 @@ response, err := llm.Complete(ctx, model, input, options)
 
 `DefaultProviderRegistry` returns the provider registry used by the default client. `SetOverride` on that registry affects later package-level requests for that provider throughout the process.
 
-## Explicit client
+## Custom client
 
 An explicit client combines application-owned adapter and provider registries:
 

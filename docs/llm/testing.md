@@ -1,4 +1,4 @@
-# Testing
+# Testing strategy
 
 Code built on `llm` can be tested at three layers. Only the adapter request path needs a simulated provider protocol; business result handling and most tool policy can use ordinary Go values.
 
@@ -62,7 +62,8 @@ A tool-loop test should make the mock server vary its response by request count:
 - the loop stops on a final stop reason or its iteration limit;
 - application retries cannot repeat side-effecting tools.
 
-See [Tools](tools.md) for the protocol and execution checklist, and the [tool-loop task guide](recipes/tool-loop.md) for the complete application loop.
+See [Tool definitions and calls](tools.md) for the type and message contract,
+and [Executing tool calls](recipes/tool-loop.md) for the complete application loop.
 
 ## Cancellation, concurrency, and isolation
 

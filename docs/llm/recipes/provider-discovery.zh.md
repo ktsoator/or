@@ -1,10 +1,8 @@
-# 模型与鉴权发现
+# 查找模型与检查凭证
 
-## 本场景实现什么
+应用可以在启动时列出当前可调用的模型，并检查各提供方是否已配置凭证。整个过程不发送模型请求。
 
-诊断命令只列出当前进程已导入 adapter 能路由的模型，并在不发送请求的情况下报告 provider 凭证状态。
-
-模型选择 UI 和启动检查应基于这条路径。只使用 `GetModels` 会包含没有内置 adapter 的目录协议。
+模型选择界面和启动检查应使用 `GetRunnableModels`，而不是只使用 `GetModels`。后者还会返回当前程序没有注册协议适配器的模型。
 
 ## 完整程序
 
@@ -42,16 +40,20 @@ func main() {
 }
 ```
 
-## 目录与运行时是两层状态
+## 模型是否可调用
 
 | API | 回答的问题 |
 |---|---|
-| `GetProviders` | 嵌入目录有哪些 provider ID？ |
-| `GetModels(provider)` | 目录中有哪些模型，包括未实现协议？ |
-| `GetRunnableModels(provider)` | 默认 adapter registry 当前能路由哪些模型？ |
-| `SupportsProtocol(protocol)` | 是否导入了该协议 adapter？ |
-| `AuthStatus(provider, env)` | Provider 能否解析凭证，凭证来自哪里？ |
+| `GetProviders` | 内置模型清单中有哪些提供方 ID？ |
+| `GetModels(provider)` | 清单中收录哪些模型，包括当前不能调用的模型？ |
+| `GetRunnableModels(provider)` | 默认协议适配器注册表当前能路由哪些模型？ |
+| `SupportsProtocol(protocol)` | 当前程序是否已注册该协议的适配器？ |
+| `AuthStatus(provider, env)` | 提供方能否解析凭证，凭证来自哪里？ |
 
-`AuthStatus` 报告 `env:DEEPSEEK_API_KEY` 或 `override` 等来源，但不会发送请求。配置了凭证不代表凭证未过期、具有模型权限或一定会被模型服务接受。
+模型被内置模型清单收录，并不表示当前程序可以调用它。调用模型还需要对应的协议适配器已注册；`llm/all` 会注册全部内置协议，按需导入单个协议包则只注册对应协议。
 
-诊断中不要暴露 `GetEnvAPIKey` 返回的 secret。应展示 `APIKeyEnvVars` 给出的变量名和 `AuthStatus` 的缺失项。
+## 检查凭证
+
+`AuthStatus` 会报告诸如 `env:DEEPSEEK_API_KEY` 或 `override` 的凭证来源，但不会发送请求。已配置凭证不代表它未过期、有权调用该模型，或一定会被模型服务接受。
+
+诊断界面不要展示 `GetEnvAPIKey` 返回的密钥值。可展示 `APIKeyEnvVars` 给出的变量名，以及 `AuthStatus` 中缺失的变量名。

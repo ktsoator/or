@@ -58,9 +58,24 @@ func main() {
 go run .
 ```
 
-`llm.Complete` 会将整个流收集成一个 `AssistantMessage`。当应用需要在增量到达时即时处理，则改用 [`llm.Stream`](streaming.md)。包级函数通过一个默认注册表分发；上面那行空导入 `llm/openai` 会把 OpenAI 兼容协议注册进去。用到哪个协议就导入对应的 provider 包（或者导入 `llm/all` 一次性注册全部），这样二进制里只链接需要的 SDK。
+`llm.Complete` 等待生成结束，再返回最终的 `AssistantMessage`。如果需要边生成边处理文本、推理或工具调用，使用 [`llm.Stream`](streaming.md)。
 
-`LookupModel` 只检查目录条目，`SupportsProtocol` 检查当前进程是否注册了该协议。构建模型选择器时直接使用 `GetRunnableModels`。`GetModels` 还会返回 catalog-only 协议的模型，不能作为可调用列表。
+### 注册协议适配器
+
+调用包级 `Complete` 或 `Stream` 前，必须导入目标模型所使用协议的适配器包。示例中的空导入 `llm/openai` 会在程序初始化时注册 OpenAI Chat Completions 兼容接口的适配器。使用 Anthropic Messages 兼容接口时导入 `llm/anthropic`；同时需要两种内置协议时可导入 `llm/all`。
+
+按需导入适配器包，可以避免把未使用的 provider SDK 链接进二进制。
+
+### 选择可运行模型
+
+模型出现在内置模型清单中，只表示框架认识该模型；不表示当前进程已经具备调用它的适配器。
+
+- `LookupModel`：检查 provider 和模型 ID 是否存在于内置模型清单。
+- `SupportsProtocol`：检查当前进程是否已注册该模型所需的协议适配器。
+- `GetRunnableModels`：只返回模型清单中且当前进程能够调用的模型，适合构建模型选择器。
+- `GetModels`：返回完整模型清单，其中可能包含当前没有内置适配器的模型，不能直接作为可调用列表。
+
+当前实现状态见[协议与提供方状态](support-matrix.md)。
 
 ## 自定义请求
 
@@ -79,7 +94,7 @@ response, err := llm.Complete(
 )
 ```
 
-完整的选项集合参见[请求配置](configuration.md)。
+完整的选项集合参见[请求选项](configuration.md)。
 
 ## 查看用量与成本
 
@@ -90,13 +105,13 @@ fmt.Printf("tokens=%d cost=$%.6f\n",
 	response.Usage.TotalTokens, response.Usage.Cost.Total)
 ```
 
-停止原因、用量与诊断详见[读取响应](results.md)。
+停止原因、用量与诊断详见[响应与用量](results.md)。
 
 ## 下一步
 
-- 用[对话](conversations.md)把交流延续到多轮。
-- 从[提供方目录](providers.md)中选择一个模型。
-- 在[支持矩阵](support-matrix.md)中确认协议和 provider 状态。
+- 用[消息与上下文](conversations.md)了解消息结构，再按[保存与恢复对话](recipes/conversation-persistence.md)实现多轮会话。
+- 从[模型与提供方](providers.md)中选择一个模型。
+- 在[协议与提供方状态](support-matrix.md)中确认协议和提供方状态。
 - 用[流式事件](streaming.md)增量渲染响应。
 - 用[类型化工具](tools.md)为模型加上结构化能力。
 - 在[示例](examples.md)页浏览可运行程序。

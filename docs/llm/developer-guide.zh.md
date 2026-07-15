@@ -1,207 +1,162 @@
 # or/llm 开发者指南
 
-本文说明 `or/llm` 的架构、模块协作、请求生命周期、扩展边界和运行限制。具体功能的完整代码只在对应专题与[场景手册](recipes/README.md)维护；公开符号签名见 [API 索引](api-reference.md)。
+本页说明 `or/llm` 的模块关系、初始化方式、请求调用链、状态边界和扩展路径。它适合需要接入多个模型服务、配置独立 `Client`、排查请求过程或实现协议适配器的开发者。
 
-## 1. 框架概述
+如果只需要完成一个具体任务，直接从[使用指南](recipes/README.md)选择场景。公开符号查找见 [API 索引](api-reference.md)，字段和行为契约见“API 与概念”下的对应页面。
 
-### 解决的问题
+## 架构定位
 
-LLM provider 对消息格式、工具、推理字段、流式事件、usage 和错误的表达不同。`llm` 用中立领域类型承载应用输入和结果，再由协议 adapter 完成线格式转换。
+不同模型服务对消息、工具、推理选项、流式响应、用量和错误的表达并不一致。`llm` 使用自己的 `Context`、`Message`、`Model`、`Event`、`ToolDefinition` 和 `AssistantMessage` 表达应用输入与结果，再由协议适配器完成请求构造和响应转换。
 
-核心目标：
+这层抽象的边界是一次模型调用：
 
-- 同一 `Context` 可以发送给已实现协议下的不同模型；
-- 历史在每次请求前按目标模型重新适配；
-- 文本、推理和工具调用通过统一事件生命周期返回；
-- 工具定义、参数校验、usage 和停止原因不依赖 provider SDK 类型；
-- 应用可以替换模型服务地址、凭证、HTTP transport 或完整协议 adapter。
+- 调用前解析模型、凭证、服务地址和请求选项；
+- 发送前按目标模型转换历史；
+- 运行时将服务端增量转换为统一事件；
+- 完成后返回内容、停止原因、用量、成本估算和诊断。
 
-### 与普通 SDK 包装的区别
+会话数据库、上下文压缩、工具执行、智能体运行循环、检索增强生成和模型服务调度不在这一层实现。
 
-`llm` 不向上暴露两个 provider SDK 的联合接口。`Message`、`Model`、`Context`、`Event`、`ToolDefinition` 和 `AssistantMessage` 是独立领域模型。Adapter 负责 provider 请求构造、历史转换、流式归一化、兼容方言和错误映射。
+## 主要模块
 
-### 适用场景
-
-- 应用自行管理历史和工具执行；
-- 同一业务需要调用多个兼容 provider；
-- UI 需要分别处理文本、thinking 和工具调用进度；
-- 服务需要自定义模型 API 地址、代理、headers、TLS 或连接池；
-- 需要 LLM 请求层，但不需要完整 Agent 运行时。
-
-### 不适用场景
-
-会话存储、上下文压缩、自动工具执行、Agent 规划、RAG、任务调度和 provider 负载均衡不属于本包。协议实现状态以[支持矩阵](support-matrix.md)为准。
-
-## 2. 整体架构
-
-### 核心模块
-
-| 模块 | 主要文件 | 职责 |
+| 模块 | 主要源码 | 负责内容 |
 |---|---|---|
-| 领域模型 | `llm/message.go`、`llm/model.go` | 消息、内容块、模型、usage、停止原因 |
-| 请求入口 | `llm/default.go`、`llm/client.go` | 参数校验、provider 解析和 adapter 分派 |
-| Adapter 注册 | `llm/adapters.go` | `Protocol` 到 `ProtocolAdapter` 的映射 |
-| Provider 配置 | `llm/provider.go`、`llm/provider_registry.go` | 凭证、URL、headers、override 和认证状态 |
-| 模型目录 | `llm/catalog.go`、`llm/model_registry.go` | 嵌入目录与应用级模型注册表 |
-| 历史转换 | `llm/transform.go` | 图像降级、reasoning 清理、工具调用修复 |
-| 流式运行 | `llm/events.go`、`llm/stream.go` | 统一事件和终止保证 |
-| 工具 | `llm/tools.go`、`llm/validation.go`、`llm/jsonschema.go` | Schema、恢复、校验和解码 |
-| 内置 adapter | `llm/openai/`、`llm/anthropic/` | 两种已实现协议的请求与响应转换 |
+| 消息与模型 | `llm/message.go`、`llm/model.go` | 消息、内容块、模型能力、用量和停止原因 |
+| 请求入口 | `llm/default.go`、`llm/client.go` | 校验选项、解析提供方配置、选择协议适配器 |
+| 协议适配器注册 | `llm/adapters.go` | 建立 `Protocol` 到 `ProtocolAdapter` 的映射 |
+| 提供方配置 | `llm/provider.go`、`llm/provider_registry.go` | 凭证、服务地址、请求头、覆盖配置和鉴权状态 |
+| 模型清单 | `llm/catalog.go`、`llm/model_registry.go` | 内置清单和应用级模型注册表 |
+| 历史转换 | `llm/transform.go` | 图片降级、推理内容处理和工具调用修复 |
+| 流式事件 | `llm/events.go`、`llm/stream.go` | 统一事件、部分消息和终止保证 |
+| 工具 | `llm/tools.go`、`llm/validation.go`、`llm/jsonschema.go` | JSON Schema 生成、参数恢复、校验和解码 |
+| 内置协议适配器 | `llm/openai/`、`llm/anthropic/` | 已实现请求与响应格式的转换 |
 
-### 注册表、Client 与 Adapter
+模块之间的关系如下：
 
 ```mermaid
 flowchart LR
     app["应用"] --> client["Client"]
-    client --> providers["ProviderRegistry<br/><small>key · URL · headers</small>"]
-    client --> adapters["AdapterRegistry<br/><small>Protocol → adapter</small>"]
-    app -. 模型发现 .-> models["ModelRegistry"]
+    app -. "选择模型" .-> models["模型清单 / ModelRegistry"]
+    client --> providers["ProviderRegistry<br/><small>凭证 · 地址 · 请求头</small>"]
+    client --> adapters["AdapterRegistry<br/><small>协议 → 实现</small>"]
     adapters --> adapter["ProtocolAdapter"]
-    adapter --> provider["Provider HTTP API"]
-    provider --> adapter --> events["Event stream"] --> app
+    adapter --> service["模型服务 HTTP API"]
+    service --> adapter --> events["统一事件"] --> app
 ```
 
-- `AdapterRegistry` 决定某个 `Model.Protocol` 由谁处理。
-- `ProviderRegistry` 解析该模型请求的凭证、URL 和 headers。
-- `ModelRegistry` 只用于发现模型；`Client` 不依赖它发起请求。
-- 包级 `Complete` 和 `Stream` 使用默认 `Client`。显式 `Client` 用于状态隔离和依赖注入。
+`ModelRegistry` 用于查找模型，不参与 `Client` 的请求分派。真正参与请求的是 `Model` 值、`ProviderRegistry` 和 `AdapterRegistry`。三类注册表的详细区别见[Client 与注册表](clients-and-registries.md)。
 
-### 初始化过程
+## 选择包级函数还是独立 `Client`
 
-1. `llm/default.go` 创建默认 adapter registry、provider registry 和 client。
-2. 应用导入 `llm/openai`、`llm/anthropic` 或 `llm/all`。
-3. Adapter 子包的 `init` 向默认 adapter registry 注册协议实现。
-4. 模型目录在包初始化期间解码；provider registry 从内置配置构造。
-5. 应用解析或构造 `Model` 后调用请求入口。
+多数应用使用包级 `Complete` 和 `Stream`。导入协议包后，其 `init` 函数会把协议适配器注册到默认 `AdapterRegistry`；默认 `ProviderRegistry` 从内置配置创建。
 
-包没有服务器启动、插件扫描或后台调度器。
+```go
+import (
+	"github.com/ktsoator/or/llm"
+	_ "github.com/ktsoator/or/llm/openai"
+)
+```
 
-## 3. 核心功能
+以下情况使用独立 `Client`：
 
-本节只划分职责。任务到接口的完整映射见[功能总览](capabilities.md)。
+- 不同租户或子系统需要独立的提供方覆盖配置；
+- 需要自定义代理、TLS、连接池或 HTTP 传输配置；
+- 测试不能修改进程共享的默认注册表；
+- 只允许使用指定协议；
+- 需要注册自定义 `ProtocolAdapter`。
 
-| 能力 | `llm` 负责 | 调用方负责 | 权威文档 |
-|---|---|---|---|
-| 完整生成 | 收集事件并返回 `AssistantMessage` | 处理结果和业务错误 | [快速开始](getting-started.md) |
-| 流式响应 | 统一事件、部分快照和终止事件 | 持续消费通道并更新 UI | [流式响应](streaming.md) |
-| 对话 | 转换 provider-neutral 历史 | 保存、加载、追加和裁剪历史 | [对话](conversations.md) |
-| 图片输入 | 转换 base64 图片；为文本模型降级 | 读取文件、验证大小和 MIME | [图片输入场景](recipes/vision.md) |
-| 推理 | 映射中立等级并分离 thinking 内容 | 选择等级和展示策略 | [推理与思考](reasoning.md) |
-| 工具调用 | Schema、参数恢复、校验和结果消息类型 | 授权、执行、幂等和循环上限 | [工具](tools.md) |
-| 模型与 Provider | 目录查询、凭证解析和请求 override | 选择模型并验证线上兼容性 | [提供方与模型](providers.md) |
-| 可观测性 | 暴露请求、改写和响应 Hook | 脱敏、指标和日志后端 | [请求配置](configuration.md) |
+完整构造程序见[创建自定义 Client](recipes/custom-client.md)。`Client` 本身不保存对话，也不为每次请求创建模型清单。
 
-完整应用流程集中在[场景手册](recipes/README.md)，仓库程序集中在[示例索引](examples.md)。
+## 请求如何执行
 
-## 4. 配置说明
-
-配置的唯一字段表和凭证优先级位于[请求配置](configuration.md)。以下只说明配置作用域：
-
-| 作用域 | 类型 | 生命周期 | 典型用途 |
-|---|---|---|---|
-| 单次请求 | `StreamOptions` | 一次 `Complete` 或 `Stream` | key、采样、输出上限、超时、Hook |
-| 单个 provider | `ProviderOverride` | 对注册表后续请求生效 | 网关 URL、共享 headers、provider key |
-| 单个 Client | `AdapterRegistry`、`ProviderRegistry` | 由应用持有 | 租户或子系统隔离 |
-| 单个模型 | `Model`、`Compatibility` | 随模型值传递 | 服务地址、能力和协议差异 |
-
-请求级值与 provider override 的合并规则不要在业务层复制。需要查看 adapter 最终收到的模型和选项时，使用 `ProviderRegistry.ResolveRequest`。
-
-## 5. 快速开始
-
-最短可运行路径只在[快速开始](getting-started.md)维护：
-
-1. 使用 Go 1.24 或更高版本引入 module；
-2. 配置目标 provider 的凭证；
-3. 导入模型协议对应的 adapter；
-4. 使用 `LookupModel` 与 `SupportsProtocol` 验证模型；
-5. 调用 `Complete` 并处理 error。
-
-场景手册中的示例在此基础上增加完整结果处理和生产约束。
-
-## 6. 生命周期与执行流程
-
-### 单次请求
+一次 `Stream` 调用依次经过 `Client`、`ProviderRegistry` 和 `ProtocolAdapter`：
 
 ```mermaid
 sequenceDiagram
-    participant App as Application
+    participant App as 应用
     participant Client
-    participant Providers as ProviderRegistry
-    participant Adapter as ProtocolAdapter
-    participant API as Provider API
+    participant Registry as 提供方注册表
+    participant Adapter as 协议适配器
+    participant Service as 模型服务
 
-    App->>Client: Complete / Stream
-    Client->>Client: StreamOptions.Validate
-    Client->>Providers: ResolveRequest
-    Client->>Adapter: Stream(model, context, options)
-    Adapter->>Adapter: TransformMessages
-    Adapter->>API: streamed HTTP request
-    API-->>Adapter: provider chunks
-    Adapter-->>App: normalized Events
+    App->>Client: Stream（模型、上下文、选项）
+    Client->>Client: 校验 StreamOptions
+    Client->>Registry: 解析请求配置
+    Registry-->>Client: 最终模型与请求选项
+    Client->>Adapter: 发起流式请求
+    Adapter->>Adapter: 转换消息
+    Adapter->>Service: HTTP 流式请求
+    Service-->>Adapter: 服务端响应增量
+    Adapter-->>App: EventStart / 内容事件 / 终止事件
 ```
 
-`Complete` 复用 `Stream`，读取到 `EventDone` 或 `EventError` 后返回。Adapter goroutine 在退出时关闭 SDK stream 和事件通道。事件通道的消费约束见[流式响应](streaming.md)。
+`Complete` 复用同一条流式路径，在内部持续读取事件，并在 `EventDone` 或 `EventError` 后返回 `AssistantMessage`。因此两种入口共享消息转换、错误映射、用量和诊断逻辑。
 
-### Hook 与重试
+事件通道无缓冲。使用 `Stream` 时必须持续读取到关闭，即使请求上下文已取消或应用不再展示增量。事件顺序和终止规则见[流式事件](streaming.md)。
 
-`OnRequest`、`RewriteRequest` 和 `OnResponse` 对每次 SDK attempt 执行。`RewriteRequest` 每次以原始序列化正文为输入。跨 SDK 的 middleware 嵌套顺序没有额外保证；不要依赖未公开的执行细节。
+## 配置在哪一层生效
 
-### 资源释放
-
-- `Client` 和 registry 没有 `Close` 方法；
-- adapter 负责关闭单次请求的 provider stream；
-- 传入的 `http.Client` 和 Transport 由应用拥有并复用；
-- context 取消整个请求，`StreamOptions.Timeout` 限制每次 HTTP attempt；
-- 流消费者必须读取事件通道直到关闭。
-
-## 7. 扩展机制
-
-| 需求 | 扩展点 | 说明 |
+| 配置范围 | 类型 | 适合放置的值 |
 |---|---|---|
-| 接入兼容现有协议的新服务地址 | 手动构造 `Model` | 设置 `Protocol`、`BaseURL` 和必要 compatibility |
-| 新 provider 配置 | `NewSpecProvider`、`ProviderRegistry.Register` | 声明凭证变量、headers 和模型 |
-| 自定义代理、TLS 或 Transport | `openai.NewAdapter`、`anthropic.NewAdapter` | 注入应用拥有的 `*http.Client` |
-| 请求观察或字段补丁 | `OnRequest`、`RewriteRequest`、`OnResponse` | Hook 在请求 goroutine 内同步执行 |
-| 框架尚未支持的请求与响应协议 | `ProtocolAdapter`、`ProtocolStreamOptions` | 使用 `StreamWriter` 维持公共事件契约 |
+| 单次请求 | `StreamOptions` | 用户凭证、采样参数、输出上限、超时、请求头和回调 |
+| 单个提供方 | `ProviderOverride` | 网关地址、共享凭证、公共请求头和环境覆盖 |
+| 单个 `Client` | `AdapterRegistry`、`ProviderRegistry` | 租户隔离、协议允许列表和测试状态 |
+| 单个模型 | `Model`、`ModelCompatibility` | 服务地址、能力、上下文限制和接口差异 |
 
-完整实现要求见[自定义协议](extending.md)。消息与内容块接口包含未导出的 marker 方法，外部包不能增加新角色或内容块；音频、文档、citation 等类型需要修改核心包。
+请求值与提供方覆盖配置的优先级只在[请求选项](configuration.md)维护。需要检查协议适配器最终收到的值时，可以调用 `ProviderRegistry.ResolveRequest`，不要在业务代码中复制合并逻辑。
 
-## 8. 错误处理与排查
+`OnRequest`、`RewriteRequest` 和 `OnResponse` 会对底层 SDK 的每次请求尝试执行。回调与请求在同一执行路径上，阻塞回调会直接增加延迟。观察和改写的完整示例见[记录和修改请求](recipes/observability.md)。
 
-| 阶段 | 信号 | 入口 |
-|---|---|---|
-| 请求创建前 | `Complete`/`Stream` 直接返回 error | options、凭证、adapter 注册 |
-| 流运行期间 | `EventError`；`Complete` 返回部分消息和 error | HTTP、provider、解码、取消 |
-| 正常终止但需业务处理 | `AssistantMessage.StopReason` | token 上限、工具请求等 |
-| 已恢复的非致命问题 | `AssistantMessage.Diagnostics` | 工具参数恢复等 |
+## 状态、并发与资源
 
-错误语义见[错误处理](errors.md)，按症状的修复步骤见[排障](troubleshooting.md)，可复用业务策略见[错误处理场景](recipes/error-handling.md)。包没有内置日志文件或全局 logger。
+- `Client` 不保存会话状态。应用维护 `Context.Messages` 并决定何时持久化。
+- 注册表支持并发读取和修改；默认提供方注册表是进程共享状态。
+- 已经通过 `ResolveRequest` 得到配置的在途请求，不受后续覆盖配置修改影响。
+- `Client` 和注册表没有 `Close` 方法。
+- 协议适配器负责关闭单次请求的响应流；应用负责创建并持有传入的 `http.Client` 及其底层传输组件。
+- 应复用 `http.Client` 及其底层传输组件，避免每次请求重新创建连接池。
+- 请求上下文控制整个调用；`StreamOptions.Timeout` 控制单次 HTTP 尝试。
 
-## 9. 使用限制
+对话的并发更新、存储版本和恢复过程见[保存与恢复对话](recipes/conversation-persistence.md)。
 
-- 已实现协议、仅目录协议和 provider 状态以[支持矩阵](support-matrix.md)为唯一来源。
-- 三类 registry 可并发访问；默认 provider registry 是进程共享状态。
-- 事件通道无缓冲，停止读取会阻塞 producer。
-- 每个非终止事件包含 `Partial` 快照；高频处理会增加分配。
-- base64 图片增加内存和请求体积。
-- 工具校验覆盖常用 JSON Schema 子集，不承诺完整规范兼容。
-- 模型目录在构建时嵌入；价格、能力和状态可能晚于 provider。
-- Hook、序列化历史、工具结果和 reasoning 签名可能包含敏感数据。
-- 当前材料没有官方吞吐量 benchmark、内置指标 exporter 或账单对账机制。
+## 扩展路径
 
-## 10. API 或模块索引
+先判断目标服务改变的是配置还是请求与响应格式：
 
-公开接口按请求、消息、事件、配置、工具、模型、provider、诊断和扩展整理在 [API 索引](api-reference.md)。专题入口如下：
-
-| 模块 | 文档 |
+| 目标 | 推荐扩展点 |
 |---|---|
-| 请求与配置 | [快速开始](getting-started.md)、[请求配置](configuration.md) |
-| 消息与结果 | [对话](conversations.md)、[读取响应](results.md) |
-| 流式 | [流式响应](streaming.md) |
-| 工具与推理 | [工具](tools.md)、[推理与思考](reasoning.md) |
-| 模型与 provider | [提供方与模型](providers.md)、[支持矩阵](support-matrix.md) |
-| Client 与注册表 | [Client 与注册表](clients-and-registries.md) |
-| 错误与排障 | [错误处理](errors.md)、[排障](troubleshooting.md) |
-| 测试与扩展 | [测试](testing.md)、[自定义协议](extending.md) |
+| 更换已有提供方的服务地址或凭证 | `ProviderOverride` |
+| 接入一个兼容现有协议的服务 | 直接构造 `Model` |
+| 注册新的提供方、凭证变量和模型集合 | `NewSpecProvider`、`ProviderRegistry.Register` |
+| 修改代理、TLS、连接池或 HTTP 传输配置 | 为内置协议适配器注入 `*http.Client` |
+| 观察请求或补充暂未类型化的字段 | `OnRequest`、`RewriteRequest`、`OnResponse` |
+| 支持新的请求与响应格式 | 实现 `ProtocolAdapter` 和必要的 `ProtocolStreamOptions` |
 
-内部实现与源码不变量见[源码解析](../internals/overview.md)。
+`StreamWriter` 帮助自定义协议适配器遵循统一的事件生命周期。完整实现要求见[自定义协议](extending.md)。消息与内容块接口含未导出的标记方法，外部包不能自行增加新角色或内容块。
+
+## 上线前检查
+
+- 使用 `LookupModel` 处理配置或用户提供的模型 ID，避免未知值触发 panic。
+- 使用 `GetRunnableModels` 或 `SupportsProtocol` 确认当前程序已经注册目标协议。
+- 使用 `AuthStatus` 检查是否能解析凭证，但仍需真实请求验证凭证权限。
+- 为整个调用设置请求上下文截止时间，并明确底层 SDK 重试与应用重试的边界。
+- 流式事件必须读取到通道关闭；调用端断开连接时，先取消请求上下文，再继续读取并丢弃剩余事件，直至通道关闭。
+- 工具执行设置授权、超时、幂等键、并发数和循环上限。
+- 对提示词、图片、工具参数、请求体、历史和推理签名执行脱敏与访问控制。
+- 分别记录原始 `Usage` 和成本估算；`Usage.Cost` 不等于模型服务账单。
+- 使用目标模型服务验证鉴权、流式、工具、推理、用量和错误路径。
+
+框架没有内置日志文件、指标导出器、账单对账或官方吞吐量基准数据。
+
+## 排查入口
+
+| 现象 | 从这里开始 |
+|---|---|
+| 请求开始前直接返回 `error` | [失败信号](errors.md) |
+| 流不结束、取消后仍阻塞 | [问题排查](troubleshooting.md#取消后流一直不关闭) |
+| 模型存在但不能调用 | [查找模型与检查凭证](recipes/provider-discovery.md) |
+| 输出截断或上下文超限 | [处理请求失败](recipes/error-handling.md) |
+| 工具参数不完整或校验失败 | [工具定义与调用](tools.md#执行前校验) |
+| 自定义服务请求不兼容 | [接入自定义模型服务](recipes/custom-gateway.md) |
+
+源码约束和协议适配器的实现细节见[源码解析](../internals/overview.md)。

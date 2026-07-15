@@ -1,12 +1,20 @@
-# Custom gateway
+# Connecting a custom model service
 
-## Choosing the integration form
+Use this page to send model calls to a proxy, private deployment, or compatible service. A model service address is its public HTTP API address, for example `https://gateway.example.com/v1`.
 
-Use a provider override when all requests for an existing provider should use one gateway. Construct a `Model` directly when only one compatible endpoint is needed or the provider is not cataloged. Neither form adds a new wire protocol.
+## Choosing an integration method
 
-## Complete provider-override program
+| Situation | Method |
+|---|---|
+| Every call to an existing provider uses one service | Use `ProviderOverride` |
+| Calling one compatible service, or a service absent from the built-in model catalog | Construct a `Model` directly |
+| The service uses request and response formats outside framework protocols | Implement `ProtocolAdapter` |
 
-The gateway URL and key come from application configuration rather than source code:
+The first two methods reuse an existing protocol adapter and do not require a new one.
+
+## Overriding an existing provider
+
+Read the service address and API key from application configuration, not source code:
 
 ```go
 package main
@@ -46,17 +54,17 @@ func main() {
 }
 ```
 
-## Precedence
+## Override scope and precedence
 
-| Setting | Highest to lowest |
-|---|---|
-| API key | request `APIKey` → override `APIKey` → request `Env` → override `Env` → process environment |
-| Base URL | provider override → `Model.BaseURL` |
-| Header per name | request → override → provider spec → model |
+`ProviderOverride` can replace credentials, service address, headers, and
+environment values. The complete precedence against request options, model
+fields, and process environment is maintained only in
+[Request options](../configuration.md#supply-credentials-per-request) and
+[Models and providers](../providers.md#redirect-a-providers-requests).
 
-`SetOverride` stores a snapshot. Later mutation of the input maps does not change the registered override. Requests that already resolved configuration are not affected by later updates.
+`SetOverride` stores a snapshot. Later mutation of the input maps does not change the registered override. Requests already resolving configuration are not affected by later updates.
 
-## One compatible endpoint
+## Connecting one compatible service
 
 ```go
 model := llm.Model{
@@ -69,12 +77,12 @@ response, err := llm.Complete(ctx, model, llm.Prompt("hello"),
 	llm.StreamOptions{APIKey: "local-key"})
 ```
 
-The endpoint must implement the selected protocol's streaming and error behavior, not merely return similar JSON. Configure `Model.Compatibility` for known dialect differences. Implement `ProtocolAdapter` only for a genuinely different wire protocol.
+The model service must implement the selected protocol's request, streaming response, and error behavior; returning similar JSON is not enough to guarantee compatibility. Configure known field differences with `Model.Compatibility`. Implement `ProtocolAdapter` only when request and response formats fall outside existing protocols.
 
-## Operational constraints
+## Compatibility and security boundaries
 
 - `DefaultProviderRegistry` is process-global. Avoid tenant-specific overrides on a shared default registry.
-- Do not accept arbitrary user-supplied base URLs without SSRF controls and network allowlists.
+- Do not accept user-supplied service addresses without SSRF controls and network allowlists.
 - Preserve TLS verification; custom certificates belong on an explicit `http.Transport`.
 - Test tools, reasoning, usage, retries, and error streams against the actual gateway.
 - Clear test overrides or use an isolated client to prevent cross-test leakage.

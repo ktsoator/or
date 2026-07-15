@@ -1,7 +1,7 @@
 # Troubleshooting
 
-Symptom-first fixes for the problems that come up most. For the underlying model
-— how errors are surfaced and how keys resolve — see [Error handling](errors.md).
+This page maps common symptoms to diagnostics and fixes. For the failure model
+and credential-resolution rules, see [Failure signals](errors.md).
 
 ## `no adapter registered for protocol "..."`
 
@@ -20,8 +20,8 @@ import (
 )
 ```
 
-If the protocol is marked catalog-only in the
-[support matrix](support-matrix.md#protocol-status), importing `llm/all` does
+If the protocol is marked catalog-only in
+[Protocol and provider status](support-matrix.md#protocol-status), importing `llm/all` does
 not add an implementation. Choose a currently runnable model or implement an
 adapter.
 
@@ -119,4 +119,4 @@ recovered arguments.
 - **Fix:** before running a tool with side effects, check `Diagnostics` and
   decline `partial` or `invalid` arguments. On a decode error, return a tool
   error (`result.IsError = true`) so the model can correct the call. See the
-  [tool-loop checklist](tools.md#run-the-tool-loop).
+  [Executing tool calls](recipes/tool-loop.md).

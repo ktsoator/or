@@ -1,10 +1,15 @@
-# 可观测性 Hook
+# 记录和修改请求
 
-## 本场景实现什么
+`StreamOptions` 提供三个请求回调：`OnRequest` 读取即将发送的请求，`RewriteRequest` 修改序列化后的请求体，`OnResponse` 读取 HTTP 状态和响应头。
 
-请求记录每次尝试的耗时、method、URL、序列化字节数、status 和 provider request ID，但不记录提示正文或凭证。
+示例记录请求方法、地址、请求体大小、响应状态、请求 ID 和耗时，不记录提示词正文或凭证。每次 SDK 请求尝试都会调用这些回调，因此重试也会产生记录。
 
-Hook 每次 SDK attempt 都会运行，因此重试可见。它们在请求路径中同步执行。
+## 运行前准备
+
+```sh
+go get github.com/ktsoator/or/llm@latest
+export DEEPSEEK_API_KEY=your-key
+```
 
 ## 完整程序
 
@@ -45,20 +50,16 @@ func main() {
 }
 ```
 
-## Hook 语义
+## 回调的执行时机
 
-| Hook | 输入 | 失败行为 |
-|---|---|---|
-| `OnRequest` | 每次尝试的实际 method、URL 和序列化 body | 不返回 error；阻塞会延迟请求 |
-| `RewriteRequest` | 相同请求数据，返回替换字节 | `nil` 保留原值；无效 JSON 会让 provider 调用失败 |
-| `OnResponse` | 每次 HTTP 响应的 status 和 headers | 在消费 response body 前运行 |
+示例使用 `OnRequest` 观察序列化请求、用 `RewriteRequest` 返回替换后的请求体，并在 `OnResponse` 中读取状态码和响应头。三个回调都会对每次 SDK 尝试执行；精确签名、返回行为和调用约束统一见[请求选项](../configuration.md#观察-http-请求与响应)。
 
-`RewriteRequest` 是为类型化选项未表达的 provider 字段准备的逃生口。应优先使用 `StreamOptions`、协议选项、模型兼容字段、headers 或 provider override。
+`RewriteRequest` 用于补充类型化选项尚未支持的模型服务字段。优先使用 `StreamOptions`、协议选项、`Model.Compatibility`、请求头或提供方覆盖；这些方式更容易校验和维护。
 
-## 安全与运维
+## 日志与性能边界
 
-- Request body 包含提示词、图片、工具和工具参数。应记录大小或脱敏结构，不记录原始字节。
-- URL 和 header 可能含租户 ID 或凭证，导出属性前使用 allowlist。
-- 慢速遥测写入应放入应用缓冲队列；hook callback 只执行有界工作。
-- SDK 重试会让一个逻辑请求产生多次 hook 调用；需要时由应用记录 attempt 编号。
-- 本包没有 logger、metrics exporter 或 trace backend，hook 必须接入应用自己的遥测系统。
+- 请求体可能包含提示词、图片、工具定义和工具参数。只记录大小或脱敏后的结构，不要记录原始字节。
+- URL 和响应头可能包含租户信息或凭证。导出日志和指标前使用允许列表筛选字段。
+- 回调在请求路径中同步执行。慢速日志或遥测写入应交给应用自己的缓冲队列。
+- 一次逻辑请求可能因 SDK 重试触发多组回调。需要区分时，由应用记录尝试序号。
+- `llm` 不提供日志器、指标导出器或链路追踪后端；回调需要接入应用现有的可观测系统。

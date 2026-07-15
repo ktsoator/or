@@ -1,10 +1,8 @@
-# Model and auth discovery
+# Finding models and checking credentials
 
-## What this builds
+An application can list models it can call at startup and check whether each provider has credentials configured. This does not send a model request.
 
-A diagnostic command lists only models routable by the adapters imported into the process and reports provider credential status without sending a request.
-
-This is the correct basis for model-selection UIs and startup checks. `GetModels` alone includes catalog entries for protocols that have no built-in adapter.
+Use `GetRunnableModels` for a model-selection interface and startup checks, rather than `GetModels` alone. The latter also returns models whose protocol adapters are not registered in the current program.
 
 ## Complete program
 
@@ -42,16 +40,20 @@ func main() {
 }
 ```
 
-## Catalog and runtime are separate
+## Whether a model is callable
 
 | API | Question answered |
 |---|---|
-| `GetProviders` | Which provider IDs exist in the embedded catalog? |
-| `GetModels(provider)` | Which catalog models exist, including unimplemented protocols? |
-| `GetRunnableModels(provider)` | Which models can the default adapter registry route now? |
-| `SupportsProtocol(protocol)` | Was an adapter for this protocol imported? |
-| `AuthStatus(provider, env)` | Can this provider resolve a credential, and from where? |
+| `GetProviders` | Which provider IDs exist in the built-in model catalog? |
+| `GetModels(provider)` | Which models are listed, including models not callable now? |
+| `GetRunnableModels(provider)` | Which models can the default protocol-adapter registry route now? |
+| `SupportsProtocol(protocol)` | Is an adapter for this protocol registered in the current program? |
+| `AuthStatus(provider, env)` | Can the provider resolve a credential, and from where? |
 
-`AuthStatus` reports sources such as `env:DEEPSEEK_API_KEY` or `override` but does not send a request. A configured credential can still be expired, unauthorized for the model, or rejected by the endpoint.
+A model being listed in the built-in model catalog does not mean the current program can call it. Calling it also requires a registered adapter for its protocol. `llm/all` registers every built-in protocol; importing one protocol package registers only that protocol.
 
-Do not expose secret values from `GetEnvAPIKey` in diagnostics. Show expected variable names with `APIKeyEnvVars` and missing names from `AuthStatus` instead.
+## Checking credentials
+
+`AuthStatus` reports sources such as `env:DEEPSEEK_API_KEY` or `override` but does not send a request. A configured credential can still be expired, unauthorized for the model, or rejected by the model service.
+
+Do not expose secret values from `GetEnvAPIKey` in diagnostics. Show expected variable names from `APIKeyEnvVars` and missing names from `AuthStatus` instead.

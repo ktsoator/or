@@ -114,6 +114,6 @@ func buildClient(httpClient *http.Client, model llm.Model, options llm.StreamOpt
 
 `Model.BaseURL`、`Model.Headers` 和 `Model.Compatibility` 让非参考厂商也能复用同一个适配器。例如，OpenAI 兼容厂商可以把 `BaseURL` 指向自己的端点，并用兼容性字段描述 `max_tokens` 与 `max_completion_tokens`、严格工具支持、reasoning 字段名等差异。
 
-因此，新增一个兼容厂商通常只是目录改动，而不是新增适配器。只有真正不同的线路协议才需要新的 `ProtocolAdapter`。
+因此，新增一个兼容厂商通常只是更新模型清单，而不是新增适配器。只有请求与响应格式真正不同的服务才需要新的 `ProtocolAdapter`。
 
 源码：[`llm/adapters.go`](https://github.com/ktsoator/or/blob/main/llm/adapters.go)、[`llm/anthropic/adapter.go`](https://github.com/ktsoator/or/blob/main/llm/anthropic/adapter.go)、[`llm/openai/`](https://github.com/ktsoator/or/tree/main/llm/openai)。

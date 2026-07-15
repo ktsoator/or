@@ -1,16 +1,16 @@
-# 测试
+# 测试策略
 
 基于 `llm` 的代码可以分三层测试。只有 adapter 请求路径需要模拟 provider 协议；业务结果处理和多数工具策略都可以使用普通 Go 值。
 
 | 层级 | 测试对象 | 网络 | 推荐方式 |
 |---|---|---|---|
-| 结果处理 | 文本渲染、停止原因、usage、诊断 | 无 | 手工构造 `AssistantMessage` |
+| 结果处理 | 文本渲染、停止原因、token 用量、诊断 | 无 | 手工构造 `AssistantMessage` |
 | 应用流程 | 历史、工具循环、重试决策 | 无或本地 | 纯值或有状态 mock |
 | Adapter 路径 | 请求序列化、SSE、事件和错误映射 | 本地 HTTP | `httptest.Server` + 显式 `Model` |
 
 ## 用纯值测试响应处理
 
-`AssistantMessage`、`Context` 和内容块是普通结构体。将响应处理逻辑提取成接收 `AssistantMessage` 的函数后，可以直接覆盖错误、截断、工具调用和 usage 分支。
+`AssistantMessage`、`Context` 和内容块是普通结构体。将响应处理逻辑提取成接收 `AssistantMessage` 的函数后，可以直接覆盖错误、截断、工具调用和 token 用量分支。
 
 ```go
 func renderReply(msg llm.AssistantMessage) string {
@@ -42,7 +42,7 @@ func TestRenderReply(t *testing.T) {
 
 ## 针对 mock server 测试请求路径
 
-完整的 OpenAI 兼容 SSE 测试只在 [Mock Provider 测试场景](recipes/mock-testing.md)维护。测试路径由以下部分组成：
+完整的 OpenAI 兼容 SSE 测试只在[使用本地模拟服务测试](recipes/mock-testing.md)中维护。测试路径由以下部分组成：
 
 1. 用 `httptest.NewServer` 返回目标协议的事件；
 2. 手动构造 `Model`，把 `BaseURL` 指向 server；
@@ -62,7 +62,7 @@ func TestRenderReply(t *testing.T) {
 - 循环在最终停止原因或轮数上限结束；
 - 带副作用工具不会因应用级 retry 被重复执行。
 
-工具协议与执行清单见[工具](tools.md)，完整应用循环见[工具循环场景](recipes/tool-loop.md)。
+工具类型与消息契约见[工具定义与调用](tools.md)，完整应用循环见[执行工具调用](recipes/tool-loop.md)。
 
 ## 取消、并发与状态隔离
 

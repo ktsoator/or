@@ -213,13 +213,13 @@ func GetModels(provider string) []Model                  // 对应 Models
 func GetRunnableModels(provider string) []Model          // 仅返回已注册适配器的模型
 ```
 
-取单个模型有 `LookupModel` 与 `GetModel` 两个版本，仅在缺失时的处理上有别：`GetModel` 适用于标识符在代码中写死、理应存在的场合，缺失即属程序错误；`LookupModel` 适用于标识符来自配置或外部输入、需由调用方自行应对缺失的场合。`GetProviders` 与 `GetModels` 则分别直通 `Providers` 与 `Models`，语义不变。`GetRunnableModels` 进一步通过 `SupportsProtocol` 筛选目录，只返回其协议已存在于包级默认 adapter 注册表中的模型，因此结果会反映应用实际导入的协议包。
+取单个模型有 `LookupModel` 与 `GetModel` 两个版本，仅在缺失时的处理上有别：`GetModel` 适用于标识符在代码中写死、理应存在的场合，缺失即属程序错误；`LookupModel` 适用于标识符来自配置或外部输入、需由调用方自行应对缺失的场合。`GetProviders` 与 `GetModels` 则分别直通 `Providers` 与 `Models`，语义不变。`GetRunnableModels` 进一步通过 `SupportsProtocol` 筛选模型清单，只返回其协议已存在于包级默认 adapter 注册表中的模型，因此结果会反映应用实际导入的协议包。
 
 无论经由哪个入口，取回的都是深拷贝。`Model` 内含切片、map 与指针字段，若直接交出表中原件，调用方的改动便会波及其他持有者；返回独立副本即可杜绝这种隐性耦合。
 
 ## 内置模型
 
-上述注册表中的内置模型并非在运行时拉取，而是随二进制一同发布。[`catalog.generated.json`](https://github.com/ktsoator/or/blob/main/llm/catalog.generated.json) 由 `go generate`（`internal/genmodels`）从上游目录数据生成——以 [Models.dev](https://models.dev) 为主，辅以 OpenRouter 与 Vercel AI Gateway 的实时目录与定价。它既包含已实现协议的模型，也包含为未来 adapter 准备的部分 catalog-only 协议模型。生成结果连同源码一并提交，再经 `//go:embed` 编入二进制：
+上述注册表中的内置模型并非在运行时拉取，而是随二进制一同发布。[`catalog.generated.json`](https://github.com/ktsoator/or/blob/main/llm/catalog.generated.json) 由 `go generate`（`internal/genmodels`）从上游模型清单数据生成——以 [Models.dev](https://models.dev) 为主，辅以 OpenRouter 与 Vercel AI Gateway 的实时模型清单与定价。它既包含已实现协议的模型，也包含为未来 adapter 准备的部分仅收录协议模型。生成结果连同源码一并提交，再经 `//go:embed` 编入二进制：
 
 ```go
 //go:embed catalog.generated.json
@@ -234,12 +234,12 @@ var builtInModelRegistry = newBuiltInModelRegistry()
 func builtInModels() []Model {
 	var models []Model
 	if err := json.Unmarshal(generatedCatalogJSON, &models); err != nil {
-		panic(...) // 目录损坏即无从启动
+		panic(...) // 模型清单损坏即无从启动
 	}
 	return models
 }
 ```
 
-此处对解码与注册失败一律 `panic`，而非返回错误。内嵌目录是编译期产物：到了运行时，它要么完好，要么意味着构建本身有误，二者之间并无可供降级运行的中间状态，因此让程序尽早终止。
+此处对解码与注册失败一律 `panic`，而非返回错误。内嵌模型清单是编译期产物：到了运行时，它要么完好，要么意味着构建本身有误，二者之间并无可供降级运行的中间状态，因此让程序尽早终止。
 
 源码：[`model.go`](https://github.com/ktsoator/or/blob/main/llm/model.go)、[`model_registry.go`](https://github.com/ktsoator/or/blob/main/llm/model_registry.go) 与 [`catalog.go`](https://github.com/ktsoator/or/blob/main/llm/catalog.go)。

@@ -1,10 +1,8 @@
-# Mock Provider 测试
+# 使用本地模拟服务测试
 
-## 本场景实现什么
+`httptest.Server` 可以在本机模拟模型服务。测试不需要真实账号或外部网络，即可覆盖请求序列化、流式响应解析和最终消息组装。
 
-`httptest` server 发出 OpenAI-compatible SSE，测试在没有 provider 账号和网络访问的情况下验证完整 `Complete` 请求路径。
-
-将代码保存为依赖 `llm` 的 package 中的 `completion_test.go`。
+下面的测试模拟 OpenAI Chat Completions 的 SSE 响应。将代码保存为使用 `llm` 的 Go package 中的 `completion_test.go`。
 
 ## 完整测试
 
@@ -54,14 +52,22 @@ func TestCompletion(t *testing.T) {
 }
 ```
 
-运行 `go test ./...`。非空 request API key 只用于通过本地校验，不会发送到测试服务器之外。
+运行：
 
-## 下一步应该测试什么
+```sh
+go test ./...
+```
 
-- 检查请求 JSON，断言 tools、system prompt、reasoning 和 headers。
-- 第一次请求发 `tool_calls`，第二次发最终答案，测试完整工具循环。
-- 发错误 status 和畸形 SSE，验证部分消息与错误策略。
-- 测试 `Stream` 取消，并继续读取到通道关闭，以发现 goroutine 泄漏。
-- 测试注册自定义 adapter 或 provider override 时使用显式 client 和 registry，避免 package-global 状态跨测试污染。
+示例中的 API 密钥只用于通过请求校验，并仅发送给本地测试服务器。
 
-Mock test 验证协议转换，不验证真实 provider 兼容性。生产使用的 provider 仍应保留少量带凭证集成测试。
+## 可以继续覆盖的路径
+
+- 读取请求 JSON，断言工具、系统指令、推理选项和请求头是否正确。
+- 第一次返回工具调用，第二次返回最终答案，覆盖完整工具调用流程。
+- 返回错误状态码或格式错误的 SSE，验证部分消息和错误处理。
+- 取消 `Stream`，并继续读取到通道关闭，检查 goroutine 是否能结束。
+- 测试自定义协议适配器或提供方覆盖时，使用自定义 Client 和独立注册表，避免包级全局状态影响其他测试。
+
+## 测试范围
+
+本地模拟测试验证应用逻辑和协议转换，不验证真实模型服务的鉴权、限流、字段差异或线上行为。生产使用的模型服务仍应保留少量带凭证的集成测试。

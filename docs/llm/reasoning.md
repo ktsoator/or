@@ -1,10 +1,9 @@
-# Reasoning and thinking
+# Reasoning options
 
-`StreamOptions.Reasoning` is a provider-neutral effort level. Each adapter maps
-it to the target provider's native form—Anthropic adaptive or budget thinking,
-or OpenAI-compatible reasoning fields—and clamps it to the levels supported by
-the selected model. Non-reasoning models ignore it, so the same option is safe
-to set on any model.
+This page defines the exact semantics of `StreamOptions.Reasoning`, supported
+model levels, thinking content blocks, and protocol-specific options. For
+application-level display, storage, and control policy, see
+[Requesting reasoning](recipes/reasoning.md).
 
 ```go
 options := llm.StreamOptions{Reasoning: llm.ModelThinkingHigh}
@@ -48,7 +47,7 @@ thinking-token budget (or adaptive thinking), on OpenAI-compatible providers a
 
 Thinking tokens count toward `Usage.Output` and bill at the same output rate as
 generated text, so a higher level makes each request cost more. See
-[Reading responses](results.md#token-usage-and-cost) for usage and cost.
+[Responses and usage](results.md#token-usage-and-cost) for usage and cost.
 
 ## Check what a model supports
 
@@ -149,4 +148,4 @@ they will accept the next tool call, so dropping it can make the turn fail. The
 library keeps the block (even when `ThinkingDisplayOmitted` hides its text) so
 the history stays valid. When the target model changes, reasoning content from
 the prior model is dropped rather than replayed as plain text. See
-[Conversations](conversations.md) for model switching and persistence.
+[Messages and context](conversations.md) for the underlying message rules.

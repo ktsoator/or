@@ -1,10 +1,27 @@
-# Reasoning output
+# Requesting reasoning
 
-## What this builds
+`StreamOptions.Reasoning` requests a model reasoning level. A streaming response can handle reasoning content separately from final text.
 
-A streaming command requests the closest supported reasoning level, renders thinking separately from answer text, and reads the final usage record.
+A reasoning level expresses a preference, not a guarantee that visible reasoning text will be returned. A model can reason internally while returning only its final answer.
 
-Reasoning is a request hint, not a guarantee that visible thinking text will be returned. Providers use different native controls, and a model can perform reasoning while omitting its text.
+## Scope
+
+| Requirement | Handling |
+|---|---|
+| Request more or less reasoning effort | Set `StreamOptions.Reasoning` |
+| Separate reasoning from the final answer live | Handle thinking and text events separately |
+| Only the final answer is needed | Use `Complete`; `Reasoning` still applies |
+| Hide visible Anthropic reasoning | Set `AnthropicStreamOptions.ThinkingDisplay` |
+| Read exact reasoning tokens | Unified `Usage` has no separate field; use model-service data |
+
+Reasoning is useful for mathematics, code analysis, complex planning, and multi-step decisions, but higher levels commonly increase latency and token consumption. Simple extraction, formatting, or classification may not benefit.
+
+## Before running the example
+
+```sh
+go get github.com/ktsoator/or/llm@latest
+export DEEPSEEK_API_KEY=your-key
+```
 
 ## Complete program
 
@@ -16,6 +33,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/ktsoator/or/llm"
 	_ "github.com/ktsoator/or/llm/openai"
@@ -28,7 +46,9 @@ func main() {
 	fmt.Fprintf(os.Stderr, "supported=%v requested=%s effective=%s\n",
 		llm.SupportedThinkingLevels(model), requested, effective)
 
-	events, err := llm.Stream(context.Background(), model,
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	events, err := llm.Stream(ctx, model,
 		llm.Prompt("Solve 37 * 48 and verify the result."),
 		llm.StreamOptions{Reasoning: effective, MaxTokens: 1000})
 	if err != nil {
@@ -54,31 +74,65 @@ func main() {
 		}
 	}
 	if streamErr != nil {
+		if final != nil {
+			log.Printf("partial answer: %q", final.Text())
+		}
 		log.Fatal(streamErr)
 	}
-	if final != nil {
-		fmt.Printf("\noutput tokens=%d\n", final.Usage.Output)
+	if final == nil {
+		log.Fatal("stream closed without a terminal message")
 	}
+	fmt.Printf("\nstop=%s output tokens=%d\n",
+		final.StopReason, final.Usage.Output)
 }
 ```
 
-## How neutral levels are mapped
+Reasoning deltas go to standard error and final-answer text goes to standard output, allowing callers to display or redirect them separately. The program still consumes events until channel close.
 
-`ModelThinkingLevel` provides `off`, `minimal`, `low`, `medium`, `high`, and `xhigh`. `SupportedThinkingLevels` derives the levels advertised by the model. `ClampThinkingLevel` selects the nearest available level; non-reasoning models effectively ignore the request.
+## Selecting a reasoning level
 
-The adapter translates the effective level into protocol-native fields. Do not place provider-specific reasoning JSON in `RewriteRequest` unless the typed mapping cannot represent a required endpoint feature.
+`SupportedThinkingLevels` returns the levels declared by the selected model, and
+`ClampThinkingLevel` converts a user choice into a value that model accepts.
+Record both the requested and effective values so the interface matches the
+actual request. The canonical level list, clamping order, and token semantics
+are in [Reasoning options](../reasoning.md#effort-levels).
 
-## Anthropic display control
+The protocol adapter translates the effective level into endpoint-specific fields. Use `RewriteRequest` only when typed configuration cannot express a required endpoint feature.
 
-The Anthropic protocol can omit visible thinking while retaining reasoning and
-the signatures required to continue the conversation. See
+## Reading reasoning events
+
+The example writes new reasoning text on `EventThinkingDelta`, writes the final
+answer on `EventTextDelta`, and stores the message from `EventDone` or
+`EventError`. A response may contain several reasoning and text blocks; use
+`ContentIndex` when each block updates a separate region.
+
+`ThinkingContent` in the final `AssistantMessage.Content` can also contain
+signatures or redaction markers, so do not persist only the reasoning text shown
+on screen. See [Streaming events](../streaming.md#event-reference) for the full
+field contract.
+
+## Controlling visible reasoning
+
+Anthropic Messages can omit visible reasoning while retaining the signatures
+needed to continue a conversation. See
 [Reasoning § Anthropic thinking display](../reasoning.md#anthropic-thinking-display)
 for the option, code, and token semantics; this task guide does not duplicate
 protocol configuration.
 
+`ThinkingDisplayOmitted` controls returned content only; it does not change whether the model reasons or how it is billed. Only the Anthropic protocol currently implements this display option. Passing Anthropic-specific options to another protocol fails before the request starts.
+
+## Tokens, results, and history
+
+- `Usage.Output` records output usage reported by the model service. Some services include reasoning consumption, but unified `Usage` has no separate reasoning-token field.
+- The relationship between `MaxTokens` and reasoning budget is model-service specific. Heavy reasoning can leave less room for the final answer or end at the output limit.
+- When continuing with the same model, persist the complete `AssistantMessage` so reasoning signatures needed for conversation or tool use are retained.
+- When changing models, `TransformMessages` removes model-specific reasoning instead of sending it to the new model as ordinary text.
+
 ## Boundaries
 
 - Thinking text and signatures may contain sensitive information. Do not log them by default.
-- When switching models, provider-specific reasoning blocks are removed rather than replayed to another model.
-- Output token limits include reasoning consumption on providers that account for it that way.
-- Catalog reasoning metadata can be stale. Verify behavior against the selected endpoint.
+- When switching models, model-service-specific reasoning blocks are removed rather than replayed to another model.
+- Some model services count reasoning consumption toward output limits.
+- Built-in model catalog reasoning metadata can be stale. Verify behavior against the selected model.
+- Do not treat visible reasoning as a factual source or audit record; validate final answers and tool arguments.
+- Before exposing reasoning to end users, define product policy, access controls, and retention periods.

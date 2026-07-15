@@ -28,39 +28,42 @@ plugins:
             Basics: 入门
             Core: 核心
             Advanced: 进阶
-            Recipes: 场景示例
-            Application flows: 应用流程
+            Guides: 使用指南
+            Common tasks: 常见任务
             Operations: 配置与运维
+            API and concepts: API 与概念
+            Operations and extension: 运维与扩展
             Overview: 概述
             Capabilities: 功能总览
             Getting started: 快速开始
             Developer guide: 开发者指南
-            Protocol support: 协议支持
+            Protocol and provider status: 协议与提供方状态
             Examples: 示例
-            Providers and models: 提供方与模型
+            Models and providers: 模型与提供方
             Clients and registries: Client 与注册表
             API reference: API 索引
-            Basic completion: 基础补全
-            Streaming chat: 流式对话
-            Image input: 图片输入
-            Reasoning output: 推理输出
-            Tool loop: 工具循环
-            Model switching: 模型切换
-            Conversation persistence: 对话持久化
-            Model and auth discovery: 模型与鉴权发现
-            Custom gateway: 自定义网关
-            Explicit client: 显式 Client
-            Observability hooks: 可观测性 Hook
-            Mock-provider testing: Mock Provider 测试
-            Streaming: 流式响应
-            Tools: 工具
-            Reasoning: 推理与思考
-            Reading responses: 读取响应
-            Error handling: 错误处理
-            Troubleshooting: 排障
-            Testing: 测试
-            Conversations: 对话
-            Configuration: 请求配置
+            Basic completion: 单次文本生成
+            Streaming responses: 流式响应
+            Sending images: 发送图片
+            Requesting reasoning: 请求推理内容
+            Executing tool calls: 执行工具调用
+            Changing models in a conversation: 对话中更换模型
+            Saving and restoring conversations: 保存与恢复对话
+            Finding models and checking credentials: 查找模型与检查凭证
+            Connecting a custom model service: 接入自定义模型服务
+            Creating a custom client: 创建自定义 Client
+            Recording and rewriting requests: 记录和修改请求
+            Handling request failures: 处理请求失败
+            Testing with a local mock server: 使用本地模拟服务测试
+            Streaming events: 流式事件
+            Tool definitions and calls: 工具定义与调用
+            Reasoning options: 推理配置
+            Responses and usage: 响应与用量
+            Failure signals: 失败信号
+            Messages and context: 消息与上下文
+            Request options: 请求选项
+            Troubleshooting: 问题排查
+            Testing strategy: 测试策略
             Custom protocols: 自定义协议
             Agent: Agent
             Events and state: 事件与状态
@@ -143,37 +146,37 @@ nav:
           - Capabilities: llm/capabilities.md
           - Getting started: llm/getting-started.md
           - Developer guide: llm/developer-guide.md
-          - Protocol support: llm/support-matrix.md
-      - Recipes:
+          - Protocol and provider status: llm/support-matrix.md
+      - Guides:
           - Overview: llm/recipes/README.md
-          - Application flows:
+          - Common tasks:
               - Basic completion: llm/recipes/basic-completion.md
-              - Streaming chat: llm/recipes/streaming-chat.md
-              - Conversation persistence: llm/recipes/conversation-persistence.md
-              - Image input: llm/recipes/vision.md
-              - Reasoning output: llm/recipes/reasoning.md
-              - Tool loop: llm/recipes/tool-loop.md
-              - Model switching: llm/recipes/model-switching.md
+              - Streaming responses: llm/recipes/streaming-chat.md
+              - Saving and restoring conversations: llm/recipes/conversation-persistence.md
+              - Sending images: llm/recipes/vision.md
+              - Requesting reasoning: llm/recipes/reasoning.md
+              - Executing tool calls: llm/recipes/tool-loop.md
+              - Changing models in a conversation: llm/recipes/model-switching.md
           - Operations:
-              - Model and auth discovery: llm/recipes/provider-discovery.md
-              - Custom gateway: llm/recipes/custom-gateway.md
-              - Explicit client: llm/recipes/custom-client.md
-              - Observability hooks: llm/recipes/observability.md
-              - Error handling: llm/recipes/error-handling.md
-              - Mock-provider testing: llm/recipes/mock-testing.md
-      - Core:
-          - Streaming: llm/streaming.md
-          - Tools: llm/tools.md
-          - Reasoning: llm/reasoning.md
-          - Reading responses: llm/results.md
-          - Conversations: llm/conversations.md
-          - Error handling: llm/errors.md
-      - Advanced:
-          - Providers and models: llm/providers.md
-          - Configuration: llm/configuration.md
+              - Finding models and checking credentials: llm/recipes/provider-discovery.md
+              - Connecting a custom model service: llm/recipes/custom-gateway.md
+              - Creating a custom client: llm/recipes/custom-client.md
+              - Recording and rewriting requests: llm/recipes/observability.md
+              - Handling request failures: llm/recipes/error-handling.md
+              - Testing with a local mock server: llm/recipes/mock-testing.md
+      - API and concepts:
+          - Messages and context: llm/conversations.md
+          - Streaming events: llm/streaming.md
+          - Tool definitions and calls: llm/tools.md
+          - Reasoning options: llm/reasoning.md
+          - Responses and usage: llm/results.md
+          - Failure signals: llm/errors.md
+          - Models and providers: llm/providers.md
+          - Request options: llm/configuration.md
           - Clients and registries: llm/clients-and-registries.md
+      - Operations and extension:
           - Troubleshooting: llm/troubleshooting.md
-          - Testing: llm/testing.md
+          - Testing strategy: llm/testing.md
           - Custom protocols: llm/extending.md
       - API reference: llm/api-reference.md
       - Examples: llm/examples.md
