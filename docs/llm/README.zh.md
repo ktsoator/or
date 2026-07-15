@@ -169,7 +169,7 @@ go get github.com/ktsoator/or/llm@latest
 - [自定义协议](extending.md) — 适配器、注册表与 `StreamWriter`
 - [Client 与注册表](clients-and-registries.md) — 显式依赖注入、HTTP client 和状态隔离
 - [API 索引](api-reference.md) — 按模块整理的公开接口
-- [Recipes](recipes/README.md) — 按开发任务组织的最小示例
+- [场景手册](recipes/README.md) — 按任务提供完整程序、调用流程、参数、失败行为和运维约束
 
 每个主题的可运行程序列在[示例](examples.md)页。
 

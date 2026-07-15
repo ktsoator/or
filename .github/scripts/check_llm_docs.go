@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go/parser"
+	"go/token"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -74,7 +77,10 @@ func run() error {
 	if err := checkCatalogMarker("docs/llm/support-matrix.zh.md", models); err != nil {
 		return err
 	}
-	return checkAPIReference()
+	if err := checkAPIReference(); err != nil {
+		return err
+	}
+	return checkRecipes()
 }
 
 func readCatalog(path string) (map[string]catalogModel, error) {
@@ -177,6 +183,140 @@ func checkAPIReference() error {
 				return errors.New(path + " does not mention public API " + name)
 			}
 		}
+	}
+	return nil
+}
+
+func checkRecipes() error {
+	recipes := []string{
+		"basic-completion", "streaming-chat", "conversation-persistence",
+		"vision", "reasoning", "tool-loop", "model-switching",
+		"provider-discovery", "custom-gateway", "custom-client",
+		"observability", "error-handling", "mock-testing",
+	}
+	index, err := os.ReadFile("docs/llm/recipes/README.md")
+	if err != nil {
+		return err
+	}
+	localizedIndex, err := os.ReadFile("docs/llm/recipes/README.zh.md")
+	if err != nil {
+		return err
+	}
+
+	for _, name := range recipes {
+		link := name + ".md"
+		if !strings.Contains(string(index), "("+link+")") ||
+			!strings.Contains(string(localizedIndex), "("+link+")") {
+			return fmt.Errorf("recipe index does not link both languages to %s", link)
+		}
+		for _, suffix := range []string{".md", ".zh.md"} {
+			path := filepath.Join("docs/llm/recipes", name+suffix)
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			body := string(data)
+			if len(data) < 1500 {
+				return fmt.Errorf("%s is too short for a task guide", path)
+			}
+			if !strings.Contains(body, "```go") {
+				return fmt.Errorf("%s has no Go example", path)
+			}
+			code, err := firstGoBlock(body)
+			if err != nil {
+				return fmt.Errorf("%s: %w", path, err)
+			}
+			if _, err := parser.ParseFile(token.NewFileSet(), path, code, parser.AllErrors); err != nil {
+				return fmt.Errorf("%s first Go program has invalid syntax: %w", path, err)
+			}
+			if strings.Count(body, "\n## ") < 3 {
+				return fmt.Errorf("%s needs purpose, implementation, and operational guidance", path)
+			}
+			for _, fragment := range []string{"## Core code", "## Program skeleton", "## 核心代码", "## 程序骨架"} {
+				if strings.Contains(body, fragment) {
+					return fmt.Errorf("%s still contains snippet-only section %q", path, fragment)
+				}
+			}
+		}
+	}
+	return compileRecipeExamples(recipes)
+}
+
+func firstGoBlock(body string) (string, error) {
+	const opening = "```go\n"
+	start := strings.Index(body, opening)
+	if start < 0 {
+		return "", errors.New("Go code fence is missing")
+	}
+	rest := body[start+len(opening):]
+	end := strings.Index(rest, "\n```")
+	if end < 0 {
+		return "", errors.New("Go code fence is not closed")
+	}
+	return rest[:end] + "\n", nil
+}
+
+func compileRecipeExamples(recipes []string) error {
+	root, err := filepath.Abs(".")
+	if err != nil {
+		return err
+	}
+	temp, err := os.MkdirTemp("", "llm-recipe-examples-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(temp)
+
+	goMod := fmt.Sprintf(`module llmrecipedocs
+
+go 1.24
+
+require github.com/ktsoator/or v0.0.0
+
+replace github.com/ktsoator/or => %s
+`, filepath.ToSlash(root))
+	if err := os.WriteFile(filepath.Join(temp, "go.mod"), []byte(goMod), 0o600); err != nil {
+		return err
+	}
+	goSum, err := os.ReadFile(filepath.Join(root, "go.sum"))
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(temp, "go.sum"), goSum, 0o600); err != nil {
+		return err
+	}
+
+	for _, name := range recipes {
+		data, err := os.ReadFile(filepath.Join("docs/llm/recipes", name+".md"))
+		if err != nil {
+			return err
+		}
+		code, err := firstGoBlock(string(data))
+		if err != nil {
+			return err
+		}
+		dir := filepath.Join(temp, name)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return err
+		}
+		filename := "main.go"
+		if strings.HasPrefix(strings.TrimSpace(code), "package myapp_test") {
+			filename = "example_test.go"
+			if err := os.WriteFile(filepath.Join(dir, "doc.go"), []byte("package myapp\n"), 0o600); err != nil {
+				return err
+			}
+		}
+		if err := os.WriteFile(filepath.Join(dir, filename), []byte(code), 0o600); err != nil {
+			return err
+		}
+	}
+
+	command := exec.Command("go", "test", "-mod=mod", "-run=^$", "./...")
+	command.Dir = temp
+	command.Env = append(os.Environ(), "GOWORK=off")
+	output, err := command.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("recipe Go programs do not compile: %w\n%s", err, output)
 	}
 	return nil
 }

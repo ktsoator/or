@@ -189,7 +189,7 @@ go get github.com/ktsoator/or/llm@latest
 - [Custom protocols](extending.md) — adapters, registries, and `StreamWriter`
 - [Clients and registries](clients-and-registries.md) — explicit dependency injection, HTTP clients, and isolation
 - [API reference](api-reference.md) — public interfaces organized by module
-- [Recipes](recipes/README.md) — minimal examples organized by development task
+- [Task guides](recipes/README.md) — complete programs, call flows, parameters, failures, and operational constraints by scenario
 
 Runnable programs for each topic are listed on the [Examples](examples.md) page.
 
