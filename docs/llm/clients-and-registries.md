@@ -45,53 +45,25 @@ response, err := llm.Complete(ctx, model, input, options)
 
 ## Explicit client
 
-This program registers both built-in adapters and uses an independent provider registry:
+An explicit client combines application-owned adapter and provider registries:
 
 ```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"log"
-
-	"github.com/ktsoator/or/llm"
-	"github.com/ktsoator/or/llm/anthropic"
-	"github.com/ktsoator/or/llm/openai"
-)
-
-func main() {
-	adapters := llm.NewAdapterRegistry()
-	if err := adapters.Register(openai.NewAdapter(nil)); err != nil {
-		log.Fatal(err)
-	}
-	if err := adapters.Register(anthropic.NewAdapter(nil)); err != nil {
-		log.Fatal(err)
-	}
-
-	providers := llm.NewBuiltInProviderRegistry()
-	client := llm.NewClient(adapters, providers)
-
-	model, ok := llm.LookupModel("deepseek", "deepseek-v4-flash")
-	if !ok {
-		log.Fatal("model not found")
-	}
-
-	response, err := client.Complete(
-		context.Background(), model,
-		llm.Prompt("Reply with OK."), llm.StreamOptions{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(response.Text())
+adapters := llm.NewAdapterRegistry()
+if err := adapters.Register(openai.NewAdapter(httpClient)); err != nil {
+	log.Fatal(err)
 }
+client := llm.NewClient(adapters, llm.NewBuiltInProviderRegistry())
 ```
 
 `NewClient(adapters, nil)` skips the provider registry but still applies the legacy environment-variable mapping for `Model.Provider`. Pass `StreamOptions.APIKey` when a custom provider has no legacy mapping.
 
+See the [explicit-client task guide](recipes/custom-client.md) for complete
+imports, Transport configuration, and a request.
+
 ## Custom HTTP client
 
-Both built-in adapters accept `*http.Client`:
+Both built-in adapters accept `*http.Client`. This fragment shows connection
+pool settings only; the complete client construction is not repeated here:
 
 ```go
 transport := http.DefaultTransport.(*http.Transport).Clone()

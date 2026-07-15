@@ -96,7 +96,7 @@ input := llm.Context{Messages: []llm.Message{
 
 每次请求前，本库都会为目标模型适配已存储的历史：为仅支持文本的模型降级图像、同模型重放时保留推理签名、删除其他模型产生的推理，并规范化工具调用标识符。
 
-下面这两个模型甚至使用不同的线协议（DeepSeek 是 OpenAI 兼容，MiniMax CN 是 Anthropic 兼容）但历史切片可以原样复用。由于每种协议各有适配器，需同时注册两个 provider 包：
+下面这两个模型甚至使用不同的接口协议（DeepSeek 兼容 OpenAI Chat Completions，MiniMax CN 兼容 Anthropic Messages），但历史切片可以原样复用。由于每种协议各有适配器，需同时注册两个 provider 包：
 
 ```go
 import (

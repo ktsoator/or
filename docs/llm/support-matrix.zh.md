@@ -8,8 +8,8 @@
 
 | 协议 | 目录模型数 | 状态 | 注册方式 | 说明 |
 |---|---:|---|---|---|
-| `openai-completions` | 481 | 已实现 | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Chat Completions 及兼容 endpoint |
-| `anthropic-messages` | 262 | 已实现 | `_ "github.com/ktsoator/or/llm/anthropic"` | Anthropic Messages 及兼容 endpoint |
+| `openai-completions` | 481 | 已实现 | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Chat Completions 及兼容服务 |
+| `anthropic-messages` | 262 | 已实现 | `_ "github.com/ktsoator/or/llm/anthropic"` | Anthropic Messages 及兼容服务 |
 | `openai-responses` | 45 | 仅目录 | 无 | 当前没有 adapter；官方 OpenAI 目录模型使用该协议 |
 | `google-generative-ai` | 12 | 仅目录 | 无 | 当前没有 adapter |
 | `mistral-conversations` | 21 | 仅目录 | 无 | 当前没有 adapter |

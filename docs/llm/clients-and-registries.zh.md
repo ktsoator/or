@@ -14,7 +14,7 @@
 
 | 类型 | 存储内容 | 主要键 | 是否参与请求 |
 |---|---|---|---|
-| `AdapterRegistry` | `ProtocolAdapter` | `Protocol` | 根据 `Model.Protocol` 选择线协议实现 |
+| `AdapterRegistry` | `ProtocolAdapter` | `Protocol` | 根据 `Model.Protocol` 选择请求与响应协议实现 |
 | `ProviderRegistry` | Provider 配置和 override | `Model.Provider` | 解析 key、URL 和 headers |
 | `ModelRegistry` | `Model` 元数据 | provider + model ID | 用于模型发现；`Client` 不直接依赖它 |
 
@@ -45,53 +45,23 @@ response, err := llm.Complete(ctx, model, input, options)
 
 ## 显式 Client
 
-下面的程序注册两个内置 adapter，并使用独立 provider 注册表：
+显式 client 由应用持有的 adapter registry 和 provider registry 组成：
 
 ```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"log"
-
-	"github.com/ktsoator/or/llm"
-	"github.com/ktsoator/or/llm/anthropic"
-	"github.com/ktsoator/or/llm/openai"
-)
-
-func main() {
-	adapters := llm.NewAdapterRegistry()
-	if err := adapters.Register(openai.NewAdapter(nil)); err != nil {
-		log.Fatal(err)
-	}
-	if err := adapters.Register(anthropic.NewAdapter(nil)); err != nil {
-		log.Fatal(err)
-	}
-
-	providers := llm.NewBuiltInProviderRegistry()
-	client := llm.NewClient(adapters, providers)
-
-	model, ok := llm.LookupModel("deepseek", "deepseek-v4-flash")
-	if !ok {
-		log.Fatal("model not found")
-	}
-
-	response, err := client.Complete(
-		context.Background(), model,
-		llm.Prompt("Reply with OK."), llm.StreamOptions{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(response.Text())
+adapters := llm.NewAdapterRegistry()
+if err := adapters.Register(openai.NewAdapter(httpClient)); err != nil {
+	log.Fatal(err)
 }
+client := llm.NewClient(adapters, llm.NewBuiltInProviderRegistry())
 ```
 
 `NewClient(adapters, nil)` 跳过 provider 注册表，但仍按 `Model.Provider` 查找旧版环境变量映射。自定义 provider 不在该映射中时，应显式传入 `StreamOptions.APIKey`。
 
+完整 import、Transport 配置和请求程序见[显式 Client 场景](recipes/custom-client.md)。
+
 ## 自定义 HTTP Client
 
-两个内置 adapter 接受 `*http.Client`：
+两个内置 adapter 接受 `*http.Client`。以下片段只展示连接池设置；完整 client 构造不在本页重复：
 
 ```go
 transport := http.DefaultTransport.(*http.Transport).Clone()
@@ -187,4 +157,4 @@ model, ok := models.Get("local", "local-model")
 | 每个租户有独立 URL/headers | 每租户独立 `ProviderRegistry` 和 `Client` |
 | 自定义代理、TLS 或 Transport | 显式 adapter + 自定义 `http.Client` |
 | 单元测试或 mock server | 显式 client，避免修改默认注册表 |
-| 全新线协议 | 自定义 `ProtocolAdapter` |
+| 框架尚未支持的请求与响应协议 | 自定义 `ProtocolAdapter` |

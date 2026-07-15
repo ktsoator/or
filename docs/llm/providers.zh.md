@@ -1,29 +1,10 @@
 # 提供方与模型
 
-本包包含两种协议适配器：
-
-- `openai-completions`
-- `anthropic-messages`
-
-模型目录还包含三个没有 adapter 的 catalog-only 协议。官方 OpenAI 目录模型当前使用 `openai-responses`，不能通过内置 adapter 调用。完整数量、provider ID 和凭证变量见[协议与 Provider 支持矩阵](support-matrix.md)。
-
-目录与兼容层显式配置了以下提供方：
-
-| 提供方 | Provider ID | 协议 | 环境变量 |
-|---|---|---|---|
-| DeepSeek | `deepseek` | `openai-completions` | `DEEPSEEK_API_KEY` |
-| MiniMax Global | `minimax` | `anthropic-messages` | `MINIMAX_API_KEY` |
-| MiniMax China | `minimax-cn` | `anthropic-messages` | `MINIMAX_CN_API_KEY` |
-| Xiaomi MiMo | `xiaomi` | `openai-completions` | `XIAOMI_API_KEY` 或 `MIMO_API_KEY` |
-| Z.AI Global | `zai` | `openai-completions` | `ZAI_API_KEY` |
-| Zhipu Coding Plan China | `zai-coding-cn` | `openai-completions` | `ZAI_CODING_CN_API_KEY` |
-| Moonshot AI Global | `moonshotai` | `openai-completions` | `MOONSHOT_API_KEY` |
-| Moonshot AI China | `moonshotai-cn` | `openai-completions` | `MOONSHOT_API_KEY` |
-| Kimi Coding | `kimi-coding` | `anthropic-messages` | `KIMI_API_KEY` |
+模型目录比 adapter 集合更大。目录条目是可查询元数据，不代表当前进程一定能执行其协议。展示可调用模型前使用 `SupportsProtocol` 或 `GetRunnableModels`。协议状态、provider ID、模型数量和凭证变量只在[协议与 Provider 支持矩阵](support-matrix.md)维护。
 
 目录中还包含其他兼容提供方和模型的元数据。这些条目可供查询，并且可能通过两种协议适配器之一正常工作，但它们尚未全部针对线上提供方 API 验证过，不构成支持保证。自动化测试通过本地 mock 服务器覆盖两种适配器，而非对每个提供方进行线上集成测试。
 
-本包只读取 `llm.GetModel` 所选提供方的 key。也可以通过 `StreamOptions.APIKey` 或 `StreamOptions.Env` 提供请求级别的凭证。
+本包只解析本次请求所选 provider 的 key。也可以通过 `StreamOptions.APIKey` 或 `StreamOptions.Env` 提供请求级凭证。
 
 ## 发现模型
 

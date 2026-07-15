@@ -27,9 +27,9 @@ if err != nil {
 dispatching to an adapter. They return an error, without contacting the
 provider, when:
 
-- **The API key is empty.** After checking `StreamOptions.APIKey` and the
-  provider's environment variables, the adapter returns a provider-aware error
-  that names exactly which variables were checked. See below.
+- **The API key is empty.** If request options, provider overrides, and the
+  environment cannot resolve a credential, the adapter returns a
+  provider-aware error. See below.
 - **No adapter is registered for the model's protocol.** You forgot the blank
   import (`_ "github.com/ktsoator/or/llm/openai"` or `.../llm/anthropic`, or
   `llm/all`). The error is `no adapter registered for protocol "..."`.
@@ -46,21 +46,9 @@ variable that was checked, in precedence order:
 API key is empty for provider "anthropic" (set ANTHROPIC_OAUTH_TOKEN or ANTHROPIC_API_KEY or pass StreamOptions.APIKey)
 ```
 
-Keys are resolved in this order, first non-empty wins:
-
-1. `StreamOptions.APIKey`, if set.
-2. `StreamOptions.Env` — a request-scoped `ProviderEnv` map, checked before the
-   process environment. Useful for multi-tenant servers that hold each user's
-   key in memory rather than in `os.Environ`.
-3. The provider's environment variables from the process.
-
-```go
-// Explicit key, no environment lookup.
-opts := llm.StreamOptions{APIKey: userKey}
-
-// Request-scoped environment, overrides the process env for this call only.
-opts := llm.StreamOptions{Env: llm.ProviderEnv{"ANTHROPIC_API_KEY": userKey}}
-```
+Credentials may come from `StreamOptions`, a provider override, or the process
+environment. The complete precedence is maintained only in
+[Configuration § per-request credentials](configuration.md#supply-credentials-per-request).
 
 To inspect key resolution yourself — for example to fail fast at startup or to
 show a setup hint — use the key helpers:
@@ -74,7 +62,8 @@ if len(llm.FindEnvAPIKeys(model.Provider)) == 0 {
 
 `APIKeyEnvVars` returns the variables a provider checks, `FindEnvAPIKeys`
 returns the ones actually set, and `MissingAPIKeyError` builds the same message
-the library uses.
+the library uses. `AuthStatus` can also report an override or environment
+source, but it does not verify that the credential is still valid.
 
 ## Failed and cancelled responses
 

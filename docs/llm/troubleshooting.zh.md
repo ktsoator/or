@@ -16,10 +16,8 @@ import (
 )
 ```
 
-若协议是 `openai-responses`、`google-generative-ai` 或
-`mistral-conversations`，导入 `llm/all` 也不会解决问题：目录中有这些协议
-的模型元数据，但本仓库没有对应内置 adapter。应选择
-`openai-completions` 或 `anthropic-messages` 模型，或自行实现 adapter。
+如果模型协议在[支持矩阵](support-matrix.md#协议状态)中标记为“仅目录”，导入
+`llm/all` 也不会增加对应实现。应选择当前可运行模型，或自行实现 adapter。
 
 ## 取消后流一直不关闭
 

@@ -27,15 +27,6 @@ go run ./example/llm/basic
 | Providers | `example/llm/providers` | 注册 provider 和设置 override | [Provider](providers.md) |
 | Who am I | `example/llm/whoami` | 查询 provider 凭证状态 | [Provider 状态](providers.md#检查-provider-是否已配置) |
 
-## 按任务选择
-
-- 第一次调用：`basic`。
-- 构建聊天 UI：`streaming`。
-- 运行结构化动作：`tools`。
-- 保存并扩展历史：`conversation`。
-- 接入多个 provider：`model_switch` 和 `providers`。
-- 调试 provider 请求：`advanced`。
-
 ## 编译检查
 
 以下命令编译全部已跟踪的 LLM 示例，不会发送网络请求：

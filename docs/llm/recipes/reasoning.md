@@ -1,43 +1,84 @@
 # Reasoning output
 
-## Purpose
+## What this builds
 
-Select a neutral reasoning level and render thinking separately from final answer text.
+A streaming command requests the closest supported reasoning level, renders thinking separately from answer text, and reads the final usage record.
 
-## Core code
+Reasoning is a request hint, not a guarantee that visible thinking text will be returned. Providers use different native controls, and a model can perform reasoning while omitting its text.
+
+## Complete program
 
 ```go
-requested := llm.ModelThinkingHigh
-effective := llm.ClampThinkingLevel(model, requested)
+package main
 
-events, err := llm.Stream(ctx, model,
-	llm.Prompt("Solve 37 * 48 and check the result."),
-	llm.StreamOptions{Reasoning: effective})
-if err != nil {
-	log.Fatal(err)
-}
+import (
+	"context"
+	"fmt"
+	"log"
+	"os"
 
-for event := range events {
-	switch event.Type {
-	case llm.EventThinkingDelta:
-		fmt.Fprint(os.Stderr, event.Delta)
-	case llm.EventTextDelta:
-		fmt.Print(event.Delta)
-	case llm.EventError:
-		log.Print(event.Err)
+	"github.com/ktsoator/or/llm"
+	_ "github.com/ktsoator/or/llm/openai"
+)
+
+func main() {
+	model := llm.GetModel("deepseek", "deepseek-v4-flash")
+	requested := llm.ModelThinkingHigh
+	effective := llm.ClampThinkingLevel(model, requested)
+	fmt.Fprintf(os.Stderr, "supported=%v requested=%s effective=%s\n",
+		llm.SupportedThinkingLevels(model), requested, effective)
+
+	events, err := llm.Stream(context.Background(), model,
+		llm.Prompt("Solve 37 * 48 and verify the result."),
+		llm.StreamOptions{Reasoning: effective, MaxTokens: 1000})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var final *llm.AssistantMessage
+	var streamErr error
+	for event := range events {
+		switch event.Type {
+		case llm.EventThinkingStart:
+			fmt.Fprintln(os.Stderr, "--- thinking ---")
+		case llm.EventThinkingDelta:
+			fmt.Fprint(os.Stderr, event.Delta)
+		case llm.EventTextStart:
+			fmt.Println("--- answer ---")
+		case llm.EventTextDelta:
+			fmt.Print(event.Delta)
+		case llm.EventDone:
+			final = event.Message
+		case llm.EventError:
+			final, streamErr = event.Message, event.Err
+		}
+	}
+	if streamErr != nil {
+		log.Fatal(streamErr)
+	}
+	if final != nil {
+		fmt.Printf("\noutput tokens=%d\n", final.Usage.Output)
 	}
 }
 ```
 
-Anthropic can omit returned thinking text while preserving signatures required by later turns:
+## How neutral levels are mapped
 
-```go
-options := llm.StreamOptions{
-	Reasoning: llm.ModelThinkingHigh,
-	ProtocolOptions: &llm.AnthropicStreamOptions{
-		ThinkingDisplay: llm.ThinkingDisplayOmitted,
-	},
-}
-```
+`ModelThinkingLevel` provides `off`, `minimal`, `low`, `medium`, `high`, and `xhigh`. `SupportedThinkingLevels` derives the levels advertised by the model. `ClampThinkingLevel` selects the nearest available level; non-reasoning models effectively ignore the request.
 
-`ThinkingDisplayOmitted` does not disable reasoning. Thinking tokens still count as output usage.
+The adapter translates the effective level into protocol-native fields. Do not place provider-specific reasoning JSON in `RewriteRequest` unless the typed mapping cannot represent a required endpoint feature.
+
+## Anthropic display control
+
+The Anthropic protocol can omit visible thinking while retaining reasoning and
+the signatures required to continue the conversation. See
+[Reasoning § Anthropic thinking display](../reasoning.md#anthropic-thinking-display)
+for the option, code, and token semantics; this task guide does not duplicate
+protocol configuration.
+
+## Boundaries
+
+- Thinking text and signatures may contain sensitive information. Do not log them by default.
+- When switching models, provider-specific reasoning blocks are removed rather than replayed to another model.
+- Output token limits include reasoning consumption on providers that account for it that way.
+- Catalog reasoning metadata can be stale. Verify behavior against the selected endpoint.

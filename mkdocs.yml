@@ -29,6 +29,8 @@ plugins:
             Core: 核心
             Advanced: 进阶
             Recipes: 场景示例
+            Application flows: 应用流程
+            Operations: 配置与运维
             Overview: 概述
             Capabilities: 功能总览
             Getting started: 快速开始
@@ -44,8 +46,12 @@ plugins:
             Reasoning output: 推理输出
             Tool loop: 工具循环
             Model switching: 模型切换
+            Conversation persistence: 对话持久化
+            Model and auth discovery: 模型与鉴权发现
             Custom gateway: 自定义网关
             Explicit client: 显式 Client
+            Observability hooks: 可观测性 Hook
+            Mock-provider testing: Mock Provider 测试
             Streaming: 流式响应
             Tools: 工具
             Reasoning: 推理与思考
@@ -140,14 +146,21 @@ nav:
           - Protocol support: llm/support-matrix.md
       - Recipes:
           - Overview: llm/recipes/README.md
-          - Basic completion: llm/recipes/basic-completion.md
-          - Streaming chat: llm/recipes/streaming-chat.md
-          - Image input: llm/recipes/vision.md
-          - Reasoning output: llm/recipes/reasoning.md
-          - Tool loop: llm/recipes/tool-loop.md
-          - Model switching: llm/recipes/model-switching.md
-          - Custom gateway: llm/recipes/custom-gateway.md
-          - Explicit client: llm/recipes/custom-client.md
+          - Application flows:
+              - Basic completion: llm/recipes/basic-completion.md
+              - Streaming chat: llm/recipes/streaming-chat.md
+              - Conversation persistence: llm/recipes/conversation-persistence.md
+              - Image input: llm/recipes/vision.md
+              - Reasoning output: llm/recipes/reasoning.md
+              - Tool loop: llm/recipes/tool-loop.md
+              - Model switching: llm/recipes/model-switching.md
+          - Operations:
+              - Model and auth discovery: llm/recipes/provider-discovery.md
+              - Custom gateway: llm/recipes/custom-gateway.md
+              - Explicit client: llm/recipes/custom-client.md
+              - Observability hooks: llm/recipes/observability.md
+              - Error handling: llm/recipes/error-handling.md
+              - Mock-provider testing: llm/recipes/mock-testing.md
       - Core:
           - Streaming: llm/streaming.md
           - Tools: llm/tools.md
