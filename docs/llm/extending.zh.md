@@ -163,3 +163,7 @@ options := llm.StreamOptions{
 ```
 
 `Client.Stream` 会先校验 `ProtocolOptions.Protocol()` 与目标模型匹配，再在调用适配器之前调用 `Validate`。
+
+若服务已经实现 OpenAI Chat Completions 或 Anthropic Messages，不应再创建新
+协议 adapter。应构造使用对应内置协议的 `Model`，并设置端点兼容字段。显式
+装配、自定义 transport 与独立注册表见 [Client 与注册表](clients-and-registries.md)。

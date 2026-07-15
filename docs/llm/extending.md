@@ -185,3 +185,9 @@ options := llm.StreamOptions{
 
 `Client.Stream` verifies that `ProtocolOptions.Protocol()` matches the target
 model, then calls `Validate` before invoking the adapter.
+
+Do not create a new protocol adapter for a service that already implements
+OpenAI Chat Completions or Anthropic Messages. Construct a `Model` with the
+matching built-in protocol and endpoint compatibility instead. For explicit
+wiring, custom transports, and isolated registries, see
+[Clients and registries](clients-and-registries.md).

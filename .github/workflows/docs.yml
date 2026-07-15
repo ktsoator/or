@@ -7,13 +7,47 @@ on:
       - "docs/**"
       - "mkdocs.yml"
       - ".github/workflows/docs.yml"
+      - ".github/scripts/check_llm_docs.go"
+      - "llm/**"
+      - "example/llm/**"
+  pull_request:
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - ".github/workflows/docs.yml"
+      - ".github/scripts/check_llm_docs.go"
+      - "llm/**"
+      - "example/llm/**"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Install MkDocs Material
+        run: pip install mkdocs-material mkdocs-static-i18n
+      - name: Validate LLM documentation metadata and links
+        run: go run ./.github/scripts/check_llm_docs.go
+      - name: Build documentation
+        run: mkdocs build --strict
+      - name: Compile LLM examples
+        run: go test ./example/llm/...
+
   deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: validate
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -22,5 +56,5 @@ jobs:
           python-version: "3.x"
       - name: Install MkDocs Material
         run: pip install mkdocs-material mkdocs-static-i18n
-      - name: Build and deploy to GitHub Pages
+      - name: Deploy to GitHub Pages
         run: mkdocs gh-deploy --force

@@ -157,5 +157,24 @@ if err := json.Unmarshal(raw, &restored); err != nil {
 
 `restored.Messages` 已可用于扩展，并针对任意模型重放。
 
+若存储系统按行或按记录保存单条消息，可使用 `MarshalMessage` 与
+`UnmarshalMessage`，无需先包进 `Context`：
+
+```go
+data, err := llm.MarshalMessage(messages[0])
+if err != nil {
+	log.Fatal(err)
+}
+
+message, err := llm.UnmarshalMessage(data)
+if err != nil {
+	log.Fatal(err)
+}
+messages = append(messages, message)
+```
+
+遇到未知角色、未知内容类型或畸形 JSON 时，`UnmarshalMessage` 返回错误，
+不会把不支持的消息结构静默转换为其他类型。
+
 !!! warning "序列化的历史是敏感数据"
     序列化后的 `Context` 可能包含用户输入、工具结果（其中可能嵌入抓取到的文档或凭证）以及提供方的推理签名。请把这份 JSON 当作敏感数据：不要整体打日志，存储或传输时应与其中的底层数据同等对待。

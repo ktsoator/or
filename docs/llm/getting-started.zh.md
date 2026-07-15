@@ -34,7 +34,10 @@ import (
 )
 
 func main() {
-	model := llm.GetModel("deepseek", "deepseek-v4-flash")
+	model, ok := llm.LookupModel("deepseek", "deepseek-v4-flash")
+	if !ok || !llm.SupportsProtocol(model.Protocol) {
+		log.Fatal("model is not runnable")
+	}
 	response, err := llm.Complete(
 		context.Background(),
 		model,
@@ -56,6 +59,8 @@ go run .
 ```
 
 `llm.Complete` 会将整个流收集成一个 `AssistantMessage`。当应用需要在增量到达时即时处理，则改用 [`llm.Stream`](streaming.md)。包级函数通过一个默认注册表分发；上面那行空导入 `llm/openai` 会把 OpenAI 兼容协议注册进去。用到哪个协议就导入对应的 provider 包（或者导入 `llm/all` 一次性注册全部），这样二进制里只链接需要的 SDK。
+
+`LookupModel` 只检查目录条目，`SupportsProtocol` 检查当前进程是否注册了该协议。构建模型选择器时直接使用 `GetRunnableModels`。`GetModels` 还会返回 catalog-only 协议的模型，不能作为可调用列表。
 
 ## 自定义请求
 
@@ -91,6 +96,8 @@ fmt.Printf("tokens=%d cost=$%.6f\n",
 
 - 用[对话](conversations.md)把交流延续到多轮。
 - 从[提供方目录](providers.md)中选择一个模型。
+- 在[支持矩阵](support-matrix.md)中确认协议和 provider 状态。
 - 用[流式事件](streaming.md)增量渲染响应。
 - 用[类型化工具](tools.md)为模型加上结构化能力。
 - 在[示例](examples.md)页浏览可运行程序。
+- 从 [Recipes](recipes/README.md) 按开发任务查找最小代码。

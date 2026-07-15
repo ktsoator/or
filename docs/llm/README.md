@@ -4,6 +4,14 @@
 structured tools, reasoning content, multimodal messages, and conversation
 history across OpenAI-compatible and Anthropic-compatible models.
 
+For a first pass through the package, read:
+
+1. [Capabilities](capabilities.md) to map tasks to APIs;
+2. [Getting started](getting-started.md) to run a first request;
+3. [Developer guide](developer-guide.md) for architecture, lifecycle, boundaries, and troubleshooting;
+4. [API reference](api-reference.md) for the public interface index;
+5. [Support matrix](support-matrix.md) to verify protocol, provider, and model routing.
+
 ## What it is
 
 The package is a **stateless translation layer**. For each request it decides
@@ -113,6 +121,21 @@ for event := range events {
 - **Extensible** — add a new wire protocol by implementing one adapter, without
   changing the shared request API.
 
+| Task | Preferred API |
+|---|---|
+| Complete generation | `Complete`, `Prompt` |
+| Streaming chat | `Stream`, `EventTextDelta` |
+| Multi-turn history | `Context.Messages`, `UserText` |
+| Image input | `UserImage`, `ImageContent` |
+| Reasoning display | `StreamOptions.Reasoning`, thinking events |
+| Tool calling | `MustTool`, `DecodeToolCall`, `ToolResult` |
+| Model selection | `GetRunnableModels`, `SupportsProtocol` |
+| Provider gateway | `ProviderRegistry.SetOverride` |
+| Isolated client | `NewClient`, `NewAdapterRegistry` |
+| New protocol | `ProtocolAdapter`, `StreamWriter` |
+
+See [Capabilities](capabilities.md) for the complete mapping.
+
 ## Core objects
 
 Five types carry almost everything you touch:
@@ -136,15 +159,12 @@ Pick the guide for the task you have:
 - **Reasoning** — set an effort level and read thinking back. See [Reasoning](reasoning.md).
 - **Switch models** — send the same history to a different model or protocol. See [Conversations § switch models](conversations.md#switch-models-between-turns).
 
-## `llm` or `agent`?
+## Scope boundary
 
-Use `llm` directly when you own the control flow — a single request, your own
-multi-turn loop, or a custom tool loop you want full control over. Reach for
-[`or/agent`](../agent/README.md) when you want the tool-call loop, run state,
-steering, and abort handled for you, and the agent harness when you also need
-transcript persistence, context compaction, per-turn system prompts, and skills.
-Both are built on the types above, so nothing is thrown away if you start with
-`llm` and adopt the agent later.
+`llm` does not execute tools, persist transcripts, compact context, or own a
+multi-step run loop. Applications that use this package must implement those
+responsibilities themselves or delegate them to a separate layer. This
+documentation covers only `llm`.
 
 ## Install
 
@@ -154,7 +174,10 @@ go get github.com/ktsoator/or/llm@latest
 
 ## Documentation
 
+- [Capabilities](capabilities.md) — what can be built and which APIs to call
+- [Developer guide](developer-guide.md) — architecture, features, lifecycle, extension, and limits
 - [Getting started](getting-started.md) — credentials and your first request
+- [Protocol and provider support matrix](support-matrix.md) — implemented protocols, catalog models, and credentials
 - [Providers and models](providers.md) — catalog discovery and custom endpoints
 - [Streaming](streaming.md) — events, partial responses, diagnostics, and cancellation
 - [Tools](tools.md) — typed tools, the tool loop, and protocol-specific tool choice
@@ -164,6 +187,9 @@ go get github.com/ktsoator/or/llm@latest
 - [Conversations](conversations.md) — images, model switching, and persistence
 - [Configuration](configuration.md) — retries, timeouts, headers, and HTTP hooks
 - [Custom protocols](extending.md) — adapters, registries, and `StreamWriter`
+- [Clients and registries](clients-and-registries.md) — explicit dependency injection, HTTP clients, and isolation
+- [API reference](api-reference.md) — public interfaces organized by module
+- [Recipes](recipes/README.md) — minimal examples organized by development task
 
 Runnable programs for each topic are listed on the [Examples](examples.md) page.
 

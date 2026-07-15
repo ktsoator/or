@@ -20,6 +20,32 @@ import (
 )
 ```
 
+If the protocol is `openai-responses`, `google-generative-ai`, or
+`mistral-conversations`, importing `llm/all` will not help: this repository has
+catalog entries for those protocols but no built-in adapter. Choose a model
+using `openai-completions` or `anthropic-messages`, or implement an adapter.
+
+## A stream never closes after cancellation
+
+The consumer stops receiving events, but the goroutine waiting on the stream
+does not finish.
+
+- **Cause:** `Stream` returns an unbuffered channel. Cancelling the context asks
+  the producer to stop, but the consumer must continue reading until the channel
+  closes. Returning from the receive loop early can leave the producer blocked
+  while publishing its final event.
+- **Fix:** record the cancellation or error, keep draining the channel, and only
+  then return. There is no stream `Close` or `Abort` method.
+
+```go
+for event := range events {
+	if event.Type == llm.EventError {
+		streamErr = event.Err
+	}
+}
+return streamErr
+```
+
 ## `panic: llm: unknown model "..." for provider "..."`
 
 `GetModel` panics when the provider/model pair is not in the built-in catalog.

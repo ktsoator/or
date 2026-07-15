@@ -5,6 +5,12 @@ The package includes two protocol adapters:
 - `openai-completions`
 - `anthropic-messages`
 
+The catalog is broader than the adapter set. A catalog entry is queryable
+metadata, not proof that this package can execute its protocol. Check
+[`SupportsProtocol`](api-reference.md#catalog-functions) or use
+`GetRunnableModels` before presenting a model as runnable. The current boundary
+is summarized in [Protocol support](support-matrix.md).
+
 The catalog and compatibility layer explicitly configure these providers:
 
 | Provider | Provider ID | Protocol | Environment variable |
@@ -41,7 +47,7 @@ for _, provider := range llm.GetProviders() {
 	}
 }
 
-model, ok := llm.LookupModel("xiaomi", "mimo-v2-flash")
+model, ok := llm.LookupModel("xiaomi", "mimo-v2.5")
 if !ok {
 	log.Fatal("model not found")
 }
@@ -109,6 +115,10 @@ fmt.Printf("%s: %d-token window, $%.2f/M in, $%.2f/M out\n",
 	model.Name, model.ContextWindow, model.Cost.Input, model.Cost.Output)
 ```
 
+Catalog prices are static metadata bundled with this repository. They may lag
+provider price changes and do not include account-specific discounts, taxes, or
+provider-side rounding. Use the provider invoice as the billing authority.
+
 See [Reading responses](results.md) for the matching `Usage` and `UsageCost`
 records on a completed request.
 
@@ -154,6 +164,30 @@ model.Compatibility = &llm.AnthropicMessagesCompatibility{
 	SupportsCacheControl: supports(false),
 }
 ```
+
+The compatibility records expose these fields:
+
+| Type | Field | Effect |
+|---|---|---|
+| `OpenAICompletionsCompatibility` | `MaxTokensField` | Changes the JSON field used for the output-token cap |
+| `OpenAICompletionsCompatibility` | `SupportsReasoningEffort` | Enables or disables the OpenAI reasoning-effort field |
+| `OpenAICompletionsCompatibility` | `SupportsDeveloperRole` | Controls whether developer-role messages may be sent |
+| `OpenAICompletionsCompatibility` | `SupportsStore` | Controls whether the adapter sends `store=false` |
+| `OpenAICompletionsCompatibility` | `SupportsStrictMode` | Controls strict mode on tool definitions |
+| `OpenAICompletionsCompatibility` | `RequiresReasoningContentOnAssistantMessages` | Requires reasoning content when assistant turns are replayed |
+| `OpenAICompletionsCompatibility` | `RequiresThinkingAsText` | Replays thinking as ordinary text instead of a reasoning field |
+| `OpenAICompletionsCompatibility` | `ThinkingFormat` | Selects the endpoint-specific reasoning representation |
+| `OpenAICompletionsCompatibility` | `ZAIToolStream` | Adds Z.AI's `tool_stream` field |
+| `AnthropicMessagesCompatibility` | `SupportsTemperature` | Enables or disables temperature |
+| `AnthropicMessagesCompatibility` | `SupportsCacheControl` | Enables or disables message cache control |
+| `AnthropicMessagesCompatibility` | `SupportsCacheControlTools` | Enables or disables cache control on tools |
+| `AnthropicMessagesCompatibility` | `ForceAdaptiveThinking` | Forces adaptive thinking |
+| `AnthropicMessagesCompatibility` | `AllowEmptySignature` | Permits an empty replayed thinking signature |
+
+All Boolean compatibility fields are pointers. `nil` means adapter default;
+`false` is an explicit override. The accepted `ThinkingFormat` strings are
+defined by the current adapters; the package does not publish an open enum for
+arbitrary providers.
 
 For a wire protocol that is neither OpenAI-compatible nor
 Anthropic-compatible, implement a [custom protocol adapter](extending.md).
@@ -224,3 +258,8 @@ registry.Register(llm.NewSpecProvider(llm.ProviderSpec{
 `NewSpecProvider` builds a provider from an independent snapshot of the supplied
 data, including model configuration. Vendors that need per-request logic such
 as OAuth refresh are not covered by the spec type yet.
+
+`ProviderRegistry` also exposes `Get`, `Providers`, `Resolve`, `Models`,
+`Override`, and `ClearOverride`. Applications that need isolated registries or
+explicit clients should use [Clients and registries](clients-and-registries.md)
+instead of mutating the package defaults.

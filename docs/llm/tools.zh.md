@@ -277,28 +277,8 @@ options := llm.StreamOptions{
 
 两种协议都提供 `Auto` 和 `None` 常量。任何显式的工具选择都要求 `Context.Tools` 中至少有一个工具。
 
-## 交由 agent 自动化
+## 执行边界
 
-上面这条"请求 → 执行 → 回传"的循环，正是 [`or/agent`](../agent/README.md) 替调用方运行的部分。无需手写 `StopReason` 判定、消息记账与分派，只需为每个工具提供一个 `Execute` 函数，再调用一次 `Prompt`——工具的 `llm.MustTool[T]` 定义可原样沿用：
-
-```go
-weather := agent.AgentTool{
-	Definition: llm.MustTool[WeatherArgs]("get_weather", "Get a weather forecast"),
-	Execute: func(ctx context.Context, callID string, args json.RawMessage,
-		onUpdate func(agent.ToolResult)) (agent.ToolResult, error) {
-		// 解码参数、执行工作、返回结果
-	},
-}
-
-assistant := agent.New(agent.Options{Model: model, Tools: []agent.AgentTool{weather}})
-err := assistant.Prompt(ctx, "去北京该带些什么?")
-```
-
-在循环之上，agent 补齐了应用需要的周边能力：
-
-- **流式事件**：用 `Subscribe` 订阅文本、推理、工具与生命周期事件。
-- **引导与追加**：用 `Steer` / `FollowUp` 在运行途中注入消息。
-- **取消与状态**：用 `Abort` 中止运行；用 `Snapshot` 读取其状态。
-- **按轮控制**：在轮次之间更换模型、系统提示或工具。
-
-需要这些时就用 `agent`；想完全掌控循环本身时留在 `llm`。上手见 [agent 指南](../agent/README.md)。
+`llm` 返回工具调用，但从不执行工具。应用或独立的编排层必须负责
+“请求 → 执行 → 回传”循环。编排层的生命周期、状态与事件接口不属于本 LLM
+文档的范围。

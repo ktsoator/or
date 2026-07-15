@@ -328,32 +328,8 @@ options := llm.StreamOptions{
 Both protocols expose `Auto` and `None` constants. Any explicit tool choice
 requires at least one tool in `Context.Tools`.
 
-## Automating the loop
+## Execution boundary
 
-The request → execute → reply loop above is what [`or/agent`](../agent/README.md)
-runs for you. Instead of hand-writing the `StopReason` gating, message
-bookkeeping, and dispatch, you give each tool an `Execute` function and call
-`Prompt` once — the tool's `llm.MustTool[T]` definition carries over verbatim:
-
-```go
-weather := agent.AgentTool{
-	Definition: llm.MustTool[WeatherArgs]("get_weather", "Get a weather forecast"),
-	Execute: func(ctx context.Context, callID string, args json.RawMessage,
-		onUpdate func(agent.ToolResult)) (agent.ToolResult, error) {
-		// decode args, do the work, return the result
-	},
-}
-
-assistant := agent.New(agent.Options{Model: model, Tools: []agent.AgentTool{weather}})
-err := assistant.Prompt(ctx, "What should I pack for Beijing?")
-```
-
-On top of the loop, the agent adds what an application needs around it:
-
-- **Streaming events** — `Subscribe` to text, reasoning, tool, and lifecycle events.
-- **Steering and follow-ups** — inject messages mid-run with `Steer` / `FollowUp`.
-- **Cancellation and state** — `Abort` a run; read a `Snapshot` of its state.
-- **Per-turn control** — swap the model, system prompt, or tools between turns.
-
-Reach for `agent` when you want these handled; stay with `llm` when you want full
-control of the loop itself. See the [agent guide](../agent/README.md) to start.
+`llm` returns tool calls but never executes them. The application or a separate
+orchestration layer must own the request → execute → reply loop. Orchestration
+lifecycle, state, and event APIs are outside the scope of this LLM reference.

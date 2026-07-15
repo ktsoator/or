@@ -18,6 +18,8 @@ if err != nil {
 
 **2. 用类型分支消费事件。** 文本和推理增量随到随打印，在 `EventDone` 时捕获最终消息，在 `EventError` 时停止。
 
+事件通道是无缓冲通道。循环必须继续读取到通道关闭。业务不再需要增量时，可以忽略事件内容，但仍应 drain 通道；直接停止读取会让 adapter goroutine 阻塞在下一次发送上。
+
 ```go
 var finalMessage *llm.AssistantMessage
 for event := range events {
@@ -149,7 +151,7 @@ flowchart LR
 
 ## 取消
 
-取消请求 context 会停止一个进行中的请求。流会发出一个 `EventError`，其消息报告 `StopReasonAborted`，随后关闭。
+取消请求 context 会请求停止进行中的 HTTP 调用。adapter 会尝试发出一个 `EventError`，其消息报告 `StopReasonAborted`，随后关闭通道。调用方在取消后仍必须继续读取通道；若消费者已经停止读取，无缓冲发送可能阻止终止事件和关闭动作完成。
 
 ```go
 ctx, cancel := context.WithCancel(context.Background())
@@ -161,6 +163,7 @@ if err != nil {
 }
 
 // 从别处调用 cancel()，例如当用户按下「停止」时。
+// 取消后仍继续 range，直到通道关闭。
 for event := range events {
 	switch event.Type {
 	case llm.EventTextDelta:
@@ -172,3 +175,5 @@ for event := range events {
 ```
 
 传输层的截止时间请使用独立的、按尝试计的 `Timeout` 选项；参见[请求配置](configuration.md)。
+
+`Stream` 不提供独立的 `Close` 或 `Abort` 方法。取消入口是传入的 context，资源释放由 adapter goroutine 在退出时完成。

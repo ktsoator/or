@@ -87,6 +87,15 @@ func TestComplete(t *testing.T) {
 The same server works for `Stream`: range over the events and assert on the
 `EventTextDelta` sequence and the terminal `EventDone`.
 
+Add a cancellation test for every consumer that can return early. Cancel the
+context while the mock server is streaming, continue receiving until the
+channel closes, and assert that the consumer goroutine exits. This catches code
+that abandons the unbuffered event channel and leaves the producer blocked.
+
+Use an explicit `Client` when a test changes adapters or provider overrides.
+This avoids mutating the package defaults shared by parallel tests; see
+[Clients and registries](clients-and-registries.md).
+
 ## Test a tool loop
 
 Vary the mock server's response by request so it returns a tool call first and a

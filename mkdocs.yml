@@ -28,10 +28,24 @@ plugins:
             Basics: 入门
             Core: 核心
             Advanced: 进阶
+            Recipes: 场景示例
             Overview: 概述
+            Capabilities: 功能总览
             Getting started: 快速开始
+            Developer guide: 开发者指南
+            Protocol support: 协议支持
             Examples: 示例
             Providers and models: 提供方与模型
+            Clients and registries: Client 与注册表
+            API reference: API 索引
+            Basic completion: 基础补全
+            Streaming chat: 流式对话
+            Image input: 图片输入
+            Reasoning output: 推理输出
+            Tool loop: 工具循环
+            Model switching: 模型切换
+            Custom gateway: 自定义网关
+            Explicit client: 显式 Client
             Streaming: 流式响应
             Tools: 工具
             Reasoning: 推理与思考
@@ -120,8 +134,20 @@ nav:
   - LLM:
       - Basics:
           - Overview: llm/README.md
+          - Capabilities: llm/capabilities.md
           - Getting started: llm/getting-started.md
-          - Providers and models: llm/providers.md
+          - Developer guide: llm/developer-guide.md
+          - Protocol support: llm/support-matrix.md
+      - Recipes:
+          - Overview: llm/recipes/README.md
+          - Basic completion: llm/recipes/basic-completion.md
+          - Streaming chat: llm/recipes/streaming-chat.md
+          - Image input: llm/recipes/vision.md
+          - Reasoning output: llm/recipes/reasoning.md
+          - Tool loop: llm/recipes/tool-loop.md
+          - Model switching: llm/recipes/model-switching.md
+          - Custom gateway: llm/recipes/custom-gateway.md
+          - Explicit client: llm/recipes/custom-client.md
       - Core:
           - Streaming: llm/streaming.md
           - Tools: llm/tools.md
@@ -130,10 +156,13 @@ nav:
           - Conversations: llm/conversations.md
           - Error handling: llm/errors.md
       - Advanced:
+          - Providers and models: llm/providers.md
           - Configuration: llm/configuration.md
+          - Clients and registries: llm/clients-and-registries.md
           - Troubleshooting: llm/troubleshooting.md
           - Testing: llm/testing.md
           - Custom protocols: llm/extending.md
+      - API reference: llm/api-reference.md
       - Examples: llm/examples.md
   - Agent:
       - Basics:

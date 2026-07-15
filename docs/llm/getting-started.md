@@ -38,7 +38,10 @@ import (
 )
 
 func main() {
-	model := llm.GetModel("deepseek", "deepseek-v4-flash")
+	model, ok := llm.LookupModel("deepseek", "deepseek-v4-flash")
+	if !ok || !llm.SupportsProtocol(model.Protocol) {
+		log.Fatal("model is not runnable")
+	}
 	response, err := llm.Complete(
 		context.Background(),
 		model,
@@ -65,6 +68,10 @@ The package-level functions dispatch through a default registry; the blank
 `llm/openai` import above registers the OpenAI-compatible protocol into it. Import
 the provider package for each protocol you use — or `llm/all` for every built-in —
 so only the SDKs you need are linked into your binary.
+
+`LookupModel` checks catalog membership, while `SupportsProtocol` checks adapter
+registration in this process. Build model pickers from `GetRunnableModels`.
+`GetModels` also returns catalog-only protocol entries and is not a runnable list.
 
 ## Customize the request
 
@@ -102,6 +109,8 @@ fmt.Printf("tokens=%d cost=$%.6f\n",
 
 - Continue the exchange over several turns with [conversations](conversations.md).
 - Choose a model from the [provider catalog](providers.md).
+- Confirm protocol and provider status in the [support matrix](support-matrix.md).
 - Render responses incrementally with [streaming events](streaming.md).
 - Give the model structured capabilities with [typed tools](tools.md).
 - Browse runnable programs on the [examples](examples.md) page.
+- Find minimal task-oriented code in [recipes](recipes/README.md).
