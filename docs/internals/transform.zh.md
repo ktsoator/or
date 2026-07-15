@@ -87,7 +87,7 @@ func IsContextOverflow(message AssistantMessage, contextWindow int64) bool {
 ```
 
 1.  多数厂商返回的错误文本会匹配已知的溢出措辞。`nonOverflowPatterns` 排除了限流之类的相似串。
-2.  有些厂商（如 z.ai）请求成功，却报告 usage 超过窗口；传入非零的 `contextWindow` 才能捕获这种情况。
+2.  有些厂商（如 z.ai）请求成功，却报告 token 用量超过窗口；传入非零的 `contextWindow` 才能捕获这种情况。
 3.  另一些厂商（如小米 MiMo）把超长输入截断以填满窗口，然后以 length 停止且输出为零。
 
 把 `contextWindow` 传 `0` 时，只检查错误文本（第一种情况）。

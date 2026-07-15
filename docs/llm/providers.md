@@ -1,10 +1,10 @@
-# Providers and models
+# Models and providers
 
 The catalog is broader than the adapter set. A catalog entry is queryable
 metadata, not proof that this package can execute its protocol. Check
-[`SupportsProtocol`](api-reference.md#catalog-functions) or use
+[`SupportsProtocol`](api-reference.md#models-and-providers) or use
 `GetRunnableModels` before presenting a model as runnable. The current boundary
-is maintained in [Protocol support](support-matrix.md), together with provider
+is maintained in [Protocol and provider status](support-matrix.md), together with provider
 IDs, model counts, and credential variables.
 
 The catalog also contains metadata for additional compatible providers and
@@ -101,7 +101,7 @@ Catalog prices are static metadata bundled with this repository. They may lag
 provider price changes and do not include account-specific discounts, taxes, or
 provider-side rounding. Use the provider invoice as the billing authority.
 
-See [Reading responses](results.md) for the matching `Usage` and `UsageCost`
+See [Responses and usage](results.md) for the matching `Usage` and `UsageCost`
 records on a completed request.
 
 ## Custom and compatible endpoints

@@ -1,10 +1,26 @@
-# Tool loop
+# Executing tool calls
 
-## What this builds
+After a model requests a tool, the application validates and decodes the arguments, runs its own tool implementation, appends the result to history, and asks the model to continue. The example uses a weather tool and limits execution to eight turns.
 
-A bounded loop lets the model request a typed weather tool, validates and decodes its arguments, executes application code, appends one result per call, and sends the updated history back for a final answer.
+`llm` defines and transports tool calls; it does not run them. Authorization, timeouts, idempotency, auditing, and side-effect policy belong to the application.
 
-`llm` defines and transports tool calls. It never runs them. Authorization, timeouts, idempotency, auditing, and side-effect policy belong to the application.
+## Responsibility boundary
+
+| Stage | What `llm` provides | Application responsibility |
+|---|---|---|
+| Tool declaration | Generate JSON Schema from a Go struct | Design names, descriptions, and argument constraints |
+| Tool request | Parse `ToolCall` and preserve call IDs | Dispatch names only to allowed implementations |
+| Argument handling | Coerce, validate, and decode against schema | Authorization, business rules, and resource-scope checks |
+| Tool execution | No executor is provided in the current material | Timeout, cancellation, concurrency, audit, and side effects |
+| Result return | Construct `ToolResultMessage` | Redact output and decide whether errors are retryable |
+| Loop control | Stop reasons and typed history | Turn, token, cost, and total-duration limits |
+
+## Before running the example
+
+```sh
+go get github.com/ktsoator/or/llm@latest
+export DEEPSEEK_API_KEY=your-key
+```
 
 ## Complete program
 
@@ -15,6 +31,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/ktsoator/or/llm"
 	_ "github.com/ktsoator/or/llm/openai"
@@ -26,7 +43,9 @@ type WeatherArgs struct {
 }
 
 func main() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
 	model := llm.GetModel("deepseek", "deepseek-v4-flash")
 	weather := llm.MustTool[WeatherArgs]("get_weather", "Get a weather forecast")
 	messages := []llm.Message{
@@ -54,10 +73,23 @@ func main() {
 				response.StopReason, response.ErrorMessage)
 		}
 
-		for _, call := range response.ToolCalls() {
+		calls := response.ToolCalls()
+		if len(calls) == 0 {
+			log.Fatal("model stopped for tool use without a tool call")
+		}
+		for _, call := range calls {
+			if argumentsRecovered(response.Diagnostics, call.ID) {
+				result := llm.ToolResult(call.ID, call.Name,
+					"tool arguments were incomplete; call the tool again")
+				result.IsError = true
+				messages = append(messages, result)
+				continue
+			}
 			args, err := llm.DecodeToolCall[WeatherArgs](weather, call)
 			if err != nil {
-				result := llm.ToolResult(call.ID, call.Name, err.Error())
+				log.Printf("invalid tool call %s: %v", call.ID, err)
+				result := llm.ToolResult(call.ID, call.Name,
+					"invalid tool arguments; correct them and try again")
 				result.IsError = true
 				messages = append(messages, result)
 				continue
@@ -70,9 +102,35 @@ func main() {
 	}
 	log.Fatal("tool loop exceeded 8 turns")
 }
+
+func argumentsRecovered(diagnostics []llm.Diagnostic, callID string) bool {
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Type != llm.DiagnosticToolArgumentsRecovered {
+			continue
+		}
+		id, _ := diagnostic.Details["toolCallId"].(string)
+		if id == callID {
+			return true
+		}
+	}
+	return false
+}
 ```
 
-## Loop contract
+The weather result is a deterministic stub. A real implementation needs its own tool deadline plus user authorization and resource-scope checks before external access.
+
+## Defining tools
+
+The example uses `MustTool` for a fixed startup declaration and
+`DecodeToolCall` to validate and decode returned arguments. Use `NewTool`, which
+returns an error, for dynamically built definitions. See
+[Tool definitions and calls](../tools.md) for all constructors, schema tags, and
+generic validation APIs.
+
+Schema validation checks argument shape; it does not authorize access to a
+city, file, or account.
+
+## Tool-call order
 
 1. Define `ToolDefinition`; `MustTool` is appropriate for static startup declarations and panics on an invalid definition.
 2. Send the tool with the current messages.
@@ -81,9 +139,27 @@ func main() {
 5. Match every returned `ToolCall` with exactly one `ToolResultMessage`.
 6. Send the expanded history again until normal stop or the application limit.
 
-`DecodeToolCall` validates against the generated schema and decodes into `WeatherArgs`. It can coerce common mistakes such as a numeric string, but coercion is not authorization.
+`DecodeToolCall` validates against the generated schema and decodes into `WeatherArgs`. It can coerce common format differences such as a numeric string, but successful coercion is not authorization.
 
-## Failure and security policy
+## Multiple tools and result return
+
+One response can contain multiple `ToolCall` values. Iterate over `response.ToolCalls()` and append one result with the matching call ID for every call:
+
+- On success, use `ToolResult(call.ID, call.Name, text)`.
+- For argument or business errors, still return `ToolResultMessage` with `IsError = true` so the model can correct the call.
+- Do not expose internal stacks, database errors, or credentials in tool error text; keep details in application logs.
+- Independent read-only calls may run concurrently, but concurrency must be bounded and each result must retain the correct call ID.
+- Calls with ordering dependencies or side effects must follow application sequencing rules; model-return order is not a safety policy.
+
+Tool results can contain text or images. Construct `ToolResultMessage.Content` manually for images; the `ToolResult` helper creates text-only results.
+
+## Streaming tool calls
+
+With `Stream`, tool arguments arrive incrementally through `EventToolCallDelta`. Delta JSON can be incomplete, and even `EventToolCallEnd` can contain best-effort recovered arguments.
+
+Wait for `EventDone`, then read calls from the final `AssistantMessage.ToolCalls()` and inspect `Diagnostics`. `DiagnosticToolArgumentsRecovered` means arguments were not parsed as complete strict JSON; side-effecting operations should normally reject automatic execution.
+
+## Failure and security boundaries
 
 - Inspect `response.Diagnostics` before executing side effects. `partial` or `invalid` recovered arguments should normally be rejected.
 - Return decode or business errors to the model with `IsError=true`; do not crash the whole loop for a correctable call.
@@ -91,5 +167,8 @@ func main() {
 - Add allowlists and user authorization independently of the schema. A valid argument can still request a forbidden action.
 - Use idempotency keys for writes. Provider retries and application retries must not duplicate external effects.
 - Bound turns, concurrent calls, payload size, and total spend.
+- Treat tool names as untrusted input and dispatch only to explicitly registered implementations. A model must not select arbitrary functions or commands by name.
+- Tool output becomes conversation history and can be read by later model calls. Remove credentials, internal paths, and unnecessary personal data before returning it.
+- After context cancellation, stop starting new tools and propagate cancellation to running tool implementations.
 
 Protocol-specific forced tool selection is documented in [Tools](../tools.md#protocol-specific-tool-choice).

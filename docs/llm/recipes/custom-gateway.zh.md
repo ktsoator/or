@@ -1,14 +1,20 @@
-# 自定义网关
+# 接入自定义模型服务
+
+本页用于将模型调用发送到代理、私有部署或兼容服务。模型服务地址是其公开的 HTTP API 地址，例如 `https://gateway.example.com/v1`。
 
 ## 选择接入方式
 
-这里的“模型服务地址”（endpoint）指模型服务暴露的 HTTP API 地址，例如 `https://gateway.example.com/v1`。
+| 情况 | 做法 |
+|---|---|
+| 已收录提供方的所有请求都经过同一服务 | 使用 `ProviderOverride` |
+| 只调用一个兼容服务，或服务不在内置模型清单中 | 直接构造 `Model` |
+| 服务使用框架不支持的请求与响应格式 | 实现 `ProtocolAdapter` |
 
-现有 provider 的全部请求都要使用同一个网关时，使用 provider override。只接入一个兼容服务地址，或 provider 不在目录中时，直接构造 `Model`。两种方式都复用现有协议 adapter。
+前两种方式复用现有协议适配器，不需要实现新的适配器。
 
-## 完整 Provider Override 程序
+## 覆盖已有提供方的配置
 
-网关 URL 和 key 从应用配置读取，不写在源码中：
+服务地址和 API 密钥从应用配置读取，不写入源码：
 
 ```go
 package main
@@ -48,17 +54,13 @@ func main() {
 }
 ```
 
-## 优先级
+## 覆盖的生效范围
 
-| 设置 | 从高到低 |
-|---|---|
-| API key | 请求 `APIKey` → override `APIKey` → 请求 `Env` → override `Env` → 进程环境 |
-| Base URL | provider override → `Model.BaseURL` |
-| 同名 Header | 请求 → override → provider spec → model |
+`ProviderOverride` 可覆盖 API 密钥、服务地址、请求头和环境值。它与请求选项、模型字段及进程环境的完整优先级只在[请求选项](../configuration.md#按请求提供凭证)和[模型与提供方](../providers.md#为-provider-的请求改道)中维护。
 
-`SetOverride` 保存输入快照，之后修改原 map 不会改变注册内容。已经解析完配置的请求不受后续更新影响。
+`SetOverride` 保存输入快照，之后修改原 map 不会改变注册内容。已经开始解析配置的请求不受后续更新影响。
 
-## 单个兼容 Endpoint
+## 接入单个兼容服务
 
 ```go
 model := llm.Model{
@@ -71,12 +73,12 @@ response, err := llm.Complete(ctx, model, llm.Prompt("hello"),
 	llm.StreamOptions{APIKey: "local-key"})
 ```
 
-模型服务必须完整实现所选协议的请求、流式响应和错误行为，只返回相似 JSON 并不足够。已知字段差异用 `Model.Compatibility` 配置；只有请求与响应格式不属于框架现有协议时，才实现 `ProtocolAdapter`。
+模型服务必须实现所选协议的请求、流式响应和错误行为；只返回相似 JSON 不足以保证兼容。已知字段差异使用 `Model.Compatibility` 配置。只有请求与响应格式不属于现有协议时，才实现 `ProtocolAdapter`。
 
-## 运维约束
+## 兼容性与安全边界
 
-- `DefaultProviderRegistry` 是进程全局状态，不要在共享默认注册表上设置租户专用 override。
-- 接受用户提供的 base URL 前必须做 SSRF 控制和网络 allowlist。
+- `DefaultProviderRegistry` 是进程全局状态，不要在共享默认注册表上设置租户专用覆盖。
+- 接受用户提供的服务地址前必须做 SSRF 控制和网络允许列表校验。
 - 不要关闭 TLS 校验；自定义证书应配置在显式 `http.Transport` 上。
-- 针对真实网关测试工具、推理、usage、重试和错误流。
+- 针对真实网关测试工具、推理、token 用量、重试和错误流。
 - 测试后清理 override，或使用隔离 client，避免测试间泄漏。

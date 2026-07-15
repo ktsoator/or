@@ -1,10 +1,15 @@
-# Observability hooks
+# Recording and rewriting requests
 
-## What this builds
+`StreamOptions` provides three request callbacks: `OnRequest` inspects the outgoing request, `RewriteRequest` changes the serialized request body, and `OnResponse` inspects the HTTP status and headers.
 
-A request records attempt duration, method, URL, serialized byte count, status, and provider request ID without logging prompt bodies or credentials.
+The example records method, URL, body size, response status, request ID, and elapsed time without logging prompt content or credentials. Each SDK attempt invokes the callbacks, so retries produce additional records.
 
-Hooks run once per SDK attempt, so retries remain visible. They execute synchronously in the request path.
+## Before running the example
+
+```sh
+go get github.com/ktsoator/or/llm@latest
+export DEEPSEEK_API_KEY=your-key
+```
 
 ## Complete program
 
@@ -45,17 +50,17 @@ func main() {
 }
 ```
 
-## Hook semantics
+## Callback timing
 
-| Hook | Input | Failure behavior |
-|---|---|---|
-| `OnRequest` | Exact serialized method, URL, and body for each attempt | No error return; blocking delays the request |
-| `RewriteRequest` | Same request data; returns replacement bytes | `nil` keeps original; invalid JSON can break the provider call |
-| `OnResponse` | Status and headers for each HTTP response | Runs before response body consumption |
+The example uses `OnRequest` to observe the serialized request,
+`RewriteRequest` to return a replacement body, and `OnResponse` to read status
+and headers. All three run for every SDK attempt. Their exact signatures,
+return behavior, and call constraints are maintained in
+[Request options](../configuration.md#observe-http-requests-and-responses).
 
-`RewriteRequest` is an escape hatch for a provider field not represented by typed options. Prefer `StreamOptions`, protocol options, model compatibility, headers, or provider overrides first.
+Use `RewriteRequest` for model-service fields not yet represented by typed options. Prefer `StreamOptions`, protocol options, `Model.Compatibility`, headers, or provider overrides because they are easier to validate and maintain.
 
-## Security and operations
+## Logging and performance boundaries
 
 - Request bodies contain prompts, images, tools, and tool arguments. Log size or a redacted structure rather than raw bytes.
 - URLs and headers can contain tenant IDs or credentials. Apply an allowlist before exporting attributes.

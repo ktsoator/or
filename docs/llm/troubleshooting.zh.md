@@ -1,6 +1,6 @@
-# 排障
+# 问题排查
 
-针对最常见问题、以症状为先的修复。底层模型（错误如何暴露、key 如何解析）见[错误处理](errors.md)。
+本页按错误现象给出排查入口和修复方式。失败信号及凭证解析规则见[失败信号](errors.md)。
 
 ## 协议没有注册适配器
 
@@ -16,7 +16,7 @@ import (
 )
 ```
 
-如果模型协议在[支持矩阵](support-matrix.md#协议状态)中标记为“仅目录”，导入
+如果模型协议在[协议与提供方状态](support-matrix.md#协议状态)中标记为“仅收录”，导入
 `llm/all` 也不会增加对应实现。应选择当前可运行模型，或自行实现 adapter。
 
 ## 取消后流一直不关闭
@@ -38,21 +38,21 @@ for event := range events {
 return streamErr
 ```
 
-## 模型不在目录中（panic）
+## 模型未收录（panic）
 
-当 provider/模型组合不在内置目录中时，`GetModel` 会 panic，消息为 `panic: llm: unknown model "..." for provider "..."`。
+当 provider/模型组合不在内置模型清单中时，`GetModel` 会 panic，消息为 `panic: llm: unknown model "..." for provider "..."`。
 
 - **原因：** 拼写错误、provider ID 写错，或该模型未被收录。
-- **修复：** 改用 `LookupModel`，它返回 `(Model, false)` 而不 panic；并用 `GetProviders` / `GetModels` 浏览目录。
+- **修复：** 改用 `LookupModel`，它返回 `(Model, false)` 而不 panic；并用 `GetProviders` / `GetModels` 浏览模型清单。
 
 ```go
 model, ok := llm.LookupModel("deepseek", "deepseek-v4-flash")
 if !ok {
-	log.Fatalf("不在目录中;可用 provider: %v", llm.GetProviders())
+	log.Fatalf("模型未收录;可用 provider: %v", llm.GetProviders())
 }
 ```
 
-若端点不在目录中，可手动构造 `llm.Model` 并设置其 `BaseURL`、`Protocol` 与 `Provider`。
+若模型服务未收录在清单中，可手动构造 `llm.Model` 并设置其 `BaseURL`、`Protocol` 与 `Provider`。
 
 ## 缺少 API key
 
@@ -92,4 +92,4 @@ fmt.Println(llm.FindEnvAPIKeys("minimax-cn")) // [] 表示一个都没设
 `DecodeToolCall` 返回错误，或 `AssistantMessage.Diagnostics` 报告了被恢复的参数。
 
 - **原因：** 模型产生了畸形 JSON，或流被截断。库会尽力恢复参数并在 `Diagnostics` 中记录方式，而不是让整个响应失败。
-- **修复：** 在执行有副作用的工具前，检查 `Diagnostics` 并拒绝 `partial` 或 `invalid` 参数。遇到 decode 错误时，回传工具错误（`result.IsError = true`），让模型纠正调用。见[工具循环清单](tools.md#运行工具循环)。
+- **修复：** 在执行有副作用的工具前，检查 `Diagnostics` 并拒绝 `partial` 或 `invalid` 参数。遇到 decode 错误时，回传工具错误（`result.IsError = true`），让模型纠正调用。见[执行工具调用](recipes/tool-loop.md)。

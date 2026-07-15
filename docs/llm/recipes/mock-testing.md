@@ -1,10 +1,8 @@
-# Mock-provider testing
+# Testing with a local mock server
 
-## What this builds
+`httptest.Server` can simulate a model service locally. Without a real account or external network access, a test can cover request serialization, streaming response parsing, and final message assembly.
 
-An `httptest` server emits OpenAI-compatible SSE, and a test verifies the full `Complete` request path without a provider account or network access.
-
-Save this as `completion_test.go` in a package that depends on `llm`.
+The test below simulates an OpenAI Chat Completions SSE response. Save it as `completion_test.go` in a Go package that uses `llm`.
 
 ## Complete test
 
@@ -54,14 +52,22 @@ func TestCompletion(t *testing.T) {
 }
 ```
 
-Run with `go test ./...`. The non-empty request API key satisfies local validation but is never sent outside the test server.
+Run it:
 
-## What to test next
+```sh
+go test ./...
+```
 
-- Inspect the request JSON to assert tools, system prompt, reasoning, and headers.
+The example API key satisfies request validation and is sent only to the local test server.
+
+## Additional paths to cover
+
+- Inspect request JSON to assert tools, system prompts, reasoning options, and headers.
 - Emit `tool_calls` first and a final answer on the second request to test a complete tool loop.
 - Emit error status and malformed SSE to verify partial messages and error policy.
 - Test `Stream` cancellation and continue receiving until channel close to detect goroutine leaks.
-- Use an explicit client and registry when tests register custom adapters or provider overrides, avoiding package-global cross-test state.
+- Use a custom client and independent registries when testing custom adapters or provider overrides, avoiding package-global cross-test state.
 
-Mock tests validate protocol translation, not live-provider compatibility. Keep a small credentialed integration suite for providers used in production.
+## Test scope
+
+Local mock tests validate application logic and protocol translation. They do not validate authentication, rate limits, field differences, or live behavior of a real model service. Keep a small credentialed integration suite for model services used in production.

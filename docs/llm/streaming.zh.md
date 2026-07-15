@@ -1,52 +1,23 @@
-# 流式响应
+# 流式事件
 
-使用 `Stream` 在文本和推理生成的同时进行处理。
+本页定义 `Stream` 的事件顺序、字段语义、终止条件和取消行为。需要完整的界面接入程序与异常处理策略，参见[流式响应](recipes/streaming-chat.md)。
 
-**1. 启动流。** `Stream` 会立即返回一个通道；请求在后台运行，事件到达时随即送出。
-
-```go
-events, err := llm.Stream(
-	context.Background(),
-	model,
-	llm.Prompt("Explain Go channels briefly."),
-	llm.StreamOptions{Reasoning: llm.ModelThinkingHigh},
-)
-if err != nil {
-	log.Fatal(err)
-}
-```
-
-**2. 用类型分支消费事件。** 文本和推理增量随到随打印，在 `EventDone` 时捕获最终消息，在 `EventError` 时停止。
-
-事件通道是无缓冲通道。循环必须继续读取到通道关闭。业务不再需要增量时，可以忽略事件内容，但仍应 drain 通道；直接停止读取会让 adapter goroutine 阻塞在下一次发送上。
+`Stream` 返回一个只读、无缓冲的事件通道。请求由后台协程执行，调用方必须持续读取到通道关闭；提前停止读取可能阻塞协议适配器发送后续事件。最小的消费结构如下：
 
 ```go
-var finalMessage *llm.AssistantMessage
 for event := range events {
 	switch event.Type {
 	case llm.EventThinkingDelta, llm.EventTextDelta:
 		fmt.Print(event.Delta)
 	case llm.EventDone:
-		finalMessage = event.Message
+		handleDone(event.Message)
 	case llm.EventError:
-		log.Fatal(event.Err)
+		handleFailure(event.Message, event.Err)
 	}
 }
 ```
 
-**3. 读取最终消息**——通道关闭后，从中读出停止原因、token 用量和成本。
-
-```go
-fmt.Printf("\nstop=%s tokens=%d cost=$%.6f\n",
-	finalMessage.StopReason,
-	finalMessage.Usage.TotalTokens,
-	finalMessage.Usage.Cost.Total,
-)
-```
-
-只有当所选模型和提供方暴露推理内容时，才会发出 thinking 事件。
-
-包含超时、错误保存和 drain 处理的完整程序见[流式聊天场景](recipes/streaming-chat.md)。本页只定义公共事件契约。
+只有所选模型和提供方返回推理内容时，才会出现推理事件。`EventError.Message` 可能包含已经生成的部分内容和用量。
 
 ## 事件参考
 
@@ -88,9 +59,9 @@ flowchart LR
 | `EventDone` | 请求成功完成 | `Message` |
 | `EventError` | 请求失败或被取消 | `Err`、`Message` |
 
-`EventDone.Message` 是最终的 assistant 消息，包含内容、用量、成本和停止原因。 `EventError.Message` 可能包含部分内容和用量。通道只会发出恰好一个终止事件，随后关闭。如何解读这个最终消息（停止原因、token 用量与成本、诊断，以及上下文溢出检测）参见[读取响应](results.md)。
+`EventDone.Message` 是最终的助手消息，包含内容、用量、成本和停止原因。`EventError.Message` 可能包含部分内容和用量。通道只会发出恰好一个终止事件，随后关闭。字段解释参见[响应与用量](results.md)。
 
-来自不同内容块的事件可能交错出现。用 `ContentIndex` 将增量关联到对应的块。每个非终止事件都携带一份迄今为止已构建的 assistant 消息的 `Partial` 快照。
+来自不同内容块的事件可能交错出现。用 `ContentIndex` 将增量关联到对应的块。每个非终止事件都携带一份当前助手消息的 `Partial` 快照。
 
 ## 工具调用增量与诊断
 
@@ -100,29 +71,8 @@ flowchart LR
 
 ## 取消
 
-取消请求 context 会请求停止进行中的 HTTP 调用。adapter 会尝试发出一个 `EventError`，其消息报告 `StopReasonAborted`，随后关闭通道。调用方在取消后仍必须继续读取通道；若消费者已经停止读取，无缓冲发送可能阻止终止事件和关闭动作完成。
+取消请求上下文会停止正在进行的 HTTP 调用。协议适配器会尝试发出一个 `EventError`，其消息包含 `StopReasonAborted`，随后关闭通道。调用方在取消后仍必须继续读取通道；若消费者已经停止读取，无缓冲发送可能阻止终止事件发出并延迟通道关闭。
 
-```go
-ctx, cancel := context.WithCancel(context.Background())
-defer cancel()
+传输层的截止时间请使用独立的、按尝试计的 `Timeout` 选项；参见[请求选项](configuration.md)。
 
-events, err := llm.Stream(ctx, model, input, llm.StreamOptions{})
-if err != nil {
-	log.Fatal(err)
-}
-
-// 从别处调用 cancel()，例如当用户按下「停止」时。
-// 取消后仍继续 range，直到通道关闭。
-for event := range events {
-	switch event.Type {
-	case llm.EventTextDelta:
-		fmt.Print(event.Delta)
-	case llm.EventError:
-		fmt.Printf("\nstopped: %s\n", event.Message.StopReason)
-	}
-}
-```
-
-传输层的截止时间请使用独立的、按尝试计的 `Timeout` 选项；参见[请求配置](configuration.md)。
-
-`Stream` 不提供独立的 `Close` 或 `Abort` 方法。取消入口是传入的 context，资源释放由 adapter goroutine 在退出时完成。
+`Stream` 不提供独立的 `Close` 或 `Abort` 方法。取消入口是传入的请求上下文。协议适配器的后台协程退出时释放本次请求占用的资源。

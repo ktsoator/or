@@ -1,14 +1,14 @@
-# 提供方与模型
+# 模型与提供方
 
-模型目录比 adapter 集合更大。目录条目是可查询元数据，不代表当前进程一定能执行其协议。展示可调用模型前使用 `SupportsProtocol` 或 `GetRunnableModels`。协议状态、provider ID、模型数量和凭证变量只在[协议与 Provider 支持矩阵](support-matrix.md)维护。
+内置模型清单比 adapter 集合更大。清单条目是可查询元数据，不代表当前进程一定能执行其协议。展示可调用模型前使用 `SupportsProtocol` 或 `GetRunnableModels`。协议状态、provider ID、模型数量和凭证变量只在[协议与提供方状态](support-matrix.md)维护。
 
-目录中还包含其他兼容提供方和模型的元数据。这些条目可供查询，并且可能通过两种协议适配器之一正常工作，但它们尚未全部针对线上提供方 API 验证过，不构成支持保证。自动化测试通过本地 mock 服务器覆盖两种适配器，而非对每个提供方进行线上集成测试。
+模型清单中还包含其他兼容提供方和模型的元数据。这些条目可供查询，并且可能通过两种协议适配器之一正常工作，但它们尚未全部针对线上提供方 API 验证过，不构成支持保证。自动化测试通过本地 mock 服务器覆盖两种适配器，而非对每个提供方进行线上集成测试。
 
 本包只解析本次请求所选 provider 的 key。也可以通过 `StreamOptions.APIKey` 或 `StreamOptions.Env` 提供请求级凭证。
 
 ## 发现模型
 
-与其硬编码动态提供的模型 ID，不如直接查询目录：
+与其硬编码动态提供的模型 ID，不如直接查询模型清单：
 
 ```go
 for _, provider := range llm.GetProviders() {
@@ -24,9 +24,9 @@ if !ok {
 }
 ```
 
-`LookupModel` 返回模型和一个表示是否找到的标志。`GetModel` 适用于已知的目录条目，在提供方或模型 ID 不存在时会 panic。
+`LookupModel` 返回模型和一个表示是否找到的标志。`GetModel` 适用于已知的清单条目，在提供方或模型 ID 不存在时会 panic。
 
-目录也包含尚无内置适配器的协议模型。可用 `SupportsProtocol` 检查单个协议，或用
+模型清单也包含尚无内置适配器的协议模型。可用 `SupportsProtocol` 检查单个协议，或用
 `GetRunnableModels` 只列出当前应用已导入适配器、因而能够实际调用的模型：
 
 ```go
@@ -40,7 +40,7 @@ for _, model := range llm.GetRunnableModels("deepseek") {
 ```
 
 这两个函数查询包级默认 adapter 注册表。使用前应以副作用方式导入对应协议包，或导入
-`llm/all`。`GetModels` 仍然返回未经筛选的完整目录。
+`llm/all`。`GetModels` 仍然返回未经筛选的完整模型清单。
 
 ## 模型元数据
 
@@ -78,9 +78,9 @@ fmt.Printf("%s: %d-token window, $%.2f/M in, $%.2f/M out\n",
 model.Name, model.ContextWindow, model.Cost.Input, model.Cost.Output)
 ```
 
-目录由外部数据源生成并嵌入二进制。价格、模型状态和限制可能晚于 provider 更新。`CalculateCost` 和 `Usage.Cost` 是目录估算，不是 provider 账单。
+模型清单由外部数据源生成并嵌入二进制。价格、模型状态和限制可能晚于 provider 更新。`CalculateCost` 和 `Usage.Cost` 是基于内置价格的估算，不是 provider 账单。
 
-已完成请求上对应的 `Usage` 与 `UsageCost` 记录参见[读取响应](results.md)。
+已完成请求上对应的 `Usage` 与 `UsageCost` 记录参见[响应与用量](results.md)。
 
 ## 自定义与兼容端点
 
@@ -148,7 +148,7 @@ Anthropic Messages compatibility 字段：
 
 ## 提供方配置与状态
 
-本包在模型目录之外维护一个 provider 注册表。目录存放 provider 的模型，注册表存放它的配置：提供 key 的环境变量，以及施加到其请求上的 override。包级 `Stream` 和 `Complete` 都经过默认注册表，因此无需自建 client，状态查询和 override 即可生效。
+本包在内置模型清单之外维护一个 provider 注册表。模型清单存放 provider 的模型元数据，注册表存放它的配置：提供 key 的环境变量，以及施加到其请求上的 override。包级 `Stream` 和 `Complete` 都经过默认注册表，因此无需自建 client，状态查询和 override 即可生效。
 
 ### 检查 provider 是否已配置
 
@@ -178,11 +178,11 @@ registry.SetOverride("deepseek", llm.ProviderOverride{
 ```
 
 `SetOverride` 会保存一份独立快照，因此调用后可以安全复用或修改传入的值、map
-和请求级环境变量。条件允许时，override 仍建议在启动阶段设置。完整的凭证优先级见[请求配置](configuration.md)。
+和请求级环境变量。条件允许时，override 仍建议在启动阶段设置。完整的凭证优先级见[请求选项](configuration.md)。
 
 ### 注册自定义 provider
 
-`Register` 加入目录未内置的 provider。它从自己的环境变量解析 key，也能像内置 provider 一样被 override；这是除了直接传一个裸 `Model` 之外，接入本地服务器的另一种方式。
+`Register` 加入模型清单中未内置的 provider。它从自己的环境变量解析 key，也能像内置 provider 一样被 override；这是除了直接传一个裸 `Model` 之外，接入本地服务器的另一种方式。
 
 ```go
 registry.Register(llm.NewSpecProvider(llm.ProviderSpec{

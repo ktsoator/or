@@ -1,4 +1,4 @@
-# 工具
+# 工具定义与调用
 
 工具是一类经声明后可供模型请求调用的函数——用于获取数据、执行计算，或完成模型自身无法完成的操作。本库本身不执行任何操作：它将 Go 类型转换为模型可见的 schema，把模型发起的调用交回调用方，再由调用方将结果回传。
 
@@ -6,7 +6,7 @@
 
 举例来说，模型要查天气时不会自己去查，而是发出一个 `get_weather(city=…)` 调用；调用方查到结果后回传，模型再据此作答。
 
-本页覆盖该流程的两个部分：先从 Go 结构体定义类型化工具，再将"请求 → 执行 → 回传"这一往返组织成循环。`DecodeToolCall` 与 `ToolResult` 即是衔接两者的部件。
+本页说明工具类型、Schema 生成、参数校验和协议选项。完整的“请求 → 执行 → 回传”程序及生产环境策略见[执行工具调用](recipes/tool-loop.md)。
 
 ## 速览
 
@@ -48,84 +48,30 @@ type WeatherArgs struct {
 | 正则 | `pattern=^[A-Z]` | string |
 | 数组长度 | `minItems=` · `maxItems=` | array |
 
-**2. 从类型构建工具**，并挂到请求 context 上。
+从类型构建工具后，将定义放入 `Context.Tools`：
 
 ```go
 weatherTool := llm.MustTool[WeatherArgs]("get_weather", "Get a weather forecast")
 
-input := llm.Context{
-	Messages: []llm.Message{
-		llm.UserText("What's the weather in Shanghai for the next 3 days?"),
-	},
-	Tools: []llm.ToolDefinition{weatherTool},
-}
+input.Tools = []llm.ToolDefinition{weatherTool}
 ```
 
-**3. 发送请求并读回工具调用。** `response.ToolCalls()` 返回模型发起的每个调用；先把助手消息追加进历史，后续的工具结果才能跟在它后面。
+`response.ToolCalls()` 按顺序返回模型发起的调用。`DecodeToolCall` 会先按工具 Schema 校验参数，再解码为指定的 Go 类型：
 
 ```go
-response, err := llm.Complete(ctx, model, input, llm.StreamOptions{})
-if err != nil {
-	log.Fatal(err)
-}
-messages = append(messages, &response)
+arguments, err := llm.DecodeToolCall[WeatherArgs](weatherTool, toolCall)
+result := llm.ToolResult(toolCall.ID, toolCall.Name, resultText)
 ```
 
-**4. 解码每个调用、返回结果，再次询问。** `DecodeToolCall` 会按 schema 校验参数并解码进 `WeatherArgs`，得到可直接使用的值。
-
-```go
-for _, toolCall := range response.ToolCalls() {
-	arguments, err := llm.DecodeToolCall[WeatherArgs](weatherTool, toolCall)
-	if err != nil {
-		log.Fatal(err)
-	}
-	result := fmt.Sprintf("%s will be sunny for %d days.", arguments.City, arguments.Days)
-	messages = append(messages, llm.ToolResult(toolCall.ID, toolCall.Name, result))
-}
-```
-
-把工具结果放进第二次 `Complete` 发回去，模型就能据此给出最终答案。
-
-从工具声明到多轮执行的完整程序见[工具循环场景](recipes/tool-loop.md)。本页保留类型、Schema、校验和循环契约，避免维护第二份应用程序。
+从工具声明到多轮执行的完整程序见[执行工具调用](recipes/tool-loop.md)。本页只维护类型、Schema、校验和消息对应关系。
 
 当类型无法生成有效 schema 时，`MustTool` 会 panic，适合在启动阶段声明的工具。若工具是动态构建的、需要处理失败而非崩溃，请改用返回 error 的 `NewTool`。
 
-## 运行工具循环
+## 调用与结果的对应关系
 
-上面的示例为清晰起见只处理了一轮。真实应用需要循环：模型可能调用工具、读取结果，再调用更多工具，最后才作答。`StopReason` 会指明当前处于哪种情况，因此应据其控制循环，而不是仅凭是否存在工具调用。
+`StopReasonToolUse` 表示模型等待工具结果。每个 `ToolCall` 都必须对应一个 `ToolResultMessage`，且结果中的 `ToolCallID` 和工具名称必须与调用一致。历史顺序为 assistant 消息在前，其工具结果随后；之后才能发起下一轮请求。
 
-```mermaid
-flowchart TD
-    A(["Complete / Stream"]) --> B{"StopReason?"}
-    B -->|ToolUse| C["追加 assistant 消息"]
-    C --> D["对每个 ToolCall:<br/><small>DecodeToolCall → 执行 → ToolResult</small>"]
-    D --> E["追加工具结果"]
-    E --> A
-    B -->|Stop| F(["完成 —— 使用 Text()"])
-    B -->|Error / Aborted| G(["停止 —— 不要执行工具"])
-
-    classDef ok stroke:#16a34a,stroke-width:2px;
-    classDef bad stroke:#dc2626,stroke-width:2px;
-    class F ok;
-    class G bad;
-```
-
-- `StopReasonToolUse` — 模型需要工具结果。执行这些调用，逐个追加结果，再次调用模型。
-- `StopReasonStop` — 模型已作答。返回 `response.Text()`。
-- `StopReasonLength` — 输出触达 token 上限，本轮被截断。
-- `StopReasonError` / `StopReasonAborted` — 请求失败或被取消。绝不要执行这类响应中的工具调用。
-
-一次请求可在 `Context.Tools` 中声明多个工具，单轮也可能包含不止一个 `ToolCall`。遍历 `ToolCalls()`，按 `call.Name` 分派，并为每个调用追加一个匹配 ID 的 `ToolResult`。包含循环上限、decode 错误回传和最终停止处理的完整程序见[工具循环场景](recipes/tool-loop.md)。
-
-工具的实际执行是调用方的应用代码，`llm` 并不介入；它只负责把模型发起的调用交回，并把返回的 `ToolResult` 编回历史。
-
-!!! check "生产环境工具循环清单"
-    - **以 `StopReason` 为准，而非是否存在工具调用。** 当它为 `StopReasonToolUse` 时继续循环；为 `StopReasonStop` 时停止。
-    - **先追加 assistant 消息，再追加其工具结果。** 历史中的顺序必须是先 assistant 这一轮，然后是各个 `ToolResult`。
-    - **每个工具调用都要有对应结果。** 每个调用回传一个 `ToolResult`，不要让任何调用在下次请求中悬空未答。
-    - **decode 失败时回传工具错误，不要崩溃。** 设置 `result.IsError = true` 并把该消息回传，让模型纠正参数。
-    - **为循环设上界。** 限制轮数，避免行为异常的模型无限循环。
-    - **有副作用前先看诊断。** 在执行会写入或消耗资源的工具前，拒绝 `partial` 或 `invalid` 参数。见[流式诊断](streaming.md#工具调用增量与诊断)。
+单轮可能包含多个调用，也可能在收到结果后继续调用其他工具。循环上限、分派、执行失败回传和停止条件属于应用流程，完整实现只在[执行工具调用](recipes/tool-loop.md)中维护。
 
 ## 执行前校验
 

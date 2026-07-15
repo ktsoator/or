@@ -1,60 +1,29 @@
-# Streaming
+# Streaming events
 
-Use `Stream` to process text and reasoning as they are generated.
+This page defines the event order, field semantics, terminal conditions, and
+cancellation behavior of `Stream`. For a complete UI integration and failure
+policy, see [Streaming responses](recipes/streaming-chat.md).
 
-**1. Start the stream.** `Stream` returns a channel immediately; the request
-runs in the background and delivers events as they arrive.
-
-```go
-events, err := llm.Stream(
-	context.Background(),
-	model,
-	llm.Prompt("Explain Go channels briefly."),
-	llm.StreamOptions{Reasoning: llm.ModelThinkingHigh},
-)
-if err != nil {
-	log.Fatal(err)
-}
-```
-
-**2. Consume events with a type switch.** Print text and reasoning deltas as
-they come, capture the final message on `EventDone`, and stop on `EventError`.
-
-The event channel is unbuffered. Keep receiving until the channel closes. When
-business logic no longer needs deltas, ignore event contents but still drain the
-channel. Stopping reads directly can block the adapter goroutine on its next send.
+`Stream` returns a read-only, unbuffered event channel. A background goroutine
+runs the request, and the caller must receive until the channel closes. Stopping
+early can block the adapter while it sends a later event. The minimal consumer
+shape is:
 
 ```go
-var finalMessage *llm.AssistantMessage
 for event := range events {
 	switch event.Type {
 	case llm.EventThinkingDelta, llm.EventTextDelta:
 		fmt.Print(event.Delta)
 	case llm.EventDone:
-		finalMessage = event.Message
+		handleDone(event.Message)
 	case llm.EventError:
-		log.Fatal(event.Err)
+		handleFailure(event.Message, event.Err)
 	}
 }
 ```
 
-**3. Read the final message** for the stop reason, token usage, and cost once
-the channel closes.
-
-```go
-fmt.Printf("\nstop=%s tokens=%d cost=$%.6f\n",
-	finalMessage.StopReason,
-	finalMessage.Usage.TotalTokens,
-	finalMessage.Usage.Cost.Total,
-)
-```
-
-Thinking events are emitted only when the selected model and provider expose
-reasoning content.
-
-See the [streaming-chat task guide](recipes/streaming-chat.md) for the complete
-program with timeout, error preservation, and channel draining. This page owns
-the public event contract.
+Thinking events appear only when the selected model and provider return
+reasoning content. `EventError.Message` may contain partial content and usage.
 
 ## Event reference
 
@@ -102,7 +71,7 @@ Every non-terminal event carries a `Partial` snapshot; the `…` prefix stands f
 `EventDone.Message` is the final assistant message and contains content, usage,
 cost, and stop reason. `EventError.Message` may contain partial content and
 usage. The channel emits exactly one terminal event and then closes. See
-[Reading responses](results.md) for how to interpret the final message: stop
+[Responses and usage](results.md) for how to interpret the final message: stop
 reasons, token usage and cost, diagnostics, and context-overflow detection.
 
 Events from different content blocks may be interleaved. Use `ContentIndex` to
@@ -131,29 +100,8 @@ closes the channel. Keep receiving after cancellation. If the consumer has
 already stopped, an unbuffered send can prevent the terminal event and close
 from completing.
 
-```go
-ctx, cancel := context.WithCancel(context.Background())
-defer cancel()
-
-events, err := llm.Stream(ctx, model, input, llm.StreamOptions{})
-if err != nil {
-	log.Fatal(err)
-}
-
-// Call cancel() from elsewhere, for example when the user presses Stop.
-// Keep ranging after cancellation until the channel closes.
-for event := range events {
-	switch event.Type {
-	case llm.EventTextDelta:
-		fmt.Print(event.Delta)
-	case llm.EventError:
-		fmt.Printf("\nstopped: %s\n", event.Message.StopReason)
-	}
-}
-```
-
 Use the independent per-attempt `Timeout` option for transport deadlines; see
-[Request configuration](configuration.md).
+[Request options](configuration.md).
 
 `Stream` has no separate `Close` or `Abort` method. Cancel through the supplied
 context; the adapter goroutine releases stream resources when it exits.

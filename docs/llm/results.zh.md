@@ -1,6 +1,6 @@
-# 读取响应
+# 响应与用量
 
-`Complete` 返回一个 `AssistantMessage`；流式方式通过 `EventDone.Message` 给出同一个值。本页介绍可以从中读取什么：内容、生成停止的原因、token 用量与成本，以及非致命诊断。
+本页定义 `AssistantMessage` 的内容、停止原因、用量、成本估算和诊断字段。`Complete` 直接返回该值；流式调用通过 `EventDone.Message` 或 `EventError.Message` 返回同一种结构。
 
 ## 内容与元数据
 
@@ -43,7 +43,7 @@ for _, block := range response.Content {
 | `StopReason` | 含义 | 典型处理 |
 |---|---|---|
 | `StopReasonStop` | 正常完成 | 使用 `response.Text()` |
-| `StopReasonToolUse` | 模型需要工具结果 | 运行[工具循环](tools.md#运行工具循环) |
+| `StopReasonToolUse` | 模型需要工具结果 | 按[执行工具调用](recipes/tool-loop.md)处理调用并回传结果 |
 | `StopReasonLength` | 输出触达 `MaxTokens` 上限 | 续写本轮或调高上限 |
 | `StopReasonError` | 提供方或运行时失败 | 查看 `ErrorMessage`；不要执行工具调用 |
 | `StopReasonAborted` | 请求被取消 | 停止；context 已被取消 |
@@ -75,7 +75,7 @@ case llm.StopReasonError, llm.StopReasonAborted:
 
 `Usage.Cost` 是一个 `UsageCost`，以货币单位给出相同的分项（`Input`、`Output`、 `CacheRead`、`CacheWrite` 和 `Total`），在组装响应时按模型定价计算得出。
 
-这是基于目录快照的估算。provider 调价、账号折扣或 provider 侧舍入都可能使其与账单不一致。
+这是基于内置模型清单快照的估算。provider 调价、账号折扣或 provider 侧舍入都可能使其与账单不一致。
 
 ```go
 fmt.Printf("tokens=%d (cached %d) cost=$%.6f\n",

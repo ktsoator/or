@@ -10,7 +10,7 @@ Each directory is a separate `main` package using the root module:
 go run ./example/llm/basic
 ```
 
-Live requests require the selected provider's API key. Check the [protocol and provider support matrix](support-matrix.md) first.
+Live requests require the selected provider's API key. Check [Protocol and provider status](support-matrix.md) first.
 
 ## Example programs
 
@@ -18,11 +18,11 @@ Live requests require the selected provider's API key. Check the [protocol and p
 |---|---|---|---|
 | Basic | `example/llm/basic` | `LookupModel`, `Complete`, text results | [Basic completion](recipes/basic-completion.md) |
 | Options | `example/llm/options` | System prompt, temperature, max tokens | [Configuration](configuration.md) |
-| Streaming | `example/llm/streaming` | Text deltas and terminal events | [Streaming chat](recipes/streaming-chat.md) |
-| Reasoning | `example/llm/reasoning` | Reasoning effort and thinking events | [Reasoning output](recipes/reasoning.md) |
-| Tools | `example/llm/tools` | Typed tools and an application tool loop | [Tool loop](recipes/tool-loop.md) |
-| Conversation | `example/llm/conversation` | Caller-owned multi-turn history | [Conversations](conversations.md) |
-| Model switch | `example/llm/model_switch` | Changing protocol and model with one history | [Model switching](recipes/model-switching.md) |
+| Streaming | `example/llm/streaming` | Text deltas and terminal events | [Streaming responses](recipes/streaming-chat.md) |
+| Reasoning | `example/llm/reasoning` | Reasoning effort and thinking events | [Requesting reasoning](recipes/reasoning.md) |
+| Tools | `example/llm/tools` | Typed tools and an application tool loop | [Executing tool calls](recipes/tool-loop.md) |
+| Conversation | `example/llm/conversation` | Caller-owned multi-turn history | [Messages and context](conversations.md) |
+| Model switch | `example/llm/model_switch` | Changing protocol and model with one history | [Changing models in a conversation](recipes/model-switching.md) |
 | Advanced | `example/llm/advanced` | Request hooks and low-level options | [Configuration](configuration.md) |
 | Providers | `example/llm/providers` | Provider registration and overrides | [Providers](providers.md) |
 | Who am I | `example/llm/whoami` | Provider credential status | [Provider status](providers.md#check-whether-a-provider-is-configured) |

@@ -15,7 +15,7 @@
 | [`llm/openai/`](https://github.com/ktsoator/or/tree/main/llm/openai) | `openai-completions` 适配器；在 `init` 中自行注册 |
 | [`llm/anthropic/`](https://github.com/ktsoator/or/tree/main/llm/anthropic) | `anthropic-messages` 适配器；在 `init` 中自行注册 |
 | [`llm/all/`](https://github.com/ktsoator/or/tree/main/llm/all) | 空导入两个适配器，供想要全部内置协议的调用方使用 |
-| [`llm/internal/`](https://github.com/ktsoator/or/tree/main/llm/internal) | `jsonx`（宽容的 JSON 辅助）与 `genmodels`（模型目录生成器） |
+| [`llm/internal/`](https://github.com/ktsoator/or/tree/main/llm/internal) | `jsonx`（宽容的 JSON 辅助）与 `genmodels`（模型清单生成器） |
 
 适配器通过副作用被引入：
 
@@ -32,7 +32,7 @@ import (
 
 - **`ProtocolAdapter`** —— 一个接口，含 `Protocol()`（它在注册表中的键）和 `Stream()`（单个协议的请求生命周期）。见[协议适配器](adapters.md)。
 - **`AdapterRegistry`** —— 一个并发安全的 `map[Protocol]ProtocolAdapter`。厂商的 `init` 函数调用 `llm.Register` 把自己加入包默认注册表；偏好显式接线的调用方用 `NewAdapterRegistry` 和 `AdapterRegistry.Register` 自建。
-- **`ProviderRegistry`** —— 一张并发安全的 per-vendor 配置表：凭证来源、静态 header，以及可选的 `ProviderOverride`。它的 `ResolveRequest` 在派发前为每次请求填充 API key 并套用 override；默认是从目录填充的 `NewBuiltInProviderRegistry`。见 [provider](../llm/providers.md)。
+- **`ProviderRegistry`** —— 一张并发安全的 per-vendor 配置表：凭证来源、静态 header，以及可选的 `ProviderOverride`。它的 `ResolveRequest` 在派发前为每次请求填充 API key 并套用 override；默认是从内置模型清单填充的 `NewBuiltInProviderRegistry`。见 [provider](../llm/providers.md)。
 - **`Client`** —— 同时持有两张注册表，为每次请求路由：先经 `ProviderRegistry` 解析 provider 配置，再派发到模型协议对应的适配器。`llm.Stream` 和 `llm.Complete` 只是绑定到默认注册表的默认 client 的薄封装。
 
 ```mermaid
@@ -100,7 +100,7 @@ func (c *Client) Stream(ctx context.Context, model Model, input Context, options
 
 ## 延伸阅读
 
-- [模型与协议](models.md) —— `Model`、它的能力和目录。
+- [模型与协议](models.md) —— `Model`、它的能力和模型清单。
 - [消息类型系统](messages.md) —— 与厂商无关的对话模型。
 - [协议适配器](adapters.md) —— 一种协议如何被翻译和注册。
 - [流式机制](streaming.md) —— 事件与 `StreamWriter` 机制。

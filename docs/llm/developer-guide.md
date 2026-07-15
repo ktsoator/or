@@ -1,207 +1,213 @@
 # or/llm developer guide
 
-This guide explains the architecture, module collaboration, request lifecycle, extension boundaries, and runtime limits of `or/llm`. Complete feature programs live only in the corresponding topic guides and [task guides](recipes/README.md); exported signatures are indexed in the [API reference](api-reference.md).
+This page explains the module relationships, initialization choices, request
+path, state boundaries, and extension routes of `or/llm`. It is intended for
+developers integrating several model services, configuring an independent
+client, diagnosing request execution, or implementing a protocol adapter.
 
-## 1. Framework overview
+For one concrete task, start from the [guides](recipes/README.md). Use the
+[API reference](api-reference.md) to locate exported symbols and the pages under
+API and concepts for field and behavioral contracts.
 
-### Problem addressed
+## Architectural role
 
-LLM providers represent messages, tools, reasoning fields, streamed events, usage, and failures differently. `llm` carries application input and results in neutral domain types, then delegates wire conversion to protocol adapters.
+Model services represent messages, tools, reasoning options, streamed output,
+usage, and failures differently. `llm` uses its own `Context`, `Message`,
+`Model`, `Event`, `ToolDefinition`, and `AssistantMessage` types for application
+input and output, then delegates request and response conversion to a protocol
+adapter.
 
-Its core goals are to:
+The abstraction covers one model call:
 
-- send one `Context` to different models on implemented protocols;
-- re-adapt stored history for the target model before every request;
-- expose text, reasoning, and tool calls through one event lifecycle;
-- keep tool definitions, validation, usage, and stop reasons independent of provider SDK types;
-- let applications replace endpoints, credentials, HTTP transports, or an entire protocol adapter.
+- resolve the model, credentials, service address, and request options;
+- transform history for the target model before sending;
+- normalize service increments into common events;
+- return content, stop reason, usage, estimated cost, and diagnostics.
 
-### Difference from an SDK wrapper
+Conversation databases, context compaction, tool execution, agent loops, RAG,
+and provider scheduling are outside this layer.
 
-`llm` does not expose a union of two provider SDKs. `Message`, `Model`, `Context`, `Event`, `ToolDefinition`, and `AssistantMessage` form an independent domain model. Adapters own provider request construction, history transformation, stream normalization, compatibility dialects, and error mapping.
+## Main modules
 
-### Suitable uses
-
-- Applications that own history storage and tool execution.
-- Services that call multiple compatible providers.
-- UIs that process text, thinking, and tool progress separately.
-- Systems that need custom endpoints, proxies, headers, TLS, or connection pools.
-- Applications that need an LLM request layer without a complete agent runtime.
-
-### Unsuitable uses
-
-Session storage, context compaction, automatic tool execution, agent planning, RAG, task scheduling, and provider load balancing are outside this package. Treat the [support matrix](support-matrix.md) as the source of truth for implemented protocols.
-
-## 2. Architecture
-
-### Core modules
-
-| Module | Primary files | Responsibility |
+| Module | Primary source | Responsibility |
 |---|---|---|
-| Domain model | `llm/message.go`, `llm/model.go` | Messages, content blocks, models, usage, and stop reasons |
-| Request entry | `llm/default.go`, `llm/client.go` | Validation, provider resolution, and adapter dispatch |
-| Adapter registration | `llm/adapters.go` | Mapping `Protocol` to `ProtocolAdapter` |
-| Provider configuration | `llm/provider.go`, `llm/provider_registry.go` | Credentials, URLs, headers, overrides, and auth status |
-| Model catalog | `llm/catalog.go`, `llm/model_registry.go` | Embedded catalog and application model registries |
-| History transformation | `llm/transform.go` | Image downgrade, reasoning cleanup, and tool-call repair |
-| Streaming runtime | `llm/events.go`, `llm/stream.go` | Normalized events and terminal-event guarantees |
+| Messages and models | `llm/message.go`, `llm/model.go` | Messages, content blocks, model capability, usage, and stop reasons |
+| Request entry | `llm/default.go`, `llm/client.go` | Validate options, resolve provider configuration, select an adapter |
+| Adapter registration | `llm/adapters.go` | Map `Protocol` to `ProtocolAdapter` |
+| Provider configuration | `llm/provider.go`, `llm/provider_registry.go` | Credentials, service address, headers, overrides, and auth status |
+| Model catalog | `llm/catalog.go`, `llm/model_registry.go` | Built-in catalog and application model registries |
+| History transformation | `llm/transform.go` | Image degradation, reasoning handling, and tool-call repair |
+| Streaming events | `llm/events.go`, `llm/stream.go` | Common events, partial messages, and terminal guarantees |
 | Tools | `llm/tools.go`, `llm/validation.go`, `llm/jsonschema.go` | Schema generation, recovery, validation, and decoding |
-| Built-in adapters | `llm/openai/`, `llm/anthropic/` | Request and response conversion for implemented protocols |
+| Built-in adapters | `llm/openai/`, `llm/anthropic/` | Conversion for implemented request and response formats |
 
-### Registries, client, and adapter
+The modules relate as follows:
 
 ```mermaid
 flowchart LR
     app["Application"] --> client["Client"]
-    client --> providers["ProviderRegistry<br/><small>key · URL · headers</small>"]
+    app -. "select model" .-> models["Catalog / ModelRegistry"]
+    client --> providers["ProviderRegistry<br/><small>credentials · address · headers</small>"]
     client --> adapters["AdapterRegistry<br/><small>Protocol → adapter</small>"]
-    app -. model discovery .-> models["ModelRegistry"]
     adapters --> adapter["ProtocolAdapter"]
-    adapter --> provider["Provider HTTP API"]
-    provider --> adapter --> events["Event stream"] --> app
+    adapter --> service["Model service HTTP API"]
+    service --> adapter --> events["Normalized events"] --> app
 ```
 
-- `AdapterRegistry` decides which implementation handles `Model.Protocol`.
-- `ProviderRegistry` resolves credentials, URLs, and headers for that model request.
-- `ModelRegistry` is for discovery only; `Client` does not depend on it to send requests.
-- Package-level `Complete` and `Stream` use a default `Client`. Explicit clients provide state isolation and dependency injection.
+`ModelRegistry` supports model lookup and does not participate in client
+dispatch. A request depends on the `Model` value, `ProviderRegistry`, and
+`AdapterRegistry`. See [Clients and registries](clients-and-registries.md) for
+the exact differences.
 
-### Initialization
+## Default or explicit client
 
-1. `llm/default.go` constructs the default adapter registry, provider registry, and client.
-2. The application imports `llm/openai`, `llm/anthropic`, or `llm/all`.
-3. Adapter package `init` functions register protocol implementations in the default adapter registry.
-4. The model catalog is decoded during package initialization; built-in provider configuration populates the provider registry.
-5. The application resolves or constructs a `Model` and calls a request entry point.
+Most applications use package-level `Complete` and `Stream`. Importing a
+protocol package runs its `init` function and registers an adapter with the
+default `AdapterRegistry`; the default `ProviderRegistry` is built from embedded
+configuration.
 
-The package starts no server, plugin scanner, or background scheduler.
+```go
+import (
+	"github.com/ktsoator/or/llm"
+	_ "github.com/ktsoator/or/llm/openai"
+)
+```
 
-## 3. Core capabilities
+Use an explicit `Client` when:
 
-This section assigns responsibilities only. See [Capabilities](capabilities.md) for the complete task-to-API mapping.
+- tenants or subsystems require independent provider overrides;
+- a custom proxy, TLS configuration, pool, or transport is required;
+- tests must not mutate process-wide default registries;
+- only an allowlist of protocols may be used;
+- a custom `ProtocolAdapter` must be registered.
 
-| Capability | `llm` owns | Caller owns | Canonical guide |
-|---|---|---|---|
-| Complete generation | Collect events into `AssistantMessage` | Result handling and business policy | [Getting started](getting-started.md) |
-| Streaming | Normalize events, partial snapshots, and termination | Consume the channel and update the UI | [Streaming](streaming.md) |
-| Conversations | Transform provider-neutral history | Store, load, append, and compact history | [Conversations](conversations.md) |
-| Image input | Convert base64 images and downgrade for text models | File loading, size limits, and MIME validation | [Image-input task guide](recipes/vision.md) |
-| Reasoning | Map neutral effort and separate thinking content | Effort selection and display policy | [Reasoning](reasoning.md) |
-| Tool calls | Schema, argument recovery, validation, and result types | Authorization, execution, idempotency, and loop limits | [Tools](tools.md) |
-| Models and providers | Catalog queries, credential resolution, and overrides | Model selection and live compatibility verification | [Providers and models](providers.md) |
-| Observability | Request, rewrite, and response hooks | Redaction, metrics, and logging backends | [Configuration](configuration.md) |
+See [Creating a custom client](recipes/custom-client.md) for the complete
+program. A `Client` does not store conversations or create a model catalog for
+each request.
 
-Complete application flows are in the [task guides](recipes/README.md); repository programs are in the [examples index](examples.md).
+## Request execution
 
-## 4. Configuration
-
-The authoritative option table and credential precedence are in [Configuration](configuration.md). The scopes are:
-
-| Scope | Type | Lifetime | Typical use |
-|---|---|---|---|
-| One request | `StreamOptions` | One `Complete` or `Stream` call | Key, sampling, output limit, timeout, hooks |
-| One provider | `ProviderOverride` | Subsequent requests through the registry | Gateway URL, shared headers, provider key |
-| One client | `AdapterRegistry`, `ProviderRegistry` | Owned by the application | Tenant or subsystem isolation |
-| One model | `Model`, `Compatibility` | Copied with the model value | Endpoint, capabilities, protocol dialect |
-
-Do not duplicate request/override precedence in application code. Use `ProviderRegistry.ResolveRequest` when diagnostics need the model and options that the adapter will receive.
-
-## 5. Quick start
-
-The shortest runnable path is maintained only in [Getting started](getting-started.md):
-
-1. Add the module with Go 1.24 or later.
-2. Configure the selected provider credential.
-3. Import the adapter for the model protocol.
-4. Validate the model with `LookupModel` and `SupportsProtocol`.
-5. Call `Complete` and handle its error.
-
-Task-guide programs add complete result handling and production constraints to that base.
-
-## 6. Lifecycle and execution
-
-### One request
+One `Stream` call passes through the client, provider registry, and protocol
+adapter:
 
 ```mermaid
 sequenceDiagram
     participant App as Application
     participant Client
-    participant Providers as ProviderRegistry
+    participant Registry as ProviderRegistry
     participant Adapter as ProtocolAdapter
-    participant API as Provider API
+    participant Service as Model service
 
-    App->>Client: Complete / Stream
+    App->>Client: Stream(model, context, options)
     Client->>Client: StreamOptions.Validate
-    Client->>Providers: ResolveRequest
+    Client->>Registry: ResolveRequest
+    Registry-->>Client: effective model and options
     Client->>Adapter: Stream(model, context, options)
     Adapter->>Adapter: TransformMessages
-    Adapter->>API: streamed HTTP request
-    API-->>Adapter: provider chunks
-    Adapter-->>App: normalized Events
+    Adapter->>Service: streaming HTTP request
+    Service-->>Adapter: service response increments
+    Adapter-->>App: EventStart / content events / terminal event
 ```
 
-`Complete` reuses `Stream` and returns after `EventDone` or `EventError`. The adapter goroutine closes the SDK stream and event channel on exit. See [Streaming](streaming.md) for the consumer contract.
+`Complete` reuses the same streaming path, consumes events internally, and
+returns an `AssistantMessage` after `EventDone` or `EventError`. Both entry
+points therefore share history transformation, failure mapping, usage, and
+diagnostics.
 
-### Hooks and retries
+The event channel is unbuffered. A `Stream` caller must receive until close,
+including after context cancellation or after the application stops displaying
+increments. See [Streaming events](streaming.md) for ordering and termination.
 
-`OnRequest`, `RewriteRequest`, and `OnResponse` run for every SDK attempt. `RewriteRequest` starts from the original serialized body on each attempt. There is no additional cross-SDK guarantee for middleware nesting order; do not depend on an undocumented order.
+## Configuration scope
 
-### Resource release
+| Scope | Type | Appropriate values |
+|---|---|---|
+| One request | `StreamOptions` | User credentials, sampling, output cap, timeout, headers, and hooks |
+| One provider | `ProviderOverride` | Gateway address, shared credentials, common headers, and environment overrides |
+| One client | `AdapterRegistry`, `ProviderRegistry` | Tenant isolation, protocol allowlists, and test state |
+| One model | `Model`, `ModelCompatibility` | Service address, capabilities, context limits, and interface differences |
 
+Precedence between request values and provider overrides is maintained only in
+[Request options](configuration.md). Use `ProviderRegistry.ResolveRequest` when
+diagnostics need the effective values passed to the adapter; do not reproduce
+the merge logic in application code.
+
+`OnRequest`, `RewriteRequest`, and `OnResponse` run for every SDK attempt. They
+execute on the request path, so a blocking callback directly adds latency. See
+[Recording and rewriting requests](recipes/observability.md).
+
+## State, concurrency, and resources
+
+- `Client` stores no session state. The application owns `Context.Messages` and
+  decides when to persist them.
+- Registry types support concurrent reads and mutations; the default provider
+  registry is process-shared state.
+- An in-flight request that already completed `ResolveRequest` is unaffected by
+  later override changes.
 - `Client` and registry types have no `Close` method.
-- The adapter closes the provider stream for each request.
-- The application owns and reuses an injected `http.Client` and Transport.
-- Context cancellation controls the whole request; `StreamOptions.Timeout` limits one HTTP attempt.
-- A stream consumer must read the event channel until it closes.
+- An adapter closes the response stream for one request; the application owns
+  an injected `http.Client` and transport.
+- Reuse HTTP clients and transports instead of rebuilding connection pools per
+  request.
+- Context controls the whole call; `StreamOptions.Timeout` controls one HTTP
+  attempt.
 
-## 7. Extension mechanisms
+See [Saving and restoring conversations](recipes/conversation-persistence.md)
+for concurrent turn updates, storage versioning, and restore flow.
 
-| Requirement | Extension point | Notes |
-|---|---|---|
-| New endpoint using an existing wire protocol | Construct `Model` | Set `Protocol`, `BaseURL`, and required compatibility flags |
-| New provider configuration | `NewSpecProvider`, `ProviderRegistry.Register` | Declare credential variables, headers, and models |
-| Custom proxy, TLS, or Transport | `openai.NewAdapter`, `anthropic.NewAdapter` | Inject an application-owned `*http.Client` |
-| Request observation or field patch | `OnRequest`, `RewriteRequest`, `OnResponse` | Hooks run synchronously in the request goroutine |
-| New wire protocol | `ProtocolAdapter`, `ProtocolStreamOptions` | Use `StreamWriter` to preserve the public event contract |
+## Extension routes
 
-See [Custom protocols](extending.md) for implementation requirements. Message and content interfaces contain unexported marker methods, so external packages cannot add roles or content blocks; audio, documents, citations, and similar types require a core package change.
+First determine whether the target changes configuration or the request and
+response format:
 
-## 8. Error handling and diagnosis
-
-| Stage | Signal | Investigation entry |
-|---|---|---|
-| Before request creation | `Complete`/`Stream` returns an error directly | Options, credentials, adapter registration |
-| During the stream | `EventError`; `Complete` returns a partial message and error | HTTP, provider, decoding, cancellation |
-| Normal termination requiring policy | `AssistantMessage.StopReason` | Token limit, tool request, and similar outcomes |
-| Recovered non-fatal issue | `AssistantMessage.Diagnostics` | Tool-argument recovery and related diagnostics |
-
-See [Error handling](errors.md) for semantics, [Troubleshooting](troubleshooting.md) for symptom-based fixes, and the [error-handling task guide](recipes/error-handling.md) for a reusable application policy. The package has no built-in log file or global logger.
-
-## 9. Limits
-
-- The [support matrix](support-matrix.md) is the sole source for implemented and catalog-only protocols and provider status.
-- All three registry types support concurrent access; the default provider registry is process-shared state.
-- The event channel is unbuffered, so a consumer that stops reading blocks the producer.
-- Every non-terminal event carries a `Partial` snapshot; high-frequency processing increases allocation.
-- Base64 images increase memory use and request size.
-- Tool validation covers a practical JSON Schema subset, not the complete specification.
-- The model catalog is embedded at build time; prices, capabilities, and status can lag the provider.
-- Hooks, serialized history, tool results, and reasoning signatures can contain sensitive data.
-- The current material defines no official throughput benchmark, built-in metrics exporter, or billing reconciliation.
-
-## 10. API and module index
-
-The [API reference](api-reference.md) organizes public interfaces by requests, messages, events, options, tools, models, providers, diagnostics, and extensions. Topic entry points are:
-
-| Module | Documentation |
+| Goal | Recommended extension point |
 |---|---|
-| Requests and options | [Getting started](getting-started.md), [Configuration](configuration.md) |
-| Messages and results | [Conversations](conversations.md), [Reading responses](results.md) |
-| Streaming | [Streaming](streaming.md) |
-| Tools and reasoning | [Tools](tools.md), [Reasoning](reasoning.md) |
-| Models and providers | [Providers and models](providers.md), [Support matrix](support-matrix.md) |
-| Clients and registries | [Clients and registries](clients-and-registries.md) |
-| Errors and diagnosis | [Error handling](errors.md), [Troubleshooting](troubleshooting.md) |
-| Testing and extension | [Testing](testing.md), [Custom protocols](extending.md) |
+| Change an existing provider's service address or credentials | `ProviderOverride` |
+| Connect one service compatible with an existing protocol | Construct a `Model` directly |
+| Register a provider, credential variables, and a model set | `NewSpecProvider`, `ProviderRegistry.Register` |
+| Change proxy, TLS, pool, or transport | Inject `*http.Client` into a built-in adapter |
+| Observe requests or add a field not yet typed | `OnRequest`, `RewriteRequest`, `OnResponse` |
+| Support a new request and response format | Implement `ProtocolAdapter` and required `ProtocolStreamOptions` |
 
-See [Internals](../internals/overview.md) for implementation details and source-level invariants.
+`StreamWriter` helps a custom adapter preserve the shared event lifecycle. See
+[Custom protocols](extending.md) for implementation requirements. Message and
+content interfaces contain unexported marker methods, so external packages
+cannot add roles or content blocks.
+
+## Pre-production checklist
+
+- Use `LookupModel` for configured or user-supplied model IDs so unknown input
+  does not panic.
+- Use `GetRunnableModels` or `SupportsProtocol` to confirm that the target
+  adapter is registered in the current process.
+- Use `AuthStatus` to check credential resolution, then make a real request to
+  verify authorization.
+- Set a context deadline for the whole call and define the boundary between SDK
+  retries and application retries.
+- Consume a stream until close. On client disconnect, cancel context and keep
+  draining.
+- Apply authorization, deadlines, idempotency keys, concurrency limits, and
+  loop bounds to tool execution.
+- Redact and control access to prompts, images, tool arguments, request bodies,
+  history, and reasoning signatures.
+- Record original `Usage` separately from estimated cost; `Usage.Cost` is not a
+  model-service invoice.
+- Verify authentication, streaming, tools, reasoning, usage, and failures
+  against every production model service.
+
+The package has no built-in log file, metrics exporter, billing reconciliation,
+or official throughput benchmark.
+
+## Troubleshooting entry points
+
+| Symptom | Start here |
+|---|---|
+| Request returns an error before starting | [Failure signals](errors.md) |
+| Stream does not close after cancellation | [Troubleshooting](troubleshooting.md#a-stream-never-closes-after-cancellation) |
+| Model exists but cannot be called | [Finding models and checking credentials](recipes/provider-discovery.md) |
+| Output is truncated or context overflows | [Handling request failures](recipes/error-handling.md) |
+| Tool arguments are incomplete or invalid | [Tool definitions and calls](tools.md#validate-before-executing) |
+| Custom service request is incompatible | [Connecting a custom model service](recipes/custom-gateway.md) |
+
+See [Internals](../internals/overview.md) for source-level invariants and adapter
+implementation details.

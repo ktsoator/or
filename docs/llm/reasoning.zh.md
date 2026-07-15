@@ -1,6 +1,6 @@
-# 推理与思考
+# 推理配置
 
-`StreamOptions.Reasoning` 是一个与厂商无关的推理强度。每个适配器会将它映射到目标提供方的原生形式（Anthropic 的自适应或预算思考，或 OpenAI 兼容的推理字段），并将其限制在所选模型支持的级别范围内。非推理模型会忽略它，因此这个选项可以安全地设在任何模型上。
+本页定义 `StreamOptions.Reasoning`、模型支持级别、思考内容块和协议专用选项的精确语义。如何在应用中展示、保存和控制推理内容，参见[请求推理内容](recipes/reasoning.md)。
 
 ```go
 options := llm.StreamOptions{Reasoning: llm.ModelThinkingHigh}
@@ -36,7 +36,7 @@ response, err := llm.Complete(ctx, model, llm.Prompt("..."), options)
 
 在底层,该级别会映射到各提供方自己的控制:在 Anthropic 上是思考 token 预算（或自适应思考）,在 OpenAI 兼容提供方上是 `reasoning_effort` 字段。中立的级别让代码在两者之间保持一致。
 
-思考消耗的 token 计入 `Usage.Output`，与生成文本按同一输出费率计价，因此级别越高、单次请求越贵。用量与成本详见[读取响应](results.md#token-用量与成本)。
+思考消耗的 token 计入 `Usage.Output`，与生成文本按同一输出费率计价，因此级别越高、单次请求越贵。用量与成本详见[响应与用量](results.md#token-用量与成本)。
 
 ## 检查模型支持哪些级别
 
@@ -115,4 +115,4 @@ options := llm.StreamOptions{
 
 ## 对话连续性
 
-提供方所需的推理元数据（例如 Anthropic 签名和 OpenRouter 加密推理）会保留在 assistant 消息中，并在后续工具调用需要时重放。这一点对带思考的工具调用尤为重要:一些提供方要求把带签名的思考块原样回传，才会接受下一次工具调用，丢失它可能导致该轮失败。即使用 `ThinkingDisplayOmitted` 隐去了文本，本库仍保留该块，以保证历史有效。当目标模型发生变化时，前一个模型产生的推理会被删除，而不会作为普通文本重放。模型切换与持久化详见[对话](conversations.md)。
+提供方所需的推理元数据（例如 Anthropic 签名和 OpenRouter 加密推理）会保留在 assistant 消息中，并在后续工具调用需要时重放。这一点对带思考的工具调用尤为重要:一些提供方要求把带签名的思考块原样回传，才会接受下一次工具调用，丢失它可能导致该轮失败。即使用 `ThinkingDisplayOmitted` 隐去了文本，本库仍保留该块，以保证历史有效。当目标模型发生变化时，前一个模型产生的推理会被删除，而不会作为普通文本重放。底层消息规则见[消息与上下文](conversations.md)。

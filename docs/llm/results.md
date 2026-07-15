@@ -1,8 +1,9 @@
-# Reading responses
+# Responses and usage
 
-`Complete` returns an `AssistantMessage`; streaming delivers the same value as
-`EventDone.Message`. This page covers what to read back from it: content, why
-generation stopped, token usage and cost, and non-fatal diagnostics.
+This page defines the content, stop reason, usage, estimated cost, and
+diagnostic fields of `AssistantMessage`. `Complete` returns it directly;
+streaming calls expose the same structure on `EventDone.Message` or
+`EventError.Message`.
 
 ## Content and metadata
 
@@ -49,7 +50,7 @@ response — especially before executing tool calls.
 | `StopReason` | Meaning | Typical handling |
 |---|---|---|
 | `StopReasonStop` | Normal completion | Use `response.Text()` |
-| `StopReasonToolUse` | The model wants tool results | Run the [tool loop](tools.md#run-the-tool-loop) |
+| `StopReasonToolUse` | The model wants tool results | Follow [Executing tool calls](recipes/tool-loop.md) and return results |
 | `StopReasonLength` | Output hit the `MaxTokens` cap | Continue the turn or raise the cap |
 | `StopReasonError` | Provider or runtime failure | Inspect `ErrorMessage`; do not execute tool calls |
 | `StopReasonAborted` | Request was cancelled | Stop; the context was cancelled |

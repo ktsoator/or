@@ -1,10 +1,15 @@
-# Explicit client
+# Creating a custom client
 
-## What this builds
+Package-level `Complete` and `Stream` use a default client and default registries. Create an independent `llm.Client` when the application must control network connections, provider configuration, or available protocols.
 
-An application creates its own HTTP transport, adapter registry, provider registry, and `Client`. This avoids package-global provider overrides and makes network dependencies explicit.
+Use this approach for custom TLS or proxies, tenant isolation, tests that must avoid global state, and protocol allowlists.
 
-Use this form for custom TLS or proxies, tenant isolation, tests, restricted protocol allowlists, or a custom adapter.
+## Before running the example
+
+```sh
+go get github.com/ktsoator/or/llm@latest
+export DEEPSEEK_API_KEY=your-key
+```
 
 ## Complete program
 
@@ -46,25 +51,26 @@ func main() {
 }
 ```
 
-This uses a normal import rather than a side-effect import because the program constructs and registers the adapter itself.
+This uses a normal import because the program calls `openai.NewAdapter` and registers the protocol adapter itself. The package-level default client does not use this registry.
 
-## Registry responsibilities
+## Components of a dedicated client
 
-| Component | Responsibility |
-|---|---|
-| `AdapterRegistry` | Map `Model.Protocol` to a wire-protocol implementation |
-| `ProviderRegistry` | Resolve credentials, URL overrides, and headers |
-| `ModelRegistry` | Optional application-owned model discovery; not required by `Client` |
-| `http.Client` | Connection pooling, proxy, TLS, and transport-level behavior |
+The example creates an `AdapterRegistry`, `ProviderRegistry`, and `http.Client`
+before passing them to `NewClient`. See
+[Clients and registries](../clients-and-registries.md#the-three-registries) for
+the canonical ownership, request participation, and concurrency rules.
 
-`NewClient(adapters, nil)` skips the provider registry but retains legacy environment lookup for known `Model.Provider` values. A nil adapter registry causes requests to fail.
+`ModelRegistry` performs model lookup and is not a `NewClient` argument.
+`NewClient(adapters, nil)` skips the provider registry but retains legacy
+environment lookup for known `Model.Provider` values. A nil adapter registry
+causes requests to fail.
 
-## Lifecycle and concurrency
+## Isolation and lifecycle
 
-- Registries support concurrent reads and mutations and return defensive copies where documented.
-- Reuse `http.Client` and its transport. Creating one transport per request discards connection pooling.
+- Registries support concurrent reads and mutations.
+- Reuse `http.Client` and `http.Transport`. Creating them per request prevents connection-pool reuse.
 - `llm.Client` has no `Close` method. The application owns the supplied HTTP transport; call `CloseIdleConnections` during application shutdown if required.
-- One client per tenant is reasonable when provider URLs or headers differ. Per-request API keys alone do not require separate clients.
+- Separate clients are reasonable when tenants use different service addresses, headers, or network policies. API keys alone can be passed in request options and do not require separate clients.
 - Register only required protocols when binary dependencies or endpoint policy must be restricted.
 
 For custom provider configuration, register `NewSpecProvider` on the isolated provider registry. For a new wire protocol, see [Custom protocols](../extending.md).

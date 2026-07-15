@@ -1,16 +1,18 @@
-# Error handling
+# Handling request failures
 
-## Error layers
+Request failure and normal model completion are different states. Handle the returned `error` first, then inspect `AssistantMessage.StopReason` to determine why generation ended.
+
+## Where failure occurs
 
 Errors occur at three different stages and require different handling:
 
 | Stage | Signal | Examples |
 |---|---|---|
-| Local setup | `Stream`/`Complete` returns an error before a stream exists | Invalid options, missing adapter, request construction |
-| Runtime stream | `EventError`, or `Complete` returns partial message plus error | Authentication, rate limit, HTTP failure, decoding failure |
-| Normal generation stop | Nil error with non-stop `StopReason` | Token limit or tool request |
+| Before the request starts | `Stream` or `Complete` returns `error` directly | Invalid options, missing protocol adapter, request construction |
+| While reading the response | `EventError`, or `Complete` returns a partial message and `error` | Authentication, rate limit, HTTP, or decoding failure |
+| Normal model stop | Nil `error`; the reason is in `StopReason` | Completion, token limit, or tool request |
 
-## Complete program with a reusable policy
+## Handling Complete results consistently
 
 ```go
 package main
@@ -46,8 +48,10 @@ func complete(ctx context.Context, model llm.Model,
 	}
 
 	switch message.StopReason {
-	case llm.StopReasonStop, llm.StopReasonToolUse:
+	case llm.StopReasonStop:
 		return message, nil
+	case llm.StopReasonToolUse:
+		return message, fmt.Errorf("model requested tool execution")
 	case llm.StopReasonLength:
 		return message, fmt.Errorf("output truncated at max token limit")
 	case llm.StopReasonAborted:
@@ -59,7 +63,7 @@ func complete(ctx context.Context, model llm.Model,
 }
 ```
 
-## Retry decisions
+## When to retry
 
 - Retry transient transport, rate-limit, or provider-availability failures only when the operation is safe to replay.
 - Do not retry missing adapters, invalid options, invalid tools, or unknown model IDs without changing configuration.
@@ -77,6 +81,6 @@ if llm.IsContextOverflow(message, model.ContextWindow) {
 
 `llm` detects explicit provider errors and some silent usage-based overflows. It does not choose which messages to remove.
 
-## Troubleshooting data
+## Recording troubleshooting data
 
 Record provider/model ID, protocol, stop reason, response ID, attempt count, latency, and redacted diagnostics. Do not record API keys, full headers, raw request bodies, images, or complete histories by default. See [Troubleshooting](../troubleshooting.md) for symptom-specific checks.

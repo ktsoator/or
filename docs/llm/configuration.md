@@ -1,4 +1,4 @@
-# Request configuration
+# Request options
 
 `StreamOptions` contains settings shared by all protocols. Settings whose
 semantics differ between protocols are nested under `ProtocolOptions`.
@@ -117,7 +117,7 @@ options := llm.StreamOptions{
 }
 ```
 
-See [Reasoning](reasoning.md) and [Tools](tools.md) for the protocol-specific
+See [Reasoning options](reasoning.md) and [Tool definitions and calls](tools.md) for the protocol-specific
 option types currently included with the package.
 
 ## Use a custom HTTP client

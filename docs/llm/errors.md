@@ -1,4 +1,8 @@
-# Error handling
+# Failure signals
+
+This page defines how request failures are reported and how the signals relate.
+For application policy covering retries, fallback, user-facing responses, and
+partial-result storage, see [Handling request failures](recipes/error-handling.md).
 
 The library reports failures through two distinct surfaces, and which one you
 get tells you where the failure happened:
@@ -11,15 +15,6 @@ get tells you where the failure happened:
   together with the error; a stream ends with an `EventError`. The message's
   `StopReason` is `StopReasonError` (or `StopReasonAborted` for cancellation)
   and `ErrorMessage` holds the detail.
-
-```go
-response, err := llm.Complete(ctx, model, input, opts)
-if err != nil {
-	// Request never left the process, or the provider stream failed.
-	// response may still carry a partial message and StopReason.
-	log.Fatalf("request failed: %v", err)
-}
-```
 
 ## Setup errors returned before sending
 
@@ -69,7 +64,7 @@ source, but it does not verify that the credential is still valid.
 
 Once the request reaches the provider, branch on `StopReason` rather than
 treating every non-nil error as fatal. See
-[Reading responses](results.md#stop-reasons) for the full table; the two
+[Responses and usage](results.md#stop-reasons) for the full table; the two
 error-related reasons are:
 
 - `StopReasonError` — a provider or runtime failure mid-stream. Read
@@ -77,46 +72,19 @@ error-related reasons are:
 - `StopReasonAborted` — the `context` was cancelled. Stop cleanly; this is
   expected when you cancel a request.
 
-```go
-response, err := llm.Complete(ctx, model, input, opts)
-switch response.StopReason {
-case llm.StopReasonError:
-	log.Printf("provider error: %s", response.ErrorMessage)
-case llm.StopReasonAborted:
-	log.Print("cancelled")
-default:
-	fmt.Println(response.Text())
-}
-_ = err
-```
-
-When streaming, the same failure arrives as a terminal event:
-
-```go
-for event := range events {
-	if event.Type == llm.EventError {
-		log.Printf("stream failed: %v", event.Err)
-		break
-	}
-}
-```
-
-See [Streaming § cancellation](streaming.md#cancellation) for cancelling an
-in-flight stream.
+`Complete` returns that message together with a non-nil `error`; `Stream`
+returns `Message` and `Err` on the terminal `EventError`. See
+[Handling request failures](recipes/error-handling.md) for application
+branching, and [Streaming events § cancellation](streaming.md#cancellation) for
+an in-flight cancellation.
 
 ## Context overflow
 
 A request that exceeds the model's context window may fail explicitly or be
-silently truncated by the provider. `IsContextOverflow` detects both, so you can
-compact history and retry instead of surfacing a raw error:
-
-```go
-if llm.IsContextOverflow(response, model.ContextWindow) {
-	// Drop or summarize old messages, then retry the turn.
-}
-```
-
-See [Reading responses § detect context overflow](results.md#detect-context-overflow).
+silently truncated by the provider. `IsContextOverflow` recognizes both signal
+forms. See [Responses and usage § detect context overflow](results.md#detect-context-overflow)
+for detection and [Handling request failures](recipes/error-handling.md#context-overflow)
+for the application retry flow after compaction.
 
 ## Retries and timeouts
 
@@ -131,4 +99,4 @@ Not every problem is an error. Malformed or truncated tool-call arguments are
 recovered best-effort and recorded in `AssistantMessage.Diagnostics` rather than
 failing the response — always inspect diagnostics before executing a tool with
 side effects. See
-[Reading responses § diagnostics](results.md#diagnostics).
+[Responses and usage § diagnostics](results.md#diagnostics).

@@ -1,4 +1,4 @@
-# Tools
+# Tool definitions and calls
 
 A tool is a function you declare and let the model *ask you to call* — to fetch
 data, run a calculation, or take an action the model cannot perform itself. The
@@ -10,9 +10,9 @@ For example, to answer a weather question the model does not look it up itself �
 it emits a `get_weather(city=…)` call, the caller runs it and sends the result
 back, and the model answers from that.
 
-This page covers the two halves of that flow: defining typed tools from Go
-structs, then running the request → execute → reply cycle as a loop.
-`DecodeToolCall` and `ToolResult` are the pieces that connect them.
+This page defines the tool types, schema generation, argument validation, and
+protocol options. For a complete request → execute → reply program and its
+production policy, see [Executing tool calls](recipes/tool-loop.md).
 
 ## At a glance
 
@@ -62,113 +62,42 @@ the model's returned arguments:
 | Pattern | `pattern=^[A-Z]` | string |
 | Array length | `minItems=` · `maxItems=` | array |
 
-**2. Build the tool from the type** and attach it to the request context.
+Build the tool from the type, then attach the definition to `Context.Tools`:
 
 ```go
 weatherTool := llm.MustTool[WeatherArgs]("get_weather", "Get a weather forecast")
 
-input := llm.Context{
-	Messages: []llm.Message{
-		llm.UserText("What's the weather in Shanghai for the next 3 days?"),
-	},
-	Tools: []llm.ToolDefinition{weatherTool},
-}
+input.Tools = []llm.ToolDefinition{weatherTool}
 ```
 
-**3. Send the request and read the calls back.** `response.ToolCalls()` returns
-every call the model made; append the assistant message to the history first so
-its tool results can follow.
+`response.ToolCalls()` returns model calls in order. `DecodeToolCall` validates
+against the tool schema before decoding into the requested Go type:
 
 ```go
-response, err := llm.Complete(ctx, model, input, llm.StreamOptions{})
-if err != nil {
-	log.Fatal(err)
-}
-messages = append(messages, &response)
+arguments, err := llm.DecodeToolCall[WeatherArgs](weatherTool, toolCall)
+result := llm.ToolResult(toolCall.ID, toolCall.Name, resultText)
 ```
 
-**4. Decode each call, return a result, and ask again.** `DecodeToolCall`
-validates the arguments against the schema and decodes them into `WeatherArgs`,
-so the values are ready to use.
-
-```go
-for _, toolCall := range response.ToolCalls() {
-	arguments, err := llm.DecodeToolCall[WeatherArgs](weatherTool, toolCall)
-	if err != nil {
-		log.Fatal(err)
-	}
-	result := fmt.Sprintf("%s will be sunny for %d days.", arguments.City, arguments.Days)
-	messages = append(messages, llm.ToolResult(toolCall.ID, toolCall.Name, result))
-}
-```
-
-Sending the tool results back in a second `Complete` lets the model turn them
-into a final answer.
-
-See the [tool-loop task guide](recipes/tool-loop.md) for the complete program
-from declaration through multi-round execution. This page retains the types,
-schema, validation, and loop contract instead of maintaining a second
-application program.
+See [Executing tool calls](recipes/tool-loop.md) for the complete program from
+declaration through multi-round execution. This page owns only the types,
+schema, validation, and message-correspondence contract.
 
 `MustTool` panics when the type cannot produce a valid schema, which suits
 tools declared at startup. Use `NewTool`, which returns an error instead, when a
 tool is built dynamically and a failure must be handled rather than crash.
 
-## Run the tool loop
+## Call and result correspondence
 
-The example above handles a single round for clarity. A real application loops:
-the model may call tools, read the results, then call more tools before it
-answers. `StopReason` tells you which case you are in, so gate the loop on it
-rather than on the presence of tool calls alone.
+`StopReasonToolUse` means the model is waiting for tool results. Every
+`ToolCall` must have one corresponding `ToolResultMessage`, and the result's
+`ToolCallID` and tool name must match the call. In history, the assistant
+message comes first, followed by its tool results; only then can the next model
+request be sent.
 
-```mermaid
-flowchart TD
-    A(["Complete / Stream"]) --> B{"StopReason?"}
-    B -->|ToolUse| C["append assistant message"]
-    C --> D["for each ToolCall:<br/><small>DecodeToolCall → run → ToolResult</small>"]
-    D --> E["append tool results"]
-    E --> A
-    B -->|Stop| F(["done — use Text()"])
-    B -->|Error / Aborted| G(["stop — do not run tools"])
-
-    classDef ok stroke:#16a34a,stroke-width:2px;
-    classDef bad stroke:#dc2626,stroke-width:2px;
-    class F ok;
-    class G bad;
-```
-
-- `StopReasonToolUse` — the model wants tool results. Execute the calls, append
-  each result, and call the model again.
-- `StopReasonStop` — the model answered. Return `response.Text()`.
-- `StopReasonLength` — output hit the token cap; the turn is truncated.
-- `StopReasonError` / `StopReasonAborted` — the request failed or was
-  cancelled. Never execute tool calls from such a response.
-
-A request may declare several tools in `Context.Tools`, and one turn may contain
-more than one `ToolCall`. Iterate over `ToolCalls()`, route by `call.Name`, and
-append one `ToolResult` with the matching ID for every call. See the
-[tool-loop task guide](recipes/tool-loop.md) for the complete program with an
-iteration limit, decode-error feedback, and final-stop handling.
-
-Actual tool execution is application code; `llm` does not participate. It only
-gives the model's calls back to the caller and folds each `ToolResult` into the
-history.
-
-!!! check "Production tool-loop checklist"
-    - **Gate on `StopReason`, not on the presence of tool calls.** Loop while it
-      is `StopReasonToolUse`; stop on `StopReasonStop`.
-    - **Append the assistant message before its tool results.** The order in the
-      history must be assistant turn, then each `ToolResult`.
-    - **Match every tool call with a result.** Send one `ToolResult` per call, so
-      no call is left unanswered in the next request.
-    - **On decode failure, return a tool error, don't crash.** Set
-      `result.IsError = true` and feed the message back so the model can correct
-      its arguments.
-    - **Bound the loop.** Cap the number of rounds so a misbehaving model cannot
-      spin forever.
-    - **Inspect diagnostics before side effects.** Decline `partial` or
-      `invalid` arguments before executing a tool that writes or spends. See
-      [stream diagnostics](streaming.md#tool-call-deltas-and-diagnostics).
+One turn may contain several calls, and the model may request more tools after
+reading their results. Loop limits, dispatch, execution-failure feedback, and
+stop policy belong to the application flow and are maintained only in
+[Executing tool calls](recipes/tool-loop.md).
 
 ## Validate before executing
 

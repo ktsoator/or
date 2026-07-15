@@ -1,7 +1,9 @@
-# Conversations
+# Messages and context
 
-Conversation messages are provider-neutral. The same history can be persisted,
-extended, and sent to another compatible model without rebuilding it.
+This page defines the `Context`, message interfaces, content blocks,
+constructors, and serialization contract. Complete implementations for
+multi-turn conversations, images, persistence, and model switching live in the
+corresponding [guides](recipes/README.md).
 
 ## Message and content model
 
@@ -26,13 +28,13 @@ The content blocks are the leaf types you read and write:
 
 Because both the message and the blocks are typed, a stored conversation
 round-trips through JSON without manual dispatch — see
-[Save and restore](#save-and-restore-conversations).
+[JSON serialization](#json-serialization).
 
 For the common "just send text" case, reach for the convenience constructors
 below. Build the struct literals by hand only when you need content a
 constructor does not cover — for example mixing text and an image in one user
-message (see [Image input](#image-input)), or seeding an assistant turn that
-carries a tool call.
+message, or seeding an assistant turn that carries a tool call. See
+[Sending images](recipes/vision.md) for the complete image-input flow.
 
 ## Build messages
 
@@ -60,135 +62,39 @@ The longhand struct literals below remain valid; reach for them when you need
 content a constructor does not cover, such as mixing text and images in one
 message.
 
-## Continue a conversation
+## History and model transformation
 
-A multi-turn conversation is a growing `[]llm.Message`. Append the assistant's
-reply, then the next user message, and send the whole slice again. The library
-is stateless, so the history you keep is the conversation.
+`llm` stores no session state. The caller owns a `[]llm.Message`, appends each
+`*AssistantMessage` and the next user message, then passes the slice back in
+`Context.Messages`. `SystemPrompt` belongs to the request context and is not
+automatically inserted into the message slice. For concurrency, storage
+boundaries, and a complete restore program, see
+[Saving and restoring conversations](recipes/conversation-persistence.md).
 
-```go
-messages := []llm.Message{
-	llm.UserText("Name a Go web framework."),
-}
+Before a request, `TransformMessages` creates a target-model copy of history:
 
-for _, turn := range []string{"And one for CLIs?", "Which is older?"} {
-	reply, err := llm.Complete(ctx, model,
-		llm.Context{Messages: messages}, llm.StreamOptions{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	messages = append(messages, &reply)            // record the answer
-	messages = append(messages, llm.UserText(turn)) // ask the follow-up
-}
-```
+| Stored content | Transformation |
+|---|---|
+| Image sent to a text-only model | Replace it with a text placeholder |
+| Reasoning from the same model | Preserve compatible thinking and signatures |
+| Reasoning from another model | Remove model-service-private reasoning |
+| Tool-call IDs | Normalize for the target protocol and update matching results |
+| Failed or aborted assistant message | Remove it from the replay copy |
+| Tool call without a result | Insert a synthetic error result |
 
-Append `&reply` (a pointer) so the assistant turn keeps the type the library
-needs to replay it. A `SystemPrompt` set on the `Context` applies to every turn
-without being stored in the message history.
+“Same model” requires provider, protocol, and model ID to match. Transformation
+does not mutate caller-owned history; unchanged message objects may be shared
+with the source slice, so callers should treat input history as immutable.
 
-## Image input
+See [Changing models in a conversation](recipes/model-switching.md) for the
+complete cross-model flow and compatibility checks.
 
-Multimodal models accept images alongside text in a user message. Provide the
-raw bytes as base64 with their MIME type:
+## JSON serialization
 
-```go
-raw, err := os.ReadFile("screenshot.png")
-if err != nil {
-	log.Fatal(err)
-}
-input := llm.Context{Messages: []llm.Message{
-	&llm.UserMessage{Content: []llm.UserContent{
-		&llm.TextContent{Text: "Describe the problem shown in this screenshot."},
-		&llm.ImageContent{
-			MIMEType: "image/png",
-			Data:     base64.StdEncoding.EncodeToString(raw),
-		},
-	}},
-}}
-```
-
-A model declares image support through `Model.Input`. When a history containing
-images is sent to a text-only model, images are replaced with a short
-placeholder automatically.
-
-## Switch models between turns
-
-Before each request, the library adapts stored history for the target model. It
-downgrades images for text-only models, preserves reasoning signatures where
-compatible, drops reasoning produced by another model, and normalizes tool
-call identifiers.
-
-The two models below even speak different wire protocols — DeepSeek is
-OpenAI-compatible, MiniMax CN is Anthropic-compatible — yet the history slice is
-reused as-is. Register both provider packages, since each protocol has its own
-adapter:
-
-```go
-import (
-	"github.com/ktsoator/or/llm"
-	_ "github.com/ktsoator/or/llm/anthropic" // MiniMax CN (Anthropic-compatible)
-	_ "github.com/ktsoator/or/llm/openai"    // DeepSeek (OpenAI-compatible)
-)
-
-ctx := context.Background()
-draft := llm.GetModel("deepseek", "deepseek-v4-flash")   // openai-completions
-review := llm.GetModel("minimax-cn", "MiniMax-M2.7")      // anthropic-messages
-
-messages := []llm.Message{
-	llm.UserText("Compute 25 * 18 and explain the steps."),
-}
-
-first, err := llm.Complete(ctx, draft,
-	llm.Context{Messages: messages}, llm.StreamOptions{})
-if err != nil {
-	log.Fatal(err)
-}
-messages = append(messages, &first)
-messages = append(messages, llm.UserText("Check the calculation above for mistakes."))
-
-second, err := llm.Complete(ctx, review,
-	llm.Context{Messages: messages}, llm.StreamOptions{})
-if err != nil {
-	log.Fatal(err)
-}
-```
-
-This needs `DEEPSEEK_API_KEY` and `MINIMAX_CN_API_KEY` in the environment. See
-the runnable [`model_switch`](https://github.com/ktsoator/or/tree/main/example/llm/model_switch)
-example for the complete program.
-
-`TransformMessages` performs this adaptation and is exported for callers that
-need to inspect the exact history a model would receive.
-
-## Save and restore conversations
-
-`Context` serializes to self-describing JSON: messages carry a role and content
-blocks carry a type, so JSON round-trips into concrete message and content types
-without manual dispatch.
-
-```go
-data, err := json.MarshalIndent(llm.Context{Messages: messages}, "", "  ")
-if err != nil {
-	log.Fatal(err)
-}
-if err := os.WriteFile("conversation.json", data, 0o644); err != nil {
-	log.Fatal(err)
-}
-
-raw, err := os.ReadFile("conversation.json")
-if err != nil {
-	log.Fatal(err)
-}
-var restored llm.Context
-if err := json.Unmarshal(raw, &restored); err != nil {
-	log.Fatal(err)
-}
-```
-
-`restored.Messages` is ready to extend and replay against any model.
-
-For stores that persist one message per row or record, use `MarshalMessage` and
-`UnmarshalMessage` instead of wrapping the value in a `Context`:
+`Context` round-trips through JSON. Messages carry roles and content blocks
+carry types, so unmarshalling restores concrete message and content
+implementations. For stores that persist one message per record, use
+`MarshalMessage` and `UnmarshalMessage`:
 
 ```go
 data, err := llm.MarshalMessage(messages[0])
@@ -204,7 +110,11 @@ messages = append(messages, message)
 ```
 
 `UnmarshalMessage` returns an error for an unknown role, unknown content type,
-or malformed JSON. It does not silently coerce unsupported message shapes.
+or malformed JSON. It does not silently coerce unsupported shapes. For file and
+database examples, concurrent writes, and schema-version guidance, see
+[Saving and restoring conversations](recipes/conversation-persistence.md). For
+encoding, model-capability checks, and security boundaries around images, see
+[Sending images](recipes/vision.md).
 
 !!! warning "Serialized history is sensitive data"
     A serialized `Context` can contain user input, tool results (which may embed

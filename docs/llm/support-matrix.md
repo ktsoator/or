@@ -1,4 +1,4 @@
-# Protocol and provider support matrix
+# Protocol and provider status
 
 The model catalog and protocol implementations are independent. `GetModels` returns catalog entries. A request is routable only when the current process has registered an adapter for the model's `Protocol`. Use `GetRunnableModels` for runtime model lists.
 
@@ -64,16 +64,17 @@ The current catalog contains the following provider IDs. Counts come from `llm/c
 | `zai` | 6 | OpenAI Completions | `ZAI_API_KEY` |
 | `zai-coding-cn` | 6 | OpenAI Completions | `ZAI_CODING_CN_API_KEY` |
 
-The authoritative credential mapping is `llm/keys.go` and `APIKeyEnvVars(provider)`.
+Built-in credential configuration is defined in `llm/keys.go`. At runtime, call
+`APIKeyEnvVars(provider)` to query the variable names for a provider.
 
-## Validation level
+## Validation scope
 
-Built-in tests validate both protocol adapters with local mock servers. The current project material does not show continuous integration against every live provider in the table. Therefore:
+Built-in tests cover the adapters for both implemented protocols with local mock servers. The project does not run continuous live integration tests against every provider in the table. Therefore:
 
-- “implemented protocol” means the adapter can route and decode that wire format;
-- catalog membership is not a live-provider support guarantee;
-- provider changes to non-standard fields may require a `Model.Compatibility` update or `RewriteRequest`;
-- production adoption should test authentication, streaming, tools, usage, and errors against the selected provider account.
+- “implemented” means the built-in adapter handles the protocol's request and response formats;
+- “model is listed” means only that its metadata exists in the built-in model catalog; it is not a live-provider compatibility guarantee;
+- providers using non-standard fields may require `Model.Compatibility` or `RewriteRequest`;
+- before production use, validate authentication, streaming, tools, token usage, and error handling with an account for the target provider.
 
 ## Model capabilities
 

@@ -1,6 +1,6 @@
-# 对话
+# 消息与上下文
 
-对话消息与厂商无关。同一段历史可以被持久化、扩展，并发送给另一个兼容模型，而无需重建。
+本页定义 `Context`、消息接口、内容块、构造器和序列化契约。多轮对话、图片输入、持久化和模型切换的完整实现分别放在对应的[使用指南](recipes/README.md)中。
 
 ## 消息与内容模型
 
@@ -21,9 +21,9 @@
 | `ThinkingContent` | 推理文本及其 provider 签名（仅 assistant） |
 | `ToolCall` | 工具名、ID 与解码后的参数（仅 assistant） |
 
-由于消息和块都是带类型的，已存对话可无需手动分派地通过 JSON 往返——见[保存与恢复](#保存与恢复对话)。
+由于消息和块都是带类型的，已存对话可无需手动分派地通过 JSON 往返——见[JSON 序列化](#json-序列化)。
 
-对于常见的"只发文本"场景，请使用下面的便捷构造器。仅当需要构造器覆盖不到的内容时才手写结构体字面量——例如在一条用户消息里混合文本与图像（见[图像输入](#图像输入)），或播种一条携带工具调用的 assistant 轮次。
+对于常见的“只发文本”场景，请使用下面的便捷构造器。仅当需要构造器覆盖不到的内容时才手写结构体字面量，例如在一条用户消息里混合文本与图像，或预置一条携带工具调用的 assistant 轮次。完整图片输入见[发送图片](recipes/vision.md)。
 
 ## 构建消息
 
@@ -48,117 +48,28 @@ response.ToolCalls() // 按顺序返回每一个工具调用
 
 下面这种完整的结构体字面量写法仍然有效；当需要构造器未覆盖的内容时（例如在一条消息中混合文本和图像），再使用它。
 
-## 延续对话
+## 历史与模型转换
 
-多轮对话就是一个不断增长的 `[]llm.Message`。追加助手的回复，再追加下一条用户消息，然后把整个切片再次发送。本库是无状态的，保存的历史就是这段对话。
+`llm` 不保存会话状态。调用方维护 `[]llm.Message`，每轮依次追加 `*AssistantMessage` 和新的用户消息，再放回 `Context.Messages`。`SystemPrompt` 是请求上下文的一部分，不会自动写入消息切片。完整的并发控制、存储边界和恢复程序见[保存与恢复对话](recipes/conversation-persistence.md)。
 
-```go
-messages := []llm.Message{
-	llm.UserText("Name a Go web framework."),
-}
+请求发出前，`TransformMessages` 会创建面向目标模型的历史副本：
 
-for _, turn := range []string{"And one for CLIs?", "Which is older?"} {
-	reply, err := llm.Complete(ctx, model,
-		llm.Context{Messages: messages}, llm.StreamOptions{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	messages = append(messages, &reply)            // 记录回答
-	messages = append(messages, llm.UserText(turn)) // 追问
-}
-```
+| 已存内容 | 转换行为 |
+|---|---|
+| 图片发送给纯文本模型 | 替换为文本占位符 |
+| 同一模型产生的推理内容 | 保留兼容的推理内容和签名 |
+| 其他模型产生的推理内容 | 删除模型服务专有的推理内容 |
+| 工具调用 ID | 按目标协议规范化，并同步更新对应结果 |
+| 失败或取消的 assistant 消息 | 从重放副本中删除 |
+| 没有结果的工具调用 | 插入合成错误结果 |
 
-追加 `&reply`（指针），让助手这一轮保留本库重放所需的类型。设在 `Context` 上的 `SystemPrompt` 对每一轮都生效，且不会被存进消息历史。
+“同一模型”要求 provider、协议和模型 ID 均一致。转换不会修改调用方传入的历史；未转换的消息对象可能与原切片共享，调用方应把输入历史视为不可变值。
 
-## 图像输入
+跨模型使用的完整流程与兼容性检查见[对话中更换模型](recipes/model-switching.md)。
 
-多模态模型支持在用户消息中图文并存。以 base64 提供原始字节及其 MIME 类型：
+## JSON 序列化
 
-```go
-raw, err := os.ReadFile("screenshot.png")
-if err != nil {
-	log.Fatal(err)
-}
-input := llm.Context{Messages: []llm.Message{
-	&llm.UserMessage{Content: []llm.UserContent{
-		&llm.TextContent{Text: "Describe the problem shown in this screenshot."},
-		&llm.ImageContent{
-			MIMEType: "image/png",
-			Data:     base64.StdEncoding.EncodeToString(raw),
-		},
-	}},
-}}
-```
-
-模型通过 `Model.Input` 声明是否支持图像。当包含图像的历史被发送给仅支持文本的模型时，图像会被自动替换为一个简短的占位符。
-
-## 在不同轮次间切换模型
-
-每次请求前，本库都会为目标模型适配已存储的历史：为仅支持文本的模型降级图像、同模型重放时保留推理签名、删除其他模型产生的推理，并规范化工具调用标识符。
-
-下面这两个模型甚至使用不同的接口协议（DeepSeek 兼容 OpenAI Chat Completions，MiniMax CN 兼容 Anthropic Messages），但历史切片可以原样复用。由于每种协议各有适配器，需同时注册两个 provider 包：
-
-```go
-import (
-	"github.com/ktsoator/or/llm"
-	_ "github.com/ktsoator/or/llm/anthropic" // MiniMax CN（Anthropic 兼容）
-	_ "github.com/ktsoator/or/llm/openai"    // DeepSeek（OpenAI 兼容）
-)
-
-ctx := context.Background()
-draft := llm.GetModel("deepseek", "deepseek-v4-flash")   // openai-completions
-review := llm.GetModel("minimax-cn", "MiniMax-M2.7")      // anthropic-messages
-
-messages := []llm.Message{
-	llm.UserText("Compute 25 * 18 and explain the steps."),
-}
-
-first, err := llm.Complete(ctx, draft,
-	llm.Context{Messages: messages}, llm.StreamOptions{})
-if err != nil {
-	log.Fatal(err)
-}
-messages = append(messages, &first)
-messages = append(messages, llm.UserText("Check the calculation above for mistakes."))
-
-second, err := llm.Complete(ctx, review,
-	llm.Context{Messages: messages}, llm.StreamOptions{})
-if err != nil {
-	log.Fatal(err)
-}
-```
-
-这需要环境中设置 `DEEPSEEK_API_KEY` 与 `MINIMAX_CN_API_KEY`。完整程序见可运行的[`model_switch`](https://github.com/ktsoator/or/tree/main/example/llm/model_switch)示例。
-
-`TransformMessages` 执行这项适配，并已对外导出，供需要查看模型实际会收到的确切历史的调用方使用。
-
-## 保存与恢复对话
-
-`Context` 序列化为自描述的 JSON：消息携带角色，内容块携带类型，因此 JSON 可以无需手动分派地往返还原成具体的消息和内容类型。
-
-```go
-data, err := json.MarshalIndent(llm.Context{Messages: messages}, "", "  ")
-if err != nil {
-	log.Fatal(err)
-}
-if err := os.WriteFile("conversation.json", data, 0o644); err != nil {
-	log.Fatal(err)
-}
-
-raw, err := os.ReadFile("conversation.json")
-if err != nil {
-	log.Fatal(err)
-}
-var restored llm.Context
-if err := json.Unmarshal(raw, &restored); err != nil {
-	log.Fatal(err)
-}
-```
-
-`restored.Messages` 已可用于扩展，并针对任意模型重放。
-
-若存储系统按行或按记录保存单条消息，可使用 `MarshalMessage` 与
-`UnmarshalMessage`，无需先包进 `Context`：
+`Context` 实现 JSON 往返。消息在 JSON 中携带角色，内容块携带类型，反序列化后会恢复为具体的消息和内容实现。按记录保存单条消息时，使用 `MarshalMessage` 与 `UnmarshalMessage`：
 
 ```go
 data, err := llm.MarshalMessage(messages[0])
@@ -173,8 +84,7 @@ if err != nil {
 messages = append(messages, message)
 ```
 
-遇到未知角色、未知内容类型或畸形 JSON 时，`UnmarshalMessage` 返回错误，
-不会把不支持的消息结构静默转换为其他类型。
+遇到未知角色、未知内容类型或畸形 JSON 时，`UnmarshalMessage` 返回错误，不会把不支持的结构静默转换为其他类型。完整的文件与数据库示例、并发写入和版本字段建议见[保存与恢复对话](recipes/conversation-persistence.md)。图片的编码、输入能力检查和安全边界见[发送图片](recipes/vision.md)。
 
 !!! warning "序列化的历史是敏感数据"
     序列化后的 `Context` 可能包含用户输入、工具结果（其中可能嵌入抓取到的文档或凭证）以及提供方的推理签名。请把这份 JSON 当作敏感数据：不要整体打日志，存储或传输时应与其中的底层数据同等对待。

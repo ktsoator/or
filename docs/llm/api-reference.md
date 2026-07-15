@@ -1,333 +1,111 @@
 # API reference
 
-This page indexes the public API of `github.com/ktsoator/or/llm` by use case. Current source and [pkg.go.dev](https://pkg.go.dev/github.com/ktsoator/or/llm) remain authoritative for exact Go declarations.
-
-Usage levels:
-
-- **Common**: normal application request paths;
-- **Configuration**: model selection, credentials, gateways, or explicit clients;
-- **Extension**: custom providers or protocols;
-- **Low-level**: adapter, diagnostic, or test helpers.
+This page indexes the public symbols of `github.com/ktsoator/or/llm` by module.
+It does not duplicate field defaults, event tables, or behavioral rules. Current
+source and [pkg.go.dev](https://pkg.go.dev/github.com/ktsoator/or/llm) remain
+authoritative for exact Go declarations; the linked reference page owns each
+group's semantics.
 
 ## Request entry points
 
-| API | Level | Parameters | Return | Failure behavior |
-|---|---|---|---|---|
-| `Complete(ctx, model, input, options)` | Common | `context.Context`, `Model`, `Context`, `StreamOptions` | `(AssistantMessage, error)` | Setup errors return a zero message; stream failures can return a partial message with an error |
-| `Stream(ctx, model, input, options)` | Common | Same | `(<-chan Event, error)` | Setup errors return immediately; runtime failures arrive as `EventError` |
-| `NewClient(adapters, providers)` | Configuration | `*AdapterRegistry`, `*ProviderRegistry` | `*Client` | Requests fail when `adapters` is nil |
-| `(*Client).Complete(...)` | Configuration | Same as package `Complete` | `(AssistantMessage, error)` | Uses the client's registries |
-| `(*Client).Stream(...)` | Configuration | Same as package `Stream` | `(<-chan Event, error)` | Returns an error when the protocol is unregistered |
-
-## Input constructors
-
 | API | Return | Purpose |
 |---|---|---|
-| `Prompt(text)` | `Context` | One text user message |
-| `PromptWithSystem(system, user)` | `Context` | System prompt plus one text user message |
-| `NewContext(messages...)` | `Context` | Preserve messages in argument order |
-| `UserText(text)` | `*UserMessage` | Text user message |
-| `UserImage(data, mimeType)` | `*UserMessage` | One base64 image message |
-| `AssistantText(text)` | `*AssistantMessage` | Seed history or tests with assistant text |
-| `ToolResult(callID, toolName, text)` | `*ToolResultMessage` | Text tool result with `IsError=false` |
-| `NewAssistantMessage(model)` | `AssistantMessage` | Initialize protocol, provider, model, and timestamp for adapter output |
+| `Complete(ctx, model, input, options)` | `(AssistantMessage, error)` | Collect a response and return the final or partial message |
+| `Stream(ctx, model, input, options)` | `(<-chan Event, error)` | Receive normalized events while generation runs |
+| `NewClient(adapters, providers)` | `*Client` | Create an independent client with explicit registries |
+| `(*Client).Complete(...)` | `(AssistantMessage, error)` | Complete through a specified client |
+| `(*Client).Stream(...)` | `(<-chan Event, error)` | Stream through a specified client |
 
-## Message model
+See [Failure signals](errors.md) for preflight and streaming failures, and
+[Getting started](getting-started.md) for the shortest request path.
 
-### `Context`
+## Inputs, messages, and history
 
-| Field | Type | Meaning |
+| Category | Public symbols | Reference |
 |---|---|---|
-| `SystemPrompt` | `string` | Request system prompt; not automatically stored in history |
-| `Messages` | `[]Message` | User, assistant, and tool-result history |
-| `Tools` | `[]ToolDefinition` | Tools available for this request |
+| Context constructors | `Prompt`, `PromptWithSystem`, `NewContext` | [Messages and context](conversations.md#build-messages) |
+| Message constructors | `UserText`, `UserImage`, `AssistantText`, `ToolResult` | [Messages and context](conversations.md#build-messages) |
+| Message interfaces | `Message`, `UserMessage`, `AssistantMessage`, `ToolResultMessage` | [Messages and context](conversations.md#message-and-content-model) |
+| Content blocks | `TextContent`, `ImageContent`, `ThinkingContent`, `ToolCall` | [Messages and context](conversations.md#message-and-content-model) |
+| Response access | `AssistantMessage.Text`, `AssistantMessage.ToolCalls` | [Responses and usage](results.md#content-and-metadata) |
+| Serialization | `MarshalMessage`, `UnmarshalMessage` | [Messages and context](conversations.md#json-serialization) |
+| History transformation | `TransformMessages` | [Messages and context](conversations.md#history-and-model-transformation) |
 
-`Context` implements `MarshalJSON` and `UnmarshalJSON`, rebuilding concrete message and content-block types during decoding.
+`NewAssistantMessage` initializes adapter output. `Context` and the concrete
+message types implement JSON marshal and unmarshal.
 
-### Message types
+## Streaming
 
-| Type | Allowed content |
-|---|---|
-| `UserMessage` | `TextContent`, `ImageContent` |
-| `AssistantMessage` | `TextContent`, `ThinkingContent`, `ToolCall` |
-| `ToolResultMessage` | `TextContent`, `ImageContent` |
-
-`Message`, `UserContent`, `AssistantContent`, and `ToolResultContent` are sealed with unexported marker methods. External packages cannot add message or content-block implementations.
-
-### Content blocks
-
-| Type | Primary fields | Meaning |
+| Category | Public symbols | Reference |
 |---|---|---|
-| `TextContent` | `Text`, `TextSignature` | Text and an optional provider signature |
-| `ImageContent` | `Data`, `MIMEType` | Base64 image |
-| `ThinkingContent` | `Thinking`, `ThinkingSignature`, `Redacted` | Reasoning text or an encrypted/redacted reasoning block |
-| `ToolCall` | `ID`, `Name`, `Arguments`, `ThoughtSignature` | A tool invocation requested by the model |
+| Events | `Event`, `EventType`, `EventStart`, text/reasoning/tool-call events, `EventDone`, `EventError` | [Streaming events](streaming.md#event-reference) |
+| Adapter output | `StreamWriter`, `NewStreamWriter` | [Custom protocols](extending.md) |
+| Tool-call copying | `CloneToolCall` | [Streaming events](streaming.md#tool-call-deltas-and-diagnostics) |
 
-Concrete message and block types implement JSON marshal/unmarshal methods. Use `json.Marshal` and `json.Unmarshal`; applications normally do not call those methods directly.
+Valid event fields, order, and termination rules are maintained only in
+[Streaming events](streaming.md).
 
-### `AssistantMessage`
+## Request options
 
-Important fields are `Content`, `Protocol`, `Provider`, `Model`, `ResponseModel`, `ResponseID`, `Usage`, `StopReason`, `ErrorMessage`, `Diagnostics`, and `Timestamp`.
-
-| Method | Return | Meaning |
+| Category | Public symbols | Reference |
 |---|---|---|
-| `Text()` | `string` | Concatenate all text blocks in order |
-| `ToolCalls()` | `[]ToolCall` | Return all tool calls in order |
-| `MarshalJSON()` | `([]byte, error)` | Encode self-describing JSON |
-| `UnmarshalJSON(data)` | `error` | Restore concrete content-block types |
+| Shared options | `StreamOptions`, `StreamOptions.Validate` | [Request options](configuration.md) |
+| Protocol option interface | `ProtocolStreamOptions` | [Request options](configuration.md) |
+| OpenAI options | `OpenAICompletionsStreamOptions` and `OpenAIToolChoice` types and constants | [Tool definitions and calls](tools.md#protocol-specific-tool-choice) |
+| Anthropic options | `AnthropicStreamOptions` and `AnthropicToolChoice` types and constants | [Tool definitions and calls](tools.md#protocol-specific-tool-choice) |
+| Thinking display | `ThinkingDisplay`, `ThinkingDisplaySummarized`, `ThinkingDisplayOmitted` | [Reasoning options](reasoning.md#anthropic-thinking-display) |
 
-## Message serialization and transformation
-
-| API | Meaning |
-|---|---|
-| `MarshalMessage(message)` | Encode one `Message` with role and content discriminators |
-| `UnmarshalMessage(data)` | Decode one message into its concrete type |
-| `TransformMessages(messages, model, normalizer)` | Adapt history for a target model without mutating the caller's original slice |
-
-Built-in adapters call `TransformMessages` automatically from `Stream` and `Complete`.
-
-## Streaming events
-
-### `EventType`
-
-| Constant | Meaningful fields |
-|---|---|
-| `EventStart` | `Partial` |
-| `EventTextStart` | `ContentIndex`, `Partial` |
-| `EventTextDelta` | `ContentIndex`, `Delta`, `Partial` |
-| `EventTextEnd` | `ContentIndex`, `Content`, `Partial` |
-| `EventThinkingStart` | `ContentIndex`, `Partial` |
-| `EventThinkingDelta` | `ContentIndex`, `Delta`, `Partial` |
-| `EventThinkingEnd` | `ContentIndex`, `Content`, `Partial` |
-| `EventToolCallStart` | `ContentIndex`, `ToolCall`, `Partial` |
-| `EventToolCallDelta` | `ContentIndex`, `Delta`, `ToolCall`, `Partial` |
-| `EventToolCallEnd` | `ContentIndex`, `ToolCall`, `Partial` |
-| `EventDone` | `Message` |
-| `EventError` | `Message`, `Err` |
-
-Consume the event channel until it closes. Execute tools only after `EventDone`.
-
-### `StreamWriter`
-
-Adapter authors create a writer with `NewStreamWriter(ctx, events, output)`.
-
-| Method | Meaning |
-|---|---|
-| `Start()` | Idempotently emit `EventStart` |
-| `Emit(event)` | Emit a non-terminal event with a `Partial` snapshot |
-| `Done()` | Emit the single `EventDone` |
-| `Fail(err)` | Emit the single `EventError` |
-
-`CloneToolCall` deep-copies a tool call's argument map.
-
-## Request configuration
-
-### `StreamOptions`
-
-| Field | Type | Default behavior |
-|---|---|---|
-| `APIKey` | `string` | Resolve from provider override or environment when empty |
-| `Env` | `ProviderEnv` | nil; request-scoped environment overrides |
-| `Temperature` | `*float64` | nil; do not override provider default |
-| `MaxTokens` | `int64` | zero; omitted for OpenAI, falls back to `Model.MaxTokens` for Anthropic |
-| `Headers` | `map[string]string` | nil; override same-name model/provider headers |
-| `Reasoning` | `ModelThinkingLevel` | empty; use model/provider default |
-| `ProtocolOptions` | `ProtocolStreamOptions` | nil |
-| `MaxRetries` | `*int` | nil; use SDK default |
-| `Timeout` | `time.Duration` | zero; use SDK request default |
-| `OnRequest` | callback | nil; called for every serialized attempt |
-| `RewriteRequest` | callback | nil; called before each attempt is sent |
-| `OnResponse` | callback | nil; called for each HTTP response |
-
-`StreamOptions.Validate(protocol, tools)` validates protocol-specific options. `Client.Stream` calls it automatically.
-
-### Protocol-specific options
-
-`ProtocolStreamOptions` requires:
-
-```go
-Protocol() Protocol
-Validate(tools []ToolDefinition) error
-```
-
-Built-in types:
-
-| Type | Fields |
-|---|---|
-| `OpenAICompletionsStreamOptions` | `ToolChoice OpenAIToolChoice` |
-| `AnthropicStreamOptions` | `ThinkingDisplay`, `ToolChoice AnthropicToolChoice` |
-
-Tool-choice constants and values:
-
-- `OpenAIToolChoiceAuto`, `OpenAIToolChoiceNone`, `OpenAIToolChoiceRequired`;
-- `OpenAIToolChoiceFunction{Name: ...}`;
-- `AnthropicToolChoiceAuto`, `AnthropicToolChoiceAny`, `AnthropicToolChoiceNone`;
-- `AnthropicToolChoiceTool{Name: ...}`.
-
-`OpenAIToolChoice`, `OpenAIToolChoiceMode`, `AnthropicToolChoice`, and `AnthropicToolChoiceMode` represent the sealed unions.
+See [Request options](configuration.md) for field defaults, credential
+precedence, hooks, and request rewriting.
 
 ## Tools
 
-| API | Parameters | Return | Failure behavior |
-|---|---|---|---|
-| `NewTool[T](name, description)` | Name and description; `T` is the argument struct | `(ToolDefinition, error)` | Invalid name or schema returns an error |
-| `MustTool[T](name, description)` | Same | `ToolDefinition` | Panics when invalid; intended for startup declarations |
-| `DecodeToolCall[T](tool, call)` | Definition and model call | `(T, error)` | Schema validation or JSON decoding can fail |
-| `ValidateToolCall(tools, call)` | Tool list and call | `(map[string]any, error)` | Unknown tool or invalid arguments |
-| `ValidateToolArguments(tool, call)` | Known tool and call | `(map[string]any, error)` | Arguments violate schema |
-| `ParseToolArguments(raw)` | Raw JSON string | `map[string]any` | Returns recovered fields or an empty map |
-| `ParseToolArgumentsMode(raw)` | Raw JSON string | `(map[string]any, ArgumentsMode)` | No error return; mode reports recovery quality |
-| `ToolArgumentsDiagnostic(id, name, mode)` | Call identity and parse mode | `(Diagnostic, bool)` | bool is false for strict JSON |
+| Category | Public symbols | Reference |
+|---|---|---|
+| Definition | `ToolDefinition`, `NewTool[T]`, `MustTool[T]` | [Tool definitions and calls](tools.md#typed-tools) |
+| Reading and decoding | `ToolCall`, `DecodeToolCall[T]` | [Tool definitions and calls](tools.md#validate-before-executing) |
+| Generic validation | `ValidateToolCall`, `ValidateToolArguments` | [Tool definitions and calls](tools.md#validate-before-executing) |
+| Best-effort parsing | `ParseToolArguments`, `ParseToolArgumentsMode`, `ArgumentsMode` constants | [Tool definitions and calls](tools.md#validate-before-executing) |
+| Diagnostics | `ToolArgumentsDiagnostic`, `DiagnosticToolArgumentsRecovered` | [Responses and usage](results.md#diagnostics) |
 
-`ArgumentsMode` constants are `ArgumentsStrict`, `ArgumentsRepaired`, `ArgumentsPartial`, and `ArgumentsInvalid`.
+These APIs do not execute or authorize tools. See
+[Executing tool calls](recipes/tool-loop.md) for the complete application flow.
 
-## Models
+## Models and providers
 
-### Catalog functions
+| Category | Public symbols | Reference |
+|---|---|---|
+| Built-in catalog | `LookupModel`, `GetModel`, `GetProviders`, `GetModels`, `GetRunnableModels`, `SupportsProtocol` | [Models and providers](providers.md#discover-models) |
+| Model capability | `Model`, `ModelInput`, `ModelThinkingLevel`, `SupportedThinkingLevels`, `ClampThinkingLevel` | [Models and providers](providers.md#model-metadata), [Reasoning options](reasoning.md) |
+| Cost estimation | `ModelCost`, `CalculateCost` | [Responses and usage](results.md#token-usage-and-cost) |
+| Model registry | `ModelRegistry`, `NewModelRegistry` | [Clients and registries](clients-and-registries.md#modelregistry) |
+| Provider definition | `Provider`, `ProviderSpec`, `NewSpecProvider` | [Models and providers](providers.md#register-a-custom-provider) |
+| Provider overrides | `ProviderOverride`, `AuthStatus` | [Models and providers](providers.md#provider-configuration-and-status) |
+| Provider registry | `ProviderRegistry`, `NewProviderRegistry`, `NewBuiltInProviderRegistry`, `DefaultProviderRegistry` | [Clients and registries](clients-and-registries.md#providerregistry) |
+| Credential helpers | `APIKeyEnvVars`, `FindEnvAPIKeys`, `FindEnvAPIKeysWithEnv`, `GetEnvAPIKey`, `GetEnvAPIKeyWithEnv`, `MissingAPIKeyError` | [Request options](configuration.md#supply-credentials-per-request) |
 
-| API | Meaning |
-|---|---|
-| `LookupModel(provider, modelID)` | Return `(Model, bool)`; use for dynamic input |
-| `GetModel(provider, modelID)` | Return `Model`; panic for an unknown entry |
-| `GetProviders()` | Return built-in catalog provider IDs |
-| `GetModels(provider)` | Return every catalog model, including unimplemented protocols |
-| `GetRunnableModels(provider)` | Return models routable by the default adapter registry |
-| `SupportsProtocol(protocol)` | Report default adapter registration |
+Model fields, compatibility configuration, and provider override behavior are
+maintained only in [Models and providers](providers.md). See
+[Protocol and provider status](support-matrix.md) for live-support boundaries.
 
-### `Model`
+## Protocols and registries
 
-Key fields are `ID`, `Name`, `Provider`, `Protocol`, `BaseURL`, `Headers`, `Reasoning`, `ThinkingLevelMap`, `Input`, `ContextWindow`, `MaxTokens`, `Cost`, and `Compatibility`.
+| Category | Public symbols | Reference |
+|---|---|---|
+| Protocols | `Protocol`, `ProtocolOpenAICompletions`, `ProtocolAnthropicMessages` | [Protocol and provider status](support-matrix.md) |
+| Compatibility | `ModelCompatibility`, `OpenAICompletionsCompatibility`, `AnthropicMessagesCompatibility` | [Models and providers](providers.md#custom-and-compatible-endpoints) |
+| Adapter | `ProtocolAdapter` | [Custom protocols](extending.md) |
+| Adapter registry | `AdapterRegistry`, `NewAdapterRegistry`, `Register` | [Clients and registries](clients-and-registries.md) |
+| Built-in adapters | `openai.NewAdapter`, `anthropic.NewAdapter`, `llm/all` | [Getting started](getting-started.md#register-a-protocol-adapter) |
 
-`Model.UnmarshalJSON` restores a concrete compatibility type from `Protocol`. Compatibility-bearing decoding currently supports OpenAI Completions and Anthropic Messages.
+## Results, failures, and diagnostics
 
-### Reasoning, input, and cost
+| Category | Public symbols | Reference |
+|---|---|---|
+| Stop reasons | `StopReason` and `StopReasonStop`, `Length`, `ToolUse`, `Error`, `Aborted` | [Responses and usage](results.md#stop-reasons) |
+| Tokens and cost | `Usage`, `UsageCost`, `ModelCost` | [Responses and usage](results.md#token-usage-and-cost) |
+| Context overflow | `IsContextOverflow`, `OverflowPatterns` | [Responses and usage](results.md#detect-context-overflow) |
+| Diagnostics | `Diagnostic`, `DiagnosticToolArgumentsRecovered` | [Responses and usage](results.md#diagnostics) |
 
-| Type or API | Meaning |
-|---|---|
-| `ModelInput` | Input modality; constants `Text` and `Image` |
-| `ModelThinkingLevel` | `Off`, `Minimal`, `Low`, `Medium`, `High`, `XHigh` |
-| `ThinkingDisplay` | `ThinkingDisplaySummarized`, `ThinkingDisplayOmitted` |
-| `SupportedThinkingLevels(model)` | Return neutral reasoning levels accepted by the model |
-| `ClampThinkingLevel(model, level)` | Clamp a request to the nearest supported level |
-| `CalculateCost(model, usage)` | Price usage from per-million-token catalog rates |
-
-### `ModelRegistry`
-
-| API | Meaning |
-|---|---|
-| `NewModelRegistry()` | Create an empty registry |
-| `Register(model)` | Validate and add or replace a model |
-| `Get(provider, modelID)` | Return a defensive copy |
-| `Providers()` | Return sorted provider IDs |
-| `Models(provider)` | Return models ordered by ID |
-
-## Providers and credentials
-
-### Environment helpers
-
-| API | Meaning |
-|---|---|
-| `APIKeyEnvVars(provider)` | Return checked variable names in precedence order |
-| `FindEnvAPIKeys(provider)` | Return configured process variable names |
-| `FindEnvAPIKeysWithEnv(provider, env)` | Include request-scoped `ProviderEnv` |
-| `GetEnvAPIKey(provider)` | Return the first available key |
-| `GetEnvAPIKeyWithEnv(provider, env)` | Prefer request-scoped environment values |
-| `MissingAPIKeyError(provider)` | Build an error naming provider and expected variables |
-
-### Provider types
-
-`ProviderSpec` fields are `ID`, `Name`, `EnvKeys`, `Models`, and `Headers`.
-
-`NewSpecProvider(spec)` returns an independent snapshot. `Provider` methods:
-
-| Method | Return |
-|---|---|
-| `ID()` | `string` |
-| `Name()` | `string` |
-| `Models()` | defensive `[]Model` |
-| `EnvKeys()` | defensive `[]string` |
-
-`ProviderOverride` fields are `BaseURL`, `APIKey`, `Headers`, and `Env`.
-
-`AuthStatus` fields are `Configured`, `Source`, `Label`, and `Missing`.
-
-### `ProviderRegistry`
-
-| API | Meaning |
-|---|---|
-| `NewProviderRegistry()` | Empty registry |
-| `NewBuiltInProviderRegistry()` | Build providers from the catalog |
-| `DefaultProviderRegistry()` | Instance used by the package client |
-| `Register(provider)` | Add or replace a provider |
-| `Get(providerID)` | Look up a provider |
-| `Providers()` | Return providers sorted by ID |
-| `SetOverride(providerID, override)` | Store an override snapshot |
-| `ClearOverride(providerID)` | Remove an override |
-| `ResolveRequest(model, options)` | Apply credential, URL, and header precedence |
-| `AuthStatus(providerID, env)` | Return credential status and existence flag |
-
-## Protocol and compatibility configuration
-
-Protocol constants:
-
-- `ProtocolOpenAICompletions`
-- `ProtocolAnthropicMessages`
-
-`ModelCompatibility` requires `Protocol() Protocol`. Concrete types:
-
-### `OpenAICompletionsCompatibility`
-
-Fields: `SupportsStore`, `SupportsDeveloperRole`, `SupportsReasoningEffort`, `MaxTokensField`, `SupportsStrictMode`, `RequiresReasoningContentOnAssistantMessages`, `RequiresThinkingAsText`, `ThinkingFormat`, and `ZAIToolStream`.
-
-### `AnthropicMessagesCompatibility`
-
-Fields: `SupportsTemperature`, `SupportsCacheControl`, `SupportsCacheControlTools`, `ForceAdaptiveThinking`, and `AllowEmptySignature`.
-
-Except for `MaxTokensField` and `ThinkingFormat`, compatibility switches use pointers to distinguish unspecified from explicit false. Unspecified fields use adapter compatibility detection.
-
-## Results, errors, and diagnostics
-
-### Stop reason
-
-`StopReason` constants are `StopReasonStop`, `StopReasonLength`, `StopReasonToolUse`, `StopReasonError`, and `StopReasonAborted`.
-
-### Usage
-
-`Usage` fields are `Input`, `Output`, `CacheRead`, `CacheWrite`, `TotalTokens`, and `Cost`.
-
-`UsageCost` and `ModelCost` both split input, output, cache read, and cache write. `UsageCost` also contains `Total`.
-
-### Overflow and diagnostics
-
-| API | Meaning |
-|---|---|
-| `IsContextOverflow(message, contextWindow)` | Detect a context overflow from error text or usage |
-| `OverflowPatterns()` | Return a defensive copy of internal match patterns |
-| `Diagnostic` | `Type`, `Timestamp`, `Message`, `Details` |
-| `DiagnosticToolArgumentsRecovered` | Tool-argument recovery diagnostic type |
-
-## Adapter extension
-
-`ProtocolAdapter`:
-
-```go
-type ProtocolAdapter interface {
-	Protocol() Protocol
-	Stream(context.Context, Model, Context, StreamOptions) (<-chan Event, error)
-}
-```
-
-Registration API:
-
-| API | Meaning |
-|---|---|
-| `NewAdapterRegistry()` | Create an empty adapter registry |
-| `(*AdapterRegistry).Register(adapter)` | Add or replace an adapter for a protocol |
-| `(*AdapterRegistry).Get(protocol)` | Look up an adapter |
-| `Register(adapter)` | Register with the package-default adapter registry |
-
-Built-in subpackages:
-
-- `openai.NewAdapter(httpClient)`: OpenAI Chat Completions adapter;
-- `anthropic.NewAdapter(httpClient)`: Anthropic Messages adapter;
-- `llm/all`: side-effect import of every built-in adapter.
+See [Failure signals](errors.md) for how returned errors, `EventError`, and
+failed messages relate across request stages.
