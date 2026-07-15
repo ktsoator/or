@@ -56,6 +56,16 @@ The full order, highest to lowest, is: `StreamOptions.APIKey`, a provider
 [override](providers.md#redirect-a-providers-requests) key, `StreamOptions.Env`,
 override `Env`, then the process environment.
 
+Credential discovery can be inspected without sending a request:
+
+| Function | Result |
+|---|---|
+| `APIKeyEnvVars(providerID)` | Environment-variable names configured for the provider |
+| `FindEnvAPIKeys(providerID)` | Names whose values are currently set in the process environment |
+| `DefaultProviderRegistry().AuthStatus(providerID, env)` | Whether a credential resolves, its source, and missing variable names |
+
+`FindEnvAPIKeys` returns secret values. Do not write its result to logs.
+
 ## Observe HTTP requests and responses
 
 The hooks are useful for logging, tracing, and debugging. Both fire once per
@@ -76,6 +86,11 @@ options := llm.StreamOptions{
 Hooks may expose prompts, tool arguments, credentials in URLs or headers, and
 provider response metadata. Redact sensitive data before sending it to logs or
 telemetry systems.
+
+Hooks run synchronously in the request path. Slow hook code delays the request,
+and a blocking hook can prevent an attempt from completing. The callback API
+does not return errors; perform fallible telemetry work outside the callback or
+record failures separately.
 
 ## Rewrite the request body
 
@@ -104,3 +119,25 @@ options := llm.StreamOptions{
 
 See [Reasoning](reasoning.md) and [Tools](tools.md) for the protocol-specific
 option types currently included with the package.
+
+## Use a custom HTTP client
+
+The package-level functions use the default `Client`. To supply a custom
+`*http.Client`—for example for a proxy, transport instrumentation, or custom TLS
+configuration—construct an explicit client:
+
+```go
+httpClient := &http.Client{Timeout: 45 * time.Second}
+adapters := llm.NewAdapterRegistry()
+if err := adapters.Register(openai.NewAdapter(httpClient)); err != nil {
+	log.Fatal(err)
+}
+client := llm.NewClient(adapters, llm.NewBuiltInProviderRegistry())
+
+response, err := client.Complete(ctx, model, input, options)
+```
+
+`Client` has no `Close` method. Resource ownership remains with the
+`*http.Client` passed to `openai.NewAdapter` or `anthropic.NewAdapter`. See
+[Clients and registries](clients-and-registries.md) for imports and isolated
+adapter and provider registries.

@@ -187,6 +187,25 @@ if err := json.Unmarshal(raw, &restored); err != nil {
 
 `restored.Messages` is ready to extend and replay against any model.
 
+For stores that persist one message per row or record, use `MarshalMessage` and
+`UnmarshalMessage` instead of wrapping the value in a `Context`:
+
+```go
+data, err := llm.MarshalMessage(messages[0])
+if err != nil {
+	log.Fatal(err)
+}
+
+message, err := llm.UnmarshalMessage(data)
+if err != nil {
+	log.Fatal(err)
+}
+messages = append(messages, message)
+```
+
+`UnmarshalMessage` returns an error for an unknown role, unknown content type,
+or malformed JSON. It does not silently coerce unsupported message shapes.
+
 !!! warning "Serialized history is sensitive data"
     A serialized `Context` can contain user input, tool results (which may embed
     fetched documents or credentials), and provider reasoning signatures. Treat

@@ -2,6 +2,14 @@
 
 `github.com/ktsoator/or/llm` 提供统一的 Go API，用于在 OpenAI 兼容与 Anthropic 兼容的模型之间进行流式响应、结构化工具、推理内容、多模态消息和对话历史的处理。
 
+第一次接触本包时按以下顺序阅读：
+
+1. [功能总览](capabilities.md)：从开发任务查找对应接口；
+2. [快速开始](getting-started.md)：运行第一个请求；
+3. [开发者指南](developer-guide.md)：理解架构、生命周期、边界和排障；
+4. [API 索引](api-reference.md)：按模块查询公开接口；
+5. [支持矩阵](support-matrix.md)：确认协议、provider 和模型是否可运行。
+
 ## 它是什么
 
 本包是一个**无状态的翻译层**。对每个请求，它只决定在网络上发送什么、以及如何解释流式返回的响应——仅此而已。同一段协议无关的对话可以发给任一协议下的任一模型，且目标模型可以在轮次之间切换；库会每次重新适配历史。
@@ -94,6 +102,21 @@ for event := range events {
 - **持久化**：消息序列化为自描述 JSON，之后可对任意模型重放。
 - **可扩展**：实现一个适配器即可加入新的线协议，无需改动共享的请求 API。
 
+| 要实现的功能 | 首选接口 |
+|---|---|
+| 一次完整生成 | `Complete`、`Prompt` |
+| 流式聊天 | `Stream`、`EventTextDelta` |
+| 多轮历史 | `Context.Messages`、`UserText` |
+| 图像输入 | `UserImage`、`ImageContent` |
+| 推理展示 | `StreamOptions.Reasoning`、thinking events |
+| 工具调用 | `MustTool`、`DecodeToolCall`、`ToolResult` |
+| 模型选择 | `GetRunnableModels`、`SupportsProtocol` |
+| Provider 网关 | `ProviderRegistry.SetOverride` |
+| 独立 Client | `NewClient`、`NewAdapterRegistry` |
+| 全新协议 | `ProtocolAdapter`、`StreamWriter` |
+
+完整映射见[功能总览](capabilities.md)。
+
 ## 核心对象
 
 五个类型几乎涵盖日常会用到的一切：
@@ -117,9 +140,11 @@ for event := range events {
 - **推理**：设置推理强度并读回思考。见[推理](reasoning.md)。
 - **切换模型**：把同一段历史发给不同模型或协议。见[对话 § 在不同轮次间切换模型](conversations.md#在不同轮次间切换模型)。
 
-## 选 `llm` 还是 `agent`?
+## 范围边界
 
-在自行掌控控制流时直接用 `llm`：单次请求、自定义的多轮循环，或需要完全掌控的工具循环。当希望工具调用循环、运行状态、引导与中止由框架代劳时，选[`or/agent`](../agent/README.md)；当还需要转录持久化、上下文压缩、按轮系统提示与 skills 时，选 agent harness。两者都构建在上述类型之上，所以先用 `llm`、之后再采用 agent，不会有任何浪费。
+`llm` 不执行工具、不持久化对话、不压缩上下文，也不负责多步骤运行循环。
+使用本包的应用必须自行实现这些职责，或交给独立的上层模块。本组文档只覆盖
+`llm`。
 
 ## 安装
 
@@ -129,7 +154,10 @@ go get github.com/ktsoator/or/llm@latest
 
 ## 文档
 
+- [功能总览](capabilities.md) — 可以实现什么以及应该调用哪些接口
+- [开发者指南](developer-guide.md) — 架构、核心功能、生命周期、扩展和限制
 - [快速开始](getting-started.md) — 凭证与第一个请求
+- [协议与 Provider 支持矩阵](support-matrix.md) — 已实现协议、目录模型和凭证
 - [提供方与模型](providers.md) — 目录发现与自定义端点
 - [流式](streaming.md) — 事件、部分响应、诊断与取消
 - [工具](tools.md) — 类型化工具、工具循环与协议特定的工具选择
@@ -139,6 +167,9 @@ go get github.com/ktsoator/or/llm@latest
 - [对话](conversations.md) — 图像、模型切换与持久化
 - [配置](configuration.md) — 重试、超时、请求头与 HTTP 钩子
 - [自定义协议](extending.md) — 适配器、注册表与 `StreamWriter`
+- [Client 与注册表](clients-and-registries.md) — 显式依赖注入、HTTP client 和状态隔离
+- [API 索引](api-reference.md) — 按模块整理的公开接口
+- [Recipes](recipes/README.md) — 按开发任务组织的最小示例
 
 每个主题的可运行程序列在[示例](examples.md)页。
 

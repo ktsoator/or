@@ -49,6 +49,16 @@ options := llm.StreamOptions{
 
 `APIKey` 优先级最高；`Env` 会先于进程环境被查询。完整顺序从高到低为：`StreamOptions.APIKey`、provider [override](providers.zh.md) 的 key、`StreamOptions.Env`、override 的 `Env`、最后是进程环境。
 
+以下接口可在不发送请求的情况下检查凭证发现过程：
+
+| 函数 | 结果 |
+|---|---|
+| `APIKeyEnvVars(providerID)` | 该 provider 配置的环境变量名 |
+| `FindEnvAPIKeys(providerID)` | 当前进程环境中值非空的变量名 |
+| `DefaultProviderRegistry().AuthStatus(providerID, env)` | 是否解析到凭证、来源及缺失变量名 |
+
+`FindEnvAPIKeys` 返回变量名，不返回 secret 值。
+
 ## 观察 HTTP 请求与响应
 
 这些钩子适用于日志、追踪和调试。两者都会在每次尝试时各触发一次，因此重试始终可见。 `OnRequest` 收到的是为提供方序列化的确切请求体，包含协议特定字段。
@@ -65,6 +75,8 @@ options := llm.StreamOptions{
 ```
 
 钩子可能暴露提示词、工具参数、URL 或请求头中的凭证，以及提供方响应元数据。在发送到日志或遥测系统之前，请对敏感数据做脱敏处理。
+
+钩子在请求路径中同步运行。耗时的钩子会延迟请求，阻塞的钩子会阻止本次尝试完成。回调接口不返回 error；可能失败的遥测工作应移出回调，或另行记录失败。
 
 ## 重写请求体
 
@@ -88,3 +100,23 @@ options := llm.StreamOptions{
 ```
 
 本包当前附带的协议特定选项类型，参见[推理](reasoning.md)和[工具](tools.md)。
+
+## 使用自定义 HTTP client
+
+包级函数使用默认 `Client`。若要配置代理、transport 观测或自定义 TLS，
+需要为内置 adapter 传入 `*http.Client`，再构造显式 client：
+
+```go
+httpClient := &http.Client{Timeout: 45 * time.Second}
+adapters := llm.NewAdapterRegistry()
+if err := adapters.Register(openai.NewAdapter(httpClient)); err != nil {
+	log.Fatal(err)
+}
+client := llm.NewClient(adapters, llm.NewBuiltInProviderRegistry())
+
+response, err := client.Complete(ctx, model, input, options)
+```
+
+`Client` 没有 `Close` 方法。资源所有权仍属于传给 `openai.NewAdapter` 或
+`anthropic.NewAdapter` 的 `*http.Client`。完整 import 与独立注册表用法见
+[Client 与注册表](clients-and-registries.md)。

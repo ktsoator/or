@@ -20,6 +20,10 @@ if err != nil {
 **2. Consume events with a type switch.** Print text and reasoning deltas as
 they come, capture the final message on `EventDone`, and stop on `EventError`.
 
+The event channel is unbuffered. Keep receiving until the channel closes. When
+business logic no longer needs deltas, ignore event contents but still drain the
+channel. Stopping reads directly can block the adapter goroutine on its next send.
+
 ```go
 var finalMessage *llm.AssistantMessage
 for event := range events {
@@ -170,8 +174,11 @@ arguments and returns a tool error so the model can retry.
 
 ## Cancellation
 
-Cancelling the request context stops an in-flight request. The stream emits one
-`EventError` whose message reports `StopReasonAborted`, then closes.
+Cancelling the request context asks the in-flight HTTP call to stop. The adapter
+attempts to emit an `EventError` whose message reports `StopReasonAborted`, then
+closes the channel. Keep receiving after cancellation. If the consumer has
+already stopped, an unbuffered send can prevent the terminal event and close
+from completing.
 
 ```go
 ctx, cancel := context.WithCancel(context.Background())
@@ -183,6 +190,7 @@ if err != nil {
 }
 
 // Call cancel() from elsewhere, for example when the user presses Stop.
+// Keep ranging after cancellation until the channel closes.
 for event := range events {
 	switch event.Type {
 	case llm.EventTextDelta:
@@ -195,3 +203,6 @@ for event := range events {
 
 Use the independent per-attempt `Timeout` option for transport deadlines; see
 [Request configuration](configuration.md).
+
+`Stream` has no separate `Close` or `Abort` method. Cancel through the supplied
+context; the adapter goroutine releases stream resources when it exits.

@@ -73,6 +73,13 @@ func TestComplete(t *testing.T) {
 
 同一个服务器也适用于 `Stream`：遍历事件，对 `EventTextDelta` 序列与终止的 `EventDone` 做断言。
 
+任何可能提前返回的 consumer 都应有取消测试。让 mock server 正在流式返回时
+取消 context，继续接收到通道关闭，并断言 consumer goroutine 能退出。这个测试
+可以发现 consumer 丢弃无缓冲事件通道、导致 producer 阻塞的问题。
+
+测试若要修改 adapter 或 provider override，应使用显式 `Client`，避免并行测试
+共同修改包级默认状态。参见 [Client 与注册表](clients-and-registries.md)。
+
 ## 测试工具循环
 
 让 mock server 按请求次数返回不同响应：第一次返回工具调用，第二次返回最终答案。仅靠计数请求就足以驱动一个完整循环：

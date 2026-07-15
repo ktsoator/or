@@ -84,6 +84,10 @@ separately so cache hits are visible:
 (`Input`, `Output`, `CacheRead`, `CacheWrite`, and `Total`), computed from the
 model's pricing when the response is assembled.
 
+This is an estimate based on the catalog snapshot. It can differ from provider
+billing when prices change, discounts apply, or the provider rounds usage
+differently.
+
 ```go
 fmt.Printf("tokens=%d (cached %d) cost=$%.6f\n",
 	response.Usage.TotalTokens,

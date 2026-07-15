@@ -5,6 +5,8 @@
 - `openai-completions`
 - `anthropic-messages`
 
+模型目录还包含三个没有 adapter 的 catalog-only 协议。官方 OpenAI 目录模型当前使用 `openai-responses`，不能通过内置 adapter 调用。完整数量、provider ID 和凭证变量见[协议与 Provider 支持矩阵](support-matrix.md)。
+
 目录与兼容层显式配置了以下提供方：
 
 | 提供方 | Provider ID | 协议 | 环境变量 |
@@ -35,7 +37,7 @@ for _, provider := range llm.GetProviders() {
 	}
 }
 
-model, ok := llm.LookupModel("xiaomi", "mimo-v2-flash")
+model, ok := llm.LookupModel("xiaomi", "mimo-v2.5")
 if !ok {
 	log.Fatal("model not found")
 }
@@ -92,8 +94,10 @@ for _, model := range llm.GetRunnableModels("deepseek") {
 ```go
 model, _ := llm.LookupModel("deepseek", "deepseek-v4-flash")
 fmt.Printf("%s: %d-token window, $%.2f/M in, $%.2f/M out\n",
-	model.Name, model.ContextWindow, model.Cost.Input, model.Cost.Output)
+model.Name, model.ContextWindow, model.Cost.Input, model.Cost.Output)
 ```
+
+目录由外部数据源生成并嵌入二进制。价格、模型状态和限制可能晚于 provider 更新。`CalculateCost` 和 `Usage.Cost` 是目录估算，不是 provider 账单。
 
 已完成请求上对应的 `Usage` 与 `UsageCost` 记录参见[读取响应](results.md)。
 
@@ -132,6 +136,32 @@ model.Compatibility = &llm.AnthropicMessagesCompatibility{
 	SupportsCacheControl: supports(false),
 }
 ```
+
+OpenAI Completions compatibility 字段：
+
+| 字段 | 类型 | 作用 |
+|---|---|---|
+| `SupportsStore` | `*bool` | 是否发送 `store=false` |
+| `SupportsDeveloperRole` | `*bool` | reasoning 模型是否可使用 developer role |
+| `SupportsReasoningEffort` | `*bool` | 是否发送标准 reasoning effort 字段 |
+| `MaxTokensField` | `string` | `max_tokens` 或 `max_completion_tokens` |
+| `SupportsStrictMode` | `*bool` | 工具定义是否发送 strict mode |
+| `RequiresReasoningContentOnAssistantMessages` | `*bool` | 回放 assistant 时是否要求 reasoning 字段 |
+| `RequiresThinkingAsText` | `*bool` | 是否把 thinking 作为普通文本回放 |
+| `ThinkingFormat` | `string` | adapter 识别的 provider reasoning 方言 |
+| `ZAIToolStream` | `*bool` | 是否添加 Z.AI `tool_stream` 字段 |
+
+Anthropic Messages compatibility 字段：
+
+| 字段 | 类型 | 作用 |
+|---|---|---|
+| `SupportsTemperature` | `*bool` | 是否允许 temperature |
+| `SupportsCacheControl` | `*bool` | 是否支持消息 cache control |
+| `SupportsCacheControlTools` | `*bool` | 是否支持工具 cache control |
+| `ForceAdaptiveThinking` | `*bool` | 是否强制使用 adaptive thinking |
+| `AllowEmptySignature` | `*bool` | 是否允许回放空 thinking signature |
+
+指针布尔值用于区分“未配置”和显式 false。`ThinkingFormat` 的可用字符串由当前 adapter 实现决定；材料没有定义可供任意 provider 使用的开放枚举。
 
 如果某个通信协议既非 OpenAI 兼容也非 Anthropic 兼容，请实现一个[自定义协议适配器](extending.md)。
 
@@ -189,3 +219,5 @@ registry.Register(llm.NewSpecProvider(llm.ProviderSpec{
 ```
 
 `NewSpecProvider` 会从传入数据（包括模型配置）创建一份独立快照。若 provider 在请求时需要额外逻辑，例如 OAuth 刷新，spec 类型暂不支持。
+
+注册表还提供 `Get`、`Providers`、`ClearOverride` 和 `ResolveRequest`。显式 client、三类注册表的区别及并发语义见 [Client 与注册表](clients-and-registries.md)。

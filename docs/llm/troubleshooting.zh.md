@@ -16,6 +16,30 @@ import (
 )
 ```
 
+若协议是 `openai-responses`、`google-generative-ai` 或
+`mistral-conversations`，导入 `llm/all` 也不会解决问题：目录中有这些协议
+的模型元数据，但本仓库没有对应内置 adapter。应选择
+`openai-completions` 或 `anthropic-messages` 模型，或自行实现 adapter。
+
+## 取消后流一直不关闭
+
+消费者不再收到业务事件，但等待流结束的 goroutine 没有退出。
+
+- **原因：** `Stream` 返回无缓冲通道。取消 context 会请求 producer 停止，
+  但 consumer 仍必须读到通道关闭。提前退出接收循环时，producer 可能阻塞
+  在发送最终事件上。
+- **修复：** 记录取消或流错误，继续排空通道，再返回。流没有 `Close` 或
+  `Abort` 方法。
+
+```go
+for event := range events {
+	if event.Type == llm.EventError {
+		streamErr = event.Err
+	}
+}
+return streamErr
+```
+
 ## 模型不在目录中（panic）
 
 当 provider/模型组合不在内置目录中时，`GetModel` 会 panic，消息为 `panic: llm: unknown model "..." for provider "..."`。

@@ -38,3 +38,6 @@ site/
 # Editor/IDE
 # .idea/
 .vscode/
+
+# Local code analysis notes
+.analysis/

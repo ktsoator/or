@@ -75,6 +75,8 @@ case llm.StopReasonError, llm.StopReasonAborted:
 
 `Usage.Cost` 是一个 `UsageCost`，以货币单位给出相同的分项（`Input`、`Output`、 `CacheRead`、`CacheWrite` 和 `Total`），在组装响应时按模型定价计算得出。
 
+这是基于目录快照的估算。provider 调价、账号折扣或 provider 侧舍入都可能使其与账单不一致。
+
 ```go
 fmt.Printf("tokens=%d (cached %d) cost=$%.6f\n",
 	response.Usage.TotalTokens,
