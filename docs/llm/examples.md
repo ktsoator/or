@@ -27,15 +27,6 @@ Live requests require the selected provider's API key. Check the [protocol and p
 | Providers | `example/llm/providers` | Provider registration and overrides | [Providers](providers.md) |
 | Who am I | `example/llm/whoami` | Provider credential status | [Provider status](providers.md#check-whether-a-provider-is-configured) |
 
-## Selecting an example
-
-- First request: `basic`.
-- Chat UI: `streaming`.
-- Structured actions: `tools`.
-- Stored and extended history: `conversation`.
-- Multiple providers: `model_switch` and `providers`.
-- Provider request debugging: `advanced`.
-
 ## Compile check
 
 This command compiles every tracked LLM example without sending a network request:

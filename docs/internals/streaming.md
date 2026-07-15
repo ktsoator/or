@@ -1,175 +1,53 @@
 # Streaming internals
 
-Streaming is normalized around content blocks. A provider may stream JSON chunks,
-SSE events, or SDK-specific unions, but the package reports the same lifecycle:
-a stream starts, each content block starts and receives deltas, each block ends,
-and exactly one terminal event closes the channel.
+This page explains how adapters implement the public streaming contract. Event names, the field matrix, and the caller consumption rules are maintained only in [LLM streaming](../llm/streaming.md).
 
-## Event lifecycle
+A provider may return SSE, JSON fragments, or an SDK union. An adapter builds an in-memory `AssistantMessage` while emitting neutral events through `StreamWriter`. The public layer sees one lifecycle; provider differences stay in each adapter's `streamState`.
 
-| Content | Start | Delta | End |
-|---|---|---|---|
-| Text | `EventTextStart` | `EventTextDelta` | `EventTextEnd` |
-| Reasoning | `EventThinkingStart` | `EventThinkingDelta` | `EventThinkingEnd` |
-| Tool call | `EventToolCallStart` | `EventToolCallDelta` | `EventToolCallEnd` |
+## StreamWriter responsibilities
 
-A stream opens with one `EventStart` and closes with exactly one terminal event —
-`EventDone` on success or `EventError` on failure.
+Adapters do not send directly to the event channel. They pass the `AssistantMessage` under construction to `NewStreamWriter`, then call `Emit`, `Done`, or `Fail`.
 
-## The Event union
-
-`Event` is a flat union: `Type` selects the kind of update, and only a subset of
-the fields is meaningful for each `Type`.
-
-```go
-type Event struct {
-	// Type selects which of the fields below are meaningful; see the table above.
-	Type EventType
-
-	// ContentIndex is the position of the affected block within the assembled
-	// message content, on the per-block start/delta/end events.
-	ContentIndex int
-
-	// Delta is newly streamed text on a *Delta event, or a fragment of argument
-	// JSON on EventToolCallDelta.
-	Delta string
-
-	// Content is the completed block text on EventTextEnd and EventThinkingEnd.
-	Content string
-
-	// ToolCall is the tool call being assembled, on the toolcall events. It holds
-	// the best-effort parsed call at EventToolCallEnd.
-	ToolCall *ToolCall
-
-	// Partial is a snapshot of the message assembled so far, on every non-terminal
-	// event.
-	Partial *AssistantMessage
-
-	// Message is the final assistant message, on the terminal EventDone and
-	// EventError events.
-	Message *AssistantMessage
-
-	// Err is the stream failure, on EventError.
-	Err error
-}
-```
-
-Which fields are populated is fixed per `Type`. Reading a field not listed for
-the current `Type` returns a zero value that means nothing:
-
-| Type | Meaningful fields (besides `Type`) |
+| Invariant | `StreamWriter` behavior |
 |---|---|
-| `EventStart` | `Partial` |
-| `EventTextStart` | `ContentIndex`, `Partial` |
-| `EventTextDelta` | `ContentIndex`, `Delta`, `Partial` |
-| `EventTextEnd` | `ContentIndex`, `Content`, `Partial` |
-| `EventThinkingStart` | `ContentIndex`, `Partial` |
-| `EventThinkingDelta` | `ContentIndex`, `Delta`, `Partial` |
-| `EventThinkingEnd` | `ContentIndex`, `Content`, `Partial` |
-| `EventToolCallStart` | `ContentIndex`, `ToolCall`, `Partial` |
-| `EventToolCallDelta` | `ContentIndex`, `Delta`, `ToolCall`, `Partial` |
-| `EventToolCallEnd` | `ContentIndex`, `ToolCall`, `Partial` |
-| `EventDone` | `Message` |
-| `EventError` | `Message`, `Err` |
+| A stream has one start event | The first `Emit`, `Done`, or `Fail` emits `EventStart` when needed |
+| Non-terminal events carry independent snapshots | `Emit` deep-clones the current message into `Event.Partial` |
+| A stream has one terminal event | A lock and `finished` flag reject later `Done`, `Fail`, and `Emit` calls |
+| Cancellation cannot be reported as success | `Done` checks `ctx.Err()` and redirects a cancelled context to failure |
+| Failure preserves partial output | `Fail` clones the current message and sets its stop reason and `ErrorMessage` |
 
-`Partial` is attached to every non-terminal event; the terminal events carry the
-final `Message` instead.
+`Partial` must be a deep clone. Otherwise, an earlier event retained by a consumer would mutate as the adapter appended content. Cloning also means every delta has an allocation cost; a caller that only needs `Delta` should not repeatedly serialize the full `Partial`.
 
-## StreamWriter
+## Terminal paths
 
-Provider adapters do not send to the channel directly. They build an
-`AssistantMessage` in memory, hand a pointer to `NewStreamWriter`, and drive it
-with `Emit`, `Done`, and `Fail`. The writer owns the channel invariants: one
-`EventStart`, a `Partial` snapshot on every non-terminal event, and exactly one
-terminal event.
+On success, the writer clones the final message into `EventDone.Message`. An ordinary runtime failure produces `EventError` with `StopReasonError`; a cancelled context produces the same event type with `StopReasonAborted` and replaces the error with the context error.
 
-`Emit` first emits `EventStart` if needed, then clones the message built so far
-into `Partial` so each event is an independent snapshot:
+After publishing the terminal event, the writer sets `finished`. A late provider error or content block cannot produce a second terminal event. The writer owns this guarantee so individual adapters do not need to reimplement it.
 
-```go
-func (w *StreamWriter) Emit(event Event) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.finished { // (1)!
-		return
-	}
-	w.startLocked()
-	event.Partial = cloneAssistantMessage(*w.output) // (2)!
-	w.events <- event
-}
-```
+The event channel is unbuffered. A writer may block while sending, so a caller that stops receiving also prevents adapter cleanup. Context cancellation can stop HTTP work, but it does not replace channel consumption.
 
-1.  Once a terminal event has been sent, every later call is a no-op — this is
-    what makes the single-terminal guarantee hold.
-2.  A deep clone, so a consumer holding an earlier `Partial` never sees it mutate
-    as the stream continues.
+## Adapter stream state
 
-`Done` normally sends `EventDone`, but a cancelled context is redirected to the
-failure path so cancellation always surfaces as an error, never a success:
+Each adapter keeps protocol-specific state and ultimately drives the same writer:
 
-```go
-func (w *StreamWriter) Done() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.finished {
-		return
-	}
-	w.startLocked()
-	if err := w.ctx.Err(); err != nil { // (1)!
-		w.failLocked(err)
-		return
-	}
-	w.finished = true
-	w.events <- Event{Type: EventDone, Message: cloneAssistantMessage(*w.output)}
-}
-```
+- The OpenAI adapter tracks tool calls by both stream index and tool-call ID because compatible providers differ in which identifier they repeat across chunks.
+- The Anthropic adapter assembles blocks by provider content index and records whether a formal stop signal arrived. A clean socket close without that signal is treated as an error.
+- An adapter closes the SDK stream when its goroutine exits; the event channel closes after the writer publishes its terminal event.
 
-1.  A stream that assembled a full message but was cancelled ends as an error, so
-    a caller cannot mistake an aborted turn for a completed one.
+This state is not exposed to callers. Public code handles results through `Event.Type`, `ContentIndex`, and the terminal message.
 
-`failLocked` sets the stop reason and error, distinguishing a cancelled context
-from an ordinary failure:
+## Tool-argument recovery
 
-```go
-func (w *StreamWriter) failLocked(err error) {
-	w.finished = true
-	if err == nil {
-		err = errors.New("stream failed")
-	}
-	output := *w.output
-	if w.ctx.Err() != nil {
-		output.StopReason = StopReasonAborted // (1)!
-		err = w.ctx.Err()
-	} else {
-		output.StopReason = StopReasonError
-	}
-	output.ErrorMessage = err.Error()
-	w.events <- Event{Type: EventError, Message: cloneAssistantMessage(output), Err: err}
-}
-```
+Tool arguments arrive as raw JSON fragments. The adapter accumulates the string and calls `ParseToolArgumentsMode` when the tool block ends. The parser can repair bad escapes or close a truncated object.
 
-1.  Cancellation is reported as `StopReasonAborted` and the error is replaced with
-    the context error; any other failure is `StopReasonError`.
+Recovery does not automatically fail the response. The final `AssistantMessage.Diagnostics` records the recovery mode, so the caller should wait for `EventDone` and then decide whether to reject `partial` or `invalid` arguments. See [LLM tools](../llm/tools.md) for execution constraints.
 
-The mutex plus the `finished` flag mean a late provider error arriving after
-`Done` cannot send a second terminal event.
+## Resources and concurrency
 
-## Provider state
+- One adapter goroutine produces a stream and caller code consumes it.
+- The `StreamWriter` lock protects event order and terminal state; it does not buffer the channel.
+- `Client` has no `Close`; the adapter closes the provider stream for each request.
+- An injected `http.Client` belongs to the application and should be reused across requests.
+- Context controls the complete request; `StreamOptions.Timeout` controls one HTTP attempt.
 
-Each adapter keeps its own `streamState` for protocol quirks. The OpenAI adapter
-tracks tool calls by both stream index and ID, because compatible providers vary
-in which one they repeat across chunks. The Anthropic adapter tracks content
-blocks by the provider's stream index and records whether a stop signal arrived,
-so a clean socket close without a stop event is treated as an error.
-
-## Tool arguments
-
-Tool-call arguments stream as raw JSON fragments. The final `EventToolCallEnd`
-parses the accumulated string with `ParseToolArgumentsMode`, which can repair bad
-escapes or close a truncated object. Recovered arguments do not fail the whole
-response; instead the final `AssistantMessage.Diagnostics` records the recovery
-mode, so a caller can wait for `EventDone` and decline to execute a call whose
-arguments were only partially recovered.
-
-Source: [`llm/stream.go`](https://github.com/ktsoator/or/blob/main/llm/stream.go),
-[`llm/events.go`](https://github.com/ktsoator/or/blob/main/llm/events.go).
+Source: [`llm/stream.go`](https://github.com/ktsoator/or/blob/main/llm/stream.go), [`llm/events.go`](https://github.com/ktsoator/or/blob/main/llm/events.go).

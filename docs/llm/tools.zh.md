@@ -86,84 +86,7 @@ for _, toolCall := range response.ToolCalls() {
 
 把工具结果放进第二次 `Complete` 发回去，模型就能据此给出最终答案。
 
-<details>
-<summary>完整程序</summary>
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"log"
-
-	"github.com/ktsoator/or/llm"
-	_ "github.com/ktsoator/or/llm/openai" // 注册 OpenAI 兼容协议
-)
-
-type WeatherArgs struct {
-	City  string `json:"city" jsonschema:"description=City name,minLength=1"`
-	Units string `json:"units,omitempty" jsonschema:"enum=celsius,enum=fahrenheit"`
-	Days  int    `json:"days" jsonschema:"minimum=1,maximum=10"`
-}
-
-func main() {
-	ctx := context.Background()
-	model := llm.GetModel("deepseek", "deepseek-v4-flash")
-	weatherTool := llm.MustTool[WeatherArgs](
-		"get_weather",
-		"Get a weather forecast",
-	)
-
-	messages := []llm.Message{
-		llm.UserText("What's the weather in Shanghai for the next 3 days?"),
-	}
-	input := llm.Context{
-		Messages: messages,
-		Tools:    []llm.ToolDefinition{weatherTool},
-	}
-
-	response, err := llm.Complete(ctx, model, input, llm.StreamOptions{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	messages = append(messages, &response)
-
-	toolUsed := false
-	for _, toolCall := range response.ToolCalls() {
-		if toolCall.Name != weatherTool.Name {
-			continue
-		}
-
-		arguments, err := llm.DecodeToolCall[WeatherArgs](weatherTool, toolCall)
-		if err != nil {
-			log.Fatal(err)
-		}
-		result := fmt.Sprintf(
-			"%s will be sunny for the next %d days (%s).",
-			arguments.City,
-			arguments.Days,
-			arguments.Units,
-		)
-		messages = append(messages, llm.ToolResult(toolCall.ID, toolCall.Name, result))
-		toolUsed = true
-	}
-	if !toolUsed {
-		log.Fatal("model returned no weather tool call")
-	}
-
-	response, err = llm.Complete(ctx, model, llm.Context{
-		Messages: messages,
-		Tools:    []llm.ToolDefinition{weatherTool},
-	}, llm.StreamOptions{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(response.Text())
-}
-```
-
-</details>
+从工具声明到多轮执行的完整程序见[工具循环场景](recipes/tool-loop.md)。本页保留类型、Schema、校验和循环契约，避免维护第二份应用程序。
 
 当类型无法生成有效 schema 时，`MustTool` 会 panic，适合在启动阶段声明的工具。若工具是动态构建的、需要处理失败而非崩溃，请改用返回 error 的 `NewTool`。
 
@@ -192,42 +115,9 @@ flowchart TD
 - `StopReasonLength` — 输出触达 token 上限，本轮被截断。
 - `StopReasonError` / `StopReasonAborted` — 请求失败或被取消。绝不要执行这类响应中的工具调用。
 
-一次请求可在 `Context.Tools` 中声明多个工具，单轮也可能包含不止一个 `ToolCall`。遍历 `ToolCalls()` 并按 `call.Name` 分派；下面的内层循环会按顺序为每个调用追加一个 `ToolResult`。
+一次请求可在 `Context.Tools` 中声明多个工具，单轮也可能包含不止一个 `ToolCall`。遍历 `ToolCalls()`，按 `call.Name` 分派，并为每个调用追加一个匹配 ID 的 `ToolResult`。包含循环上限、decode 错误回传和最终停止处理的完整程序见[工具循环场景](recipes/tool-loop.md)。
 
-```go
-for {
-	response, err := llm.Complete(ctx, model, llm.Context{
-		Messages: messages,
-		Tools:    []llm.ToolDefinition{weatherTool},
-	}, llm.StreamOptions{})
-	if err != nil {
-		log.Fatal(err) // 失败的响应仍可能携带部分内容
-	}
-
-	if response.StopReason != llm.StopReasonToolUse {
-		fmt.Println(response.Text())
-		break
-	}
-
-	// 在历史中，助手消息必须排在它的工具结果之前。
-	messages = append(messages, &response)
-	for _, toolCall := range response.ToolCalls() {
-		arguments, err := llm.DecodeToolCall[WeatherArgs](weatherTool, toolCall)
-		if err != nil {
-			// 将错误返回给模型，让它纠正这次调用。
-			result := llm.ToolResult(toolCall.ID, toolCall.Name, err.Error())
-			result.IsError = true
-			messages = append(messages, result)
-			continue
-		}
-		// runWeather 为调用方的工具实现:执行并返回结果文本。
-		messages = append(messages, llm.ToolResult(
-			toolCall.ID, toolCall.Name, runWeather(arguments)))
-	}
-}
-```
-
-工具的实际执行（示例中的 `runWeather`）是调用方的应用代码，`llm` 并不介入；它只负责把模型发起的调用交回，并把返回的 `ToolResult` 编回历史。中间"真正运行工具"这一步不含任何库特定内容，因此本页没有单独的执行章节。
+工具的实际执行是调用方的应用代码，`llm` 并不介入；它只负责把模型发起的调用交回，并把返回的 `ToolResult` 编回历史。
 
 !!! check "生产环境工具循环清单"
     - **以 `StopReason` 为准，而非是否存在工具调用。** 当它为 `StopReasonToolUse` 时继续循环；为 `StopReasonStop` 时停止。

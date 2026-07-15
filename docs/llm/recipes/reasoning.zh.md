@@ -66,26 +66,15 @@ func main() {
 
 `ModelThinkingLevel` 包含 `off`、`minimal`、`low`、`medium`、`high` 和 `xhigh`。`SupportedThinkingLevels` 根据模型声明返回等级，`ClampThinkingLevel` 选择最近的可用值；非推理模型实际上会忽略请求。
 
-Adapter 把有效等级转换为协议原生字段。除非类型化映射无法表达 endpoint 必需功能，否则不要通过 `RewriteRequest` 手写 provider reasoning JSON。
+Adapter 把有效等级转换为协议原生字段。除非类型化映射无法表达目标服务必需的功能，否则不要通过 `RewriteRequest` 手写 provider reasoning JSON。
 
 ## Anthropic 展示控制
 
-Anthropic 协议选项可隐藏可见 thinking，同时保留推理行为：
-
-```go
-options := llm.StreamOptions{
-	Reasoning: llm.ModelThinkingHigh,
-	ProtocolOptions: &llm.AnthropicStreamOptions{
-		ThinkingDisplay: llm.ThinkingDisplayOmitted,
-	},
-}
-```
-
-`ThinkingDisplayOmitted` 不会关闭推理。Thinking token 仍可能计入 output，继续同一模型对话所需签名仍保存在 assistant 消息中。
+Anthropic 协议可以隐藏可见 thinking，同时保留推理行为和继续对话所需的签名。选项定义、代码和 token 语义见[推理与思考 § Anthropic 思考显示](../reasoning.md#anthropic-思考显示)，本场景不再复制协议配置。
 
 ## 边界
 
 - Thinking 文本和签名可能含敏感信息，默认不要记录。
 - 更换模型时，provider-specific reasoning block 会被删除，而不是重放给另一个模型。
 - 某些 provider 的输出上限包含推理消耗。
-- 目录中的 reasoning metadata 可能过期，应对选定 endpoint 做验证。
+- 目录中的 reasoning metadata 可能过期，应对选定的模型服务做实际验证。

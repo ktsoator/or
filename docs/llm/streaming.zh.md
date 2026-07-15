@@ -46,58 +46,7 @@ fmt.Printf("\nstop=%s tokens=%d cost=$%.6f\n",
 
 只有当所选模型和提供方暴露推理内容时，才会发出 thinking 事件。
 
-<details>
-<summary>完整程序</summary>
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"log"
-
-	"github.com/ktsoator/or/llm"
-	_ "github.com/ktsoator/or/llm/openai" // 注册 OpenAI 兼容协议
-)
-
-func main() {
-	model := llm.GetModel("deepseek", "deepseek-v4-flash")
-	events, err := llm.Stream(
-		context.Background(),
-		model,
-		llm.Prompt("Explain Go channels briefly."),
-		llm.StreamOptions{Reasoning: llm.ModelThinkingHigh},
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	var finalMessage *llm.AssistantMessage
-	for event := range events {
-		switch event.Type {
-		case llm.EventThinkingDelta:
-			fmt.Print(event.Delta)
-		case llm.EventTextDelta:
-			fmt.Print(event.Delta)
-		case llm.EventDone:
-			finalMessage = event.Message
-		case llm.EventError:
-			log.Fatal(event.Err)
-		}
-	}
-	if finalMessage == nil {
-		log.Fatal("stream closed without a final message")
-	}
-	fmt.Printf("\nstop=%s tokens=%d cost=$%.6f\n",
-		finalMessage.StopReason,
-		finalMessage.Usage.TotalTokens,
-		finalMessage.Usage.Cost.Total,
-	)
-}
-```
-
-</details>
+包含超时、错误保存和 drain 处理的完整程序见[流式聊天场景](recipes/streaming-chat.md)。本页只定义公共事件契约。
 
 ## 事件参考
 

@@ -20,10 +20,10 @@ import (
 )
 ```
 
-If the protocol is `openai-responses`, `google-generative-ai`, or
-`mistral-conversations`, importing `llm/all` will not help: this repository has
-catalog entries for those protocols but no built-in adapter. Choose a model
-using `openai-completions` or `anthropic-messages`, or implement an adapter.
+If the protocol is marked catalog-only in the
+[support matrix](support-matrix.md#protocol-status), importing `llm/all` does
+not add an implementation. Choose a currently runnable model or implement an
+adapter.
 
 ## A stream never closes after cancellation
 

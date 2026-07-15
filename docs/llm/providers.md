@@ -1,29 +1,11 @@
 # Providers and models
 
-The package includes two protocol adapters:
-
-- `openai-completions`
-- `anthropic-messages`
-
 The catalog is broader than the adapter set. A catalog entry is queryable
 metadata, not proof that this package can execute its protocol. Check
 [`SupportsProtocol`](api-reference.md#catalog-functions) or use
 `GetRunnableModels` before presenting a model as runnable. The current boundary
-is summarized in [Protocol support](support-matrix.md).
-
-The catalog and compatibility layer explicitly configure these providers:
-
-| Provider | Provider ID | Protocol | Environment variable |
-|---|---|---|---|
-| DeepSeek | `deepseek` | `openai-completions` | `DEEPSEEK_API_KEY` |
-| MiniMax Global | `minimax` | `anthropic-messages` | `MINIMAX_API_KEY` |
-| MiniMax China | `minimax-cn` | `anthropic-messages` | `MINIMAX_CN_API_KEY` |
-| Xiaomi MiMo | `xiaomi` | `openai-completions` | `XIAOMI_API_KEY` or `MIMO_API_KEY` |
-| Z.AI Global | `zai` | `openai-completions` | `ZAI_API_KEY` |
-| Zhipu Coding Plan China | `zai-coding-cn` | `openai-completions` | `ZAI_CODING_CN_API_KEY` |
-| Moonshot AI Global | `moonshotai` | `openai-completions` | `MOONSHOT_API_KEY` |
-| Moonshot AI China | `moonshotai-cn` | `openai-completions` | `MOONSHOT_API_KEY` |
-| Kimi Coding | `kimi-coding` | `anthropic-messages` | `KIMI_API_KEY` |
+is maintained in [Protocol support](support-matrix.md), together with provider
+IDs, model counts, and credential variables.
 
 The catalog also contains metadata for additional compatible providers and
 models. Those entries can be queried and may work through one of the two
@@ -31,7 +13,7 @@ protocol adapters, but they have not all been verified against live provider
 APIs and are not a support guarantee. Automated tests exercise both adapters
 with local mock servers rather than live integration tests for every provider.
 
-Only the key for the provider selected by `llm.GetModel` is read. Request-scoped
+Only the key for the provider selected for the current request is resolved. Request-scoped
 credentials can also be supplied with `StreamOptions.APIKey` or
 `StreamOptions.Env`.
 

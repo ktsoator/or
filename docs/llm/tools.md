@@ -105,84 +105,10 @@ for _, toolCall := range response.ToolCalls() {
 Sending the tool results back in a second `Complete` lets the model turn them
 into a final answer.
 
-<details>
-<summary>Full program</summary>
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"log"
-
-	"github.com/ktsoator/or/llm"
-	_ "github.com/ktsoator/or/llm/openai" // registers the OpenAI-compatible protocol
-)
-
-type WeatherArgs struct {
-	City  string `json:"city" jsonschema:"description=City name,minLength=1"`
-	Units string `json:"units,omitempty" jsonschema:"enum=celsius,enum=fahrenheit"`
-	Days  int    `json:"days" jsonschema:"minimum=1,maximum=10"`
-}
-
-func main() {
-	ctx := context.Background()
-	model := llm.GetModel("deepseek", "deepseek-v4-flash")
-	weatherTool := llm.MustTool[WeatherArgs](
-		"get_weather",
-		"Get a weather forecast",
-	)
-
-	messages := []llm.Message{
-		llm.UserText("What's the weather in Shanghai for the next 3 days?"),
-	}
-	input := llm.Context{
-		Messages: messages,
-		Tools:    []llm.ToolDefinition{weatherTool},
-	}
-
-	response, err := llm.Complete(ctx, model, input, llm.StreamOptions{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	messages = append(messages, &response)
-
-	toolUsed := false
-	for _, toolCall := range response.ToolCalls() {
-		if toolCall.Name != weatherTool.Name {
-			continue
-		}
-
-		arguments, err := llm.DecodeToolCall[WeatherArgs](weatherTool, toolCall)
-		if err != nil {
-			log.Fatal(err)
-		}
-		result := fmt.Sprintf(
-			"%s will be sunny for the next %d days (%s).",
-			arguments.City,
-			arguments.Days,
-			arguments.Units,
-		)
-		messages = append(messages, llm.ToolResult(toolCall.ID, toolCall.Name, result))
-		toolUsed = true
-	}
-	if !toolUsed {
-		log.Fatal("model returned no weather tool call")
-	}
-
-	response, err = llm.Complete(ctx, model, llm.Context{
-		Messages: messages,
-		Tools:    []llm.ToolDefinition{weatherTool},
-	}, llm.StreamOptions{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(response.Text())
-}
-```
-
-</details>
+See the [tool-loop task guide](recipes/tool-loop.md) for the complete program
+from declaration through multi-round execution. This page retains the types,
+schema, validation, and loop contract instead of maintaining a second
+application program.
 
 `MustTool` panics when the type cannot produce a valid schema, which suits
 tools declared at startup. Use `NewTool`, which returns an error instead, when a
@@ -219,46 +145,14 @@ flowchart TD
   cancelled. Never execute tool calls from such a response.
 
 A request may declare several tools in `Context.Tools`, and one turn may contain
-more than one `ToolCall`. Iterate over `ToolCalls()` and route by `call.Name`;
-the inner loop below appends one `ToolResult` per call, in order.
+more than one `ToolCall`. Iterate over `ToolCalls()`, route by `call.Name`, and
+append one `ToolResult` with the matching ID for every call. See the
+[tool-loop task guide](recipes/tool-loop.md) for the complete program with an
+iteration limit, decode-error feedback, and final-stop handling.
 
-```go
-for {
-	response, err := llm.Complete(ctx, model, llm.Context{
-		Messages: messages,
-		Tools:    []llm.ToolDefinition{weatherTool},
-	}, llm.StreamOptions{})
-	if err != nil {
-		log.Fatal(err) // a failed response may still carry partial content
-	}
-
-	if response.StopReason != llm.StopReasonToolUse {
-		fmt.Println(response.Text())
-		break
-	}
-
-	// The assistant message must precede its tool results in the history.
-	messages = append(messages, &response)
-	for _, toolCall := range response.ToolCalls() {
-		arguments, err := llm.DecodeToolCall[WeatherArgs](weatherTool, toolCall)
-		if err != nil {
-			// Return the error to the model so it can correct the call.
-			result := llm.ToolResult(toolCall.ID, toolCall.Name, err.Error())
-			result.IsError = true
-			messages = append(messages, result)
-			continue
-		}
-		// runWeather is your own code that does the work and returns result text.
-		messages = append(messages, llm.ToolResult(
-			toolCall.ID, toolCall.Name, runWeather(arguments)))
-	}
-}
-```
-
-Running the tool itself — `runWeather` in the example — is your application code;
-`llm` does not execute it. The library only hands back the model's calls and
-folds each `ToolResult` into the history, so there is no separate execution step
-to document.
+Actual tool execution is application code; `llm` does not participate. It only
+gives the model's calls back to the caller and folds each `ToolResult` into the
+history.
 
 !!! check "Production tool-loop checklist"
     - **Gate on `StopReason`, not on the presence of tool calls.** Loop while it

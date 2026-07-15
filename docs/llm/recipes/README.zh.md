@@ -19,7 +19,7 @@
 | 目标 | 场景 | 主要接口 |
 |---|---|---|
 | 发现可运行模型和凭证 | [模型与鉴权发现](provider-discovery.md) | `GetRunnableModels`、`AuthStatus` |
-| 接入代理或私有 endpoint | [自定义网关](custom-gateway.md) | `ProviderOverride`、`Model.BaseURL` |
+| 接入代理或私有模型服务 | [自定义网关](custom-gateway.md) | `ProviderOverride`、`Model.BaseURL` |
 | 隔离配置或注入 transport | [显式 Client](custom-client.md) | `NewClient`、registries |
 | 增加请求追踪或改写 body | [可观测性 Hook](observability.md) | `OnRequest`、`RewriteRequest`、`OnResponse` |
 | 统一处理失败 | [错误处理](error-handling.md) | `StopReason`、`IsContextOverflow` |

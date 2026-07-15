@@ -52,7 +52,7 @@ func main() {
 
 | 组件 | 职责 |
 |---|---|
-| `AdapterRegistry` | 将 `Model.Protocol` 映射到线协议实现 |
+| `AdapterRegistry` | 将 `Model.Protocol` 映射到请求与响应协议实现 |
 | `ProviderRegistry` | 解析凭证、URL override 和 headers |
 | `ModelRegistry` | 可选的应用模型发现；`Client` 不依赖它 |
 | `http.Client` | 连接池、代理、TLS 和 transport 行为 |
@@ -65,6 +65,6 @@ func main() {
 - 复用 `http.Client` 和 transport。每次请求创建 transport 会丢失连接池。
 - `llm.Client` 没有 `Close` 方法。应用拥有传入的 HTTP transport；若需要，在应用退出时调用 `CloseIdleConnections`。
 - Provider URL 或 header 不同的租户可以各用一个 client；只有 request API key 不同时无需拆 client。
-- 需要限制二进制依赖或 endpoint 策略时，只注册允许的协议。
+- 需要限制二进制依赖或模型服务访问策略时，只注册允许的协议。
 
-自定义 provider 可在隔离 registry 上注册 `NewSpecProvider`。新线协议见[自定义协议](../extending.md)。
+自定义 provider 可在隔离 registry 上注册 `NewSpecProvider`。接入框架尚未支持的请求与响应协议，参见[自定义协议](../extending.md)。

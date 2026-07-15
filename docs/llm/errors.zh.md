@@ -18,7 +18,7 @@ if err != nil {
 
 `Stream` 与 `Complete` 会在派发给适配器之前校验请求并解析凭证。遇到以下情况时，它们不与提供方通信即返回错误：
 
-- **API key 为空。** 在检查 `StreamOptions.APIKey` 和该提供方的环境变量之后，适配器会返回一个带提供方信息的错误，明确列出检查过哪些变量。见下文。
+- **API key 为空。** 请求级配置、provider override 和环境变量都不能解析出凭证时，会返回带 provider 信息的错误。见下文。
 - **模型协议没有注册适配器。** 通常是漏了空导入（`_ "github.com/ktsoator/or/llm/openai"` 或 `.../llm/anthropic`，或 `llm/all`）。错误为 `no adapter registered for protocol "..."`。
 - **选项校验不通过。** `StreamOptions.Validate` 最先运行——最常见的是拒绝与目标协议不匹配的 `ProtocolOptions`（例如把 `AnthropicStreamOptions` 传给 OpenAI 兼容模型）。
 
@@ -30,19 +30,7 @@ if err != nil {
 API key is empty for provider "anthropic" (set ANTHROPIC_OAUTH_TOKEN or ANTHROPIC_API_KEY or pass StreamOptions.APIKey)
 ```
 
-key 按以下顺序解析，取第一个非空值：
-
-1. `StreamOptions.APIKey`（若已设置）。
-2. `StreamOptions.Env`——一个请求级的 `ProviderEnv` 映射，优先于进程环境检查。适合多租户服务：每个用户的 key 保存在内存中，而非 `os.Environ`。
-3. 进程中该提供方的环境变量。
-
-```go
-// 显式指定 key,不查环境变量。
-opts := llm.StreamOptions{APIKey: userKey}
-
-// 请求级环境,仅对本次调用覆盖进程环境。
-opts := llm.StreamOptions{Env: llm.ProviderEnv{"ANTHROPIC_API_KEY": userKey}}
-```
+凭证可能来自 `StreamOptions`、provider override 或进程环境。完整优先级只在[请求配置 § 按请求提供凭证](configuration.md#按请求提供凭证)维护。
 
 若想自己检查 key 的解析（例如在启动时尽早失败，或给出配置提示）可使用 key 辅助函数：
 
@@ -53,7 +41,7 @@ if len(llm.FindEnvAPIKeys(model.Provider)) == 0 {
 }
 ```
 
-`APIKeyEnvVars` 返回某提供方检查的变量，`FindEnvAPIKeys` 返回实际已设置的变量，`MissingAPIKeyError` 则构造出与库内部一致的错误消息。
+`APIKeyEnvVars` 返回某提供方检查的变量，`FindEnvAPIKeys` 返回实际已设置的变量，`MissingAPIKeyError` 则构造出与库内部一致的错误消息。`AuthStatus` 还可以报告 override 或环境来源，但不会验证凭证是否仍有效。
 
 ## 失败与取消的响应
 

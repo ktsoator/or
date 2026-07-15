@@ -52,6 +52,6 @@ func main() {
 | `SupportsProtocol(protocol)` | 是否导入了该协议 adapter？ |
 | `AuthStatus(provider, env)` | Provider 能否解析凭证，凭证来自哪里？ |
 
-`AuthStatus` 报告 `env:DEEPSEEK_API_KEY` 或 `override` 等来源，但不会发送请求。配置了凭证不代表凭证未过期、具有模型权限或一定会被 endpoint 接受。
+`AuthStatus` 报告 `env:DEEPSEEK_API_KEY` 或 `override` 等来源，但不会发送请求。配置了凭证不代表凭证未过期、具有模型权限或一定会被模型服务接受。
 
 诊断中不要暴露 `GetEnvAPIKey` 返回的 secret。应展示 `APIKeyEnvVars` 给出的变量名和 `AuthStatus` 的缺失项。

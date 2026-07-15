@@ -52,58 +52,9 @@ fmt.Printf("\nstop=%s tokens=%d cost=$%.6f\n",
 Thinking events are emitted only when the selected model and provider expose
 reasoning content.
 
-<details>
-<summary>Full program</summary>
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"log"
-
-	"github.com/ktsoator/or/llm"
-	_ "github.com/ktsoator/or/llm/openai" // registers the OpenAI-compatible protocol
-)
-
-func main() {
-	model := llm.GetModel("deepseek", "deepseek-v4-flash")
-	events, err := llm.Stream(
-		context.Background(),
-		model,
-		llm.Prompt("Explain Go channels briefly."),
-		llm.StreamOptions{Reasoning: llm.ModelThinkingHigh},
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	var finalMessage *llm.AssistantMessage
-	for event := range events {
-		switch event.Type {
-		case llm.EventThinkingDelta:
-			fmt.Print(event.Delta)
-		case llm.EventTextDelta:
-			fmt.Print(event.Delta)
-		case llm.EventDone:
-			finalMessage = event.Message
-		case llm.EventError:
-			log.Fatal(event.Err)
-		}
-	}
-	if finalMessage == nil {
-		log.Fatal("stream closed without a final message")
-	}
-	fmt.Printf("\nstop=%s tokens=%d cost=$%.6f\n",
-		finalMessage.StopReason,
-		finalMessage.Usage.TotalTokens,
-		finalMessage.Usage.Cost.Total,
-	)
-}
-```
-
-</details>
+See the [streaming-chat task guide](recipes/streaming-chat.md) for the complete
+program with timeout, error preservation, and channel draining. This page owns
+the public event contract.
 
 ## Event reference
 

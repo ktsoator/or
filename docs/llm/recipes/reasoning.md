@@ -70,18 +70,11 @@ The adapter translates the effective level into protocol-native fields. Do not p
 
 ## Anthropic display control
 
-Anthropic protocol options can request omitted visible thinking while preserving reasoning behavior:
-
-```go
-options := llm.StreamOptions{
-	Reasoning: llm.ModelThinkingHigh,
-	ProtocolOptions: &llm.AnthropicStreamOptions{
-		ThinkingDisplay: llm.ThinkingDisplayOmitted,
-	},
-}
-```
-
-`ThinkingDisplayOmitted` does not turn reasoning off. Thinking tokens can still be counted as output, and signatures needed to continue the same model conversation remain part of the assistant message.
+The Anthropic protocol can omit visible thinking while retaining reasoning and
+the signatures required to continue the conversation. See
+[Reasoning § Anthropic thinking display](../reasoning.md#anthropic-thinking-display)
+for the option, code, and token semantics; this task guide does not duplicate
+protocol configuration.
 
 ## Boundaries
 

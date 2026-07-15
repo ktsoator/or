@@ -32,45 +32,7 @@ This page maps development tasks to the public API. See the [API reference](api-
 | Add a wire protocol | `ProtocolAdapter`, `StreamWriter` | Translate requests and emit normalized stream events | [Custom protocols](extending.md) |
 | Test without a real API | Construct `AssistantMessage`, use `httptest.Server` | Test result handling or the complete protocol path | [Mock-provider testing](recipes/mock-testing.md) |
 
-## Minimal path
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"log"
-
-	"github.com/ktsoator/or/llm"
-	_ "github.com/ktsoator/or/llm/openai"
-)
-
-func main() {
-	model, ok := llm.LookupModel("deepseek", "deepseek-v4-flash")
-	if !ok || !llm.SupportsProtocol(model.Protocol) {
-		log.Fatal("model is not runnable")
-	}
-
-	response, err := llm.Complete(
-		context.Background(),
-		model,
-		llm.Prompt("Explain Go channels in one sentence."),
-		llm.StreamOptions{},
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println(response.Text())
-}
-```
-
-Set `DEEPSEEK_API_KEY`, then run:
-
-```sh
-go run .
-```
+The first complete runnable program is maintained only in [Getting started](getting-started.md). The scenario links in the table add request flow, result handling, and production constraints.
 
 ## Boundaries
 
@@ -82,9 +44,9 @@ go run .
 - agent planning, task scheduling, or a run state machine;
 - RAG, a vector database, or document indexing;
 - provider fallback, load balancing, or model racing;
-- OpenAI Responses, Google Generative AI, or Mistral Conversations adapters.
+- adapters for protocols marked catalog-only in the support matrix.
 
-Applications may build these features above `llm`. The current project material does not define built-in implementations.
+Applications may build these features above `llm`. The current project material does not define built-in implementations. See the [support matrix](support-matrix.md) for protocol status instead of hard-coding this limitation list in application code.
 
 ## Choosing an entry point
 

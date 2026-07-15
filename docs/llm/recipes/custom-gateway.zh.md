@@ -2,7 +2,9 @@
 
 ## 选择接入方式
 
-现有 provider 的全部请求都要使用同一个网关时，使用 provider override。只接入一个兼容 endpoint，或 provider 不在目录中时，直接构造 `Model`。两种方式都不会增加新线协议。
+这里的“模型服务地址”（endpoint）指模型服务暴露的 HTTP API 地址，例如 `https://gateway.example.com/v1`。
+
+现有 provider 的全部请求都要使用同一个网关时，使用 provider override。只接入一个兼容服务地址，或 provider 不在目录中时，直接构造 `Model`。两种方式都复用现有协议 adapter。
 
 ## 完整 Provider Override 程序
 
@@ -69,7 +71,7 @@ response, err := llm.Complete(ctx, model, llm.Prompt("hello"),
 	llm.StreamOptions{APIKey: "local-key"})
 ```
 
-Endpoint 必须实现所选协议的流式和错误行为，只返回相似 JSON 并不足够。已知方言差异用 `Model.Compatibility` 配置；只有真正不同的线协议才实现 `ProtocolAdapter`。
+模型服务必须完整实现所选协议的请求、流式响应和错误行为，只返回相似 JSON 并不足够。已知字段差异用 `Model.Compatibility` 配置；只有请求与响应格式不属于框架现有协议时，才实现 `ProtocolAdapter`。
 
 ## 运维约束
 
