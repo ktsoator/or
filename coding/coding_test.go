@@ -76,8 +76,8 @@ func TestSessionRunsToolAndPersists(t *testing.T) {
 	}
 
 	var readExecuted bool
-	session.Subscribe(func(ev agent.AgentEvent) {
-		if ev.Type == agent.ToolEnd && ev.ToolName == "read" {
+	session.Subscribe(func(ev Event) {
+		if ev.Type == ToolFinished && ev.ToolName == "read" {
 			readExecuted = true
 		}
 	})

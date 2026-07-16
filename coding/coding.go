@@ -212,10 +212,14 @@ func (s *Session) FollowUp(text string, images ...llm.ImageContent) {
 // Abort cancels an in-progress run.
 func (s *Session) Abort() { s.agent.Abort() }
 
-// Subscribe registers a listener for run events and returns a function that
-// removes it.
-func (s *Session) Subscribe(listener func(agent.AgentEvent)) (unsubscribe func()) {
-	return s.agent.Subscribe(listener)
+// Subscribe registers a listener for UI-neutral coding events and returns a
+// function that removes it.
+func (s *Session) Subscribe(listener func(Event)) (unsubscribe func()) {
+	return s.agent.Subscribe(func(ev agent.AgentEvent) {
+		if projected, ok := projectAgentEvent(ev); ok {
+			listener(projected)
+		}
+	})
 }
 
 // Snapshot returns a read-only snapshot of the underlying agent state.

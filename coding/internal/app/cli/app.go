@@ -1,6 +1,5 @@
-// Package mode holds the coding CLI's run modes. Print mode is a simple
-// read-eval-print loop: read a line, run a turn, render the events, repeat.
-package mode
+// Package cli is the terminal product adapter for a coding session.
+package cli
 
 import (
 	"bufio"
@@ -12,43 +11,27 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/ktsoator/or/coding"
+	"github.com/ktsoator/or/coding/internal/app/bootstrap"
 	"github.com/ktsoator/or/coding/internal/app/config"
-	"github.com/ktsoator/or/coding/internal/app/render"
 	"github.com/ktsoator/or/coding/policy"
-	"github.com/ktsoator/or/coding/store"
 )
 
-// RunPrint starts an interactive print-mode session using cfg. It reads prompts
-// from stdin until EOF or an "exit"/"quit" line, and returns when the loop ends.
-func RunPrint(ctx context.Context, cfg config.Config) error {
-	model, err := cfg.ResolveModel()
-	if err != nil {
-		return err
-	}
-
-	// One reader serves both the prompt loop and the permission confirmations,
-	// so buffered input is never split between two readers on os.Stdin.
+// Run starts an interactive terminal session. It reads prompts from stdin until
+// EOF or an "exit"/"quit" line, and returns when the loop ends.
+func Run(ctx context.Context, cfg config.Config) error {
 	reader := bufio.NewReader(os.Stdin)
 
-	session, err := coding.New(ctx, coding.Options{
-		Model:         model,
-		ThinkingLevel: cfg.Thinking(),
-		Cwd:           cfg.Cwd,
-		Store:         store.NewJSONL(cfg.SessionFile),
-		Policy:        policy.Gate{Confirm: confirmer(reader, os.Stdout)},
+	session, err := bootstrap.NewSession(ctx, cfg, bootstrap.Dependencies{
+		Confirm: confirmer(reader, os.Stdout),
 	})
 	if err != nil {
 		return err
 	}
 
-	printer := render.New(os.Stdout)
+	printer := NewRenderer(os.Stdout)
 	unsubscribe := session.Subscribe(printer.Handle)
 	defer unsubscribe()
 
-	// Ctrl-C aborts the current run and returns to the prompt, rather than
-	// killing the process. Each SIGINT flags the interrupt and asks the session
-	// to abort; an idle Ctrl-C is a harmless no-op. Quit with 'exit' or Ctrl-D.
 	var interrupted atomic.Bool
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
@@ -60,6 +43,7 @@ func RunPrint(ctx context.Context, cfg config.Config) error {
 		}
 	}()
 
+	model := session.Snapshot().Model
 	fmt.Printf("coding agent — %s/%s in %s\n", model.Provider, model.ID, session.Cwd())
 	fmt.Println("type a request; Ctrl-C interrupts a run, 'exit' or Ctrl-D quits.")
 
@@ -81,13 +65,11 @@ func RunPrint(ctx context.Context, cfg config.Config) error {
 			}
 		}
 		if err != nil {
-			return nil // EOF
+			return nil
 		}
 	}
 }
 
-// confirmer returns a permission Confirm that prompts on out and reads a y/N
-// answer from reader.
 func confirmer(reader *bufio.Reader, out io.Writer) policy.Confirm {
 	return func(req policy.Request) bool {
 		fmt.Fprintf(out, "\n\033[33mallow %s?\033[0m [y/N] ", describe(req))
@@ -96,8 +78,6 @@ func confirmer(reader *bufio.Reader, out io.Writer) policy.Confirm {
 	}
 }
 
-// describe renders a short human-readable summary of a tool call for the
-// confirmation prompt.
 func describe(req policy.Request) string {
 	switch req.Tool {
 	case "bash":
@@ -112,7 +92,6 @@ func describe(req policy.Request) string {
 	return req.Tool
 }
 
-// firstLine returns the first line of s, for compact command display.
 func firstLine(s string) string {
 	if before, _, ok := strings.Cut(s, "\n"); ok {
 		return before + " …"

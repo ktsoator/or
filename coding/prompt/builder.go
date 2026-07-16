@@ -45,6 +45,10 @@ const DefaultInstructions = "You are a coding agent operating in a user's worksp
 	"Use the available tools to inspect and modify files and run commands. " +
 	"Make focused changes, verify your work, and report what you did concisely."
 
+const responseStyle = "## Response style\n" +
+	"- Never use emojis, pictographs, decorative Unicode symbols, or emoji-style numbered bullets.\n" +
+	"- Use ordinary text and Markdown for structure."
+
 // Build assembles the system prompt from opts. Sections with no content are
 // omitted, so a minimal configuration yields a short prompt.
 func Build(opts Options) string {
@@ -55,6 +59,8 @@ func Build(opts Options) string {
 		instructions = DefaultInstructions
 	}
 	b.WriteString(instructions)
+	b.WriteString("\n\n")
+	b.WriteString(responseStyle)
 
 	if snippets := toolSnippets(opts.Tools); len(snippets) > 0 {
 		b.WriteString("\n\n## Available tools\n")

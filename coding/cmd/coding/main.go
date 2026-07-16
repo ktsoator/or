@@ -1,36 +1,37 @@
-// Command coding is a minimal coding agent: an interactive print-mode loop that
-// reads requests, runs tool-using turns against a model, and persists the
-// session. It is the product shell over the embeddable coding core.
+// Command coding is a minimal coding agent. By default it runs an interactive
+// print-mode loop in the terminal; with -web it serves a single-session browser
+// front-end instead. Both are shells over the same embeddable coding core.
 package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"os"
 
+	"github.com/ktsoator/or/coding/internal/app/cli"
 	"github.com/ktsoator/or/coding/internal/app/config"
-	"github.com/ktsoator/or/coding/internal/app/mode"
+	"github.com/ktsoator/or/coding/internal/app/web"
 
 	_ "github.com/ktsoator/or/llm/all" // register the built-in protocol adapters
 )
 
 func main() {
-	cfg := config.Defaults()
-
-	flag.StringVar(&cfg.Provider, "provider", cfg.Provider, "model provider (e.g. anthropic, openai)")
-	flag.StringVar(&cfg.Model, "model", cfg.Model, "model id")
-	flag.StringVar(&cfg.Cwd, "cwd", cfg.Cwd, "workspace root directory")
-	flag.StringVar(&cfg.SessionFile, "session", cfg.SessionFile, "session transcript file (default .coding/session.jsonl under cwd)")
-	flag.StringVar(&cfg.ThinkingLevel, "thinking", cfg.ThinkingLevel, "reasoning level: off, minimal, low, medium, high")
-	flag.Parse()
-
-	if err := cfg.Resolve(); err != nil {
+	cfg, err := config.Parse(os.Args[1:])
+	if config.IsHelp(err) {
+		return
+	}
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "coding: %v\n", err)
 		os.Exit(1)
 	}
 
-	if err := mode.RunPrint(context.Background(), cfg); err != nil {
+	ctx := context.Background()
+	if cfg.Mode == config.ModeWeb {
+		err = web.Run(ctx, cfg)
+	} else {
+		err = cli.Run(ctx, cfg)
+	}
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "coding: %v\n", err)
 		os.Exit(1)
 	}

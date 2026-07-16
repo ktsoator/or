@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>coding agent</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@15.0.12/lib/marked.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
+<style>
+  :root {
+    --activity-bg: #fbfbfa;
+    --activity-raised: #ffffff;
+    --activity-border: #e6e5e1;
+    --activity-muted: #71716a;
+    --activity-faint: #f1f1ee;
+    --activity-ink: #242420;
+    --accent: #635bff;
+    --success: #16865b;
+    --danger: #d14343;
+    --warning: #b86408;
+  }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: rgba(120,120,120,.35); border-radius: 8px; }
+  .fade-in { animation: fade .18s ease-out; }
+  @keyframes fade { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; } }
+
+  .activity-card {
+    color: var(--activity-ink);
+  }
+  .activity-icon {
+    display: grid;
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    place-items: center;
+    color: var(--activity-muted);
+  }
+  .activity-icon svg { width: 14px; height: 14px; }
+
+  /* Reasoning is deliberately quieter than the final answer, but remains
+     inspectable and clearly signals when it is still streaming. */
+  .thinking-card {
+    color: var(--activity-muted);
+  }
+  .thinking-card summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: fit-content;
+    padding: 2px 0 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 650;
+    list-style: none;
+    user-select: none;
+  }
+  .thinking-card summary::-webkit-details-marker { display: none; }
+  .thinking-card summary::after {
+    content: '';
+    width: 5px;
+    height: 5px;
+    margin-left: 1px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(45deg) translateY(-1px);
+    transition: transform .15s ease;
+  }
+  .thinking-card:not([open]) summary::after { transform: rotate(-45deg); }
+  .thinking-pulse {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 0 rgba(99,91,255,.3);
+    animation: thinking-pulse 1.5s infinite;
+  }
+  .thinking-card.is-complete .thinking-pulse {
+    background: #aaa9a2;
+    box-shadow: none;
+    animation: none;
+  }
+  @keyframes thinking-pulse {
+    55% { box-shadow: 0 0 0 5px rgba(99,91,255,0); }
+    100% { box-shadow: 0 0 0 0 rgba(99,91,255,0); }
+  }
+  .thinking-content {
+    max-height: 190px;
+    margin: 0;
+    padding: 2px 12px 5px 14px;
+    overflow: auto;
+    font-size: 12.5px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+  }
+
+  .tool-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 32px;
+    padding: 0;
+  }
+  .tool-title { min-width: 0; flex: 1; }
+  .tool-name {
+    display: block;
+    overflow: hidden;
+    color: var(--activity-ink);
+    font: 600 12.5px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tool-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+    color: var(--activity-muted);
+    font-size: 10.5px;
+    font-weight: 650;
+  }
+  .tool-status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .tool-status.is-running .tool-status-dot { animation: status-blink 1.2s ease-in-out infinite; }
+  .tool-status.is-complete { color: var(--success); }
+  .tool-status.is-complete .tool-status-dot { background: var(--success); }
+  .tool-status.is-error { color: var(--danger); }
+  .tool-status.is-error .tool-status-dot { background: var(--danger); }
+  @keyframes status-blink { 50% { opacity: .25; } }
+  .tool-section {
+    margin-left: 32px;
+  }
+  .tool-section summary {
+    width: fit-content;
+    padding: 4px 0;
+    color: var(--activity-muted);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 550;
+    list-style-position: inside;
+  }
+  .tool-code {
+    max-height: 230px;
+    margin: 0;
+    padding: 2px 0 4px;
+    overflow: auto;
+    color: #55554f;
+    font: 11.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .tool-result-label {
+    padding: 4px 0 0;
+    color: var(--activity-muted);
+    font-size: 10.5px;
+    font-weight: 550;
+  }
+
+  .approval-card {
+    padding: 13px 14px;
+    border-radius: 12px;
+    background: var(--activity-faint);
+  }
+  .approval-head { display: flex; align-items: center; gap: 7px; }
+  .approval-icon { color: var(--warning); }
+  .approval-title { font-size: 12.5px; font-weight: 650; }
+  .approval-summary {
+    margin: 9px 0 12px 31px;
+    padding: 0;
+    color: #4d4d47;
+    font: 11.5px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .approval-actions { display: flex; align-items: center; gap: 10px; margin-left: 31px; }
+  .approval-button {
+    border: 0;
+    border-radius: 8px;
+    padding: 6px 11px;
+    font-size: 11.5px;
+    font-weight: 650;
+    transition: opacity .12s ease, background .12s ease;
+  }
+  .approval-button:disabled { cursor: wait; opacity: .45; }
+  .approval-allow { border-color: #242420; background: #242420; color: white; }
+  .approval-allow:hover { opacity: .82; }
+  .approval-deny { background: transparent; color: var(--activity-muted); }
+  .approval-deny:hover { color: var(--activity-ink); }
+  .approval-resolution {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--activity-muted);
+    font-size: 12px;
+    font-weight: 650;
+  }
+  .approval-resolution::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .approval-card.is-allowed .approval-resolution { color: var(--success); }
+  .approval-card.is-denied .approval-resolution { color: var(--danger); }
+
+  .error-card { color: var(--danger); font-size: 12.5px; }
+
+  /* Rendered markdown in assistant messages */
+  .md > *:first-child { margin-top: 0; }
+  .md > *:last-child { margin-bottom: 0; }
+  .md p { margin: .6em 0; }
+  .md h1, .md h2, .md h3, .md h4 { font-weight: 600; line-height: 1.3; margin: 1em 0 .4em; }
+  .md h1 { font-size: 1.4em; } .md h2 { font-size: 1.25em; } .md h3 { font-size: 1.1em; }
+  .md ul { list-style: disc; padding-left: 1.5em; margin: .6em 0; }
+  .md ol { list-style: decimal; padding-left: 1.5em; margin: .6em 0; }
+  .md li { margin: .2em 0; }
+  .md a { color: #2563eb; text-decoration: underline; }
+  .md blockquote { border-left: 3px solid rgba(120,120,120,.4); padding-left: .8em; color: #888; margin: .6em 0; }
+  .md code { font-family: ui-monospace, Menlo, monospace; font-size: .88em; background: rgba(120,120,120,.15); padding: .1em .35em; border-radius: 4px; }
+  .md pre { background: #f6f6f6; border: 1px solid rgba(120,120,120,.15); border-radius: 8px; padding: .8em 1em; overflow: auto; margin: .6em 0; }
+  .md pre code { background: none; padding: 0; font-size: .85em; }
+  .md table { border-collapse: collapse; margin: .6em 0; }
+  .md th, .md td { border: 1px solid rgba(120,120,120,.3); padding: .3em .6em; }
+  .md hr { border: none; border-top: 1px solid rgba(120,120,120,.2); margin: 1em 0; }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --activity-bg: #20201f;
+      --activity-raised: #292928;
+      --activity-border: #3b3b38;
+      --activity-muted: #a4a49d;
+      --activity-faint: #343432;
+      --activity-ink: #f0f0eb;
+      --success: #67c99b;
+      --danger: #f08080;
+      --warning: #f1ac58;
+    }
+    .tool-code, .approval-summary { color: #c7c7c0; }
+    .approval-allow { border-color: #efefe9; background: #efefe9; color: #242420; }
+    .approval-allow:hover { background: white; }
+    .md pre { background: #1a1a1a; border-color: rgba(255,255,255,.08); }
+    .md a { color: #60a5fa; }
+  }
+</style>
+</head>
+<body class="h-screen flex flex-col bg-white text-gray-900 dark:bg-[#212121] dark:text-gray-100 antialiased">
+
+  <header class="shrink-0 h-12 flex items-center gap-2 px-4 border-b border-gray-100 dark:border-white/10">
+    <span class="font-semibold">coding agent</span>
+    <span id="status" class="text-xs text-gray-400 flex items-center gap-1">
+      <span id="dot" class="inline-block w-1.5 h-1.5 rounded-full bg-gray-300"></span>connecting…
+    </span>
+  </header>
+
+  <main id="log" class="flex-1 overflow-y-auto">
+    <div id="thread" class="mx-auto max-w-3xl px-4 py-6 space-y-5"></div>
+  </main>
+
+  <footer class="shrink-0 pb-4">
+    <div class="mx-auto max-w-3xl px-4">
+      <div class="flex items-end gap-2 rounded-3xl border border-gray-300 dark:border-white/15 bg-white dark:bg-[#2f2f2f] px-3 py-2 shadow-sm focus-within:border-gray-400 dark:focus-within:border-white/30">
+        <textarea id="input" rows="1"
+          class="flex-1 resize-none bg-transparent outline-none placeholder-gray-400 max-h-40 py-1.5"
+          placeholder="Message coding agent…"></textarea>
+        <button id="send" title="Send"
+          class="shrink-0 w-8 h-8 rounded-full bg-black text-white dark:bg-white dark:text-black grid place-items-center disabled:opacity-30 transition">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button id="stop" title="Stop" style="display:none"
+          class="shrink-0 w-8 h-8 rounded-full bg-black text-white dark:bg-white dark:text-black grid place-items-center transition">
+          <span class="w-2.5 h-2.5 bg-white dark:bg-black rounded-[2px]"></span>
+        </button>
+      </div>
+      <p class="text-center text-[11px] text-gray-400 mt-2">read is automatic · write, edit, and bash ask first</p>
+    </div>
+  </footer>
+
+<script>
+const thread = document.getElementById('thread');
+const log = document.getElementById('log');
+const input = document.getElementById('input');
+const sendBtn = document.getElementById('send');
+const stopBtn = document.getElementById('stop');
+const statusText = document.getElementById('status');
+const dot = document.getElementById('dot');
+
+let bubble = null, thinkingEl = null, thinkingDetails = null, running = false;
+let bubbleMarkdown = '', renderTimer = null;
+let toolSequence = 0;
+const toolCards = new Map();
+const pendingToolKeys = [];
+
+const scroll = () => { log.scrollTop = log.scrollHeight; };
+
+function el(html) {
+  const t = document.createElement('template');
+  t.innerHTML = html.trim();
+  const node = t.content.firstChild;
+  thread.appendChild(node);
+  scroll();
+  return node;
+}
+
+function setStatus(text, color) {
+  statusText.lastChild.textContent = text;
+  dot.className = 'inline-block w-1.5 h-1.5 rounded-full ' + color;
+}
+
+function setRunning(on) {
+  running = on;
+  input.disabled = on;
+  sendBtn.style.display = on ? 'none' : '';   // '' falls back to the grid class
+  stopBtn.style.display = on ? 'grid' : 'none';
+  if (!on) {
+    flushAssistant();
+    completeThinking(true);
+    input.focus();
+  }
+}
+
+function assistantBubble() {
+  if (!bubble) bubble = el('<div class="md fade-in leading-7 whitespace-pre-wrap"></div>');
+  return bubble;
+}
+
+// Model output is untrusted input, so every Markdown render is sanitized before
+// it reaches the DOM. Keep the source separately because innerHTML is replaced
+// after each incremental render.
+function renderMarkdown(node, source) {
+  if (!window.marked || !window.DOMPurify) {
+    node.classList.add('whitespace-pre-wrap');
+    node.textContent = source;
+    return;
+  }
+  node.classList.remove('whitespace-pre-wrap');
+  node.innerHTML = DOMPurify.sanitize(marked.parse(source));
+}
+
+// Rendering at most once per short interval keeps streaming responsive without
+// rebuilding the message DOM for every token.
+function scheduleMarkdownRender() {
+  if (renderTimer !== null) return;
+  renderTimer = setTimeout(() => {
+    renderTimer = null;
+    if (!bubble) return;
+    renderMarkdown(bubble, bubbleMarkdown);
+    scroll();
+  }, 60);
+}
+
+function resetAssistantState() {
+  if (renderTimer !== null) clearTimeout(renderTimer);
+  renderTimer = null;
+  bubble = null;
+  bubbleMarkdown = '';
+}
+
+function flushAssistant(finalText) {
+  if (finalText && !bubble) assistantBubble();
+  if (bubble) {
+    if (finalText) bubbleMarkdown = finalText;
+    if (renderTimer !== null) clearTimeout(renderTimer);
+    renderTimer = null;
+    renderMarkdown(bubble, bubbleMarkdown);
+    scroll();
+  }
+  resetAssistantState();
+}
+
+function thinkingBlock() {
+  if (thinkingEl) return thinkingEl;
+  thinkingDetails = el(
+    '<details open class="thinking-card fade-in">' +
+      '<summary><span class="thinking-pulse"></span><span class="thinking-label">Reasoning</span></summary>' +
+      '<div class="thinking-content"></div>' +
+    '</details>'
+  );
+  thinkingEl = thinkingDetails.querySelector('.thinking-content');
+  return thinkingEl;
+}
+
+function completeThinking(collapse) {
+  if (!thinkingDetails) return;
+  thinkingDetails.classList.add('is-complete');
+  thinkingDetails.querySelector('.thinking-label').textContent = 'Reasoned';
+  if (collapse) thinkingDetails.open = false;
+  thinkingEl = null;
+  thinkingDetails = null;
+}
+
+function prettyArgs(args) {
+  if (args === undefined || args === null) return '';
+  if (typeof args === 'string') return args;
+  try { return JSON.stringify(args, null, 2); }
+  catch (_) { return String(args); }
+}
+
+function startTool(ev) {
+  const key = ev.id || 'tool-' + (++toolSequence);
+  const args = prettyArgs(ev.args);
+  const card = el(
+    '<div class="activity-card tool-card fade-in">' +
+      '<div class="tool-head">' +
+        '<span class="activity-icon" aria-hidden="true">' +
+          '<svg viewBox="0 0 24 24" fill="none"><path d="m8 9 3 3-3 3M13 15h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.6"/></svg>' +
+        '</span>' +
+        '<div class="tool-title"><span class="tool-name">' + esc(ev.tool || 'tool') + '</span></div>' +
+        '<span class="tool-status is-running"><span class="tool-status-dot"></span><span class="tool-status-text">Running</span></span>' +
+      '</div>' +
+      (args ? '<details class="tool-section"><summary>Arguments</summary><pre class="tool-code">' + esc(args) + '</pre></details>' : '') +
+      '<div class="tool-section tool-result" hidden><div class="tool-result-label">Output</div><pre class="tool-code tool-result-code"></pre></div>' +
+    '</div>'
+  );
+  toolCards.set(key, { card, tool: ev.tool || '', done: false });
+  pendingToolKeys.push(key);
+}
+
+function finishTool(ev) {
+  let key = ev.id;
+  if (!key || !toolCards.has(key)) {
+    key = pendingToolKeys.find(k => {
+      const entry = toolCards.get(k);
+      return entry && !entry.done && (!ev.tool || entry.tool === ev.tool);
+    });
+  }
+  const entry = key && toolCards.get(key);
+  if (!entry) {
+    startTool({ id: ev.id, tool: ev.tool });
+    return finishTool(ev);
+  }
+
+  entry.done = true;
+  const status = entry.card.querySelector('.tool-status');
+  status.classList.remove('is-running');
+  status.classList.add(ev.isError ? 'is-error' : 'is-complete');
+  status.querySelector('.tool-status-text').textContent = ev.isError ? 'Failed' : 'Complete';
+
+  if (ev.result || ev.isError) {
+    const result = entry.card.querySelector('.tool-result');
+    result.hidden = false;
+    result.querySelector('.tool-result-label').textContent = ev.isError ? 'Error output' : 'Output';
+    result.querySelector('.tool-result-code').textContent = ev.result || 'Tool failed without an error message.';
+  }
+  const pendingIndex = pendingToolKeys.indexOf(key);
+  if (pendingIndex >= 0) pendingToolKeys.splice(pendingIndex, 1);
+  scroll();
+}
+
+const es = new EventSource('/events');
+es.onopen = () => setStatus('ready', 'bg-emerald-500');
+es.onerror = () => setStatus('disconnected', 'bg-red-400');
+es.onmessage = (e) => handle(JSON.parse(e.data));
+
+function handle(ev) {
+  switch (ev.type) {
+    case 'delta':
+      if (ev.kind === 'thinking') {
+        thinkingBlock().textContent += ev.delta;
+      } else {
+        completeThinking(true);
+        assistantBubble();
+        bubbleMarkdown += ev.delta;
+        scheduleMarkdownRender();
+      }
+      scroll();
+      break;
+    case 'tool_start':
+      flushAssistant();
+      completeThinking(true);
+      startTool(ev);
+      break;
+    case 'tool_end':
+      finishTool(ev);
+      break;
+    case 'message_end':
+      // Some providers only send a final message, without any text deltas.
+      flushAssistant(ev.text);
+      completeThinking(true);
+      break;
+    case 'confirm_request':
+      confirmPrompt(ev.id, ev.summary);
+      break;
+    case 'error':
+      el('<div class="activity-card error-card fade-in"><strong>Error</strong><span class="ml-2">' + esc(ev.text) + '</span></div>');
+      break;
+    case 'done':
+      setRunning(false);
+      break;
+  }
+}
+
+function confirmPrompt(id, summary) {
+  completeThinking(true);
+  const box = el(
+    '<div class="activity-card approval-card fade-in">' +
+      '<div class="approval-head">' +
+        '<span class="activity-icon approval-icon" aria-hidden="true">' +
+          '<svg viewBox="0 0 24 24" fill="none"><path d="M12 3 5 6v5c0 4.6 2.8 8.1 7 10 4.2-1.9 7-5.4 7-10V6l-7-3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 8v4m0 3h.01" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>' +
+        '</span>' +
+        '<div class="approval-title">Permission required</div>' +
+      '</div>' +
+      '<pre class="approval-summary">' + esc(summary || 'No details provided') + '</pre>' +
+      '<div class="approval-actions">' +
+        '<button data-a="1" class="approval-button approval-allow">Allow once</button>' +
+        '<button data-a="0" class="approval-button approval-deny">Deny</button>' +
+      '</div>' +
+    '</div>'
+  );
+  box.querySelectorAll('button').forEach(btn => btn.onclick = async () => {
+    const buttons = box.querySelectorAll('button');
+    buttons.forEach(b => b.disabled = true);
+    const allow = btn.dataset.a === '1';
+    try {
+      const response = await fetch('/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, allow })
+      });
+      if (!response.ok) throw new Error('request failed');
+      const actions = box.querySelector('.approval-actions');
+      actions.innerHTML = '<span class="approval-resolution">' + (allow ? 'Allowed once' : 'Denied') + '</span>';
+      box.classList.add(allow ? 'is-allowed' : 'is-denied');
+    } catch (_) {
+      buttons.forEach(b => b.disabled = false);
+      const actions = box.querySelector('.approval-actions');
+      let error = actions.querySelector('.approval-send-error');
+      if (!error) {
+        error = document.createElement('span');
+        error.className = 'approval-send-error text-xs text-red-500';
+        actions.appendChild(error);
+      }
+      error.textContent = 'Could not send decision';
+    }
+  });
+  scroll();
+}
+
+function send() {
+  const text = input.value.trim();
+  if (!text || running) return;
+  el('<div class="flex justify-end"><div class="fade-in max-w-[80%] rounded-3xl bg-gray-100 dark:bg-white/10 px-4 py-2.5 whitespace-pre-wrap">' + esc(text) + '</div></div>');
+  input.value = '';
+  autosize();
+  setRunning(true);
+  fetch('/prompt', { method: 'POST', body: JSON.stringify({ text }) });
+}
+
+function autosize() {
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 160) + 'px';
+}
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+sendBtn.onclick = send;
+stopBtn.onclick = () => fetch('/abort', { method: 'POST' });
+input.addEventListener('input', autosize);
+input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+input.focus();
+</script>
+</body>
+</html>
