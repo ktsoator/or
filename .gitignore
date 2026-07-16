@@ -41,3 +41,6 @@ site/
 
 # Local code analysis notes
 .analysis/
+
+# Coding agent runtime session data
+.coding/
