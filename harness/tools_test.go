@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/ktsoator/or/agent"
-	"github.com/ktsoator/or/agent/harness"
+	"github.com/ktsoator/or/harness"
 	"github.com/ktsoator/or/llm"
 )
 
