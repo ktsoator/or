@@ -1,8 +1,6 @@
 package coding
 
 import (
-	"strings"
-
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/llm"
 )
@@ -120,11 +118,5 @@ func eventToolResultText(result any) string {
 	if !ok {
 		return ""
 	}
-	var parts []string
-	for _, content := range toolResult.Content {
-		if text, ok := content.(*llm.TextContent); ok {
-			parts = append(parts, text.Text)
-		}
-	}
-	return strings.Join(parts, "\n")
+	return toolResultContentText(toolResult.Content)
 }

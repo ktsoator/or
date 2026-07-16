@@ -64,6 +64,42 @@ func ProjectEvent(ev coding.Event) ([]byte, bool) {
 	return data, true
 }
 
+// ProjectHistory maps a UI-neutral conversation snapshot to the same event
+// shapes the browser already renders for live activity.
+func ProjectHistory(items []coding.HistoryItem) []wireEvent {
+	out := make([]wireEvent, 0, len(items))
+	for _, item := range items {
+		switch item.Type {
+		case coding.HistoryUser:
+			out = append(out, wireEvent{Type: "user_message", Text: item.Text})
+
+		case coding.HistoryAssistant:
+			out = append(out, wireEvent{Type: "message_end", Text: item.Text})
+
+		case coding.HistoryThinking:
+			out = append(out, wireEvent{Type: "delta", Kind: "thinking", Delta: item.Text})
+
+		case coding.HistoryToolCall:
+			out = append(out, wireEvent{
+				Type: "tool_start",
+				ID:   item.ToolCallID,
+				Tool: item.ToolName,
+				Args: item.ToolArgs,
+			})
+
+		case coding.HistoryToolResult:
+			out = append(out, wireEvent{
+				Type:    "tool_end",
+				ID:      item.ToolCallID,
+				Tool:    item.ToolName,
+				Result:  firstLines(item.ToolResult, 12),
+				IsError: item.IsError,
+			})
+		}
+	}
+	return out
+}
+
 // firstLines returns at most n lines of s.
 func firstLines(s string, n int) string {
 	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")

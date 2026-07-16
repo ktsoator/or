@@ -440,13 +440,44 @@ function finishTool(ev) {
   scroll();
 }
 
-const es = new EventSource('/events');
-es.onopen = () => setStatus('ready', 'bg-emerald-500');
-es.onerror = () => setStatus('disconnected', 'bg-red-400');
-es.onmessage = (e) => handle(JSON.parse(e.data));
+let es = null;
+
+function connectEvents() {
+  es = new EventSource('/events');
+  es.onopen = () => setStatus('ready', 'bg-emerald-500');
+  es.onerror = () => setStatus('disconnected', 'bg-red-400');
+  es.onmessage = (e) => handle(JSON.parse(e.data));
+}
+
+async function initialize() {
+  input.disabled = true;
+  sendBtn.disabled = true;
+  try {
+    const response = await fetch('/history', { cache: 'no-store' });
+    if (!response.ok) throw new Error('history request failed');
+    const events = await response.json();
+    events.forEach(handle);
+  } catch (_) {
+    el('<div class="error-card fade-in">History could not be restored.</div>');
+  } finally {
+    // Load the snapshot first so its items cannot overwrite live streaming DOM.
+    // The input stays disabled until the SSE connection has been created.
+    connectEvents();
+    input.disabled = false;
+    sendBtn.disabled = false;
+    input.focus();
+  }
+}
+
+function addUserMessage(text) {
+  el('<div class="flex justify-end"><div class="fade-in max-w-[80%] rounded-3xl bg-gray-100 dark:bg-white/10 px-4 py-2.5 whitespace-pre-wrap">' + esc(text) + '</div></div>');
+}
 
 function handle(ev) {
   switch (ev.type) {
+    case 'user_message':
+      addUserMessage(ev.text);
+      break;
     case 'delta':
       if (ev.kind === 'thinking') {
         thinkingBlock().textContent += ev.delta;
@@ -532,7 +563,7 @@ function confirmPrompt(id, summary) {
 function send() {
   const text = input.value.trim();
   if (!text || running) return;
-  el('<div class="flex justify-end"><div class="fade-in max-w-[80%] rounded-3xl bg-gray-100 dark:bg-white/10 px-4 py-2.5 whitespace-pre-wrap">' + esc(text) + '</div></div>');
+  addUserMessage(text);
   input.value = '';
   autosize();
   setRunning(true);
@@ -549,7 +580,7 @@ sendBtn.onclick = send;
 stopBtn.onclick = () => fetch('/abort', { method: 'POST' });
 input.addEventListener('input', autosize);
 input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
-input.focus();
+initialize();
 </script>
 </body>
 </html>

@@ -74,11 +74,27 @@ func NewServer(ctx context.Context, session *coding.Session, hub *Hub, broker *C
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleIndex)
+	mux.HandleFunc("/history", s.handleHistory)
 	mux.HandleFunc("/events", s.handleEvents)
 	mux.HandleFunc("/prompt", s.handlePrompt)
 	mux.HandleFunc("/confirm", s.handleConfirm)
 	mux.HandleFunc("/abort", s.handleAbort)
 	return mux
+}
+
+// handleHistory returns the current displayable transcript so a newly opened
+// or refreshed browser can rebuild the conversation before consuming new SSE
+// events.
+func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	if err := json.NewEncoder(w).Encode(ProjectHistory(s.session.History())); err != nil {
+		http.Error(w, "encode history", http.StatusInternalServerError)
+	}
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
