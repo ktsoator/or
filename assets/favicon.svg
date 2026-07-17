@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" role="img" aria-labelledby="title desc">
+  <title id="title">or favicon</title>
+  <desc id="desc">A compact block logo spelling Or.</desc>
+  <style>
+    .logo-mark { fill: #000; }
+    @media (prefers-color-scheme: dark) {
+      .logo-mark { fill: #fff; }
+    }
+  </style>
+  <path class="logo-mark" fill-rule="evenodd" d="
+    M60 60
+    H520
+    V740
+    H60
+    Z
+    M220 220
+    V580
+    H360
+    V220
+    Z
+  "/>
+  <path class="logo-mark" d="
+    M560 340
+    H780
+    V500
+    H700
+    V740
+    H560
+    Z
+  "/>
+</svg>

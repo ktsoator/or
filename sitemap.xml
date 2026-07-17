@@ -1,0 +1,703 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+    <url>
+        <loc>https://ktsoator.github.io/or/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/agent/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/agent/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/agent/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/agent/configuration/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/agent/configuration/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/agent/configuration/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/agent/events/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/agent/events/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/agent/events/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/agent/getting-started/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/agent/getting-started/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/agent/getting-started/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/agent/hooks/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/agent/hooks/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/agent/hooks/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/agent/loop/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/agent/loop/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/agent/loop/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/agent/messages/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/agent/messages/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/agent/messages/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/agent/steering/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/agent/steering/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/agent/steering/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/agent/tools/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/agent/tools/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/agent/tools/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/internals/adapters/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/internals/adapters/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/internals/adapters/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/internals/messages/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/internals/messages/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/internals/messages/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/internals/models/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/internals/models/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/internals/models/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/internals/overview/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/internals/overview/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/internals/overview/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/internals/streaming/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/internals/streaming/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/internals/streaming/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/internals/transform/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/internals/transform/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/internals/transform/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/api-reference/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/api-reference/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/api-reference/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/capabilities/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/capabilities/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/capabilities/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/clients-and-registries/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/clients-and-registries/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/clients-and-registries/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/configuration/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/configuration/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/configuration/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/conversations/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/conversations/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/conversations/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/developer-guide/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/developer-guide/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/developer-guide/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/errors/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/errors/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/errors/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/examples/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/examples/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/examples/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/extending/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/extending/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/extending/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/getting-started/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/getting-started/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/getting-started/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/providers/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/providers/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/providers/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/reasoning/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/reasoning/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/reasoning/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/results/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/results/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/results/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/streaming/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/streaming/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/streaming/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/support-matrix/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/support-matrix/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/support-matrix/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/testing/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/testing/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/testing/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/tools/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/tools/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/tools/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/troubleshooting/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/troubleshooting/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/troubleshooting/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/recipes/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/recipes/basic-completion/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/basic-completion/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/basic-completion/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/recipes/conversation-persistence/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/conversation-persistence/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/conversation-persistence/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/recipes/custom-client/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/custom-client/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/custom-client/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/recipes/custom-gateway/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/custom-gateway/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/custom-gateway/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/recipes/error-handling/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/error-handling/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/error-handling/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/recipes/mock-testing/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/mock-testing/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/mock-testing/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/recipes/model-switching/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/model-switching/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/model-switching/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/recipes/observability/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/observability/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/observability/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/recipes/provider-discovery/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/provider-discovery/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/provider-discovery/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/recipes/reasoning/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/reasoning/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/reasoning/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/recipes/streaming-chat/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/streaming-chat/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/streaming-chat/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/recipes/tool-loop/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/tool-loop/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/tool-loop/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/llm/recipes/vision/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/vision/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/vision/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/notes/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/notes/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/notes/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/agent/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/agent/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/agent/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/agent/configuration/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/agent/configuration/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/agent/configuration/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/agent/events/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/agent/events/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/agent/events/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/agent/getting-started/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/agent/getting-started/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/agent/getting-started/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/agent/hooks/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/agent/hooks/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/agent/hooks/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/agent/loop/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/agent/loop/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/agent/loop/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/agent/messages/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/agent/messages/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/agent/messages/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/agent/steering/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/agent/steering/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/agent/steering/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/agent/tools/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/agent/tools/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/agent/tools/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/internals/adapters/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/internals/adapters/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/internals/adapters/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/internals/messages/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/internals/messages/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/internals/messages/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/internals/models/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/internals/models/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/internals/models/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/internals/overview/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/internals/overview/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/internals/overview/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/internals/streaming/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/internals/streaming/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/internals/streaming/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/internals/transform/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/internals/transform/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/internals/transform/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/api-reference/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/api-reference/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/api-reference/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/capabilities/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/capabilities/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/capabilities/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/clients-and-registries/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/clients-and-registries/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/clients-and-registries/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/configuration/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/configuration/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/configuration/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/conversations/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/conversations/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/conversations/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/developer-guide/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/developer-guide/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/developer-guide/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/errors/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/errors/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/errors/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/examples/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/examples/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/examples/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/extending/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/extending/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/extending/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/getting-started/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/getting-started/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/getting-started/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/providers/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/providers/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/providers/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/reasoning/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/reasoning/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/reasoning/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/results/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/results/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/results/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/streaming/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/streaming/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/streaming/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/support-matrix/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/support-matrix/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/support-matrix/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/testing/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/testing/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/testing/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/tools/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/tools/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/tools/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/troubleshooting/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/troubleshooting/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/troubleshooting/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/recipes/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/recipes/basic-completion/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/basic-completion/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/basic-completion/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/recipes/conversation-persistence/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/conversation-persistence/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/conversation-persistence/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/recipes/custom-client/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/custom-client/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/custom-client/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/recipes/custom-gateway/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/custom-gateway/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/custom-gateway/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/recipes/error-handling/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/error-handling/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/error-handling/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/recipes/mock-testing/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/mock-testing/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/mock-testing/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/recipes/model-switching/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/model-switching/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/model-switching/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/recipes/observability/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/observability/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/observability/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/recipes/provider-discovery/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/provider-discovery/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/provider-discovery/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/recipes/reasoning/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/reasoning/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/reasoning/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/recipes/streaming-chat/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/streaming-chat/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/streaming-chat/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/recipes/tool-loop/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/tool-loop/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/tool-loop/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/llm/recipes/vision/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/llm/recipes/vision/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/llm/recipes/vision/"/>
+    </url>
+    <url>
+        <loc>https://ktsoator.github.io/or/zh/notes/</loc>
+        <lastmod>2026-07-17</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://ktsoator.github.io/or/zh/notes/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://ktsoator.github.io/or/notes/"/>
+    </url>
+</urlset>

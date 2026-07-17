@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" role="img" aria-labelledby="title desc">
+  <title id="title">or logo</title>
+  <desc id="desc">A minimal block logo spelling Or.</desc>
+  <style>
+    .logo-mark { fill: #000; }
+    @media (prefers-color-scheme: dark) {
+      .logo-mark { fill: #fff; }
+    }
+  </style>
+  <!-- O shape: outer boundary clockwise, inner hole counter-clockwise -->
+  <path class="logo-mark" fill-rule="evenodd" d="
+    M160 160
+    H520
+    V640
+    H160
+    Z
+    M280 280
+    V520
+    H400
+    V280
+    Z
+  "/>
+  <!-- r shape -->
+  <path class="logo-mark" d="
+    M560 360
+    H760
+    V480
+    H680
+    V640
+    H560
+    Z
+  "/>
+</svg>
