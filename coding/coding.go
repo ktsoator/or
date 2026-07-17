@@ -44,6 +44,10 @@ type Options struct {
 	// Store persists the transcript and seeds it on construction. Nil disables
 	// persistence.
 	Store store.Store
+	// DetailsStore persists tools' structured results (file changes and failures)
+	// out of band, keyed by tool-call ID, so a reloaded session restores the rich
+	// rendering it showed live. Nil replays history as plain text.
+	DetailsStore store.DetailsStore
 	// Instructions overrides the base system-prompt preamble. Empty uses
 	// prompt.DefaultInstructions.
 	Instructions string
@@ -77,6 +81,10 @@ type Session struct {
 	runMu        sync.Mutex
 	persistedLen int
 	runCtx       context.Context
+
+	detailsStore store.DetailsStore
+	detailsMu    sync.Mutex
+	details      map[string]any // tool-call ID -> decoded structured Details
 }
 
 // New builds a Session. When a Store is configured, its transcript is loaded and
@@ -113,6 +121,19 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		maxRetries = *opts.MaxRetries
 	}
 
+	details := map[string]any{}
+	if opts.DetailsStore != nil {
+		stored, err := opts.DetailsStore.Load(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for id, raw := range stored {
+			if d := decodeDetails(raw); d != nil {
+				details[id] = d
+			}
+		}
+	}
+
 	s := &Session{
 		store:         opts.Store,
 		tools:         toolSet,
@@ -121,6 +142,8 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		maxRetries:    maxRetries,
 		contextWindow: opts.Model.ContextWindow,
 		persistedLen:  len(seed),
+		detailsStore:  opts.DetailsStore,
+		details:       details,
 	}
 
 	gate := opts.Policy
@@ -143,8 +166,48 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		},
 	}
 	s.agent = agent.New(agentOpts)
+	s.captureDetails()
 
 	return s, nil
+}
+
+// captureDetails subscribes to tool completions and retains each tool's
+// structured Details in memory, persisting it to the DetailsStore so a later
+// reload can restore it. It is registered once, for the session's lifetime.
+func (s *Session) captureDetails() {
+	s.agent.Subscribe(func(ev agent.AgentEvent) {
+		if ev.Type != agent.ToolEnd {
+			return
+		}
+		result, ok := ev.Result.(agent.ToolResult)
+		if !ok || result.Details == nil {
+			return
+		}
+		payload, ok := encodeDetails(result.Details)
+		if !ok {
+			return
+		}
+		s.detailsMu.Lock()
+		s.details[ev.ToolCallID] = result.Details
+		s.detailsMu.Unlock()
+		if s.detailsStore != nil {
+			// Persist out of band; a failure here must not disrupt the run, and the
+			// live event already carried the Details to any subscriber.
+			_ = s.detailsStore.Put(context.Background(), ev.ToolCallID, payload)
+		}
+	})
+}
+
+// snapshotDetails returns a copy of the captured tool-call details, safe to read
+// while a run is appending more.
+func (s *Session) snapshotDetails() map[string]any {
+	s.detailsMu.Lock()
+	defer s.detailsMu.Unlock()
+	out := make(map[string]any, len(s.details))
+	for id, d := range s.details {
+		out[id] = d
+	}
+	return out
 }
 
 // Prompt starts a run from a text message and optional images, blocking until it

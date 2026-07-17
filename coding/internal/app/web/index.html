@@ -155,6 +155,39 @@
     font-size: 10.5px;
     font-weight: 550;
   }
+  .change-row {
+    margin-left: 32px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 0;
+    font-size: 12px;
+  }
+  .change-op {
+    padding: 0 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .change-op.create { background: rgba(16,185,129,0.15); color: #059669; }
+  .change-op.update { background: rgba(59,130,246,0.15); color: #2563eb; }
+  .change-op.failure { background: rgba(239,68,68,0.15); color: #dc2626; }
+  .change-path { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: #37372f; word-break: break-all; }
+  .change-stat.add { color: #059669; font-weight: 600; }
+  .change-stat.del { color: #dc2626; font-weight: 600; }
+  .change-fail { margin-left: 32px; padding: 2px 0; color: #dc2626; font-size: 12px; }
+  .diff-line { display: block; padding: 0 4px; white-space: pre-wrap; word-break: break-word; }
+  .diff-line.add { background: rgba(16,185,129,0.12); color: #047857; }
+  .diff-line.del { background: rgba(239,68,68,0.12); color: #b91c1c; }
+  .diff-hunk-head { display: block; padding: 2px 4px; color: var(--activity-muted); font-size: 10.5px; }
+  @media (prefers-color-scheme: dark) {
+    .change-path { color: #c7c7c0; }
+    .change-op.create { color: #34d399; } .change-op.update { color: #60a5fa; } .change-op.failure { color: #f87171; }
+    .diff-line.add { color: #6ee7b7; } .diff-line.del { color: #fca5a5; }
+    .change-fail { color: #f87171; }
+  }
 
   .approval-card {
     padding: 13px 14px;
@@ -429,7 +462,11 @@ function finishTool(ev) {
   status.classList.add(ev.isError ? 'is-error' : 'is-complete');
   status.querySelector('.tool-status-text').textContent = ev.isError ? 'Failed' : 'Complete';
 
-  if (ev.result || ev.isError) {
+  // Prefer a structured file-change view; fall back to raw text output.
+  const changeEl = ev.change ? renderChange(ev.change) : null;
+  if (changeEl) {
+    entry.card.appendChild(changeEl);
+  } else if (ev.result || ev.isError) {
     const result = entry.card.querySelector('.tool-result');
     result.hidden = false;
     result.querySelector('.tool-result-label').textContent = ev.isError ? 'Error output' : 'Output';
@@ -575,6 +612,76 @@ function autosize() {
   input.style.height = Math.min(input.scrollHeight, 160) + 'px';
 }
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+// renderChange builds the structured file-change view for a tool_end event.
+// Returns null when the payload is not a recognized change so callers fall back
+// to the raw text output.
+function renderChange(change) {
+  if (!change || typeof change !== 'object') return null;
+
+  if (change.changeType === 'failure') {
+    const fail = document.createElement('div');
+    fail.className = 'change-fail';
+    fail.textContent = (change.path ? change.path + ': ' : '') + (change.detail || 'write failed');
+    return fail;
+  }
+
+  if (change.changeType !== 'file') return null;
+
+  const wrap = document.createElement('div');
+
+  const row = document.createElement('div');
+  row.className = 'change-row';
+  const op = document.createElement('span');
+  op.className = 'change-op ' + (change.op === 'create' ? 'create' : 'update');
+  op.textContent = change.op === 'create' ? 'new' : 'edit';
+  row.appendChild(op);
+  const path = document.createElement('span');
+  path.className = 'change-path';
+  path.textContent = change.path || '';
+  row.appendChild(path);
+  if (change.additions) {
+    const add = document.createElement('span');
+    add.className = 'change-stat add';
+    add.textContent = '+' + change.additions;
+    row.appendChild(add);
+  }
+  if (change.deletions) {
+    const del = document.createElement('span');
+    del.className = 'change-stat del';
+    del.textContent = '−' + change.deletions;
+    row.appendChild(del);
+  }
+  wrap.appendChild(row);
+
+  const hunks = Array.isArray(change.hunks) ? change.hunks : [];
+  if (hunks.length) {
+    const details = document.createElement('details');
+    details.className = 'tool-section';
+    const summary = document.createElement('summary');
+    summary.textContent = 'Diff';
+    details.appendChild(summary);
+    const pre = document.createElement('pre');
+    pre.className = 'tool-code';
+    for (const h of hunks) {
+      const head = document.createElement('span');
+      head.className = 'diff-hunk-head';
+      head.textContent = '@@ -' + h.oldStart + ',' + h.oldLines + ' +' + h.newStart + ',' + h.newLines + ' @@';
+      pre.appendChild(head);
+      for (const line of (h.lines || [])) {
+        const span = document.createElement('span');
+        const mark = line.charAt(0);
+        span.className = 'diff-line' + (mark === '+' ? ' add' : mark === '-' ? ' del' : '');
+        span.textContent = line;
+        pre.appendChild(span);
+      }
+    }
+    details.appendChild(pre);
+    wrap.appendChild(details);
+  }
+
+  return wrap;
+}
 
 sendBtn.onclick = send;
 stopBtn.onclick = () => fetch('/abort', { method: 'POST' });

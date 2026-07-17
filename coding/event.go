@@ -35,7 +35,12 @@ type Event struct {
 	ToolName   string
 	ToolArgs   any
 	ToolResult string
-	IsError    bool
+	// ToolDetails is the tool's structured result (for example a tools.FileChange
+	// or tools.MutationFailure), when it produced one. Product shells render it;
+	// ToolResult remains the text fallback. It is not persisted, so it is present
+	// on live events but absent when history is replayed.
+	ToolDetails any
+	IsError     bool
 }
 
 // projectAgentEvent maps a low-level agent event into the stable coding event
@@ -68,11 +73,12 @@ func projectAgentEvent(ev agent.AgentEvent) (Event, bool) {
 
 	case agent.ToolEnd:
 		return Event{
-			Type:       ToolFinished,
-			ToolCallID: ev.ToolCallID,
-			ToolName:   ev.ToolName,
-			ToolResult: eventToolResultText(ev.Result),
-			IsError:    ev.IsError,
+			Type:        ToolFinished,
+			ToolCallID:  ev.ToolCallID,
+			ToolName:    ev.ToolName,
+			ToolResult:  eventToolResultText(ev.Result),
+			ToolDetails: eventToolResultDetails(ev.Result),
+			IsError:     ev.IsError,
 		}, true
 
 	case agent.MessageEnd:
@@ -119,4 +125,15 @@ func eventToolResultText(result any) string {
 		return ""
 	}
 	return toolResultContentText(toolResult.Content)
+}
+
+// eventToolResultDetails returns a tool's structured result, when it produced
+// one. It is the source of truth product shells render; unlike Content it is not
+// persisted, so it is available only on live events.
+func eventToolResultDetails(result any) any {
+	toolResult, ok := result.(agent.ToolResult)
+	if !ok {
+		return nil
+	}
+	return toolResult.Details
 }

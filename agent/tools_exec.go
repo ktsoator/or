@@ -221,7 +221,13 @@ func (e *engine) executePrepared(prepared preparedToolCall) (result ToolResult, 
 
 	out, err := prepared.tool.Execute(e.ctx, prepared.call.ID, prepared.rawArgs, onUpdate)
 	if err != nil {
-		return ToolResult{Content: []llm.ToolResultContent{&llm.TextContent{Text: err.Error()}}}, true
+		// Preserve the tool's own content and structured details when it supplied
+		// them, so a failing tool can still report a rich reason to product shells.
+		res := ToolResult{Content: out.Content, Details: out.Details}
+		if res.Content == nil {
+			res.Content = []llm.ToolResultContent{&llm.TextContent{Text: err.Error()}}
+		}
+		return res, true
 	}
 	return out, false
 }

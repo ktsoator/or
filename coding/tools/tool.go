@@ -62,6 +62,22 @@ func textResult(text string) agent.ToolResult {
 	}
 }
 
+// resultWith builds a ToolResult whose model-facing text is derived from a
+// structured Details value. The text is what the model reads; Details is the
+// source of truth product shells render.
+func resultWith(text string, details any) agent.ToolResult {
+	return agent.ToolResult{
+		Content: []llm.ToolResultContent{&llm.TextContent{Text: text}},
+		Details: details,
+	}
+}
+
+// mutationFailure builds a failed edit/write result carrying both the text
+// detail the model reads and a structured MutationFailure product shells render.
+func mutationFailure(path, reason, detail string) agent.ToolResult {
+	return resultWith(detail, MutationFailure{Path: path, Reason: reason, Detail: detail})
+}
+
 // resolve turns a possibly-relative tool argument path into an absolute path
 // rooted at the workspace. Absolute inputs are returned cleaned, unchanged in
 // meaning.
