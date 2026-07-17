@@ -192,6 +192,8 @@ func readTextRange(ctx context.Context, src io.Reader, offset, limit, maxBytes i
 func readCompleteLine(reader *bufio.Reader, captureLimit int) (line string, ok, overflow bool, err error) {
 	var b strings.Builder
 	seen := false
+
+readLoop:
 	for {
 		fragment, readErr := reader.ReadSlice('\n')
 		if len(fragment) > 0 {
@@ -208,24 +210,23 @@ func readCompleteLine(reader *bufio.Reader, captureLimit int) (line string, ok, 
 				}
 			}
 			if hasNewline {
-				break
+				break readLoop
 			}
 		}
 
 		switch readErr {
 		case nil:
-			break
+			continue
 		case bufio.ErrBufferFull:
 			continue
 		case io.EOF:
 			if !seen {
 				return "", false, false, nil
 			}
-			break
+			break readLoop
 		default:
 			return "", false, false, readErr
 		}
-		break
 	}
 
 	if captureLimit >= 0 && !overflow {

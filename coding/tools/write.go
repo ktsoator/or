@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"strings"
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/llm"
@@ -21,6 +22,13 @@ const (
 type writeArgs struct {
 	Path    string `json:"path" jsonschema:"description=Path to the file to write; parent directories are created as needed,minLength=1"`
 	Content string `json:"content" jsonschema:"description=Full contents to write to the file"`
+}
+
+// WriteResult is the UI-independent outcome of a full-file write.
+type WriteResult struct {
+	Path    string
+	Created bool
+	Bytes   int
 }
 
 // Write returns a tool that writes a file in full, creating parent directories
@@ -39,8 +47,16 @@ func Write(root string, ops FileOps, files *FileStateStore) Tool {
 				if err := json.Unmarshal(raw, &in); err != nil {
 					return agent.ToolResult{}, err
 				}
+				if strings.TrimSpace(in.Path) == "" {
+					err := fmt.Errorf("write: path is required")
+					return textResult(err.Error()), err
+				}
+				if err := ctx.Err(); err != nil {
+					return textResult("write: " + err.Error()), err
+				}
 				path := resolve(root, in.Path)
-				if err := checkWriteTarget(ctx, ops, files, path); err != nil {
+				existed, err := checkWriteTarget(ctx, ops, files, path)
+				if err != nil {
 					err = mutationStateError("write", in.Path, err)
 					return textResult(err.Error()), err
 				}
@@ -49,9 +65,17 @@ func Write(root string, ops FileOps, files *FileStateStore) Tool {
 				}
 				// Check again immediately before the mutation. In particular, a path
 				// that did not exist above may have been created concurrently.
-				if err := checkWriteTarget(ctx, ops, files, path); err != nil {
+				currentExists, err := checkWriteTarget(ctx, ops, files, path)
+				if err != nil {
 					err = mutationStateError("write", in.Path, err)
 					return textResult(err.Error()), err
+				}
+				if currentExists != existed {
+					err := mutationStateError("write", in.Path, ErrFileChanged)
+					return textResult(err.Error()), err
+				}
+				if err := ctx.Err(); err != nil {
+					return textResult("write: " + err.Error()), err
 				}
 				if err := ops.WriteFile(ctx, path, []byte(in.Content), defaultFilePerm); err != nil {
 					return textResult(fmt.Sprintf("write %s: %v", in.Path, err)), err
@@ -61,7 +85,8 @@ func Write(root string, ops FileOps, files *FileStateStore) Tool {
 				} else {
 					files.Delete(path)
 				}
-				return textResult(fmt.Sprintf("Wrote %s (%d bytes).", in.Path, len(in.Content))), nil
+				result := WriteResult{Path: in.Path, Created: !existed, Bytes: len(in.Content)}
+				return textResult(formatWriteResult(result)), nil
 			},
 		},
 		PromptSnippet: writeText.snippet,
@@ -71,13 +96,24 @@ func Write(root string, ops FileOps, files *FileStateStore) Tool {
 
 // checkWriteTarget allows a new path, but requires an existing path to match a
 // previously observed version.
-func checkWriteTarget(ctx context.Context, ops FileOps, files *FileStateStore, path string) error {
+func checkWriteTarget(ctx context.Context, ops FileOps, files *FileStateStore, path string) (bool, error) {
 	info, err := ops.Stat(ctx, path)
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil
+		return false, nil
 	}
 	if err != nil {
-		return err
+		return false, err
 	}
-	return files.Check(path, info)
+	if err := files.Check(path, info); err != nil {
+		return true, err
+	}
+	return true, nil
+}
+
+func formatWriteResult(result WriteResult) string {
+	action := "Updated"
+	if result.Created {
+		action = "Created"
+	}
+	return fmt.Sprintf("%s %s (%d bytes).", action, result.Path, result.Bytes)
 }

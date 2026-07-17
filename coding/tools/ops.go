@@ -12,9 +12,11 @@ package tools
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 )
 
 // FileOps abstracts filesystem access for the file tools. Paths passed to it are
@@ -23,6 +25,8 @@ import (
 type FileOps interface {
 	Open(ctx context.Context, path string) (io.ReadCloser, error)
 	ReadFile(ctx context.Context, path string) ([]byte, error)
+	// WriteFile replaces path without exposing a partially written destination
+	// when the backend supports atomic replacement.
 	WriteFile(ctx context.Context, path string, data []byte, perm os.FileMode) error
 	MkdirAll(ctx context.Context, path string, perm os.FileMode) error
 	Stat(ctx context.Context, path string) (os.FileInfo, error)
@@ -70,14 +74,79 @@ func (LocalOps) ReadFile(_ context.Context, path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
-// WriteFile writes data to path with the given permissions, truncating any
-// existing file.
-func (LocalOps) WriteFile(_ context.Context, path string, data []byte, perm os.FileMode) error {
-	return os.WriteFile(path, data, perm)
+// WriteFile writes through a same-directory temporary file and atomically
+// renames it into place. Existing permissions and symlinks are preserved.
+func (LocalOps) WriteFile(ctx context.Context, path string, data []byte, perm os.FileMode) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	target, err := localWriteTarget(path)
+	if err != nil {
+		return err
+	}
+
+	mode := perm
+	if info, statErr := os.Stat(target); statErr == nil {
+		mode = info.Mode().Perm()
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		return statErr
+	}
+
+	temp, err := os.CreateTemp(filepath.Dir(target), "."+filepath.Base(target)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tempPath := temp.Name()
+	committed := false
+	defer func() {
+		_ = temp.Close()
+		if !committed {
+			_ = os.Remove(tempPath)
+		}
+	}()
+
+	if err := temp.Chmod(mode); err != nil {
+		return err
+	}
+	const chunkSize = 64 * 1024
+	for len(data) > 0 {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		chunk := data
+		if len(chunk) > chunkSize {
+			chunk = chunk[:chunkSize]
+		}
+		n, err := temp.Write(chunk)
+		if err != nil {
+			return err
+		}
+		if n != len(chunk) {
+			return io.ErrShortWrite
+		}
+		data = data[n:]
+	}
+	if err := temp.Sync(); err != nil {
+		return err
+	}
+	if err := temp.Close(); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := os.Rename(tempPath, target); err != nil {
+		return err
+	}
+	committed = true
+	return nil
 }
 
 // MkdirAll creates path and any missing parents.
-func (LocalOps) MkdirAll(_ context.Context, path string, perm os.FileMode) error {
+func (LocalOps) MkdirAll(ctx context.Context, path string, perm os.FileMode) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	return os.MkdirAll(path, perm)
 }
 
@@ -89,6 +158,40 @@ func (LocalOps) Stat(_ context.Context, path string) (os.FileInfo, error) {
 // ReadDir lists the directory entries of path.
 func (LocalOps) ReadDir(_ context.Context, path string) ([]os.DirEntry, error) {
 	return os.ReadDir(path)
+}
+
+// localWriteTarget follows a final symlink chain so the atomic rename replaces
+// the target file rather than the symlink itself. A dangling final target is
+// returned so the write can create it when its parent exists.
+func localWriteTarget(path string) (string, error) {
+	current := filepath.Clean(path)
+	seen := make(map[string]struct{})
+	for {
+		if _, ok := seen[current]; ok {
+			return "", fmt.Errorf("write %s: symlink cycle", path)
+		}
+		seen[current] = struct{}{}
+
+		info, err := os.Lstat(current)
+		if errors.Is(err, os.ErrNotExist) {
+			return current, nil
+		}
+		if err != nil {
+			return "", err
+		}
+		if info.Mode()&os.ModeSymlink == 0 {
+			return current, nil
+		}
+
+		target, err := os.Readlink(current)
+		if err != nil {
+			return "", err
+		}
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(filepath.Dir(current), target)
+		}
+		current = filepath.Clean(target)
+	}
 }
 
 // Exec runs command with `bash -c` inside dir, returning combined output. A

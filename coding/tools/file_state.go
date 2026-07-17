@@ -84,9 +84,9 @@ func sameFileVersion(a, b os.FileInfo) bool {
 func mutationStateError(tool, path string, err error) error {
 	switch {
 	case errors.Is(err, ErrFileNotRead):
-		return fmt.Errorf("%s %s: %w; use read before changing it", tool, path, err)
+		return fmt.Errorf("%s %s: %w; use read, then retry %s. Do not use bash as a substitute", tool, path, err, tool)
 	case errors.Is(err, ErrFileChanged):
-		return fmt.Errorf("%s %s: %w; read it again before changing it", tool, path, err)
+		return fmt.Errorf("%s %s: %w; use read, then retry %s. Do not use bash as a substitute", tool, path, err, tool)
 	default:
 		return fmt.Errorf("%s %s: %w", tool, path, err)
 	}

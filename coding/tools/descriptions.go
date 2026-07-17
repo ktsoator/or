@@ -72,6 +72,7 @@ var editText = toolText{
 
 Usage:
 - Read the file with the read tool first, so old_string matches its current contents exactly.
+- If edit reports that the file was not read or has changed, use read and then retry edit; do not switch to bash.
 - old_string must match exactly one place in the file unless replace_all is set; include enough surrounding context (usually a few adjacent lines) to make it unique.
 - Preserve exact indentation — match the text as it appears after the line-number prefix in read output, never including that prefix.
 - Prefer edit over write when changing part of an existing file.`,
@@ -86,7 +87,9 @@ var writeText = toolText{
 
 Usage:
 - Read an existing file before overwriting it; creating a new file does not require a prior read.
+- If write reports that the file was not read or has changed, use read and then retry write; do not switch to bash.
 - Prefer edit over write when changing part of an existing file; write replaces the whole file.
+- Writes replace the destination atomically and preserve existing file permissions and symlinks.
 - Provide the complete intended contents, not a fragment.`,
 	snippet: "write — create or overwrite a file in full",
 	guidelines: []string{
@@ -99,10 +102,12 @@ var bashText = toolText{
 
 Usage:
 - Use bash for building, testing, running programs, and version control.
-- Prefer the dedicated tools — read, grep, glob, ls, edit, write — over shell equivalents like cat, grep, find, or sed. They are faster and need no confirmation.
+- Do not use bash as a substitute for read, grep, glob, ls, edit, or write.
+- Create or replace files with write, not echo or printf redirection, tee, or heredocs. Modify existing files with edit, not sed -i, awk, or perl.
+- If edit or write requires a prior read, call read and retry the same tool.
 - A non-zero exit code is reported as output, not as a failure, so you can react to it.`,
 	snippet: "bash — run a shell command in the workspace",
 	guidelines: []string{
-		"Use `bash` for building, testing, and running code — not for reading or searching, which the dedicated tools do without confirmation.",
+		"Never bypass a `read`, `edit`, or `write` error with `bash`; satisfy the requested precondition and retry the same tool.",
 	},
 }
