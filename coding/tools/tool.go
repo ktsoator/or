@@ -23,6 +23,20 @@ type Tool struct {
 	// ReadOnly reports whether the tool leaves the workspace unchanged. The
 	// permission layer uses it to decide what needs confirmation.
 	ReadOnly bool
+	// ReadOnlyFor optionally decides read-only status per call from the validated
+	// arguments, for a tool like bash whose effect depends on its input. When set
+	// it overrides ReadOnly for that call; nil falls back to the static ReadOnly.
+	// A conservative implementation returns false whenever it is unsure.
+	ReadOnlyFor func(args map[string]any) bool
+}
+
+// IsReadOnly reports whether a specific call is read-only, using the per-call
+// classifier when the tool provides one and the static flag otherwise.
+func (t Tool) IsReadOnly(args map[string]any) bool {
+	if t.ReadOnlyFor != nil {
+		return t.ReadOnlyFor(args)
+	}
+	return t.ReadOnly
 }
 
 // Name returns the tool's advertised name.
