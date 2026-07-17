@@ -24,6 +24,7 @@ type FileOps interface {
 	WriteFile(ctx context.Context, path string, data []byte, perm os.FileMode) error
 	MkdirAll(ctx context.Context, path string, perm os.FileMode) error
 	Stat(ctx context.Context, path string) (os.FileInfo, error)
+	ReadDir(ctx context.Context, path string) ([]os.DirEntry, error)
 }
 
 // ExecOps abstracts shell command execution for the bash tool.
@@ -73,6 +74,11 @@ func (LocalOps) MkdirAll(_ context.Context, path string, perm os.FileMode) error
 // Stat returns file info for path.
 func (LocalOps) Stat(_ context.Context, path string) (os.FileInfo, error) {
 	return os.Stat(path)
+}
+
+// ReadDir lists the directory entries of path.
+func (LocalOps) ReadDir(_ context.Context, path string) ([]os.DirEntry, error) {
+	return os.ReadDir(path)
 }
 
 // Exec runs command with `bash -c` inside dir, returning combined output. A

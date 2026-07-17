@@ -23,7 +23,7 @@ type editArgs struct {
 // place; set replace_all to change every occurrence. It runs sequentially with
 // other tool calls so concurrent edits cannot corrupt a file.
 func Edit(root string, ops FileOps) Tool {
-	def := llm.MustTool[editArgs]("edit", "Replace an exact string in a file. The match must be unique unless replace_all is set.")
+	def := llm.MustTool[editArgs]("edit", editText.description)
 	return Tool{
 		AgentTool: agent.AgentTool{
 			Definition:    def,
@@ -68,9 +68,7 @@ func Edit(root string, ops FileOps) Tool {
 				return textResult(fmt.Sprintf("Edited %s (%d replacement(s)).", in.Path, count)), nil
 			},
 		},
-		PromptSnippet: "edit: replace an exact string in a file.",
-		Guidelines: []string{
-			"Include enough surrounding context in old_string to match exactly one place, unless using replace_all.",
-		},
+		PromptSnippet: editText.snippet,
+		Guidelines:    editText.guidelines,
 	}
 }

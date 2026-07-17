@@ -26,7 +26,7 @@ type writeArgs struct {
 // tool calls so concurrent writes cannot corrupt a file. Use Edit for targeted
 // changes to an existing file.
 func Write(root string, ops FileOps) Tool {
-	def := llm.MustTool[writeArgs]("write", "Write a file in full, creating or overwriting it. Use edit for targeted changes.")
+	def := llm.MustTool[writeArgs]("write", writeText.description)
 	return Tool{
 		AgentTool: agent.AgentTool{
 			Definition:    def,
@@ -47,9 +47,7 @@ func Write(root string, ops FileOps) Tool {
 				return textResult(fmt.Sprintf("Wrote %s (%d bytes).", in.Path, len(in.Content))), nil
 			},
 		},
-		PromptSnippet: "write: create or overwrite a file in full.",
-		Guidelines: []string{
-			"Prefer edit over write when changing part of an existing file.",
-		},
+		PromptSnippet: writeText.snippet,
+		Guidelines:    writeText.guidelines,
 	}
 }

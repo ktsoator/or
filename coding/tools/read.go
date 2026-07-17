@@ -20,7 +20,7 @@ type readArgs struct {
 // 1-based line numbers, optionally windowed by offset and limit. Output is
 // capped to keep a large file from filling the context window.
 func Read(root string, ops FileOps) Tool {
-	def := llm.MustTool[readArgs]("read", "Read a text file from the workspace and return its contents with line numbers.")
+	def := llm.MustTool[readArgs]("read", readText.description)
 	return Tool{
 		AgentTool: agent.AgentTool{
 			Definition: def,
@@ -57,9 +57,7 @@ func Read(root string, ops FileOps) Tool {
 			},
 		},
 		ReadOnly:      true,
-		PromptSnippet: "read: read a file's contents with line numbers.",
-		Guidelines: []string{
-			"Read a file before editing it, so you edit against its current contents.",
-		},
+		PromptSnippet: readText.snippet,
+		Guidelines:    readText.guidelines,
 	}
 }

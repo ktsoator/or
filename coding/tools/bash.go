@@ -23,7 +23,7 @@ type bashArgs struct {
 // returns its combined output and exit code. A non-zero exit is reported to the
 // model as content, not as a failure, so the model can react to it.
 func Bash(root string, ops ExecOps) Tool {
-	def := llm.MustTool[bashArgs]("bash", "Run a bash command in the workspace directory and return its combined output.")
+	def := llm.MustTool[bashArgs]("bash", bashText.description)
 	return Tool{
 		AgentTool: agent.AgentTool{
 			Definition: def,
@@ -54,9 +54,7 @@ func Bash(root string, ops ExecOps) Tool {
 				return textResult(b.String()), nil
 			},
 		},
-		PromptSnippet: "bash: run a shell command in the workspace.",
-		Guidelines: []string{
-			"Prefer the dedicated read/edit/write tools over shell equivalents like cat or sed when one fits.",
-		},
+		PromptSnippet: bashText.snippet,
+		Guidelines:    bashText.guidelines,
 	}
 }

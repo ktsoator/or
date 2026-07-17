@@ -34,9 +34,12 @@ func (t Tool) Name() string { return t.Definition.Name }
 func CodingTools(root string, ops Ops) []Tool {
 	return []Tool{
 		Read(root, ops),
-		Bash(root, ops),
+		Grep(root, ops),
+		Glob(root, ops),
+		LS(root, ops),
 		Edit(root, ops),
 		Write(root, ops),
+		Bash(root, ops),
 	}
 }
 
