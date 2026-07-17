@@ -72,7 +72,7 @@ type Session struct {
 	agent    *agent.Agent
 	store    store.Store
 	tools    []tools.Tool
-	readOnly map[string]bool
+	readOnly map[string]tools.Tool // tool name -> tool, for per-call read-only checks
 	cwd      string
 
 	maxRetries    int
@@ -137,7 +137,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	s := &Session{
 		store:         opts.Store,
 		tools:         toolSet,
-		readOnly:      readOnlyNames(toolSet),
+		readOnly:      toolsByName(toolSet),
 		cwd:           cwd,
 		maxRetries:    maxRetries,
 		contextWindow: opts.Model.ContextWindow,
@@ -158,10 +158,14 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		GetAPIKey:     opts.GetAPIKey,
 		BeforeToolCall: func(bc agent.BeforeToolCallCtx) (bool, string) {
 			args, _ := bc.Args.(map[string]any)
+			readOnly := false
+			if t, ok := s.readOnly[bc.ToolCall.Name]; ok {
+				readOnly = t.IsReadOnly(args)
+			}
 			return gate.Check(policy.Request{
 				Tool:     bc.ToolCall.Name,
 				Args:     args,
-				ReadOnly: s.readOnly[bc.ToolCall.Name],
+				ReadOnly: readOnly,
 			})
 		},
 	}
@@ -312,12 +316,12 @@ func (s *Session) buildSystemPrompt(instructions string) string {
 	})
 }
 
-// readOnlyNames maps each tool name to whether it is read-only, for the
-// permission gate.
-func readOnlyNames(toolSet []tools.Tool) map[string]bool {
-	m := make(map[string]bool, len(toolSet))
+// toolsByName indexes the tool set by advertised name, so the permission gate
+// can consult each tool's per-call read-only classifier.
+func toolsByName(toolSet []tools.Tool) map[string]tools.Tool {
+	m := make(map[string]tools.Tool, len(toolSet))
 	for _, t := range toolSet {
-		m[t.Name()] = t.ReadOnly
+		m[t.Name()] = t
 	}
 	return m
 }
