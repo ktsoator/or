@@ -24,13 +24,6 @@ type writeArgs struct {
 	Content string `json:"content" jsonschema:"description=Full contents to write to the file"`
 }
 
-// WriteResult is the UI-independent outcome of a full-file write.
-type WriteResult struct {
-	Path    string
-	Created bool
-	Bytes   int
-}
-
 // Write returns a tool that writes a file in full, creating parent directories
 // as needed and overwriting any existing file. It runs sequentially with other
 // tool calls so concurrent writes cannot corrupt a file. Use Edit for targeted
@@ -49,7 +42,7 @@ func Write(root string, ops FileOps, files *FileStateStore) Tool {
 				}
 				if strings.TrimSpace(in.Path) == "" {
 					err := fmt.Errorf("write: path is required")
-					return textResult(err.Error()), err
+					return mutationFailure(in.Path, FailureInput, err.Error()), err
 				}
 				if err := ctx.Err(); err != nil {
 					return textResult("write: " + err.Error()), err
@@ -57,36 +50,55 @@ func Write(root string, ops FileOps, files *FileStateStore) Tool {
 				path := resolve(root, in.Path)
 				existed, err := checkWriteTarget(ctx, ops, files, path)
 				if err != nil {
+					reason := stateFailureReason(err)
 					err = mutationStateError("write", in.Path, err)
-					return textResult(err.Error()), err
+					return mutationFailure(in.Path, reason, err.Error()), err
 				}
 				if err := ops.MkdirAll(ctx, filepath.Dir(path), defaultDirPerm); err != nil {
-					return textResult(fmt.Sprintf("write %s: %v", in.Path, err)), err
+					detail := fmt.Sprintf("write %s: %v", in.Path, err)
+					return mutationFailure(in.Path, FailureIO, detail), err
 				}
 				// Check again immediately before the mutation. In particular, a path
 				// that did not exist above may have been created concurrently.
 				currentExists, err := checkWriteTarget(ctx, ops, files, path)
 				if err != nil {
+					reason := stateFailureReason(err)
 					err = mutationStateError("write", in.Path, err)
-					return textResult(err.Error()), err
+					return mutationFailure(in.Path, reason, err.Error()), err
 				}
 				if currentExists != existed {
 					err := mutationStateError("write", in.Path, ErrFileChanged)
-					return textResult(err.Error()), err
+					return mutationFailure(in.Path, FailureChanged, err.Error()), err
+				}
+				// Read the prior contents (best effort) so an update can report a diff.
+				var oldContent string
+				if existed {
+					if data, readErr := ops.ReadFile(ctx, path); readErr == nil {
+						oldContent = string(data)
+					}
 				}
 				if err := ctx.Err(); err != nil {
 					return textResult("write: " + err.Error()), err
 				}
 				if err := ops.WriteFile(ctx, path, []byte(in.Content), defaultFilePerm); err != nil {
-					return textResult(fmt.Sprintf("write %s: %v", in.Path, err)), err
+					detail := fmt.Sprintf("write %s: %v", in.Path, err)
+					return mutationFailure(in.Path, FailureIO, detail), err
 				}
 				if info, err := ops.Stat(ctx, path); err == nil {
 					files.Record(path, info)
 				} else {
 					files.Delete(path)
 				}
-				result := WriteResult{Path: in.Path, Created: !existed, Bytes: len(in.Content)}
-				return textResult(formatWriteResult(result)), nil
+
+				change := FileChange{Path: in.Path, Bytes: len(in.Content)}
+				if existed {
+					change.Kind = ChangeUpdate
+					change.Hunks, change.Additions, change.Deletions = diffLines(oldContent, in.Content)
+				} else {
+					change.Kind = ChangeCreate
+					change.Additions = len(splitLines(in.Content))
+				}
+				return resultWith(formatWriteResult(change), change), nil
 			},
 		},
 		PromptSnippet: writeText.snippet,
@@ -110,10 +122,10 @@ func checkWriteTarget(ctx context.Context, ops FileOps, files *FileStateStore, p
 	return true, nil
 }
 
-func formatWriteResult(result WriteResult) string {
+func formatWriteResult(c FileChange) string {
 	action := "Updated"
-	if result.Created {
+	if c.Kind == ChangeCreate {
 		action = "Created"
 	}
-	return fmt.Sprintf("%s %s (%d bytes).", action, result.Path, result.Bytes)
+	return fmt.Sprintf("%s %s (%d bytes, +%d -%d).", action, c.Path, c.Bytes, c.Additions, c.Deletions)
 }

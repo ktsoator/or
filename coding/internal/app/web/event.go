@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/ktsoator/or/coding"
+	"github.com/ktsoator/or/coding/tools"
 )
 
 // wireEvent is the JSON shape streamed to the browser. Fields are populated
@@ -20,10 +21,13 @@ type wireEvent struct {
 	Kind  string `json:"kind,omitempty"`  // "text" or "thinking"
 	Delta string `json:"delta,omitempty"` // incremental content
 	// tool events (ID correlates tool_start with tool_end)
-	Tool    string `json:"tool,omitempty"`
-	Args    any    `json:"args,omitempty"`
-	Result  string `json:"result,omitempty"`
-	IsError bool   `json:"isError,omitempty"`
+	Tool   string `json:"tool,omitempty"`
+	Args   any    `json:"args,omitempty"`
+	Result string `json:"result,omitempty"`
+	// Change is the structured file-change result (tools.FileChange) or failure
+	// (tools.MutationFailure), when the tool produced one, for rich rendering.
+	Change  any  `json:"change,omitempty"`
+	IsError bool `json:"isError,omitempty"`
 	// message_end fallback text (used when nothing streamed)
 	Text string `json:"text,omitempty"`
 	// confirm_request
@@ -45,7 +49,7 @@ func ProjectEvent(ev coding.Event) ([]byte, bool) {
 		out = wireEvent{Type: "tool_start", ID: ev.ToolCallID, Tool: ev.ToolName, Args: ev.ToolArgs}
 
 	case coding.ToolFinished:
-		out = wireEvent{Type: "tool_end", ID: ev.ToolCallID, Tool: ev.ToolName, Result: firstLines(ev.ToolResult, 12), IsError: ev.IsError}
+		out = wireEvent{Type: "tool_end", ID: ev.ToolCallID, Tool: ev.ToolName, Result: firstLines(ev.ToolResult, 12), Change: fileChangePayload(ev.ToolDetails), IsError: ev.IsError}
 
 	case coding.MessageCompleted:
 		out = wireEvent{Type: "message_end", Text: ev.Text}
@@ -93,11 +97,49 @@ func ProjectHistory(items []coding.HistoryItem) []wireEvent {
 				ID:      item.ToolCallID,
 				Tool:    item.ToolName,
 				Result:  firstLines(item.ToolResult, 12),
+				Change:  fileChangePayload(item.ToolDetails),
 				IsError: item.IsError,
 			})
 		}
 	}
 	return out
+}
+
+// fileChangePayload converts a tool's structured Details into the browser wire
+// shape, tagged so the front-end can tell a successful change from a failure.
+// It returns nil for tools that produced no structured result.
+func fileChangePayload(details any) any {
+	switch d := details.(type) {
+	case tools.FileChange:
+		hunks := make([]map[string]any, len(d.Hunks))
+		for i, h := range d.Hunks {
+			hunks[i] = map[string]any{
+				"oldStart": h.OldStart,
+				"oldLines": h.OldLines,
+				"newStart": h.NewStart,
+				"newLines": h.NewLines,
+				"lines":    h.Lines,
+			}
+		}
+		return map[string]any{
+			"changeType": "file",
+			"path":       d.Path,
+			"op":         string(d.Kind),
+			"additions":  d.Additions,
+			"deletions":  d.Deletions,
+			"bytes":      d.Bytes,
+			"hunks":      hunks,
+		}
+	case tools.MutationFailure:
+		return map[string]any{
+			"changeType": "failure",
+			"path":       d.Path,
+			"reason":     d.Reason,
+			"detail":     d.Detail,
+		}
+	default:
+		return nil
+	}
 }
 
 // firstLines returns at most n lines of s.

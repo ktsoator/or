@@ -31,16 +31,20 @@ type HistoryItem struct {
 	ToolName   string
 	ToolArgs   any
 	ToolResult string
-	IsError    bool
+	// ToolDetails is the tool's structured result (a tools.FileChange or
+	// tools.MutationFailure) restored from the DetailsStore, when one was
+	// persisted. It is nil when history replays as plain text.
+	ToolDetails any
+	IsError     bool
 }
 
 // History returns a displayable snapshot of the conversation in transcript
 // order. The returned slice is detached from the agent's mutable state.
 func (s *Session) History() []HistoryItem {
-	return projectHistory(s.agent.Snapshot().Messages)
+	return projectHistory(s.agent.Snapshot().Messages, s.snapshotDetails())
 }
 
-func projectHistory(messages []agent.AgentMessage) []HistoryItem {
+func projectHistory(messages []agent.AgentMessage, details map[string]any) []HistoryItem {
 	var items []HistoryItem
 	for _, message := range messages {
 		llmMessage, ok := agent.ToLLM(message)
@@ -59,11 +63,12 @@ func projectHistory(messages []agent.AgentMessage) []HistoryItem {
 
 		case *llm.ToolResultMessage:
 			items = append(items, HistoryItem{
-				Type:       HistoryToolResult,
-				ToolCallID: message.ToolCallID,
-				ToolName:   message.ToolName,
-				ToolResult: toolResultContentText(message.Content),
-				IsError:    message.IsError,
+				Type:        HistoryToolResult,
+				ToolCallID:  message.ToolCallID,
+				ToolName:    message.ToolName,
+				ToolResult:  toolResultContentText(message.Content),
+				ToolDetails: details[message.ToolCallID],
+				IsError:     message.IsError,
 			})
 		}
 	}

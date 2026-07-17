@@ -81,6 +81,28 @@ func sameFileVersion(a, b os.FileInfo) bool {
 	return fileVersion(a).Equal(fileVersion(b))
 }
 
+// stateFailureReason maps a FileStateStore.Check error to a MutationFailure
+// reason code.
+func stateFailureReason(err error) string {
+	switch {
+	case errors.Is(err, ErrFileNotRead):
+		return FailureNotRead
+	case errors.Is(err, ErrFileChanged):
+		return FailureChanged
+	default:
+		return FailureIO
+	}
+}
+
+// statFailureReason classifies a Stat error as a missing file or a generic I/O
+// failure.
+func statFailureReason(err error) string {
+	if errors.Is(err, os.ErrNotExist) {
+		return FailureNotFound
+	}
+	return FailureIO
+}
+
 func mutationStateError(tool, path string, err error) error {
 	switch {
 	case errors.Is(err, ErrFileNotRead):

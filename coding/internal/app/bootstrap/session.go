@@ -5,6 +5,7 @@ package bootstrap
 
 import (
 	"context"
+	"strings"
 
 	"github.com/ktsoator/or/coding"
 	"github.com/ktsoator/or/coding/internal/app/config"
@@ -30,6 +31,13 @@ func NewSession(ctx context.Context, cfg config.Config, deps Dependencies) (*cod
 		ThinkingLevel: cfg.Thinking(),
 		Cwd:           cfg.Cwd,
 		Store:         store.NewJSONL(cfg.SessionFile),
+		DetailsStore:  store.NewJSONLDetails(detailsFile(cfg.SessionFile)),
 		Policy:        policy.Gate{Confirm: deps.Confirm},
 	})
+}
+
+// detailsFile derives the tool-details side-car path from the transcript path,
+// keeping the two files together under the session directory.
+func detailsFile(sessionFile string) string {
+	return strings.TrimSuffix(sessionFile, ".jsonl") + ".details.jsonl"
 }

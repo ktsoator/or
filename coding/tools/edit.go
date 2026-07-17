@@ -36,21 +36,24 @@ func Edit(root string, ops FileOps, files *FileStateStore) Tool {
 				}
 				if in.OldString == in.NewString {
 					err := fmt.Errorf("old_string and new_string are identical")
-					return textResult("edit: " + err.Error()), err
+					return mutationFailure(in.Path, FailureInput, "edit: "+err.Error()), err
 				}
 
 				path := resolve(root, in.Path)
 				info, err := ops.Stat(ctx, path)
 				if err != nil {
-					return textResult(fmt.Sprintf("edit %s: %v", in.Path, err)), err
+					detail := fmt.Sprintf("edit %s: %v", in.Path, err)
+					return mutationFailure(in.Path, statFailureReason(err), detail), err
 				}
 				if err := files.Check(path, info); err != nil {
+					reason := stateFailureReason(err)
 					err = mutationStateError("edit", in.Path, err)
-					return textResult(err.Error()), err
+					return mutationFailure(in.Path, reason, err.Error()), err
 				}
 				data, err := ops.ReadFile(ctx, path)
 				if err != nil {
-					return textResult(fmt.Sprintf("edit %s: %v", in.Path, err)), err
+					detail := fmt.Sprintf("edit %s: %v", in.Path, err)
+					return mutationFailure(in.Path, FailureIO, detail), err
 				}
 				content := string(data)
 
@@ -58,34 +61,46 @@ func Edit(root string, ops FileOps, files *FileStateStore) Tool {
 				switch {
 				case count == 0:
 					err := fmt.Errorf("old_string not found in %s", in.Path)
-					return textResult("edit: " + err.Error()), err
+					return mutationFailure(in.Path, FailureNotFound, "edit: "+err.Error()), err
 				case count > 1 && !in.ReplaceAll:
 					err := fmt.Errorf("old_string matches %d places in %s; make it unique or set replace_all", count, in.Path)
-					return textResult("edit: " + err.Error()), err
+					return mutationFailure(in.Path, FailureAmbiguous, "edit: "+err.Error()), err
 				}
 
 				updated := strings.ReplaceAll(content, in.OldString, in.NewString)
 				current, err := ops.Stat(ctx, path)
 				if err != nil {
-					return textResult(fmt.Sprintf("edit %s: %v", in.Path, err)), err
+					detail := fmt.Sprintf("edit %s: %v", in.Path, err)
+					return mutationFailure(in.Path, statFailureReason(err), detail), err
 				}
 				if err := files.Check(path, current); err != nil {
+					reason := stateFailureReason(err)
 					err = mutationStateError("edit", in.Path, err)
-					return textResult(err.Error()), err
+					return mutationFailure(in.Path, reason, err.Error()), err
 				}
 				var perm os.FileMode = current.Mode().Perm()
 				if err := ops.WriteFile(ctx, path, []byte(updated), perm); err != nil {
-					return textResult(fmt.Sprintf("edit %s: %v", in.Path, err)), err
+					detail := fmt.Sprintf("edit %s: %v", in.Path, err)
+					return mutationFailure(in.Path, FailureIO, detail), err
 				}
 				if updatedInfo, err := ops.Stat(ctx, path); err == nil {
 					files.Record(path, updatedInfo)
 				} else {
 					files.Delete(path)
 				}
-				return textResult(fmt.Sprintf("Edited %s (%d replacement(s)).", in.Path, count)), nil
+
+				change := FileChange{Path: in.Path, Kind: ChangeUpdate, Bytes: len(updated)}
+				change.Hunks, change.Additions, change.Deletions = diffLines(content, updated)
+				return resultWith(formatEditResult(in.Path, count, change), change), nil
 			},
 		},
 		PromptSnippet: editText.snippet,
 		Guidelines:    editText.guidelines,
 	}
+}
+
+// formatEditResult is the model-facing summary derived from the structured
+// change.
+func formatEditResult(path string, count int, c FileChange) string {
+	return fmt.Sprintf("Edited %s (%d replacement(s), +%d -%d).", path, count, c.Additions, c.Deletions)
 }
