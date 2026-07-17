@@ -3,7 +3,9 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"path/filepath"
 
 	"github.com/ktsoator/or/agent"
@@ -25,7 +27,7 @@ type writeArgs struct {
 // as needed and overwriting any existing file. It runs sequentially with other
 // tool calls so concurrent writes cannot corrupt a file. Use Edit for targeted
 // changes to an existing file.
-func Write(root string, ops FileOps) Tool {
+func Write(root string, ops FileOps, files *FileStateStore) Tool {
 	def := llm.MustTool[writeArgs]("write", writeText.description)
 	return Tool{
 		AgentTool: agent.AgentTool{
@@ -38,11 +40,26 @@ func Write(root string, ops FileOps) Tool {
 					return agent.ToolResult{}, err
 				}
 				path := resolve(root, in.Path)
+				if err := checkWriteTarget(ctx, ops, files, path); err != nil {
+					err = mutationStateError("write", in.Path, err)
+					return textResult(err.Error()), err
+				}
 				if err := ops.MkdirAll(ctx, filepath.Dir(path), defaultDirPerm); err != nil {
 					return textResult(fmt.Sprintf("write %s: %v", in.Path, err)), err
 				}
+				// Check again immediately before the mutation. In particular, a path
+				// that did not exist above may have been created concurrently.
+				if err := checkWriteTarget(ctx, ops, files, path); err != nil {
+					err = mutationStateError("write", in.Path, err)
+					return textResult(err.Error()), err
+				}
 				if err := ops.WriteFile(ctx, path, []byte(in.Content), defaultFilePerm); err != nil {
 					return textResult(fmt.Sprintf("write %s: %v", in.Path, err)), err
+				}
+				if info, err := ops.Stat(ctx, path); err == nil {
+					files.Record(path, info)
+				} else {
+					files.Delete(path)
 				}
 				return textResult(fmt.Sprintf("Wrote %s (%d bytes).", in.Path, len(in.Content))), nil
 			},
@@ -50,4 +67,17 @@ func Write(root string, ops FileOps) Tool {
 		PromptSnippet: writeText.snippet,
 		Guidelines:    writeText.guidelines,
 	}
+}
+
+// checkWriteTarget allows a new path, but requires an existing path to match a
+// previously observed version.
+func checkWriteTarget(ctx context.Context, ops FileOps, files *FileStateStore, path string) error {
+	info, err := ops.Stat(ctx, path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return files.Check(path, info)
 }

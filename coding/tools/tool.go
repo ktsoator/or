@@ -29,16 +29,18 @@ type Tool struct {
 func (t Tool) Name() string { return t.Definition.Name }
 
 // CodingTools returns the default v1 tool set rooted at the given workspace
-// directory and backed by ops. Pass LocalOps{} for the local filesystem and
-// shell.
+// directory and backed by ops. One file-state store is shared by Read, Edit,
+// and Write for this tool-set lifetime. Pass LocalOps{} for the local filesystem
+// and shell.
 func CodingTools(root string, ops Ops) []Tool {
+	files := NewFileStateStore()
 	return []Tool{
-		Read(root, ops),
+		Read(root, ops, files),
 		Grep(root, ops),
 		Glob(root, ops),
 		LS(root, ops),
-		Edit(root, ops),
-		Write(root, ops),
+		Edit(root, ops, files),
+		Write(root, ops, files),
 		Bash(root, ops),
 	}
 }

@@ -22,7 +22,7 @@ type editArgs struct {
 // match must be unique, so an ambiguous edit fails instead of changing the wrong
 // place; set replace_all to change every occurrence. It runs sequentially with
 // other tool calls so concurrent edits cannot corrupt a file.
-func Edit(root string, ops FileOps) Tool {
+func Edit(root string, ops FileOps, files *FileStateStore) Tool {
 	def := llm.MustTool[editArgs]("edit", editText.description)
 	return Tool{
 		AgentTool: agent.AgentTool{
@@ -40,6 +40,14 @@ func Edit(root string, ops FileOps) Tool {
 				}
 
 				path := resolve(root, in.Path)
+				info, err := ops.Stat(ctx, path)
+				if err != nil {
+					return textResult(fmt.Sprintf("edit %s: %v", in.Path, err)), err
+				}
+				if err := files.Check(path, info); err != nil {
+					err = mutationStateError("edit", in.Path, err)
+					return textResult(err.Error()), err
+				}
 				data, err := ops.ReadFile(ctx, path)
 				if err != nil {
 					return textResult(fmt.Sprintf("edit %s: %v", in.Path, err)), err
@@ -57,13 +65,22 @@ func Edit(root string, ops FileOps) Tool {
 				}
 
 				updated := strings.ReplaceAll(content, in.OldString, in.NewString)
-				info, statErr := ops.Stat(ctx, path)
-				var perm os.FileMode = defaultFilePerm
-				if statErr == nil {
-					perm = info.Mode().Perm()
+				current, err := ops.Stat(ctx, path)
+				if err != nil {
+					return textResult(fmt.Sprintf("edit %s: %v", in.Path, err)), err
 				}
+				if err := files.Check(path, current); err != nil {
+					err = mutationStateError("edit", in.Path, err)
+					return textResult(err.Error()), err
+				}
+				var perm os.FileMode = current.Mode().Perm()
 				if err := ops.WriteFile(ctx, path, []byte(updated), perm); err != nil {
 					return textResult(fmt.Sprintf("edit %s: %v", in.Path, err)), err
+				}
+				if updatedInfo, err := ops.Stat(ctx, path); err == nil {
+					files.Record(path, updatedInfo)
+				} else {
+					files.Delete(path)
 				}
 				return textResult(fmt.Sprintf("Edited %s (%d replacement(s)).", in.Path, count)), nil
 			},

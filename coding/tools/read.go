@@ -39,7 +39,7 @@ type ReadResult struct {
 // Read returns a tool that reads a UTF-8 text file and returns its contents with
 // 1-based line numbers, optionally windowed by offset and limit. Output is
 // capped to keep a large file from filling the context window.
-func Read(root string, ops FileOps) Tool {
+func Read(root string, ops FileOps, files *FileStateStore) Tool {
 	def := llm.MustTool[readArgs]("read", readText.description)
 	return Tool{
 		AgentTool: agent.AgentTool{
@@ -55,6 +55,10 @@ func Read(root string, ops FileOps) Tool {
 					return textResult(err.Error()), err
 				}
 				path := resolve(root, in.Path)
+				before, err := ops.Stat(ctx, path)
+				if err != nil {
+					return textResult(fmt.Sprintf("read %s: %v", in.Path, err)), err
+				}
 				file, err := ops.Open(ctx, path)
 				if err != nil {
 					return textResult(fmt.Sprintf("read %s: %v", in.Path, err)), err
@@ -66,6 +70,15 @@ func Read(root string, ops FileOps) Tool {
 					msg := fmt.Sprintf("read %s: %v", in.Path, err)
 					return textResult(msg), err
 				}
+				after, err := ops.Stat(ctx, path)
+				if err != nil {
+					return textResult(fmt.Sprintf("read %s: %v", in.Path, err)), err
+				}
+				if !sameFileVersion(before, after) {
+					err := fmt.Errorf("%w while it was being read; read it again", ErrFileChanged)
+					return textResult(fmt.Sprintf("read %s: %v", in.Path, err)), err
+				}
+				files.Record(path, after)
 				result.Path = in.Path
 				return textResult(formatReadResult(result)), nil
 			},

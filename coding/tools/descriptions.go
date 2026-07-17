@@ -85,6 +85,7 @@ var writeText = toolText{
 	description: `Write a file in full, creating it or overwriting its contents; parent directories are created as needed.
 
 Usage:
+- Read an existing file before overwriting it; creating a new file does not require a prior read.
 - Prefer edit over write when changing part of an existing file; write replaces the whole file.
 - Provide the complete intended contents, not a fragment.`,
 	snippet: "write — create or overwrite a file in full",
