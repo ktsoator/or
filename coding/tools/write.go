@@ -96,7 +96,9 @@ func Write(root string, ops FileOps, files *FileStateStore) Tool {
 					change.Hunks, change.Additions, change.Deletions = diffLines(oldContent, in.Content)
 				} else {
 					change.Kind = ChangeCreate
-					change.Additions = len(splitLines(in.Content))
+					// Treat a newly created file as a diff from an empty file so
+					// product shells can display its contents, not only the line count.
+					change.Hunks, change.Additions, change.Deletions = diffLines("", in.Content)
 				}
 				return resultWith(formatWriteResult(change), change), nil
 			},

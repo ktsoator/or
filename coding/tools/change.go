@@ -26,8 +26,8 @@ type FileChange struct {
 	// Additions and Deletions are the line counts of the change.
 	Additions int
 	Deletions int
-	// Hunks is the diff, empty for a newly created file. Lines within a hunk are
-	// prefixed with " ", "+", or "-".
+	// Hunks is the diff. A newly created non-empty file is represented as a diff
+	// from an empty file. Lines within a hunk are prefixed with " ", "+", or "-".
 	Hunks []Hunk
 	// Bytes is the size of the content written.
 	Bytes int

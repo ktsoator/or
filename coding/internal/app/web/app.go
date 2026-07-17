@@ -5,33 +5,23 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/ktsoator/or/coding"
-	"github.com/ktsoator/or/coding/internal/app/bootstrap"
 	"github.com/ktsoator/or/coding/internal/app/config"
 )
 
-// Run serves a single-session browser front-end at cfg.Addr. It blocks until
-// the HTTP server stops.
+// Run serves the workspace's multi-session HTTP API at cfg.Addr. The React
+// front-end runs as a separate process or deployment and consumes this API.
 func Run(ctx context.Context, cfg config.Config) error {
-	hub := NewHub()
-	broker := NewConfirmBroker(hub)
-
-	session, err := bootstrap.NewSession(ctx, cfg, bootstrap.Dependencies{
-		Confirm: broker.Confirm,
-	})
+	manager, err := NewSessionManager(ctx, cfg)
 	if err != nil {
 		return err
 	}
 
-	session.Subscribe(func(ev coding.Event) {
-		if data, ok := ProjectEvent(ev); ok {
-			hub.Broadcast(data)
-		}
-	})
-
-	server := NewServer(ctx, session, hub, broker)
-	model := session.Snapshot().Model
-	fmt.Printf("coding agent — %s/%s in %s\n", model.Provider, model.ID, session.Cwd())
-	fmt.Printf("open http://%s\n", cfg.Addr)
+	server := NewServer(ctx, manager, cfg.FrontendOrigin)
+	model, _ := cfg.ResolveModel()
+	fmt.Printf("coding API — %s/%s in %s\n", model.Provider, model.ID, cfg.Cwd)
+	fmt.Printf("listening on http://%s/api/\n", cfg.Addr)
+	if cfg.FrontendOrigin != "" {
+		fmt.Printf("allowing front-end origin %s\n", cfg.FrontendOrigin)
+	}
 	return http.ListenAndServe(cfg.Addr, server.Handler())
 }

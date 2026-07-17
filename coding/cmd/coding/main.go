@@ -1,6 +1,6 @@
 // Command coding is a minimal coding agent. By default it runs an interactive
-// print-mode loop in the terminal; with -web it serves a single-session browser
-// front-end instead. Both are shells over the same embeddable coding core.
+// print-mode loop in the terminal; with -web it serves the multi-session HTTP
+// API consumed by the separate React front-end.
 package main
 
 import (

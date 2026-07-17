@@ -1,8 +1,8 @@
-// Package web is a browser front-end for a coding session. It is part of the
-// product shell: it consumes the same coding.Session the terminal shell uses,
-// streaming run events to the browser over Server-Sent Events and taking prompts
-// and permission answers back over plain POST requests. The coding core has no
-// knowledge of it.
+// Package web exposes an HTTP API for a coding session. It consumes the same
+// coding.Session the terminal shell uses, streams run events over Server-Sent
+// Events, and accepts prompts and permission answers over POST requests. The
+// coding core and independently deployed React application do not depend on one
+// another.
 package web
 
 import (
@@ -35,7 +35,7 @@ type wireEvent struct {
 	Summary string `json:"summary,omitempty"`
 }
 
-// ProjectEvent maps a UI-neutral coding event to the Web wire protocol.
+// ProjectEvent maps a UI-neutral coding event to the HTTP wire protocol.
 func ProjectEvent(ev coding.Event) ([]byte, bool) {
 	var out wireEvent
 	switch ev.Type {

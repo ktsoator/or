@@ -32,10 +32,13 @@ type Config struct {
 	Cwd string
 	// SessionFile is where the transcript is persisted.
 	SessionFile string
-	// Mode selects the terminal or browser product adapter.
+	// Mode selects the terminal or HTTP API product adapter.
 	Mode Mode
 	// Addr is the Web listen address when Mode is ModeWeb.
 	Addr string
+	// FrontendOrigin is the optional browser origin allowed to call the API
+	// directly when the React application is deployed separately.
+	FrontendOrigin string
 }
 
 // Thinking returns the reasoning level as the typed value the agent expects.
@@ -49,13 +52,14 @@ func Defaults() Config {
 	provider := envOr("OR_PROVIDER", "deepseek")
 	model := envOr("OR_MODEL", "deepseek-v4-pro")
 	return Config{
-		Provider:      provider,
-		Model:         model,
-		ThinkingLevel: envOr("OR_THINKING", "medium"),
-		Cwd:           ".",
-		SessionFile:   "",
-		Mode:          ModeCLI,
-		Addr:          "localhost:8787",
+		Provider:       provider,
+		Model:          model,
+		ThinkingLevel:  envOr("OR_THINKING", "medium"),
+		Cwd:            ".",
+		SessionFile:    "",
+		Mode:           ModeCLI,
+		Addr:           "localhost:8787",
+		FrontendOrigin: envOr("OR_WEB_ORIGIN", ""),
 	}
 }
 
@@ -70,8 +74,9 @@ func Parse(args []string) (Config, error) {
 	flags.StringVar(&cfg.Cwd, "cwd", cfg.Cwd, "workspace root directory")
 	flags.StringVar(&cfg.SessionFile, "session", cfg.SessionFile, "session transcript file (default .coding/session.jsonl under cwd)")
 	flags.StringVar(&cfg.ThinkingLevel, "thinking", cfg.ThinkingLevel, "reasoning level: off, minimal, low, medium, high, xhigh")
-	flags.StringVar(&cfg.Addr, "addr", cfg.Addr, "web UI listen address (with -web)")
-	webUI := flags.Bool("web", false, "serve a browser UI instead of the terminal REPL")
+	flags.StringVar(&cfg.Addr, "addr", cfg.Addr, "web API listen address (with -web)")
+	flags.StringVar(&cfg.FrontendOrigin, "web-origin", cfg.FrontendOrigin, "allowed front-end origin for cross-origin API access")
+	webUI := flags.Bool("web", false, "serve the HTTP API instead of the terminal REPL")
 
 	if err := flags.Parse(args); err != nil {
 		return Config{}, err
