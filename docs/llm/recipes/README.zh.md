@@ -27,7 +27,7 @@
 
 ## 运行示例前
 
-示例要求 Go 1.24 或更高版本：
+示例要求 Go 1.25 或更高版本：
 
 ```sh
 go get github.com/ktsoator/or/llm@latest

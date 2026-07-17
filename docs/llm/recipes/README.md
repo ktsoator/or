@@ -29,7 +29,7 @@ concepts own type, field, and behavioral contracts.
 
 ## Before running an example
 
-Examples require Go 1.24 or later:
+Examples require Go 1.25 or later:
 
 ```sh
 go get github.com/ktsoator/or/llm@latest

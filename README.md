@@ -46,7 +46,7 @@ without turning the root package into a single large API.
 
 ## Requirements
 
-- Go 1.24 or later
+- Go 1.25 or later
 - An API key for the selected hosted provider, or a compatible local endpoint
 
 ## Install
