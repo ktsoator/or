@@ -21,9 +21,10 @@ var readText = toolText{
 
 Usage:
 - path may be absolute or relative to the workspace root.
-- Prefer reading the whole file; use offset and limit only for very large files.
+- offset is 1-based and defaults to 1; limit defaults to 1000 lines and cannot exceed 2000.
+- When more content is available, continue from the offset reported at the end of the result.
 - Read a file before you edit it, so your edits match its current contents.
-- Output is capped; a very large file is truncated with a notice.`,
+- Output is capped at complete line boundaries; an unusually long single line returns an error instead of partial content.`,
 	snippet: "read — read a file's contents with line numbers",
 	guidelines: []string{
 		"Read a file with `read` before you `edit` it, so edits match its current contents.",

@@ -12,6 +12,7 @@ package tools
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 )
@@ -20,6 +21,7 @@ import (
 // already resolved to absolute form by the tool. Implementations must honor ctx
 // cancellation where the underlying operation supports it.
 type FileOps interface {
+	Open(ctx context.Context, path string) (io.ReadCloser, error)
 	ReadFile(ctx context.Context, path string) ([]byte, error)
 	WriteFile(ctx context.Context, path string, data []byte, perm os.FileMode) error
 	MkdirAll(ctx context.Context, path string, perm os.FileMode) error
@@ -54,6 +56,14 @@ type Ops interface {
 // LocalOps runs against the local filesystem and a bash shell. It is the default
 // backend and holds no state.
 type LocalOps struct{}
+
+// Open opens path for streaming reads.
+func (LocalOps) Open(ctx context.Context, path string) (io.ReadCloser, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return os.Open(path)
+}
 
 // ReadFile reads the file at path.
 func (LocalOps) ReadFile(_ context.Context, path string) ([]byte, error) {
