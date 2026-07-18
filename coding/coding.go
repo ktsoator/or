@@ -298,6 +298,19 @@ func (s *Session) Messages() []agent.AgentMessage { return s.agent.Snapshot().Me
 // Cwd returns the workspace root.
 func (s *Session) Cwd() string { return s.cwd }
 
+// SetModel replaces the model used by the next run. Call it only while the
+// session is idle; an in-flight run has already captured its model.
+func (s *Session) SetModel(model llm.Model) {
+	s.agent.SetModel(model)
+	s.contextWindow = model.ContextWindow
+}
+
+// SetThinkingLevel replaces the reasoning effort used by the next run. Call it
+// only while the session is idle.
+func (s *Session) SetThinkingLevel(level llm.ModelThinkingLevel) {
+	s.agent.SetThinkingLevel(level)
+}
+
 // buildSystemPrompt assembles the coding system prompt from the active tools'
 // self-descriptions and the workspace's project context files.
 func (s *Session) buildSystemPrompt(instructions string) string {

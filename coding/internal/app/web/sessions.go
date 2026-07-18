@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -19,6 +20,7 @@ import (
 	"github.com/ktsoator/or/coding"
 	"github.com/ktsoator/or/coding/internal/app/bootstrap"
 	"github.com/ktsoator/or/coding/internal/app/config"
+	"github.com/ktsoator/or/llm"
 )
 
 const defaultSessionTitle = "New session"
@@ -27,15 +29,23 @@ const defaultSessionTitle = "New session"
 // gate still owns live resources.
 var ErrSessionActive = errors.New("web: session is running or waiting for approval")
 
+// ErrImagesUnsupported rejects image attachments before a run is reserved
+// when the session's selected model accepts text only.
+var ErrImagesUnsupported = errors.New("web: selected model does not support images")
+
 // SessionSummary is the browser-facing metadata for one independent coding
 // conversation. Runtime-only state is sampled when the list is requested.
 type SessionSummary struct {
-	ID          string    `json:"id"`
-	Title       string    `json:"title"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
-	Running     bool      `json:"running"`
-	HasApproval bool      `json:"hasApproval"`
+	ID            string                 `json:"id"`
+	Title         string                 `json:"title"`
+	CreatedAt     time.Time              `json:"createdAt"`
+	UpdatedAt     time.Time              `json:"updatedAt"`
+	Running       bool                   `json:"running"`
+	HasApproval   bool                   `json:"hasApproval"`
+	ModelProvider string                 `json:"modelProvider"`
+	ModelID       string                 `json:"modelId"`
+	ModelName     string                 `json:"modelName"`
+	ThinkingLevel llm.ModelThinkingLevel `json:"thinkingLevel"`
 }
 
 type sessionRecord struct {
@@ -45,6 +55,9 @@ type sessionRecord struct {
 	UpdatedAt  time.Time `json:"updatedAt"`
 	Transcript string    `json:"transcript"`
 	AutoTitle  bool      `json:"autoTitle,omitempty"`
+	Provider   string    `json:"provider,omitempty"`
+	Model      string    `json:"model,omitempty"`
+	Thinking   string    `json:"thinkingLevel,omitempty"`
 }
 
 type sessionRuntime struct {
@@ -132,6 +145,24 @@ func (m *SessionManager) build(record sessionRecord) (*sessionRuntime, error) {
 	broker := NewConfirmBroker(hub)
 	cfg := m.cfg
 	cfg.SessionFile = record.Transcript
+	if record.Provider != "" {
+		cfg.Provider = record.Provider
+	}
+	if record.Model != "" {
+		cfg.Model = record.Model
+	}
+	if record.Thinking != "" {
+		cfg.ThinkingLevel = record.Thinking
+	}
+	model, err := cfg.ResolveModel()
+	if err != nil {
+		return nil, err
+	}
+	thinking := llm.ClampThinkingLevel(model, cfg.Thinking())
+	cfg.ThinkingLevel = string(thinking)
+	record.Provider = model.Provider
+	record.Model = model.ID
+	record.Thinking = string(thinking)
 	session, err := bootstrap.NewSession(m.ctx, cfg, bootstrap.Dependencies{Confirm: broker.Confirm})
 	if err != nil {
 		return nil, err
@@ -260,6 +291,21 @@ func (m *SessionManager) Get(id string) (*sessionRuntime, bool) {
 	return runtime, ok
 }
 
+// UsesProvider reports whether any restored session currently references the
+// provider. Keeping the active provider visible lets an installation manage
+// its existing sessions even when credentials are supplied outside the
+// process environment (for example by an upstream proxy).
+func (m *SessionManager) UsesProvider(provider string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, runtime := range m.sessions {
+		if runtime.record.Provider == provider {
+			return true
+		}
+	}
+	return false
+}
+
 // List returns newest-active first and samples each session's live state.
 func (m *SessionManager) List() []SessionSummary {
 	m.mu.RLock()
@@ -277,13 +323,55 @@ func (m *SessionManager) List() []SessionSummary {
 	return out
 }
 
+// UpdateSettings changes the model and reasoning effort used by the session's
+// next prompt and persists the choice with that conversation.
+func (m *SessionManager) UpdateSettings(
+	id string,
+	model llm.Model,
+	thinking llm.ModelThinkingLevel,
+) (SessionSummary, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	runtime, ok := m.sessions[id]
+	if !ok {
+		return SessionSummary{}, os.ErrNotExist
+	}
+	if runtime.running.Load() || runtime.broker.HasPending() {
+		return SessionSummary{}, ErrSessionActive
+	}
+
+	previousRecord := runtime.record
+	previousModel, _ := llm.LookupModel(previousRecord.Provider, previousRecord.Model)
+	previousThinking := llm.ModelThinkingLevel(previousRecord.Thinking)
+
+	runtime.session.SetModel(model)
+	runtime.session.SetThinkingLevel(thinking)
+	runtime.record.Provider = model.Provider
+	runtime.record.Model = model.ID
+	runtime.record.Thinking = string(thinking)
+	runtime.record.UpdatedAt = time.Now().UTC()
+	if err := m.saveLocked(); err != nil {
+		runtime.record = previousRecord
+		runtime.session.SetModel(previousModel)
+		runtime.session.SetThinkingLevel(previousThinking)
+		return SessionSummary{}, err
+	}
+	return runtime.summary(), nil
+}
+
 // BeginPrompt reserves a session run and updates its durable title/activity.
-func (m *SessionManager) BeginPrompt(id, prompt string) (*sessionRuntime, error) {
+func (m *SessionManager) BeginPrompt(id, prompt string, hasImages bool) (*sessionRuntime, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	runtime, ok := m.sessions[id]
 	if !ok {
 		return nil, os.ErrNotExist
+	}
+	if hasImages {
+		model, found := llm.LookupModel(runtime.record.Provider, runtime.record.Model)
+		if !found || !slices.Contains(model.Input, llm.Image) {
+			return nil, ErrImagesUnsupported
+		}
 	}
 	if !runtime.running.CompareAndSwap(false, true) {
 		return nil, coding.ErrBusy
@@ -291,7 +379,11 @@ func (m *SessionManager) BeginPrompt(id, prompt string) (*sessionRuntime, error)
 	previous := runtime.record
 	runtime.record.UpdatedAt = time.Now().UTC()
 	if runtime.record.AutoTitle {
-		runtime.record.Title = titleFromPrompt(prompt)
+		title := prompt
+		if strings.TrimSpace(title) == "" && hasImages {
+			title = "Image"
+		}
+		runtime.record.Title = titleFromPrompt(title)
 		runtime.record.AutoTitle = false
 	}
 	if err := m.saveLocked(); err != nil {
@@ -391,13 +483,21 @@ func restoreFiles(files []stagedFile) {
 }
 
 func (s *sessionRuntime) summary() SessionSummary {
+	modelName := s.record.Model
+	if model, ok := llm.LookupModel(s.record.Provider, s.record.Model); ok && model.Name != "" {
+		modelName = model.Name
+	}
 	return SessionSummary{
-		ID:          s.record.ID,
-		Title:       s.record.Title,
-		CreatedAt:   s.record.CreatedAt,
-		UpdatedAt:   s.record.UpdatedAt,
-		Running:     s.running.Load(),
-		HasApproval: s.broker.HasPending(),
+		ID:            s.record.ID,
+		Title:         s.record.Title,
+		CreatedAt:     s.record.CreatedAt,
+		UpdatedAt:     s.record.UpdatedAt,
+		Running:       s.running.Load(),
+		HasApproval:   s.broker.HasPending(),
+		ModelProvider: s.record.Provider,
+		ModelID:       s.record.Model,
+		ModelName:     modelName,
+		ThinkingLevel: llm.ModelThinkingLevel(s.record.Thinking),
 	}
 }
 

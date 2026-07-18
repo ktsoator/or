@@ -25,7 +25,7 @@ export function Approval({
 
   return (
     <section
-      className="animate-[fade-in_160ms_ease-out] rounded-xl border border-stone-300 bg-[#fffefa] px-3.5 py-3 shadow-[0_8px_24px_-20px_rgba(28,25,23,0.65)]"
+      className="animate-[fade-in_160ms_ease-out] rounded-xl border border-stone-300 bg-white px-3.5 py-3 shadow-[0_8px_24px_-20px_rgba(28,25,23,0.65)]"
       aria-live="polite"
     >
       <div className="flex items-center gap-3 max-sm:flex-wrap">

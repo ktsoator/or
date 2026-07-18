@@ -2,17 +2,21 @@ package web
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/ktsoator/or/coding"
+	"github.com/ktsoator/or/llm"
 )
 
 func init() {
@@ -86,17 +90,104 @@ func (s *Server) Handler() http.Handler {
 	r.Use(gin.Recovery())
 
 	api := r.Group("/api")
+	api.GET("/models", s.handleModels)
 	api.GET("/sessions", s.handleSessions)
 	api.POST("/sessions", s.handleCreateSession)
 	session := api.Group("/sessions/:sessionID")
 	session.GET("/history", s.handleHistory)
 	session.GET("/events", s.handleEvents)
 	session.DELETE("", s.handleDeleteSession)
+	session.PATCH("/settings", s.handleSessionSettings)
 	session.POST("/prompt", s.handlePrompt)
 	session.POST("/confirm", s.handleConfirm)
 	session.POST("/abort", s.handleAbort)
 
 	return allowFrontendOrigin(r, s.frontendOrigin)
+}
+
+type modelOption struct {
+	Provider       string                   `json:"provider"`
+	ID             string                   `json:"id"`
+	Name           string                   `json:"name"`
+	ThinkingLevels []llm.ModelThinkingLevel `json:"thinkingLevels"`
+	SupportsImages bool                     `json:"supportsImages"`
+}
+
+func (s *Server) handleModels(c *gin.Context) {
+	models := make([]modelOption, 0)
+	for _, provider := range llm.GetProviders() {
+		if !s.providerAvailable(provider) {
+			continue
+		}
+		for _, model := range llm.GetRunnableModels(provider) {
+			name := model.Name
+			if name == "" {
+				name = model.ID
+			}
+			models = append(models, modelOption{
+				Provider:       model.Provider,
+				ID:             model.ID,
+				Name:           name,
+				ThinkingLevels: llm.SupportedThinkingLevels(model),
+				SupportsImages: slices.Contains(model.Input, llm.Image),
+			})
+		}
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{"models": models})
+}
+
+func (s *Server) providerAvailable(provider string) bool {
+	if s.sessions.UsesProvider(provider) {
+		return true
+	}
+	status, ok := llm.DefaultProviderRegistry().AuthStatus(provider, nil)
+	return ok && status.Configured
+}
+
+func (s *Server) handleSessionSettings(c *gin.Context) {
+	var body struct {
+		Provider      string `json:"provider"`
+		Model         string `json:"model"`
+		ThinkingLevel string `json:"thinkingLevel"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid session settings"})
+		return
+	}
+	model, ok := llm.LookupModel(body.Provider, body.Model)
+	if !ok || !llm.SupportsProtocol(model.Protocol) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "model is not available"})
+		return
+	}
+	if !s.providerAvailable(model.Provider) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "model provider is not configured"})
+		return
+	}
+	thinking := llm.ModelThinkingLevel(body.ThinkingLevel)
+	supported := false
+	for _, level := range llm.SupportedThinkingLevels(model) {
+		if level == thinking {
+			supported = true
+			break
+		}
+	}
+	if !supported {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "thinking level is not supported by this model"})
+		return
+	}
+
+	summary, err := s.sessions.UpdateSettings(c.Param("sessionID"), model, thinking)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+	case errors.Is(err, ErrSessionActive):
+		c.JSON(http.StatusConflict, gin.H{"error": "wait for the session to become idle before changing settings"})
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	default:
+		c.JSON(http.StatusOK, summary)
+	}
 }
 
 func (s *Server) handleDeleteSession(c *gin.Context) {
@@ -206,16 +297,27 @@ func (s *Server) handlePrompt(c *gin.Context) {
 		return
 	}
 	var body struct {
-		Text string `json:"text"`
+		Text   string        `json:"text"`
+		Images []promptImage `json:"images"`
 	}
-	if err := c.ShouldBindJSON(&body); err != nil || body.Text == "" {
-		c.Status(http.StatusBadRequest)
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxPromptRequestBytes)
+	if err := c.ShouldBindJSON(&body); err != nil || (strings.TrimSpace(body.Text) == "" && len(body.Images) == 0) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "prompt must include text or an image"})
+		return
+	}
+	images, err := decodePromptImages(body.Images)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	sessionID := c.Param("sessionID")
-	runtime, err := s.sessions.BeginPrompt(sessionID, body.Text)
+	runtime, err = s.sessions.BeginPrompt(sessionID, body.Text, len(images) > 0)
 	if errors.Is(err, coding.ErrBusy) {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		return
+	}
+	if errors.Is(err, ErrImagesUnsupported) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	if err != nil {
@@ -224,12 +326,57 @@ func (s *Server) handlePrompt(c *gin.Context) {
 	}
 	go func() {
 		defer s.sessions.EndRun(sessionID)
-		if err := runtime.session.Prompt(s.ctx, body.Text); err != nil {
+		if err := runtime.session.Prompt(s.ctx, body.Text, images...); err != nil {
 			payload, _ := json.Marshal(wireEvent{Type: "error", Text: err.Error()})
 			runtime.hub.Broadcast(payload)
 		}
 	}()
 	c.Status(http.StatusAccepted)
+}
+
+const (
+	maxPromptImages       = 4
+	maxPromptImageBytes   = 10 << 20
+	maxPromptImagesBytes  = 20 << 20
+	maxPromptRequestBytes = 28 << 20
+)
+
+type promptImage struct {
+	Data     string `json:"data"`
+	MIMEType string `json:"mimeType"`
+}
+
+func decodePromptImages(input []promptImage) ([]llm.ImageContent, error) {
+	if len(input) > maxPromptImages {
+		return nil, fmt.Errorf("a prompt can include at most %d images", maxPromptImages)
+	}
+	allowed := map[string]bool{
+		"image/gif":  true,
+		"image/jpeg": true,
+		"image/png":  true,
+		"image/webp": true,
+	}
+	images := make([]llm.ImageContent, 0, len(input))
+	total := 0
+	for _, image := range input {
+		mimeType := strings.ToLower(strings.TrimSpace(image.MIMEType))
+		if !allowed[mimeType] {
+			return nil, fmt.Errorf("unsupported image type %q", image.MIMEType)
+		}
+		decoded, err := base64.StdEncoding.DecodeString(image.Data)
+		if err != nil || len(decoded) == 0 {
+			return nil, errors.New("image data is not valid base64")
+		}
+		if len(decoded) > maxPromptImageBytes {
+			return nil, fmt.Errorf("each image must be %d MB or smaller", maxPromptImageBytes>>20)
+		}
+		total += len(decoded)
+		if total > maxPromptImagesBytes {
+			return nil, fmt.Errorf("images must total %d MB or less", maxPromptImagesBytes>>20)
+		}
+		images = append(images, llm.ImageContent{Data: image.Data, MIMEType: mimeType})
+	}
+	return images, nil
 }
 
 // handleConfirm resolves a pending permission request.

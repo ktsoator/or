@@ -29,10 +29,16 @@ type wireEvent struct {
 	Change  any  `json:"change,omitempty"`
 	IsError bool `json:"isError,omitempty"`
 	// message_end fallback text (used when nothing streamed)
-	Text string `json:"text,omitempty"`
+	Text   string      `json:"text,omitempty"`
+	Images []wireImage `json:"images,omitempty"`
 	// confirm_request
 	ID      string `json:"id,omitempty"`
 	Summary string `json:"summary,omitempty"`
+}
+
+type wireImage struct {
+	Data     string `json:"data"`
+	MIMEType string `json:"mimeType"`
 }
 
 // ProjectEvent maps a UI-neutral coding event to the HTTP wire protocol.
@@ -75,7 +81,11 @@ func ProjectHistory(items []coding.HistoryItem) []wireEvent {
 	for _, item := range items {
 		switch item.Type {
 		case coding.HistoryUser:
-			out = append(out, wireEvent{Type: "user_message", Text: item.Text})
+			images := make([]wireImage, 0, len(item.Images))
+			for _, image := range item.Images {
+				images = append(images, wireImage{Data: image.Data, MIMEType: image.MIMEType})
+			}
+			out = append(out, wireEvent{Type: "user_message", Text: item.Text, Images: images})
 
 		case coding.HistoryAssistant:
 			out = append(out, wireEvent{Type: "message_end", Text: item.Text})

@@ -5,7 +5,11 @@ import type {
   ConnectionStatus,
   HistoryResponse,
   Item,
+  ModelCatalogResponse,
+  ModelOption,
+  MessageImage,
   SessionSummary,
+  ThinkingLevel,
   WireEvent,
 } from './types'
 
@@ -24,7 +28,7 @@ type Action =
   | { t: 'wire'; sessionID: string; ev: WireEvent }
   | { t: 'status'; sessionID: string; status: ConnectionStatus }
   | { t: 'running'; sessionID: string; running: boolean }
-  | { t: 'sendUser'; sessionID: string; text: string }
+  | { t: 'sendUser'; sessionID: string; text: string; images: MessageImage[] }
   | { t: 'resolve'; sessionID: string; id: string }
   | { t: 'forget'; sessionID: string }
 
@@ -83,7 +87,12 @@ function threadsReducer(state: ThreadsState, action: Action): ThreadsState {
         running: true,
         items: [
           ...current.items,
-          { kind: 'user', id: `local-${action.sessionID}-${current.seq}`, text: action.text },
+          {
+            kind: 'user',
+            id: `local-${action.sessionID}-${current.seq}`,
+            text: action.text,
+            images: action.images,
+          },
         ],
       }
       break
@@ -120,7 +129,10 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
 
   switch (ev.type) {
     case 'user_message':
-      items = [...items, { kind: 'user', id: nextId(), text: ev.text ?? '' }]
+      items = [
+        ...items,
+        { kind: 'user', id: nextId(), text: ev.text ?? '', images: ev.images ?? [] },
+      ]
       break
 
     case 'delta':
@@ -257,11 +269,14 @@ export type Session = {
   running: boolean
   loading: boolean
   creating: boolean
+  updatingSettings: boolean
   status: ConnectionStatus
+  models: ModelOption[]
   createSession: () => Promise<void>
   deleteSession: (id: string) => Promise<void>
   selectSession: (id: string) => void
-  send: (text: string) => void
+  updateSettings: (provider: string, model: string, thinkingLevel: ThinkingLevel) => Promise<void>
+  send: (text: string, images: MessageImage[]) => void
   stop: () => void
   resolveConfirm: (id: string, allow: boolean) => Promise<void>
 }
@@ -274,8 +289,26 @@ export function useSession(): Session {
   const [activeSessionID, setActiveSessionID] = useState<string>()
   const [initializing, setInitializing] = useState(true)
   const [creating, setCreating] = useState(false)
+  const [updatingSettings, setUpdatingSettings] = useState(false)
+  const [models, setModels] = useState<ModelOption[]>([])
   const [serviceStatus, setServiceStatus] = useState<ConnectionStatus>('connecting')
   const deletedSessionIDs = useRef(new Set<string>())
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void fetch(apiURL('/models'), { cache: 'no-store', signal: controller.signal })
+      .then((response) =>
+        response.ok
+          ? response.json()
+          : Promise.reject(new Error(`model catalog failed (${response.status})`)),
+      )
+      .then((catalog: ModelCatalogResponse) => setModels(catalog.models))
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return
+        setModels([])
+      })
+    return () => controller.abort()
+  }, [])
 
   const refreshSessions = useCallback(async (signal?: AbortSignal) => {
     const response = await fetch(apiURL('/sessions'), { cache: 'no-store', signal })
@@ -455,6 +488,40 @@ export function useSession(): Session {
     await refreshSessions()
   }
 
+  const updateSettings = async (
+    provider: string,
+    model: string,
+    thinkingLevel: ThinkingLevel,
+  ) => {
+    if (!activeSessionID || updatingSettings) return
+    const sessionID = activeSessionID
+    setUpdatingSettings(true)
+    try {
+      const response = await fetch(sessionURL(sessionID, '/settings'), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider, model, thinkingLevel }),
+      })
+      if (!response.ok) {
+        let message = `update settings failed (${response.status})`
+        try {
+          const body = (await response.json()) as { error?: string }
+          if (body.error) message = body.error
+        } catch {
+          // Keep the status-based fallback when the response has no JSON body.
+        }
+        throw new Error(message)
+      }
+      const updated = (await response.json()) as SessionSummary
+      setSessions((current) => [
+        updated,
+        ...current.filter((session) => session.id !== updated.id),
+      ])
+    } finally {
+      setUpdatingSettings(false)
+    }
+  }
+
   const activeSession = sessions.find((session) => session.id === activeSessionID)
   const thread = activeSessionID ? threads[activeSessionID] : undefined
   const activeSessionRunning = activeSession?.running
@@ -468,18 +535,19 @@ export function useSession(): Session {
     })
   }, [activeSessionID, activeSessionRunning, thread?.loaded])
 
-  const send = (text: string) => {
+  const send = (text: string, images: MessageImage[]) => {
     if (!activeSessionID || !thread) return
     const trimmed = text.trim()
-    if (!trimmed || thread.running || thread.status !== 'ready') return
+    if ((!trimmed && images.length === 0) || thread.running || thread.status !== 'ready') return
     const sessionID = activeSessionID
-    dispatch({ t: 'sendUser', sessionID, text: trimmed })
+    dispatch({ t: 'sendUser', sessionID, text: trimmed, images })
     setSessions((current) =>
       current.map((session) =>
         session.id === sessionID
           ? {
               ...session,
-              title: session.title === 'New session' ? promptTitle(trimmed) : session.title,
+              title:
+                session.title === 'New session' ? promptTitle(trimmed || 'Image') : session.title,
               running: true,
               updatedAt: new Date().toISOString(),
             }
@@ -489,7 +557,7 @@ export function useSession(): Session {
     void fetch(sessionURL(sessionID, '/prompt'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: trimmed }),
+      body: JSON.stringify({ text: trimmed, images }),
     })
       .then((response) => {
         if (!response.ok) throw new Error(`prompt request failed (${response.status})`)
@@ -540,10 +608,13 @@ export function useSession(): Session {
     running: thread?.running ?? activeSession?.running ?? false,
     loading: initializing || (Boolean(activeSessionID) && !thread?.loaded),
     creating,
+    updatingSettings,
     status: thread?.status ?? serviceStatus,
+    models,
     createSession,
     deleteSession,
     selectSession,
+    updateSettings,
     send,
     stop,
     resolveConfirm,

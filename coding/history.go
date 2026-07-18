@@ -25,7 +25,8 @@ const (
 type HistoryItem struct {
 	Type HistoryItemType
 
-	Text string
+	Text   string
+	Images []llm.ImageContent
 
 	ToolCallID string
 	ToolName   string
@@ -54,8 +55,9 @@ func projectHistory(messages []agent.AgentMessage, details map[string]any) []His
 
 		switch message := llmMessage.(type) {
 		case *llm.UserMessage:
-			if text := userMessageText(message); text != "" {
-				items = append(items, HistoryItem{Type: HistoryUser, Text: text})
+			text, images := userMessageContent(message)
+			if text != "" || len(images) > 0 {
+				items = append(items, HistoryItem{Type: HistoryUser, Text: text, Images: images})
 			}
 
 		case *llm.AssistantMessage:
@@ -75,17 +77,26 @@ func projectHistory(messages []agent.AgentMessage, details map[string]any) []His
 	return items
 }
 
-func userMessageText(message *llm.UserMessage) string {
+func userMessageContent(message *llm.UserMessage) (string, []llm.ImageContent) {
 	if message == nil {
-		return ""
+		return "", nil
 	}
 	var text strings.Builder
+	var images []llm.ImageContent
 	for _, content := range message.Content {
-		if block, ok := content.(*llm.TextContent); ok && block != nil {
+		switch block := content.(type) {
+		case *llm.TextContent:
+			if block == nil {
+				continue
+			}
 			text.WriteString(block.Text)
+		case *llm.ImageContent:
+			if block != nil {
+				images = append(images, *block)
+			}
 		}
 	}
-	return text.String()
+	return text.String(), images
 }
 
 func assistantHistory(message *llm.AssistantMessage) []HistoryItem {

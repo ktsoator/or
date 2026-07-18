@@ -46,13 +46,25 @@ export type WireEvent = {
   change?: Change
   isError?: boolean
   text?: string
+  images?: MessageImage[]
   id?: string
   summary?: string
 }
 
 // Thread items are the declarative model the UI renders, derived from the wire
 // event stream by the reducer.
-export type UserItem = { kind: 'user'; id: string; text: string }
+export type MessageImage = {
+  data: string
+  mimeType: string
+}
+
+export type PendingImage = MessageImage & {
+  id: string
+  name: string
+  size: number
+}
+
+export type UserItem = { kind: 'user'; id: string; text: string; images: MessageImage[] }
 export type AssistantItem = { kind: 'assistant'; id: string; markdown: string; open: boolean }
 export type ThinkingItem = { kind: 'thinking'; id: string; text: string; streaming: boolean }
 export type ToolItem = {
@@ -81,6 +93,20 @@ export type Item =
 
 export type ConnectionStatus = 'connecting' | 'ready' | 'disconnected'
 
+export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+
+export type ModelOption = {
+  provider: string
+  id: string
+  name: string
+  thinkingLevels: ThinkingLevel[]
+  supportsImages: boolean
+}
+
+export type ModelCatalogResponse = {
+  models: ModelOption[]
+}
+
 export type SessionSummary = {
   id: string
   title: string
@@ -88,6 +114,10 @@ export type SessionSummary = {
   updatedAt: string
   running: boolean
   hasApproval: boolean
+  modelProvider: string
+  modelId: string
+  modelName: string
+  thinkingLevel: ThinkingLevel
 }
 
 export type HistoryResponse = {

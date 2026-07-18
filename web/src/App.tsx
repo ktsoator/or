@@ -1,7 +1,6 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
-  ArrowDown,
   CircleAlert,
   Clock3,
   Ellipsis,
@@ -14,6 +13,7 @@ import {
   SquarePen,
   Trash2,
   Wrench,
+  X,
 } from 'lucide-react'
 import { useSession } from './useSession'
 import type { Item, SessionSummary } from './types'
@@ -22,6 +22,7 @@ import { Markdown } from './components/Markdown'
 import { ToolCard } from './components/ToolCard'
 import { Composer } from './components/Composer'
 import { Thinking } from './components/Thinking'
+import { ProfileMenu } from './components/ProfileMenu'
 
 export default function App() {
   const {
@@ -33,10 +34,13 @@ export default function App() {
     running,
     loading,
     creating,
+    updatingSettings,
     status,
+    models,
     createSession,
     deleteSession,
     selectSession,
+    updateSettings,
     send,
     stop,
     resolveConfirm,
@@ -47,7 +51,6 @@ export default function App() {
   const [mobileSessionsOpen, setMobileSessionsOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [activeShortcut, setActiveShortcut] = useState<string>()
-  const [atLatest, setAtLatest] = useState(true)
   const [deleteTarget, setDeleteTarget] = useState<SessionSummary>()
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
@@ -62,7 +65,6 @@ export default function App() {
 
     if (followLatestRef.current) {
       el.scrollTop = el.scrollHeight
-      setAtLatest(true)
     }
   }, [activeSessionID, items])
 
@@ -74,18 +76,10 @@ export default function App() {
     setSidebarCollapsed((collapsed) => !collapsed)
   }
 
-  const scrollToLatest = () => {
-    followLatestRef.current = true
-    setAtLatest(true)
-    logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: 'smooth' })
-  }
-
   const trackScrollPosition = () => {
     const el = logRef.current
     if (!el) return
-    const latest = el.scrollHeight - el.scrollTop - el.clientHeight < 72
-    followLatestRef.current = latest
-    setAtLatest(latest)
+    followLatestRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 72
   }
 
   const chooseSession = (id: string) => {
@@ -129,16 +123,22 @@ export default function App() {
       running={running}
       confirmation={confirmation}
       centered={centered}
+      models={models}
+      modelProvider={activeSession?.modelProvider}
+      modelID={activeSession?.modelId}
+      thinkingLevel={activeSession?.thinkingLevel}
+      updatingSettings={updatingSettings}
       onSend={send}
       onStop={stop}
       onResolve={resolveConfirm}
+      onSettingsChange={updateSettings}
     />
   )
 
   return (
     <div
       className={cn(
-        'grid h-full grid-rows-[minmax(0,1fr)] overflow-hidden bg-[#fcfcfb] transition-[grid-template-columns] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none max-md:grid-cols-1',
+        'grid h-full grid-rows-[minmax(0,1fr)] overflow-hidden bg-white transition-[grid-template-columns] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none max-md:grid-cols-1',
         sidebarCollapsed
           ? 'grid-cols-[64px_minmax(0,1fr)]'
           : 'grid-cols-[256px_minmax(0,1fr)]',
@@ -154,7 +154,7 @@ export default function App() {
       )}
       <aside
         className={cn(
-          'z-50 flex min-h-0 min-w-0 flex-col overflow-hidden border-r border-stone-200/75 bg-[#f7f7f5] text-stone-700 transition-transform duration-200 ease-out',
+          'z-50 flex min-h-0 min-w-0 flex-col overflow-hidden border-r border-stone-200/75 bg-white text-stone-700 transition-transform duration-200 ease-out',
           'max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:w-[280px] max-md:shadow-2xl',
           mobileSessionsOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full',
         )}
@@ -297,28 +297,11 @@ export default function App() {
           </div>
         </nav>
 
-        <div className="w-[256px] shrink-0 border-t border-stone-200/70 p-3 max-md:w-[280px]">
-          <div className="flex items-center gap-3 rounded-xl px-1 py-1.5">
-            <span
-              className="grid size-8 shrink-0 place-items-center rounded-full bg-stone-900 text-[13px] font-[650] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.12)]"
-              aria-hidden="true"
-            >
-              K
-            </span>
-            <span
-              className={cn(
-                'truncate whitespace-nowrap text-[14px] font-[560] text-stone-900 transition-opacity duration-100 ease-out motion-reduce:transition-none',
-                sidebarCollapsed ? 'opacity-0' : 'opacity-100',
-              )}
-            >
-              ktsoator
-            </span>
-          </div>
-        </div>
+        <ProfileMenu collapsed={sidebarCollapsed} />
       </aside>
 
       <div className="relative flex h-full min-w-0 flex-col">
-        <header className="z-20 flex h-13 shrink-0 items-center border-b border-stone-200/80 bg-[#fcfcfb] px-6 max-md:h-12 max-md:px-4">
+        <header className="z-20 flex h-13 shrink-0 items-center border-b border-stone-200/80 bg-white px-6 max-md:h-12 max-md:px-4">
           <div className="flex min-w-0 items-center gap-2.5">
             <button
               className="-ml-1 grid size-7 shrink-0 place-items-center rounded-md text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-900 md:hidden"
@@ -374,21 +357,6 @@ export default function App() {
             )}
           </div>
         </main>
-
-        {items.length > 0 && !atLatest && (
-          <button
-            className={cn(
-              'absolute right-1/2 z-40 grid size-7 translate-x-1/2 place-items-center rounded-md border border-stone-300 bg-white/95 text-stone-500 transition-all hover:border-stone-400 hover:text-stone-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400',
-              confirmation ? 'bottom-[232px] max-sm:bottom-[266px]' : 'bottom-[148px]',
-            )}
-            type="button"
-            onClick={scrollToLatest}
-            title="Jump to latest"
-          >
-            <ArrowDown className="size-3.5" aria-hidden="true" />
-            <span className="sr-only">Jump to latest</span>
-          </button>
-        )}
 
         {!loading && !emptySession && composer()}
       </div>
@@ -530,44 +498,80 @@ function DeleteSessionDialog({
   onConfirm: () => void
 }) {
   const blocked = session.running || session.hasApproval
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !deleting) onCancel()
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [deleting, onCancel])
+
   return (
     <div
-      className="fixed inset-0 z-[100] grid place-items-center bg-stone-950/20 px-4 backdrop-blur-[1px]"
+      className="fixed inset-0 z-[100] grid place-items-center bg-stone-950/30 px-4 py-8 backdrop-blur-[3px]"
       role="presentation"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onCancel()
+        if (event.target === event.currentTarget && !deleting) onCancel()
       }}
     >
       <section
-        className="w-full max-w-[380px] animate-[fade-in_140ms_ease-out] rounded-xl border border-stone-300 bg-[#fffefa] p-4 shadow-[0_18px_55px_-24px_rgba(28,25,23,0.55)]"
+        className="relative w-full max-w-[468px] animate-[fade-in_140ms_ease-out] rounded-[22px] border border-white/80 bg-white p-6 shadow-[0_30px_90px_-32px_rgba(28,25,23,0.62)] max-sm:rounded-[18px] max-sm:p-5"
         role="dialog"
         aria-modal="true"
         aria-labelledby="delete-session-title"
+        aria-describedby="delete-session-description"
       >
-        <div className="flex items-start gap-3">
-          <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-red-50 text-red-700">
-            <Trash2 className="size-3.5" aria-hidden="true" />
-          </span>
-          <div className="min-w-0">
-            <h2 id="delete-session-title" className="text-sm font-semibold text-stone-900">
-              Delete session?
-            </h2>
-            <p className="mt-1 text-xs leading-5 text-stone-500">
-              “{session.title}” and its stored tool details will be permanently removed.
-            </p>
+        <button
+          className="absolute top-4 right-4 grid size-8 cursor-pointer place-items-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700 disabled:cursor-wait disabled:opacity-40"
+          type="button"
+          aria-label="Close delete confirmation"
+          disabled={deleting}
+          onClick={onCancel}
+        >
+          <X className="size-4" aria-hidden="true" />
+        </button>
+
+        <div className="pr-9">
+          <h2
+            id="delete-session-title"
+            className="text-[19px] leading-6 font-[650] tracking-[-0.02em] text-stone-950"
+          >
+            Delete session?
+          </h2>
+          <p
+            id="delete-session-description"
+            className="mt-1.5 text-[14px] leading-[1.55] text-stone-500"
+          >
+            Messages, tool output, and settings in this session will be permanently removed.
+          </p>
+        </div>
+
+        <div className="mt-5 border-y border-stone-200/80 py-3.5">
+          <div className="text-[11px] leading-4 font-semibold tracking-[0.08em] text-stone-400 uppercase">
+            Session
+          </div>
+          <div className="mt-1 truncate text-[14.5px] leading-5 font-[560] text-stone-800">
+            {session.title}
           </div>
         </div>
 
         {blocked && (
-          <div className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
-            Stop this session or resolve its approval request before deleting it.
+          <div className="mt-4 flex gap-2.5 rounded-xl border border-amber-200/70 bg-amber-50/70 px-3.5 py-3 text-[13px] leading-5 text-amber-900">
+            <ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <span>Stop this session or resolve its approval request before deleting it.</span>
           </div>
         )}
-        {error && <div className="mt-3 text-xs leading-5 text-red-700">{error}</div>}
+        {error && (
+          <div className="mt-4 flex gap-2.5 rounded-xl border border-red-200/70 bg-red-50/70 px-3.5 py-3 text-[13px] leading-5 text-red-800">
+            <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <span>{error}</span>
+          </div>
+        )}
 
-        <div className="mt-4 flex justify-end gap-2">
+        <div className="mt-6 flex justify-end gap-2.5">
           <button
-            className="h-8 cursor-pointer rounded-md px-3 text-xs font-semibold text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900 disabled:cursor-wait disabled:opacity-50"
+            className="h-10 cursor-pointer rounded-xl border border-stone-300 bg-white px-4 text-[14px] font-[560] text-stone-700 transition-[border-color,background-color,color] hover:border-stone-400 hover:bg-stone-50 hover:text-stone-950 disabled:cursor-wait disabled:opacity-50"
             type="button"
             disabled={deleting}
             onClick={onCancel}
@@ -575,12 +579,13 @@ function DeleteSessionDialog({
             Cancel
           </button>
           <button
-            className="h-8 cursor-pointer rounded-md bg-red-700 px-3 text-xs font-semibold text-white transition-colors hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-35"
+            className="flex h-10 min-w-[126px] cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#b42318] px-4 text-[14px] font-[600] text-white shadow-[0_5px_14px_-8px_rgba(180,35,24,0.85)] transition-[background-color,transform] hover:bg-[#991b1b] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-35"
             type="button"
             disabled={deleting || blocked}
             onClick={onConfirm}
           >
-            {deleting ? 'Deleting…' : 'Delete'}
+            {deleting && <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />}
+            {deleting ? 'Deleting…' : 'Delete session'}
           </button>
         </div>
       </section>
@@ -593,8 +598,24 @@ function ThreadItem({ item }: { item: Item }) {
     case 'user':
       return (
         <section className="my-5 flex animate-[fade-in_160ms_ease-out] justify-end">
-          <div className="max-w-[78%] rounded-xl bg-stone-100 px-3.5 py-2.5 text-[16.5px] leading-[1.58] whitespace-pre-wrap max-md:max-w-[88%]">
-            {item.text}
+          <div className="flex max-w-[78%] flex-col items-end gap-3 max-md:max-w-[88%]">
+            {item.images.length > 0 && (
+              <div className="flex max-w-full flex-wrap justify-end gap-3">
+                {item.images.map((image, index) => (
+                  <img
+                    key={`${image.mimeType}-${index}`}
+                    className="size-[136px] shrink-0 rounded-2xl border border-stone-200 bg-white object-cover shadow-[0_7px_18px_-15px_rgba(28,25,23,0.55)] max-sm:size-28"
+                    src={`data:${image.mimeType};base64,${image.data}`}
+                    alt={`Uploaded image ${index + 1}`}
+                  />
+                ))}
+              </div>
+            )}
+            {item.text && (
+              <div className="rounded-xl bg-stone-100 px-3.5 py-2.5 text-[16.5px] leading-[1.58] whitespace-pre-wrap">
+                {item.text}
+              </div>
+            )}
           </div>
         </section>
       )
