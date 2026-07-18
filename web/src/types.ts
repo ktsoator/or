@@ -145,6 +145,7 @@ export type ModelOption = {
   provider: string
   id: string
   name: string
+  contextWindow: number
   thinkingLevels: ThinkingLevel[]
   supportsImages: boolean
 }
@@ -166,8 +167,17 @@ export type SessionSummary = {
   thinkingLevel: ThinkingLevel
 }
 
+export type ContextUsage = {
+  provider: string
+  model: string
+  usedTokens: number
+  contextWindow: number
+  measured: boolean
+}
+
 export type HistoryResponse = {
   events: WireEvent[]
   queue?: WireEvent[]
+  context?: ContextUsage
   running: boolean
 }

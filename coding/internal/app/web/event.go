@@ -64,6 +64,24 @@ type wireUsageCost struct {
 	Total      float64 `json:"total"`
 }
 
+type wireContextUsage struct {
+	Provider      string `json:"provider"`
+	Model         string `json:"model"`
+	UsedTokens    int64  `json:"usedTokens"`
+	ContextWindow int64  `json:"contextWindow"`
+	Measured      bool   `json:"measured"`
+}
+
+func projectContextUsage(usage coding.ContextUsage) wireContextUsage {
+	return wireContextUsage{
+		Provider:      usage.Provider,
+		Model:         usage.Model,
+		UsedTokens:    usage.UsedTokens,
+		ContextWindow: usage.ContextWindow,
+		Measured:      usage.Measured,
+	}
+}
+
 // ProjectEvent maps a UI-neutral coding event to the HTTP wire protocol.
 func ProjectEvent(ev coding.Event) ([]byte, bool) {
 	var out wireEvent

@@ -3,6 +3,7 @@ import { apiURL } from './api'
 import type {
   ConfirmItem,
   ConnectionStatus,
+  ContextUsage,
   DeliveryMode,
   HistoryResponse,
   Item,
@@ -20,6 +21,7 @@ type ThreadState = {
   items: Item[]
   queue: QueuedMessage[]
   responseUsage: Usage
+  contextUsage?: ContextUsage
   running: boolean
   status: ConnectionStatus
   seq: number
@@ -44,6 +46,13 @@ type Action =
   | { t: 'queueFailed'; sessionID: string; id: string }
   | { t: 'queueStatus'; sessionID: string; id: string; status: 'queued' | 'removing' }
   | { t: 'queueRemove'; sessionID: string; id: string }
+  | {
+      t: 'contextInvalidate'
+      sessionID: string
+      provider: string
+      model: string
+      contextWindow: number
+    }
   | { t: 'resolve'; sessionID: string; id: string }
   | { t: 'forget'; sessionID: string }
 
@@ -60,6 +69,7 @@ const emptyThread = (): ThreadState => ({
   items: [],
   queue: [],
   responseUsage: emptyUsage(),
+  contextUsage: undefined,
   running: false,
   status: 'connecting',
   seq: 0,
@@ -96,7 +106,11 @@ function threadsReducer(state: ThreadsState, action: Action): ThreadsState {
       }
       for (const ev of action.history.events) next = reduceWire(next, ev)
       for (const ev of action.history.queue ?? []) next = reduceWire(next, ev)
-      if (action.history.running) next = { ...next, running: true }
+      next = {
+        ...next,
+        contextUsage: action.history.context,
+        running: action.history.running || next.running,
+      }
       break
     }
     case 'status':
@@ -166,6 +180,18 @@ function threadsReducer(state: ThreadsState, action: Action): ThreadsState {
         queue: current.queue.filter((message) => message.id !== action.id),
       }
       break
+    case 'contextInvalidate':
+      next = {
+        ...current,
+        contextUsage: {
+          provider: action.provider,
+          model: action.model,
+          usedTokens: 0,
+          contextWindow: action.contextWindow,
+          measured: false,
+        },
+      }
+      break
     case 'resolve':
       next = {
         ...current,
@@ -186,6 +212,7 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
   let items = state.items
   let queue = state.queue
   let responseUsage = state.responseUsage
+  let contextUsage = state.contextUsage
   let running = state.running
   let seq = state.seq
   const nextId = () => `i-${seq++}`
@@ -345,6 +372,18 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
     case 'message_end':
       completeThinking()
       responseUsage = mergeUsage(responseUsage, ev.usage)
+      if (ev.usage) {
+        const usedTokens = usageTokens(ev.usage)
+        if (usedTokens > 0) {
+          contextUsage = {
+            provider: contextUsage?.provider ?? '',
+            model: contextUsage?.model ?? '',
+            usedTokens,
+            contextWindow: contextUsage?.contextWindow ?? 0,
+            measured: true,
+          }
+        }
+      }
       {
         let idx = lastIndex(items, (it) => it.kind === 'assistant' && it.open)
         if (ev.text) {
@@ -408,7 +447,7 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
       break
   }
 
-  return { ...state, items, queue, responseUsage, running, seq }
+  return { ...state, items, queue, responseUsage, contextUsage, running, seq }
 }
 
 function replaceQueueAt(
@@ -454,6 +493,13 @@ function mergeUsage(current: Usage, next?: Usage): Usage {
   }
 }
 
+function usageTokens(usage: Usage): number {
+  return (
+    usage.totalTokens ||
+    usage.input + usage.output + usage.cacheRead + usage.cacheWrite
+  )
+}
+
 function hasUsage(usage: Usage): boolean {
   return (
     usage.input !== 0 ||
@@ -481,6 +527,7 @@ export type Session = {
   activeSessionID?: string
   items: Item[]
   queuedMessages: QueuedMessage[]
+  contextUsage?: ContextUsage
   confirmation?: ConfirmItem
   running: boolean
   loading: boolean
@@ -730,10 +777,28 @@ export function useSession(): Session {
         throw new Error(message)
       }
       const updated = (await response.json()) as SessionSummary
+      const previous = sessions.find((session) => session.id === sessionID)
       setSessions((current) => [
         updated,
         ...current.filter((session) => session.id !== updated.id),
       ])
+      if (
+        previous &&
+        (previous.modelProvider !== updated.modelProvider || previous.modelId !== updated.modelId)
+      ) {
+        const contextWindow =
+          models.find(
+            (candidate) =>
+              candidate.provider === updated.modelProvider && candidate.id === updated.modelId,
+          )?.contextWindow ?? 0
+        dispatch({
+          t: 'contextInvalidate',
+          sessionID,
+          provider: updated.modelProvider,
+          model: updated.modelId,
+          contextWindow,
+        })
+      }
     } finally {
       setUpdatingSettings(false)
     }
@@ -881,6 +946,7 @@ export function useSession(): Session {
     activeSessionID,
     items,
     queuedMessages: thread?.queue ?? [],
+    contextUsage: thread?.contextUsage,
     confirmation,
     running: thread?.running ?? activeSession?.running ?? false,
     loading: initializing || (Boolean(activeSessionID) && !thread?.loaded),

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Check, ChevronDown, ChevronRight } from 'lucide-react'
 import { DropdownMenu } from 'radix-ui'
-import type { ModelOption, ThinkingLevel } from '@/types'
+import type { ContextUsage, ModelOption, ThinkingLevel } from '@/types'
 import { cn } from '@/lib/utils'
 import deepseekIcon from '@/assets/providers/deepseek.svg'
 import kimiIcon from '@/assets/providers/kimi.svg'
@@ -14,6 +14,7 @@ export function ModelSettingsMenu({
   modelProvider,
   modelID,
   thinkingLevel,
+  contextUsage,
   disabled,
   onChange,
 }: {
@@ -21,6 +22,7 @@ export function ModelSettingsMenu({
   modelProvider?: string
   modelID?: string
   thinkingLevel?: ThinkingLevel
+  contextUsage?: ContextUsage
   disabled: boolean
   onChange: (
     provider: string,
@@ -50,6 +52,11 @@ export function ModelSettingsMenu({
   const selectedProviderName = providerName(selectedProvider || modelProvider || '')
   const effortName = thinkingLevel ? thinkingLabel[thinkingLevel] : 'Effort'
   const unavailable = disabled || !modelKey || models.length === 0
+  const contextWindow = currentModel?.contextWindow ?? contextUsage?.contextWindow ?? 0
+  const currentContextUsage =
+    contextUsage && contextUsage.provider === modelProvider && contextUsage.model === modelID
+      ? contextUsage
+      : undefined
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (nextOpen) setSelectedProvider(modelProvider ?? '')
@@ -219,10 +226,67 @@ export function ModelSettingsMenu({
               </DropdownMenu.SubContent>
             </DropdownMenu.Portal>
           </DropdownMenu.Sub>
+
+          <DropdownMenu.Separator className="mx-2 my-1 h-px bg-stone-100" />
+          <ContextMeter usage={currentContextUsage} contextWindow={contextWindow} />
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
   )
+}
+
+function ContextMeter({
+  usage,
+  contextWindow,
+}: {
+  usage?: ContextUsage
+  contextWindow: number
+}) {
+  const measured = Boolean(usage?.measured && usage.usedTokens > 0 && contextWindow > 0)
+  const usedTokens = measured ? usage?.usedTokens ?? 0 : 0
+  const percentage = measured ? Math.min((usedTokens / contextWindow) * 100, 100) : 0
+
+  return (
+    <div className="px-2.5 pt-1.5 pb-2" aria-label="Model context usage">
+      <div className="flex items-baseline justify-between gap-4 text-[12px] leading-5 tabular-nums">
+        <span className="font-[560] text-stone-600">Context</span>
+        <span className="text-stone-400">
+          {measured ? formatTokens(usedTokens) : '—'} / {formatTokens(contextWindow)}
+          {measured && <span> · {Math.round(percentage)}%</span>}
+        </span>
+      </div>
+      <div className="mt-1 h-1 overflow-hidden rounded-full bg-stone-100">
+        <div
+          className={cn(
+            'h-full rounded-full transition-[width,background-color] duration-300 ease-out',
+            percentage >= 90
+              ? 'bg-red-500'
+              : percentage >= 75
+                ? 'bg-amber-500'
+                : 'bg-stone-500',
+            !measured && 'bg-transparent',
+          )}
+          style={{ width: `${percentage}%` }}
+        />
+      </div>
+      {!measured && contextWindow > 0 && (
+        <p className="mt-1 text-[11px] leading-4 text-stone-400">
+          Measures after the next response
+        </p>
+      )}
+    </div>
+  )
+}
+
+function formatTokens(value: number): string {
+  if (value <= 0) return '—'
+  if (value >= 1_000_000) return `${formatTokenDecimal(value / 1_000_000)}m`
+  if (value >= 1_000) return `${formatTokenDecimal(value / 1_000)}k`
+  return Math.round(value).toLocaleString('en-US')
+}
+
+function formatTokenDecimal(value: number): string {
+  return value.toLocaleString('en-US', { maximumFractionDigits: value >= 100 ? 0 : 1 })
 }
 
 const subTriggerClass = cn(

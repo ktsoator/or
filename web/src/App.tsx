@@ -32,6 +32,7 @@ export default function App() {
     activeSessionID,
     items,
     queuedMessages,
+    contextUsage,
     confirmation,
     running,
     loading,
@@ -126,6 +127,7 @@ export default function App() {
       running={running}
       confirmation={confirmation}
       queuedMessages={queuedMessages}
+      contextUsage={contextUsage}
       centered={centered}
       models={models}
       modelProvider={activeSession?.modelProvider}
@@ -333,12 +335,12 @@ export default function App() {
 
         <main
           ref={logRef}
-          className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
+          className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 md:px-6 md:[scrollbar-gutter:stable_both-edges]"
           onScroll={trackScrollPosition}
         >
           <div
             className={cn(
-              'mx-auto min-h-full w-full max-w-[944px] px-6 py-8 pb-12 max-md:px-4 max-md:py-6',
+              'mx-auto min-h-full w-full max-w-[896px] py-8 pb-12 max-md:py-6',
               (loading || emptySession) && 'grid place-items-center',
             )}
           >

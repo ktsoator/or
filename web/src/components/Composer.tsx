@@ -3,6 +3,7 @@ import { ArrowUp, Check, ChevronDown, LoaderCircle, Plus, Square, X } from 'luci
 import { DropdownMenu } from 'radix-ui'
 import type {
   ConfirmItem,
+  ContextUsage,
   DeliveryMode,
   MessageImage,
   ModelOption,
@@ -19,6 +20,7 @@ export function Composer({
   running,
   confirmation,
   queuedMessages,
+  contextUsage,
   centered = false,
   models,
   modelProvider,
@@ -35,6 +37,7 @@ export function Composer({
   running: boolean
   confirmation?: ConfirmItem
   queuedMessages: QueuedMessage[]
+  contextUsage?: ContextUsage
   centered?: boolean
   models: ModelOption[]
   modelProvider?: string
@@ -168,7 +171,7 @@ export function Composer({
         'z-30 w-full',
         centered
           ? 'bg-transparent p-0'
-          : 'shrink-0 bg-white px-6 pt-3 pb-4 max-md:px-3 max-md:pt-2',
+          : 'shrink-0 bg-white px-3 pt-3 pb-4 md:px-8 max-md:pt-2',
       )}
     >
       <div className="mx-auto flex w-full max-w-[896px] flex-col gap-2">
@@ -268,6 +271,7 @@ export function Composer({
                 modelProvider={modelProvider}
                 modelID={modelID}
                 thinkingLevel={thinkingLevel}
+                contextUsage={contextUsage}
                 disabled={settingsDisabled}
                 onChange={changeSettings}
               />

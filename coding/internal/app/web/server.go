@@ -112,6 +112,7 @@ type modelOption struct {
 	Provider       string                   `json:"provider"`
 	ID             string                   `json:"id"`
 	Name           string                   `json:"name"`
+	ContextWindow  int64                    `json:"contextWindow"`
 	ThinkingLevels []llm.ModelThinkingLevel `json:"thinkingLevels"`
 	SupportsImages bool                     `json:"supportsImages"`
 }
@@ -131,6 +132,7 @@ func (s *Server) handleModels(c *gin.Context) {
 				Provider:       model.Provider,
 				ID:             model.ID,
 				Name:           name,
+				ContextWindow:  model.ContextWindow,
 				ThinkingLevels: llm.SupportedThinkingLevels(model),
 				SupportsImages: slices.Contains(model.Input, llm.Image),
 			})
@@ -252,6 +254,7 @@ func (s *Server) handleHistory(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"events":  events,
 		"queue":   runtime.pendingEvents(),
+		"context": projectContextUsage(runtime.session.ContextUsage()),
 		"running": runtime.running.Load(),
 	})
 }
