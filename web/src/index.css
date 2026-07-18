@@ -19,6 +19,7 @@
     font-size: 15px;
   }
   button, textarea { font: inherit; }
+  .lucide { stroke-width: 1.7; }
   ::selection { background: #dfe9ff; }
 }
 
@@ -31,9 +32,73 @@
   background-clip: padding-box;
 }
 
+.code-scroll-area {
+  scrollbar-color: #a6a69f #f4f4f1;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.code-scroll-area:focus-visible {
+  outline: 2px solid #a8a29e;
+  outline-offset: -2px;
+}
+
+.code-scroll-area::-webkit-scrollbar-track {
+  background: #f4f4f1;
+}
+
+.code-scroll-area::-webkit-scrollbar-thumb {
+  background: #a6a69f;
+  background-clip: padding-box;
+}
+
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(2px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* Muted editor colors shared by read previews, diffs, and Markdown blocks. */
+.or-code-theme .hljs-comment,
+.or-code-theme .hljs-quote {
+  color: #999995;
+}
+
+.or-code-theme .hljs-keyword,
+.or-code-theme .hljs-selector-tag,
+.or-code-theme .hljs-literal,
+.or-code-theme .hljs-section,
+.or-code-theme .hljs-link {
+  color: #c75b12;
+}
+
+.or-code-theme .hljs-string,
+.or-code-theme .hljs-attr,
+.or-code-theme .hljs-symbol,
+.or-code-theme .hljs-bullet,
+.or-code-theme .hljs-addition {
+  color: #178b36;
+}
+
+.or-code-theme .hljs-title,
+.or-code-theme .hljs-title.function_,
+.or-code-theme .hljs-title.class_ {
+  color: #086bd6;
+}
+
+.or-code-theme .hljs-type,
+.or-code-theme .hljs-built_in,
+.or-code-theme .hljs-variable.language_,
+.or-code-theme .hljs-template-variable {
+  color: #8250df;
+}
+
+.or-code-theme .hljs-number,
+.or-code-theme .hljs-regexp {
+  color: #a33a78;
+}
+
+.or-code-theme .hljs-deletion {
+  color: #cf222e;
 }
 
 @media (prefers-reduced-motion: reduce) {

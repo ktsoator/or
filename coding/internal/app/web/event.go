@@ -49,7 +49,7 @@ func ProjectEvent(ev coding.Event) ([]byte, bool) {
 		out = wireEvent{Type: "tool_start", ID: ev.ToolCallID, Tool: ev.ToolName, Args: ev.ToolArgs}
 
 	case coding.ToolFinished:
-		out = wireEvent{Type: "tool_end", ID: ev.ToolCallID, Tool: ev.ToolName, Result: firstLines(ev.ToolResult, 12), Change: fileChangePayload(ev.ToolDetails), IsError: ev.IsError}
+		out = wireEvent{Type: "tool_end", ID: ev.ToolCallID, Tool: ev.ToolName, Result: wireToolResult(ev.ToolName, ev.ToolResult), Change: fileChangePayload(ev.ToolDetails), IsError: ev.IsError}
 
 	case coding.MessageCompleted:
 		out = wireEvent{Type: "message_end", Text: ev.Text}
@@ -96,13 +96,24 @@ func ProjectHistory(items []coding.HistoryItem) []wireEvent {
 				Type:    "tool_end",
 				ID:      item.ToolCallID,
 				Tool:    item.ToolName,
-				Result:  firstLines(item.ToolResult, 12),
+				Result:  wireToolResult(item.ToolName, item.ToolResult),
 				Change:  fileChangePayload(item.ToolDetails),
 				IsError: item.IsError,
 			})
 		}
 	}
 	return out
+}
+
+// wireToolResult keeps file reads inspectable in the browser while retaining a
+// compact preview for commands and other tools. The read tool already enforces
+// its own line and byte limits.
+func wireToolResult(tool, result string) string {
+	name := strings.ToLower(tool)
+	if strings.Contains(name, "read") || strings.Contains(name, "cat") {
+		return result
+	}
+	return firstLines(result, 12)
 }
 
 // fileChangePayload converts a tool's structured Details into the browser wire

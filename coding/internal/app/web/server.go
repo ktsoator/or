@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -90,11 +91,26 @@ func (s *Server) Handler() http.Handler {
 	session := api.Group("/sessions/:sessionID")
 	session.GET("/history", s.handleHistory)
 	session.GET("/events", s.handleEvents)
+	session.DELETE("", s.handleDeleteSession)
 	session.POST("/prompt", s.handlePrompt)
 	session.POST("/confirm", s.handleConfirm)
 	session.POST("/abort", s.handleAbort)
 
 	return allowFrontendOrigin(r, s.frontendOrigin)
+}
+
+func (s *Server) handleDeleteSession(c *gin.Context) {
+	err := s.sessions.Delete(c.Param("sessionID"))
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+	case errors.Is(err, ErrSessionActive):
+		c.JSON(http.StatusConflict, gin.H{"error": "stop or resolve the session before deleting it"})
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	default:
+		c.Status(http.StatusNoContent)
+	}
 }
 
 func (s *Server) handleSessions(c *gin.Context) {

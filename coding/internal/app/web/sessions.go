@@ -23,6 +23,10 @@ import (
 
 const defaultSessionTitle = "New session"
 
+// ErrSessionActive prevents deleting a conversation while its run or approval
+// gate still owns live resources.
+var ErrSessionActive = errors.New("web: session is running or waiting for approval")
+
 // SessionSummary is the browser-facing metadata for one independent coding
 // conversation. Runtime-only state is sampled when the list is requested.
 type SessionSummary struct {
@@ -185,6 +189,70 @@ func (m *SessionManager) Create(title string) (SessionSummary, error) {
 	return runtime.summary(), nil
 }
 
+// Delete permanently removes one idle conversation and its persisted files.
+// Files are staged under temporary names before the index is changed, so an
+// index write failure can restore the conversation without data loss. Deleting
+// the final conversation creates a fresh empty replacement.
+func (m *SessionManager) Delete(id string) error {
+	m.mu.Lock()
+	runtime, ok := m.sessions[id]
+	if !ok {
+		m.mu.Unlock()
+		return os.ErrNotExist
+	}
+	if runtime.running.Load() || runtime.broker.HasPending() {
+		m.mu.Unlock()
+		return ErrSessionActive
+	}
+
+	paths, err := m.sessionFiles(runtime.record)
+	if err != nil {
+		m.mu.Unlock()
+		return err
+	}
+	staged, err := stageFiles(paths)
+	if err != nil {
+		m.mu.Unlock()
+		return err
+	}
+
+	delete(m.sessions, id)
+	var replacementID string
+	if len(m.sessions) == 0 {
+		replacementID = newSessionID()
+		now := time.Now().UTC()
+		record := sessionRecord{
+			ID:         replacementID,
+			Title:      defaultSessionTitle,
+			CreatedAt:  now,
+			UpdatedAt:  now,
+			Transcript: filepath.Join(filepath.Dir(m.indexPath), replacementID+".jsonl"),
+			AutoTitle:  true,
+		}
+		replacement, buildErr := m.build(record)
+		if buildErr != nil {
+			m.sessions[id] = runtime
+			restoreFiles(staged)
+			m.mu.Unlock()
+			return buildErr
+		}
+		m.sessions[replacementID] = replacement
+	}
+	if err := m.saveLocked(); err != nil {
+		delete(m.sessions, replacementID)
+		m.sessions[id] = runtime
+		restoreFiles(staged)
+		m.mu.Unlock()
+		return err
+	}
+	m.mu.Unlock()
+
+	for _, file := range staged {
+		_ = os.Remove(file.staged)
+	}
+	return nil
+}
+
 func (m *SessionManager) Get(id string) (*sessionRuntime, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -270,6 +338,56 @@ func (m *SessionManager) saveLocked() error {
 		return fmt.Errorf("web: replace session index: %w", err)
 	}
 	return nil
+}
+
+type stagedFile struct {
+	original string
+	staged   string
+}
+
+func (m *SessionManager) sessionFiles(record sessionRecord) ([]string, error) {
+	transcript, err := filepath.Abs(record.Transcript)
+	if err != nil {
+		return nil, err
+	}
+	legacy, err := filepath.Abs(m.cfg.SessionFile)
+	if err != nil {
+		return nil, err
+	}
+	sessionDir, err := filepath.Abs(filepath.Dir(m.indexPath))
+	if err != nil {
+		return nil, err
+	}
+	if transcript != legacy && filepath.Dir(transcript) != sessionDir {
+		return nil, fmt.Errorf("web: refusing to delete transcript outside session storage: %s", transcript)
+	}
+	details := strings.TrimSuffix(transcript, ".jsonl") + ".details.jsonl"
+	return []string{transcript, details}, nil
+}
+
+func stageFiles(paths []string) ([]stagedFile, error) {
+	var staged []stagedFile
+	for _, path := range paths {
+		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+			continue
+		} else if err != nil {
+			restoreFiles(staged)
+			return nil, err
+		}
+		tombstone := path + ".deleted-" + newSessionID()
+		if err := os.Rename(path, tombstone); err != nil {
+			restoreFiles(staged)
+			return nil, err
+		}
+		staged = append(staged, stagedFile{original: path, staged: tombstone})
+	}
+	return staged, nil
+}
+
+func restoreFiles(files []stagedFile) {
+	for i := len(files) - 1; i >= 0; i-- {
+		_ = os.Rename(files[i].staged, files[i].original)
+	}
 }
 
 func (s *sessionRuntime) summary() SessionSummary {

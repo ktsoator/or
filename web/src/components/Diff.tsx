@@ -1,39 +1,12 @@
 import { ChevronRight } from 'lucide-react'
-import hljs from 'highlight.js/lib/common'
 import type { Change, Hunk as HunkType } from '@/types'
+import { highlightCode, languageForPath } from '@/lib/highlight'
 import { cn } from '@/lib/utils'
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-
-const extensionLanguages: Record<string, string> = {
-  c: 'c',
-  cc: 'cpp',
-  cpp: 'cpp',
-  css: 'css',
-  go: 'go',
-  html: 'xml',
-  java: 'java',
-  js: 'javascript',
-  json: 'json',
-  jsx: 'javascript',
-  md: 'markdown',
-  py: 'python',
-  rs: 'rust',
-  sh: 'bash',
-  ts: 'typescript',
-  tsx: 'typescript',
-  yaml: 'yaml',
-  yml: 'yaml',
-}
-
-function languageFor(path: string): string {
-  const extension = path.split('.').pop()?.toLowerCase() ?? ''
-  const language = extensionLanguages[extension] ?? 'plaintext'
-  return hljs.getLanguage(language) ? language : 'plaintext'
-}
 
 export function FileChange({ change }: { change: Change }) {
   if (change.changeType === 'failure') {
@@ -47,12 +20,12 @@ export function FileChange({ change }: { change: Change }) {
   const hunks = Array.isArray(change.hunks) ? change.hunks : []
   const filename = change.path.split('/').filter(Boolean).pop() || change.path
   const showPath = change.path !== filename
-  const language = languageFor(change.path)
+  const language = languageForPath(change.path)
 
   return (
     <Collapsible
       defaultOpen
-      className="mt-2 ml-5 overflow-hidden rounded-lg border border-stone-200 bg-white max-md:ml-0"
+      className="mt-2 ml-5 overflow-hidden rounded-lg border border-stone-300/80 bg-white max-md:ml-0"
     >
       <div className={cn('px-3.5', showPath ? 'py-3' : 'py-2.5')}>
         <CollapsibleTrigger
@@ -66,19 +39,19 @@ export function FileChange({ change }: { change: Change }) {
             {filename}
           </strong>
           <span className="flex shrink-0 gap-1 font-mono text-sm font-medium">
-            <b className="font-inherit text-emerald-600">+{change.additions || 0}</b>
-            <b className="font-inherit text-rose-600">-{change.deletions || 0}</b>
+            <b className="font-inherit text-emerald-700">+{change.additions || 0}</b>
+            <b className="font-inherit text-rose-700">-{change.deletions || 0}</b>
           </span>
           {hunks.length > 0 && (
             <ChevronRight
-              className="size-3.5 shrink-0 text-stone-400 transition-transform group-data-[state=open]:rotate-90"
+              className="size-3.5 shrink-0 text-stone-500 transition-transform group-data-[state=open]:rotate-90"
               aria-hidden="true"
             />
           )}
         </CollapsibleTrigger>
         {showPath && (
           <div
-            className="mt-1.5 overflow-hidden font-mono text-xs text-stone-400 text-ellipsis whitespace-nowrap"
+            className="mt-1.5 overflow-hidden font-mono text-xs text-stone-500 text-ellipsis whitespace-nowrap"
             title={change.path}
           >
             {change.path}
@@ -88,7 +61,7 @@ export function FileChange({ change }: { change: Change }) {
 
       {hunks.length > 0 && (
         <CollapsibleContent>
-          <div className="max-h-[460px] overflow-auto border-t border-stone-200 bg-[#fdfdfc] [scrollbar-color:#a8a8a3_transparent] [scrollbar-width:thin]">
+          <div className="max-h-[460px] overflow-auto border-t border-stone-300/80 bg-[#fdfdfc] [scrollbar-color:#8f8f89_transparent] [scrollbar-width:thin]">
             {hunks.map((hunk, index) => (
               <Hunk key={index} hunk={hunk} language={language} />
             ))}
@@ -104,8 +77,8 @@ function Hunk({ hunk, language }: { hunk: HunkType; language: string }) {
   let newLine = hunk.newStart
 
   return (
-    <div className="border-b border-stone-200 last:border-b-0">
-      <div className="bg-stone-100/70 px-3 py-1 font-mono text-[11px] leading-4 text-stone-400">
+    <div className="border-b border-stone-300/70 last:border-b-0">
+      <div className="bg-stone-100 px-3 py-1 font-mono text-[11px] leading-4 font-medium text-stone-500">
         {`@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`}
       </div>
       {(hunk.lines ?? []).map((line, index) => {
@@ -116,29 +89,29 @@ function Hunk({ hunk, language }: { hunk: HunkType; language: string }) {
         if (!isAdd) oldLine += 1
         if (!isDelete) newLine += 1
         const code = isAdd || isDelete || mark === ' ' ? line.slice(1) : line
-        const html = hljs.highlight(code, { language }).value || ' '
+        const html = highlightCode(code, language) || ' '
 
         return (
           <div
             key={index}
             className={cn(
-              'grid min-h-6 grid-cols-[24px_42px_minmax(max-content,1fr)] font-mono text-[12.75px] leading-6 text-stone-800',
-              isAdd && 'bg-emerald-50/80',
-              isDelete && 'bg-rose-50/80',
+              'grid min-h-6 grid-cols-[24px_42px_minmax(max-content,1fr)] font-mono text-[12.75px] leading-6 text-stone-900',
+              isAdd && 'bg-[#dcefe2]',
+              isDelete && 'bg-[#f5dddd]',
             )}
           >
             <span
               className={cn(
-                'pl-2.5 text-stone-300 select-none',
-                isAdd && 'text-emerald-600',
-                isDelete && 'text-rose-600',
+                'pl-2.5 text-stone-400 select-none',
+                isAdd && 'text-emerald-700',
+                isDelete && 'text-rose-700',
               )}
             >
               {isAdd ? '+' : isDelete ? '−' : ''}
             </span>
-            <span className="pr-2.5 text-right text-stone-400 select-none">{number}</span>
+            <span className="pr-2.5 text-right text-stone-500 select-none">{number}</span>
             <code
-              className="hljs block min-w-full overflow-visible bg-transparent! px-3.5 whitespace-pre"
+              className="or-code-theme hljs block min-w-full overflow-visible bg-transparent! px-3.5 whitespace-pre"
               dangerouslySetInnerHTML={{ __html: html }}
             />
           </div>

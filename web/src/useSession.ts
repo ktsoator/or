@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useState } from 'react'
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { apiURL } from './api'
 import type {
   ConfirmItem,
@@ -26,6 +26,7 @@ type Action =
   | { t: 'running'; sessionID: string; running: boolean }
   | { t: 'sendUser'; sessionID: string; text: string }
   | { t: 'resolve'; sessionID: string; id: string }
+  | { t: 'forget'; sessionID: string }
 
 const emptyThread = (): ThreadState => ({
   items: [],
@@ -47,6 +48,11 @@ function replaceAt(items: Item[], index: number, next: Item): Item[] {
 }
 
 function threadsReducer(state: ThreadsState, action: Action): ThreadsState {
+  if (action.t === 'forget') {
+    const next = { ...state }
+    delete next[action.sessionID]
+    return next
+  }
   const current = state[action.sessionID] ?? emptyThread()
   let next = current
 
@@ -253,6 +259,7 @@ export type Session = {
   creating: boolean
   status: ConnectionStatus
   createSession: () => Promise<void>
+  deleteSession: (id: string) => Promise<void>
   selectSession: (id: string) => void
   send: (text: string) => void
   stop: () => void
@@ -265,13 +272,16 @@ export function useSession(): Session {
   const [threads, dispatch] = useReducer(threadsReducer, {})
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [activeSessionID, setActiveSessionID] = useState<string>()
+  const [initializing, setInitializing] = useState(true)
   const [creating, setCreating] = useState(false)
   const [serviceStatus, setServiceStatus] = useState<ConnectionStatus>('connecting')
+  const deletedSessionIDs = useRef(new Set<string>())
 
   const refreshSessions = useCallback(async (signal?: AbortSignal) => {
     const response = await fetch(apiURL('/sessions'), { cache: 'no-store', signal })
     if (!response.ok) throw new Error(`session list failed (${response.status})`)
-    const next = (await response.json()) as SessionSummary[]
+    const received = (await response.json()) as SessionSummary[]
+    const next = received.filter((session) => !deletedSessionIDs.current.has(session.id))
     setSessions((current) =>
       next.map((remote) => {
         const local = current.find((session) => session.id === remote.id)
@@ -291,17 +301,35 @@ export function useSession(): Session {
   }, [])
 
   useEffect(() => {
-    const controller = new AbortController()
-    void refreshSessions(controller.signal).catch((error: unknown) => {
-      if (error instanceof DOMException && error.name === 'AbortError') return
-      setServiceStatus('disconnected')
-    })
-    const timer = window.setInterval(() => {
-      void refreshSessions().catch(() => undefined)
-    }, 2000)
+    let controller: AbortController | undefined
+    let active = true
+
+    const refresh = (initial = false) => {
+      controller?.abort()
+      controller = new AbortController()
+      void refreshSessions(controller.signal).catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return
+        setServiceStatus('disconnected')
+      }).finally(() => {
+        if (active && initial) setInitializing(false)
+      })
+    }
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+
+    const refreshOnFocus = () => refresh()
+
+    refresh(true)
+    window.addEventListener('focus', refreshOnFocus)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+
     return () => {
-      controller.abort()
-      window.clearInterval(timer)
+      active = false
+      controller?.abort()
+      window.removeEventListener('focus', refreshOnFocus)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
     }
   }, [refreshSessions])
 
@@ -407,6 +435,26 @@ export function useSession(): Session {
     }
   }
 
+  const deleteSession = async (id: string) => {
+    const response = await fetch(sessionURL(id, ''), { method: 'DELETE' })
+    if (!response.ok) {
+      let message = `delete session failed (${response.status})`
+      try {
+        const body = (await response.json()) as { error?: string }
+        if (body.error) message = body.error
+      } catch {
+        // Keep the status-based fallback when the response has no JSON body.
+      }
+      throw new Error(message)
+    }
+
+    deletedSessionIDs.current.add(id)
+    dispatch({ t: 'forget', sessionID: id })
+    setSessions((current) => current.filter((session) => session.id !== id))
+    setActiveSessionID((current) => (current === id ? undefined : current))
+    await refreshSessions()
+  }
+
   const activeSession = sessions.find((session) => session.id === activeSessionID)
   const thread = activeSessionID ? threads[activeSessionID] : undefined
   const activeSessionRunning = activeSession?.running
@@ -490,10 +538,11 @@ export function useSession(): Session {
     items,
     confirmation,
     running: thread?.running ?? activeSession?.running ?? false,
-    loading: Boolean(activeSessionID) && !thread?.loaded,
+    loading: initializing || (Boolean(activeSessionID) && !thread?.loaded),
     creating,
     status: thread?.status ?? serviceStatus,
     createSession,
+    deleteSession,
     selectSession,
     send,
     stop,

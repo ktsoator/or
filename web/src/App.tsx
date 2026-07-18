@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import {
   ArrowDown,
   Braces,
@@ -8,6 +8,7 @@ import {
   ShieldAlert,
   SquarePen,
   TerminalSquare,
+  Trash2,
 } from 'lucide-react'
 import { useSession } from './useSession'
 import type { ConnectionStatus, Item, SessionSummary } from './types'
@@ -57,21 +58,47 @@ export default function App() {
     creating,
     status,
     createSession,
+    deleteSession,
     selectSession,
     send,
     stop,
     resolveConfirm,
   } = useSession()
   const logRef = useRef<HTMLDivElement>(null)
+  const followLatestRef = useRef(true)
+  const previousSessionIDRef = useRef<string | undefined>(undefined)
   const [mobileSessionsOpen, setMobileSessionsOpen] = useState(false)
+  const [atLatest, setAtLatest] = useState(true)
+  const [deleteTarget, setDeleteTarget] = useState<SessionSummary>()
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = logRef.current
-    if (el) el.scrollTop = el.scrollHeight
+    if (!el) return
+
+    const sessionChanged = previousSessionIDRef.current !== activeSessionID
+    previousSessionIDRef.current = activeSessionID
+    if (sessionChanged) followLatestRef.current = true
+
+    if (followLatestRef.current) {
+      el.scrollTop = el.scrollHeight
+      setAtLatest(true)
+    }
   }, [activeSessionID, items])
 
   const scrollToLatest = () => {
+    followLatestRef.current = true
+    setAtLatest(true)
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: 'smooth' })
+  }
+
+  const trackScrollPosition = () => {
+    const el = logRef.current
+    if (!el) return
+    const latest = el.scrollHeight - el.scrollTop - el.clientHeight < 72
+    followLatestRef.current = latest
+    setAtLatest(latest)
   }
 
   const chooseSession = (id: string) => {
@@ -83,6 +110,26 @@ export default function App() {
     void createSession()
       .then(() => setMobileSessionsOpen(false))
       .catch(() => undefined)
+  }
+
+  const requestDelete = (session: SessionSummary) => {
+    setDeleteError('')
+    setDeleteTarget(session)
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteTarget || deleteTarget.running || deleteTarget.hasApproval) return
+    setDeleting(true)
+    setDeleteError('')
+    try {
+      await deleteSession(deleteTarget.id)
+      setDeleteTarget(undefined)
+      setMobileSessionsOpen(false)
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : 'Could not delete the session')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   return (
@@ -105,7 +152,7 @@ export default function App() {
       >
         <div className="flex h-13 shrink-0 items-center justify-between px-3.5">
           <div className="flex min-w-0 items-center gap-2">
-            <Braces className="size-4 shrink-0 stroke-[1.65] text-stone-700" aria-hidden="true" />
+            <Braces className="size-4 shrink-0 text-stone-700" aria-hidden="true" />
             <span className="truncate text-[13px] font-[620] tracking-[-0.015em] text-stone-900">
               OR coding
             </span>
@@ -120,7 +167,7 @@ export default function App() {
             {creating ? (
               <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
             ) : (
-              <SquarePen className="size-3.5 stroke-[1.7]" aria-hidden="true" />
+              <SquarePen className="size-3.5" aria-hidden="true" />
             )}
             <span className="sr-only">New session</span>
           </button>
@@ -137,6 +184,7 @@ export default function App() {
                 session={session}
                 active={session.id === activeSessionID}
                 onSelect={() => chooseSession(session.id)}
+                onDelete={() => requestDelete(session)}
               />
             ))}
           </div>
@@ -169,12 +217,16 @@ export default function App() {
             </span>
           </div>
           <div className="flex items-center gap-3.5 text-stone-500">
-            <TerminalSquare className="size-4 stroke-[1.7]" aria-hidden="true" />
+            <TerminalSquare className="size-4" aria-hidden="true" />
             <ConnectionState status={status} />
           </div>
         </header>
 
-        <main ref={logRef} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto scroll-smooth">
+        <main
+          ref={logRef}
+          className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
+          onScroll={trackScrollPosition}
+        >
           <div
             className={cn(
               'mx-auto min-h-full w-full max-w-[944px] px-6 py-8 pb-12 max-md:px-4 max-md:py-6',
@@ -202,7 +254,7 @@ export default function App() {
           </div>
         </main>
 
-        {items.length > 0 && (
+        {items.length > 0 && !atLatest && (
           <button
             className={cn(
               'absolute right-1/2 z-40 grid size-7 translate-x-1/2 place-items-center rounded-md border border-stone-300 bg-white/95 text-stone-500 transition-all hover:border-stone-400 hover:text-stone-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400',
@@ -226,6 +278,18 @@ export default function App() {
           onResolve={resolveConfirm}
         />
       </div>
+
+      {deleteTarget && (
+        <DeleteSessionDialog
+          session={deleteTarget}
+          deleting={deleting}
+          error={deleteError}
+          onCancel={() => {
+            if (!deleting) setDeleteTarget(undefined)
+          }}
+          onConfirm={() => void confirmDelete()}
+        />
+      )}
     </div>
   )
 }
@@ -234,44 +298,129 @@ function SessionRow({
   session,
   active,
   onSelect,
+  onDelete,
 }: {
   session: SessionSummary
   active: boolean
   onSelect: () => void
+  onDelete: () => void
 }) {
   return (
-    <button
-      className={cn(
-        'group flex w-full cursor-pointer items-start rounded-[7px] px-2.5 py-2 text-left transition-colors',
-        active
-          ? 'bg-stone-200/75 text-stone-950'
-          : 'text-stone-600 hover:bg-stone-200/45 hover:text-stone-900',
-      )}
-      type="button"
-      aria-current={active ? 'page' : undefined}
-      onClick={onSelect}
+    <div className="group relative">
+      <button
+        className={cn(
+          'flex w-full cursor-pointer items-start rounded-[7px] px-2.5 py-2 pr-9 text-left transition-colors',
+          active
+            ? 'bg-stone-200/75 text-stone-950'
+            : 'text-stone-600 hover:bg-stone-200/45 hover:text-stone-900',
+        )}
+        type="button"
+        aria-current={active ? 'page' : undefined}
+        onClick={onSelect}
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[12.5px] font-[520] leading-4.5" title={session.title}>
+            {session.title}
+          </span>
+          <span className="mt-0.5 flex items-center gap-1.5 text-[10px] leading-4 text-stone-400">
+            {session.hasApproval ? (
+              <>
+                <ShieldAlert className="size-3 text-amber-700" aria-hidden="true" />
+                Approval needed
+              </>
+            ) : session.running ? (
+              <>
+                <LoaderCircle className="size-3 animate-spin text-stone-500" aria-hidden="true" />
+                Working
+              </>
+            ) : (
+              formatSessionTime(session.updatedAt)
+            )}
+          </span>
+        </span>
+      </button>
+      <button
+        className="absolute top-1.5 right-1.5 grid size-7 cursor-pointer place-items-center rounded-md text-stone-400 opacity-0 transition-[opacity,color,background-color] group-hover:opacity-100 hover:bg-stone-300/60 hover:text-red-700 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-stone-400 max-md:opacity-100"
+        type="button"
+        title={`Delete ${session.title}`}
+        aria-label={`Delete ${session.title}`}
+        onClick={onDelete}
+      >
+        <Trash2 className="size-3.5" aria-hidden="true" />
+      </button>
+    </div>
+  )
+}
+
+function DeleteSessionDialog({
+  session,
+  deleting,
+  error,
+  onCancel,
+  onConfirm,
+}: {
+  session: SessionSummary
+  deleting: boolean
+  error: string
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const blocked = session.running || session.hasApproval
+  return (
+    <div
+      className="fixed inset-0 z-[100] grid place-items-center bg-stone-950/20 px-4 backdrop-blur-[1px]"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onCancel()
+      }}
     >
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[12.5px] font-[520] leading-4.5" title={session.title}>
-          {session.title}
-        </span>
-        <span className="mt-0.5 flex items-center gap-1.5 text-[10px] leading-4 text-stone-400">
-          {session.hasApproval ? (
-            <>
-              <ShieldAlert className="size-3 text-amber-700" aria-hidden="true" />
-              Approval needed
-            </>
-          ) : session.running ? (
-            <>
-              <LoaderCircle className="size-3 animate-spin text-stone-500" aria-hidden="true" />
-              Working
-            </>
-          ) : (
-            formatSessionTime(session.updatedAt)
-          )}
-        </span>
-      </span>
-    </button>
+      <section
+        className="w-full max-w-[380px] animate-[fade-in_140ms_ease-out] rounded-xl border border-stone-300 bg-[#fffefa] p-4 shadow-[0_18px_55px_-24px_rgba(28,25,23,0.55)]"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-session-title"
+      >
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-red-50 text-red-700">
+            <Trash2 className="size-3.5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <h2 id="delete-session-title" className="text-sm font-semibold text-stone-900">
+              Delete session?
+            </h2>
+            <p className="mt-1 text-xs leading-5 text-stone-500">
+              “{session.title}” and its stored tool details will be permanently removed.
+            </p>
+          </div>
+        </div>
+
+        {blocked && (
+          <div className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+            Stop this session or resolve its approval request before deleting it.
+          </div>
+        )}
+        {error && <div className="mt-3 text-xs leading-5 text-red-700">{error}</div>}
+
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            className="h-8 cursor-pointer rounded-md px-3 text-xs font-semibold text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900 disabled:cursor-wait disabled:opacity-50"
+            type="button"
+            disabled={deleting}
+            onClick={onCancel}
+          >
+            Cancel
+          </button>
+          <button
+            className="h-8 cursor-pointer rounded-md bg-red-700 px-3 text-xs font-semibold text-white transition-colors hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-35"
+            type="button"
+            disabled={deleting || blocked}
+            onClick={onConfirm}
+          >
+            {deleting ? 'Deleting…' : 'Delete'}
+          </button>
+        </div>
+      </section>
+    </div>
   )
 }
 
