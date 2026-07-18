@@ -28,6 +28,9 @@ type HistoryItem struct {
 
 	Text   string
 	Images []llm.ImageContent
+	// FinalResponse is true for the assistant item that completes one visible
+	// reply. Tool-use pauses remain false even when they contain explanatory text.
+	FinalResponse bool
 
 	ToolCallID string
 	ToolName   string
@@ -69,9 +72,10 @@ func projectHistory(messages []agent.AgentMessage, details map[string]any) []His
 
 		switch message := llmMessage.(type) {
 		case *llm.UserMessage:
-			// A user message normally begins a new run. Flush defensively so an
-			// interrupted transcript cannot leak old usage into the next response.
-			flushUsage()
+			// Steering messages may enter before the current visible reply is
+			// complete, so pending tool-turn usage stays with the eventual response.
+			// A normal/follow-up user message follows a final assistant, which has
+			// already flushed its response usage below.
 			text, images := userMessageContent(message)
 			if text != "" || len(images) > 0 {
 				items = append(items, HistoryItem{Type: HistoryUser, Text: text, Images: images})
@@ -127,7 +131,7 @@ func assistantHistory(message *llm.AssistantMessage) []HistoryItem {
 	}
 	if message.StopReason == llm.StopReasonError || message.StopReason == llm.StopReasonAborted {
 		text, _ := eventAssistantText(agent.FromLLM(message))
-		return []HistoryItem{{Type: HistoryAssistant, Text: text}}
+		return []HistoryItem{{Type: HistoryAssistant, Text: text, FinalResponse: true}}
 	}
 
 	var items []HistoryItem
@@ -177,6 +181,14 @@ func assistantHistory(message *llm.AssistantMessage) []HistoryItem {
 	}
 	flushText()
 	flushThinking()
+	if message.StopReason != llm.StopReasonToolUse {
+		for index := len(items) - 1; index >= 0; index-- {
+			if items[index].Type == HistoryAssistant {
+				items[index].FinalResponse = true
+				break
+			}
+		}
+	}
 	return items
 }
 

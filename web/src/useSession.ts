@@ -3,18 +3,23 @@ import { apiURL } from './api'
 import type {
   ConfirmItem,
   ConnectionStatus,
+  DeliveryMode,
   HistoryResponse,
   Item,
   ModelCatalogResponse,
   ModelOption,
   MessageImage,
+  QueuedMessage,
   SessionSummary,
   ThinkingLevel,
+  Usage,
   WireEvent,
 } from './types'
 
 type ThreadState = {
   items: Item[]
+  queue: QueuedMessage[]
+  responseUsage: Usage
   running: boolean
   status: ConnectionStatus
   seq: number
@@ -28,12 +33,33 @@ type Action =
   | { t: 'wire'; sessionID: string; ev: WireEvent }
   | { t: 'status'; sessionID: string; status: ConnectionStatus }
   | { t: 'running'; sessionID: string; running: boolean }
-  | { t: 'sendUser'; sessionID: string; text: string; images: MessageImage[] }
+  | {
+      t: 'sendUser'
+      sessionID: string
+      id: string
+      text: string
+      images: MessageImage[]
+      delivery?: DeliveryMode
+    }
+  | { t: 'queueFailed'; sessionID: string; id: string }
+  | { t: 'queueStatus'; sessionID: string; id: string; status: 'queued' | 'removing' }
+  | { t: 'queueRemove'; sessionID: string; id: string }
   | { t: 'resolve'; sessionID: string; id: string }
   | { t: 'forget'; sessionID: string }
 
+const emptyUsage = (): Usage => ({
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+  totalTokens: 0,
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+})
+
 const emptyThread = (): ThreadState => ({
   items: [],
+  queue: [],
+  responseUsage: emptyUsage(),
   running: false,
   status: 'connecting',
   seq: 0,
@@ -69,6 +95,7 @@ function threadsReducer(state: ThreadsState, action: Action): ThreadsState {
         loaded: true,
       }
       for (const ev of action.history.events) next = reduceWire(next, ev)
+      for (const ev of action.history.queue ?? []) next = reduceWire(next, ev)
       if (action.history.running) next = { ...next, running: true }
       break
     }
@@ -81,19 +108,62 @@ function threadsReducer(state: ThreadsState, action: Action): ThreadsState {
       next = { ...current, running: action.running }
       break
     case 'sendUser':
+      next = action.delivery
+        ? {
+            ...current,
+            running: true,
+            queue: [
+              ...current.queue,
+              {
+                id: action.id,
+                text: action.text,
+                images: action.images,
+                delivery: action.delivery,
+                status: 'queued',
+              },
+            ],
+          }
+        : {
+            ...current,
+            seq: current.seq + 1,
+            running: true,
+            items: [
+              ...current.items,
+              {
+                kind: 'user',
+                id: action.id,
+                text: action.text,
+                images: action.images,
+                deliveryStatus: 'sending',
+              },
+            ],
+          }
+      break
+    case 'queueFailed':
       next = {
         ...current,
-        seq: current.seq + 1,
-        running: true,
-        items: [
-          ...current.items,
-          {
-            kind: 'user',
-            id: `local-${action.sessionID}-${current.seq}`,
-            text: action.text,
-            images: action.images,
-          },
-        ],
+        queue: current.queue.map((message) =>
+          message.id === action.id ? { ...message, status: 'failed' } : message,
+        ),
+        items: current.items.map((item) =>
+          item.kind === 'user' && item.id === action.id
+            ? { ...item, deliveryStatus: 'failed' }
+            : item,
+        ),
+      }
+      break
+    case 'queueStatus':
+      next = {
+        ...current,
+        queue: current.queue.map((message) =>
+          message.id === action.id ? { ...message, status: action.status } : message,
+        ),
+      }
+      break
+    case 'queueRemove':
+      next = {
+        ...current,
+        queue: current.queue.filter((message) => message.id !== action.id),
       }
       break
     case 'resolve':
@@ -114,6 +184,8 @@ function threadsReducer(state: ThreadsState, action: Action): ThreadsState {
 
 function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
   let items = state.items
+  let queue = state.queue
+  let responseUsage = state.responseUsage
   let running = state.running
   let seq = state.seq
   const nextId = () => `i-${seq++}`
@@ -129,10 +201,69 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
 
   switch (ev.type) {
     case 'user_message':
-      items = [
-        ...items,
-        { kind: 'user', id: nextId(), text: ev.text ?? '', images: ev.images ?? [] },
-      ]
+      {
+        const text = ev.text ?? ''
+        const images = ev.images ?? []
+        if (ev.queued && ev.delivery) {
+          let queueIndex = ev.id ? queue.findIndex((message) => message.id === ev.id) : -1
+          if (queueIndex < 0) {
+            queueIndex = queue.findIndex((message) =>
+              sameUserMessage(message.text, message.images, text, images),
+            )
+          }
+          const message: QueuedMessage = {
+            id: ev.id ?? `queued-${nextId()}`,
+            text,
+            images,
+            delivery: ev.delivery,
+            status: 'queued',
+          }
+          queue =
+            queueIndex >= 0
+              ? replaceQueueAt(queue, queueIndex, message)
+              : [...queue, message]
+          break
+        }
+
+        let queueIndex = ev.id ? queue.findIndex((message) => message.id === ev.id) : -1
+        if (queueIndex < 0) {
+          queueIndex = queue.findIndex((message) =>
+            sameUserMessage(message.text, message.images, text, images),
+          )
+        }
+        if (queueIndex >= 0) queue = queue.filter((_, index) => index !== queueIndex)
+
+        let idx = ev.id
+          ? items.findIndex((item) => item.kind === 'user' && item.id === ev.id)
+          : -1
+        if (idx < 0) {
+          idx = items.findIndex(
+            (item) =>
+              item.kind === 'user' &&
+              item.deliveryStatus === 'sending' &&
+              sameUserMessage(item.text, item.images, text, images),
+          )
+        }
+        const user = {
+          kind: 'user' as const,
+          id: ev.id ?? (idx >= 0 ? items[idx].id : nextId()),
+          text,
+          images,
+        }
+        items = idx >= 0 ? replaceAt(items, idx, user) : [...items, user]
+      }
+      break
+
+    case 'queue_cancelled':
+      if (ev.id) {
+        queue = queue.map((message) =>
+          message.id === ev.id ? { ...message, status: 'failed' } : message,
+        )
+      }
+      break
+
+    case 'queue_removed':
+      if (ev.id) queue = queue.filter((message) => message.id !== ev.id)
       break
 
     case 'delta':
@@ -159,7 +290,13 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
         } else {
           items = [
             ...items,
-            { kind: 'assistant', id: nextId(), markdown: ev.delta ?? '', open: true },
+            {
+              kind: 'assistant',
+              id: nextId(),
+              markdown: ev.delta ?? '',
+              open: true,
+              complete: false,
+            },
           ]
         }
       }
@@ -207,19 +344,41 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
 
     case 'message_end':
       completeThinking()
-      if (ev.text) {
-        const idx = lastIndex(items, (it) => it.kind === 'assistant' && it.open)
-        if (idx >= 0) {
+      responseUsage = mergeUsage(responseUsage, ev.usage)
+      {
+        let idx = lastIndex(items, (it) => it.kind === 'assistant' && it.open)
+        if (ev.text) {
+          if (idx >= 0) {
+            const cur = items[idx] as Extract<Item, { kind: 'assistant' }>
+            items = replaceAt(items, idx, { ...cur, markdown: ev.text, open: false })
+          } else {
+            idx = items.length
+            items = [
+              ...items,
+              {
+                kind: 'assistant',
+                id: nextId(),
+                markdown: ev.text,
+                open: false,
+                complete: false,
+              },
+            ]
+          }
+        } else if (idx >= 0) {
           const cur = items[idx] as Extract<Item, { kind: 'assistant' }>
-          items = replaceAt(items, idx, { ...cur, markdown: ev.text, open: false })
-        } else {
-          items = [
-            ...items,
-            { kind: 'assistant', id: nextId(), markdown: ev.text, open: false },
-          ]
+          items = replaceAt(items, idx, { ...cur, open: false })
         }
-      } else {
-        closeAssistant()
+
+        if (ev.finalResponse && idx >= 0) {
+          const cur = items[idx] as Extract<Item, { kind: 'assistant' }>
+          items = replaceAt(items, idx, {
+            ...cur,
+            open: false,
+            complete: true,
+            usage: hasUsage(responseUsage) ? responseUsage : undefined,
+          })
+          responseUsage = emptyUsage()
+        }
       }
       break
 
@@ -238,39 +397,64 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
       running = false
       closeAssistant()
       completeThinking()
+      responseUsage = emptyUsage()
       break
 
     case 'done':
       running = false
       closeAssistant()
       completeThinking()
-      if (ev.usage && hasUsage(ev.usage)) {
-        items = [
-          ...items,
-          {
-            kind: 'usage',
-            id: nextId(),
-            usage: ev.usage,
-            responseText: finalAssistantText(items),
-          },
-        ]
-      }
+      responseUsage = emptyUsage()
       break
   }
 
-  return { ...state, items, running, seq }
+  return { ...state, items, queue, responseUsage, running, seq }
 }
 
-function finalAssistantText(items: Item[]): string {
-  const userIndex = lastIndex(items, (item) => item.kind === 'user')
-  for (let i = items.length - 1; i > userIndex; i--) {
-    const item = items[i]
-    if (item.kind === 'assistant') return item.markdown
+function replaceQueueAt(
+  queue: QueuedMessage[],
+  index: number,
+  next: QueuedMessage,
+): QueuedMessage[] {
+  const copy = queue.slice()
+  copy[index] = next
+  return copy
+}
+
+function sameUserMessage(
+  leftText: string,
+  leftImages: MessageImage[],
+  rightText: string,
+  rightImages: MessageImage[],
+): boolean {
+  if (leftText !== rightText || leftImages.length !== rightImages.length) return false
+  return leftImages.every(
+    (image, index) =>
+      image.mimeType === rightImages[index]?.mimeType && image.data === rightImages[index]?.data,
+  )
+}
+
+function mergeUsage(current: Usage, next?: Usage): Usage {
+  if (!next) return current
+  return {
+    input: current.input + next.input,
+    output: current.output + next.output,
+    cacheRead: current.cacheRead + next.cacheRead,
+    cacheWrite: current.cacheWrite + next.cacheWrite,
+    totalTokens:
+      current.totalTokens +
+      (next.totalTokens || next.input + next.output + next.cacheRead + next.cacheWrite),
+    cost: {
+      input: current.cost.input + next.cost.input,
+      output: current.cost.output + next.cost.output,
+      cacheRead: current.cost.cacheRead + next.cost.cacheRead,
+      cacheWrite: current.cost.cacheWrite + next.cost.cacheWrite,
+      total: current.cost.total + next.cost.total,
+    },
   }
-  return ''
 }
 
-function hasUsage(usage: NonNullable<WireEvent['usage']>): boolean {
+function hasUsage(usage: Usage): boolean {
   return (
     usage.input !== 0 ||
     usage.output !== 0 ||
@@ -296,6 +480,7 @@ export type Session = {
   activeSession?: SessionSummary
   activeSessionID?: string
   items: Item[]
+  queuedMessages: QueuedMessage[]
   confirmation?: ConfirmItem
   running: boolean
   loading: boolean
@@ -307,7 +492,8 @@ export type Session = {
   deleteSession: (id: string) => Promise<void>
   selectSession: (id: string) => void
   updateSettings: (provider: string, model: string, thinkingLevel: ThinkingLevel) => Promise<void>
-  send: (text: string, images: MessageImage[]) => void
+  send: (text: string, images: MessageImage[], delivery?: DeliveryMode) => void
+  removeQueuedMessage: (id: string) => Promise<void>
   stop: () => void
   resolveConfirm: (id: string, allow: boolean) => Promise<void>
 }
@@ -566,12 +752,42 @@ export function useSession(): Session {
     })
   }, [activeSessionID, activeSessionRunning, thread?.loaded])
 
-  const send = (text: string, images: MessageImage[]) => {
+  const send = (text: string, images: MessageImage[], delivery?: DeliveryMode) => {
     if (!activeSessionID || !thread) return
     const trimmed = text.trim()
-    if ((!trimmed && images.length === 0) || thread.running || thread.status !== 'ready') return
+    if ((!trimmed && images.length === 0) || thread.status !== 'ready') return
     const sessionID = activeSessionID
-    dispatch({ t: 'sendUser', sessionID, text: trimmed, images })
+    const queued = thread.running
+    if (queued && !delivery) return
+    if (!queued && delivery) return
+    const id = `local-${sessionID}-${crypto.randomUUID()}`
+    dispatch({ t: 'sendUser', sessionID, id, text: trimmed, images, delivery })
+
+    if (queued) {
+      const endpoint = delivery === 'followup' ? '/follow-up' : '/steer'
+      void fetch(sessionURL(sessionID, endpoint), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, text: trimmed, images }),
+      })
+        .then(async (response) => {
+          if (response.ok) return
+          let message = `queue request failed (${response.status})`
+          try {
+            const body = (await response.json()) as { error?: string }
+            if (body.error) message = body.error
+          } catch {
+            // Keep the status-based fallback when the response has no JSON body.
+          }
+          throw new Error(message)
+        })
+        .catch(() => {
+          dispatch({ t: 'queueFailed', sessionID, id })
+          void refreshSessions().catch(() => undefined)
+        })
+      return
+    }
+
     setSessions((current) =>
       current.map((session) =>
         session.id === sessionID
@@ -594,6 +810,7 @@ export function useSession(): Session {
         if (!response.ok) throw new Error(`prompt request failed (${response.status})`)
       })
       .catch((error: unknown) => {
+        dispatch({ t: 'queueFailed', sessionID, id })
         dispatch({
           t: 'wire',
           sessionID,
@@ -606,6 +823,34 @@ export function useSession(): Session {
   const stop = () => {
     if (!activeSessionID) return
     void fetch(sessionURL(activeSessionID, '/abort'), { method: 'POST' })
+  }
+
+  const removeQueuedMessage = async (id: string) => {
+    if (!activeSessionID || !thread) return
+    const message = thread.queue.find((item) => item.id === id)
+    if (!message || message.status === 'removing') return
+    const sessionID = activeSessionID
+    if (message.status === 'failed') {
+      dispatch({ t: 'queueRemove', sessionID, id })
+      return
+    }
+
+    dispatch({ t: 'queueStatus', sessionID, id, status: 'removing' })
+    const response = await fetch(sessionURL(sessionID, `/queue/${encodeURIComponent(id)}`), {
+      method: 'DELETE',
+    })
+    if (!response.ok) {
+      dispatch({ t: 'queueStatus', sessionID, id, status: 'queued' })
+      let message = `remove queued message failed (${response.status})`
+      try {
+        const body = (await response.json()) as { error?: string }
+        if (body.error) message = body.error
+      } catch {
+        // Keep the status-based fallback when the response has no JSON body.
+      }
+      throw new Error(message)
+    }
+    dispatch({ t: 'queueRemove', sessionID, id })
   }
 
   const resolveConfirm = async (id: string, allow: boolean) => {
@@ -635,6 +880,7 @@ export function useSession(): Session {
     activeSession,
     activeSessionID,
     items,
+    queuedMessages: thread?.queue ?? [],
     confirmation,
     running: thread?.running ?? activeSession?.running ?? false,
     loading: initializing || (Boolean(activeSessionID) && !thread?.loaded),
@@ -647,6 +893,7 @@ export function useSession(): Session {
     selectSession,
     updateSettings,
     send,
+    removeQueuedMessage,
     stop,
     resolveConfirm,
   }

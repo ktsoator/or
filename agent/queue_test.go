@@ -58,6 +58,26 @@ func TestMessageQueueDrainOneAtATime(t *testing.T) {
 	}
 }
 
+func TestAgentCancelQueuedRemovesOnlyItsHandle(t *testing.T) {
+	a := New(Options{Model: testModel})
+	first := a.Steer(userPrompt("same"))
+	second := a.Steer(userPrompt("same"))
+
+	if !a.CancelQueued(first) {
+		t.Fatal("CancelQueued(first) = false")
+	}
+	if a.CancelQueued(first) {
+		t.Fatal("cancelled the same handle twice")
+	}
+	drained := a.steering.drain()
+	if len(drained) != 1 || userText(t, drained[0]) != "same" {
+		t.Fatalf("drained = %#v", drained)
+	}
+	if a.CancelQueued(second) {
+		t.Fatal("cancelled a handle after it was drained")
+	}
+}
+
 func TestAgentSteeringOneAtATimeSpansTurns(t *testing.T) {
 	rec := &recorder{turns: [][]llm.Event{
 		{done(textAssistant("a1"))},

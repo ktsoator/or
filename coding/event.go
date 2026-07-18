@@ -11,13 +11,14 @@ import (
 type EventType string
 
 const (
-	RunStarted       EventType = "run_started"
-	TextDelta        EventType = "text_delta"
-	ThinkingDelta    EventType = "thinking_delta"
-	ToolStarted      EventType = "tool_started"
-	ToolFinished     EventType = "tool_finished"
-	MessageCompleted EventType = "message_completed"
-	RunCompleted     EventType = "run_completed"
+	RunStarted           EventType = "run_started"
+	UserMessageCompleted EventType = "user_message_completed"
+	TextDelta            EventType = "text_delta"
+	ThinkingDelta        EventType = "thinking_delta"
+	ToolStarted          EventType = "tool_started"
+	ToolFinished         EventType = "tool_finished"
+	MessageCompleted     EventType = "message_completed"
+	RunCompleted         EventType = "run_completed"
 )
 
 // Event is the stable event contract exposed by Session. Fields are populated
@@ -27,8 +28,12 @@ type Event struct {
 	Type EventType
 
 	// Streaming and completed assistant content.
-	Delta string
-	Text  string
+	Delta  string
+	Text   string
+	Images []llm.ImageContent
+	// FinalResponse distinguishes a user-visible completed reply from an
+	// assistant message that paused only to call tools.
+	FinalResponse bool
 
 	// Tool lifecycle data.
 	ToolCallID string
@@ -42,9 +47,9 @@ type Event struct {
 	ToolDetails any
 	IsError     bool
 
-	// Usage is the aggregate model consumption for a completed run. A run may
-	// contain several assistant requests while tools execute; product shells
-	// should present the aggregate once rather than exposing those internals.
+	// Usage is one assistant request's consumption on MessageCompleted and the
+	// aggregate consumption on RunCompleted. Product adapters may accumulate
+	// tool-use requests until FinalResponse to show one total per visible reply.
 	Usage llm.Usage
 }
 
@@ -87,11 +92,19 @@ func projectAgentEvent(ev agent.AgentEvent) (Event, bool) {
 		}, true
 
 	case agent.MessageEnd:
-		text, ok := eventAssistantText(ev.Message)
+		if text, images, ok := eventUserMessage(ev.Message); ok {
+			return Event{Type: UserMessageCompleted, Text: text, Images: images}, true
+		}
+		assistant, ok := eventAssistantMessage(ev.Message)
 		if !ok {
 			return Event{}, false
 		}
-		return Event{Type: MessageCompleted, Text: text}, true
+		return Event{
+			Type:          MessageCompleted,
+			Text:          displayAssistantText(assistant),
+			FinalResponse: assistant.StopReason != llm.StopReasonToolUse,
+			Usage:         assistant.Usage,
+		}, true
 
 	case agent.AgentEnd:
 		return Event{Type: RunCompleted, Usage: aggregateMessageUsage(ev.Messages)}, true
@@ -99,6 +112,19 @@ func projectAgentEvent(ev agent.AgentEvent) (Event, bool) {
 	default:
 		return Event{}, false
 	}
+}
+
+func eventUserMessage(message agent.AgentMessage) (string, []llm.ImageContent, bool) {
+	llmMessage, ok := agent.ToLLM(message)
+	if !ok {
+		return "", nil, false
+	}
+	user, ok := llmMessage.(*llm.UserMessage)
+	if !ok {
+		return "", nil, false
+	}
+	text, images := userMessageContent(user)
+	return text, images, true
 }
 
 func aggregateMessageUsage(messages []agent.AgentMessage) llm.Usage {
@@ -142,21 +168,33 @@ func hasUsage(usage llm.Usage) bool {
 // eventAssistantText returns displayable assistant text. Failed and aborted
 // messages retain their terminal state in a compact textual form.
 func eventAssistantText(message agent.AgentMessage) (string, bool) {
+	assistant, ok := eventAssistantMessage(message)
+	if !ok {
+		return "", false
+	}
+	return displayAssistantText(assistant), true
+}
+
+func eventAssistantMessage(message agent.AgentMessage) (*llm.AssistantMessage, bool) {
 	llmMessage, ok := agent.ToLLM(message)
 	if !ok {
-		return "", false
+		return nil, false
 	}
 	assistant, ok := llmMessage.(*llm.AssistantMessage)
-	if !ok {
-		return "", false
+	if !ok || assistant == nil {
+		return nil, false
 	}
+	return assistant, true
+}
+
+func displayAssistantText(assistant *llm.AssistantMessage) string {
 	if assistant.StopReason == llm.StopReasonError || assistant.StopReason == llm.StopReasonAborted {
 		if assistant.ErrorMessage != "" {
-			return "[" + string(assistant.StopReason) + "] " + assistant.ErrorMessage, true
+			return "[" + string(assistant.StopReason) + "] " + assistant.ErrorMessage
 		}
-		return "[" + string(assistant.StopReason) + "]", true
+		return "[" + string(assistant.StopReason) + "]"
 	}
-	return assistant.Text(), true
+	return assistant.Text()
 }
 
 // eventToolResultText extracts text blocks from a tool result. Binary and

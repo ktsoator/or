@@ -266,18 +266,33 @@ func (s *Session) persistNew(ctx context.Context) error {
 	return nil
 }
 
+// QueueHandle identifies one message while it remains queued in this Session.
+type QueueHandle struct {
+	agent agent.QueueHandle
+}
+
 // Steer queues a message to inject after the current turn's tool calls finish.
-func (s *Session) Steer(text string, images ...llm.ImageContent) {
-	s.agent.Steer(agent.UserMessage(text, images...))
+func (s *Session) Steer(text string, images ...llm.ImageContent) QueueHandle {
+	return QueueHandle{agent: s.agent.Steer(agent.UserMessage(text, images...))}
 }
 
 // FollowUp queues a message to process once the run would otherwise stop.
-func (s *Session) FollowUp(text string, images ...llm.ImageContent) {
-	s.agent.FollowUp(agent.UserMessage(text, images...))
+func (s *Session) FollowUp(text string, images ...llm.ImageContent) QueueHandle {
+	return QueueHandle{agent: s.agent.FollowUp(agent.UserMessage(text, images...))}
+}
+
+// CancelQueuedMessage removes one message that has not entered the transcript.
+func (s *Session) CancelQueuedMessage(handle QueueHandle) bool {
+	return s.agent.CancelQueued(handle.agent)
 }
 
 // Abort cancels an in-progress run.
 func (s *Session) Abort() { s.agent.Abort() }
+
+// ClearQueuedMessages drops steering and follow-up messages that have not yet
+// entered the transcript. Product adapters use it when a run is stopped or
+// otherwise finishes before a queued message can be consumed.
+func (s *Session) ClearQueuedMessages() { s.agent.ClearQueues() }
 
 // Subscribe registers a listener for UI-neutral coding events and returns a
 // function that removes it.

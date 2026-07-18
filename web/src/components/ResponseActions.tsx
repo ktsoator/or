@@ -4,12 +4,19 @@ import { Tooltip } from 'radix-ui'
 import type { Usage } from '@/types'
 import { cn } from '@/lib/utils'
 
-export function UsageSummary({ usage, responseText }: { usage: Usage; responseText: string }) {
+export function ResponseActions({
+  usage,
+  responseText,
+}: {
+  usage?: Usage
+  responseText: string
+}) {
   const [copied, setCopied] = useState(false)
   const [feedback, setFeedback] = useState<'up' | 'down'>()
   const resetCopyRef = useRef<number>(undefined)
-  const totalTokens =
-    usage.totalTokens || usage.input + usage.output + usage.cacheRead + usage.cacheWrite
+  const totalTokens = usage
+    ? usage.totalTokens || usage.input + usage.output + usage.cacheRead + usage.cacheWrite
+    : 0
 
   useEffect(
     () => () => {
@@ -31,7 +38,7 @@ export function UsageSummary({ usage, responseText }: { usage: Usage; responseTe
   }
 
   return (
-    <div className="-mt-2 mb-5 flex h-7 animate-[fade-in_160ms_ease-out] items-center gap-0.5">
+    <div className="mt-1 flex h-7 animate-[fade-in_160ms_ease-out] items-center gap-0.5">
       <Tooltip.Provider delayDuration={80} skipDelayDuration={100}>
         <ActionButton
           icon={copied ? Check : Copy}
@@ -52,51 +59,54 @@ export function UsageSummary({ usage, responseText }: { usage: Usage; responseTe
           onClick={() => setFeedback((current) => (current === 'down' ? undefined : 'down'))}
         />
 
-        <span className="mx-1 h-3 w-px bg-stone-200" aria-hidden="true" />
-
-        <Tooltip.Root>
-          <Tooltip.Trigger asChild>
-            <button
-              className="group inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg px-2 text-[12px] leading-5 text-stone-400 tabular-nums outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-600 focus-visible:bg-[rgb(241,241,241)] focus-visible:text-stone-600 focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=delayed-open]:bg-[rgb(241,241,241)] data-[state=delayed-open]:text-stone-600"
-              type="button"
-              aria-label="Show token usage details"
-            >
-              <span className="font-[560] text-stone-500">Usage</span>
-              <span className="text-stone-300">·</span>
-              <span>{formatCompactNumber(totalTokens)} tokens</span>
-              {usage.cost.total > 0 && (
-                <>
+        {usage && hasUsage(usage) && (
+          <>
+            <span className="mx-1 h-3 w-px bg-stone-200" aria-hidden="true" />
+            <Tooltip.Root>
+              <Tooltip.Trigger asChild>
+                <button
+                  className="group inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg px-2 text-[12px] leading-5 text-stone-400 tabular-nums outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-600 focus-visible:bg-[rgb(241,241,241)] focus-visible:text-stone-600 focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=delayed-open]:bg-[rgb(241,241,241)] data-[state=delayed-open]:text-stone-600"
+                  type="button"
+                  aria-label="Show token usage details"
+                >
+                  <span className="font-[560] text-stone-500">Usage</span>
                   <span className="text-stone-300">·</span>
-                  <span>{formatSummaryCost(usage.cost.total)}</span>
-                </>
-              )}
-            </button>
-          </Tooltip.Trigger>
+                  <span>{formatCompactNumber(totalTokens)} tokens</span>
+                  {usage.cost.total > 0 && (
+                    <>
+                      <span className="text-stone-300">·</span>
+                      <span>{formatSummaryCost(usage.cost.total)}</span>
+                    </>
+                  )}
+                </button>
+              </Tooltip.Trigger>
 
-          <Tooltip.Portal>
-            <Tooltip.Content
-              side="bottom"
-              align="start"
-              sideOffset={7}
-              collisionPadding={10}
-              className="z-[150] animate-[fade-in_110ms_ease-out] rounded-[10px] border border-stone-200 bg-white px-3 py-2 text-[12px] leading-5 text-stone-700 tabular-nums shadow-[0_14px_38px_-20px_rgba(28,25,23,0.5)] outline-none"
-            >
-              <div className="flex items-center gap-3 whitespace-nowrap">
-                <Metric label="Input" value={formatInteger(usage.input)} />
-                <Metric label="Output" value={formatInteger(usage.output)} />
-                {usage.cacheRead > 0 && (
-                  <Metric label="Cache read" value={formatInteger(usage.cacheRead)} />
-                )}
-                {usage.cacheWrite > 0 && (
-                  <Metric label="Cache write" value={formatInteger(usage.cacheWrite)} />
-                )}
-                {usage.cost.total > 0 && (
-                  <Metric label="Cost" value={formatExactCost(usage.cost.total)} />
-                )}
-              </div>
-            </Tooltip.Content>
-          </Tooltip.Portal>
-        </Tooltip.Root>
+              <Tooltip.Portal>
+                <Tooltip.Content
+                  side="bottom"
+                  align="start"
+                  sideOffset={7}
+                  collisionPadding={10}
+                  className="z-[150] animate-[fade-in_110ms_ease-out] rounded-[10px] border border-stone-200 bg-white px-3 py-2 text-[12px] leading-5 text-stone-700 tabular-nums shadow-[0_14px_38px_-20px_rgba(28,25,23,0.5)] outline-none"
+                >
+                  <div className="flex items-center gap-3 whitespace-nowrap">
+                    <Metric label="Input" value={formatInteger(usage.input)} />
+                    <Metric label="Output" value={formatInteger(usage.output)} />
+                    {usage.cacheRead > 0 && (
+                      <Metric label="Cache read" value={formatInteger(usage.cacheRead)} />
+                    )}
+                    {usage.cacheWrite > 0 && (
+                      <Metric label="Cache write" value={formatInteger(usage.cacheWrite)} />
+                    )}
+                    {usage.cost.total > 0 && (
+                      <Metric label="Cost" value={formatExactCost(usage.cost.total)} />
+                    )}
+                  </div>
+                </Tooltip.Content>
+              </Tooltip.Portal>
+            </Tooltip.Root>
+          </>
+        )}
       </Tooltip.Provider>
     </div>
   )
@@ -152,6 +162,17 @@ function Metric({ label, value }: { label: string; value: string }) {
       <span className="text-stone-400">{label}</span>
       <span className="font-[540] text-stone-700">{value}</span>
     </span>
+  )
+}
+
+function hasUsage(usage: Usage): boolean {
+  return (
+    usage.input !== 0 ||
+    usage.output !== 0 ||
+    usage.cacheRead !== 0 ||
+    usage.cacheWrite !== 0 ||
+    usage.totalTokens !== 0 ||
+    usage.cost.total !== 0
   )
 }
 

@@ -33,6 +33,10 @@ type wireEvent struct {
 	Text   string      `json:"text,omitempty"`
 	Images []wireImage `json:"images,omitempty"`
 	Usage  *wireUsage  `json:"usage,omitempty"`
+	Final  bool        `json:"finalResponse,omitempty"`
+	// queued-message metadata
+	Delivery string `json:"delivery,omitempty"`
+	Queued   bool   `json:"queued,omitempty"`
 	// confirm_request
 	ID      string `json:"id,omitempty"`
 	Summary string `json:"summary,omitempty"`
@@ -64,6 +68,9 @@ type wireUsageCost struct {
 func ProjectEvent(ev coding.Event) ([]byte, bool) {
 	var out wireEvent
 	switch ev.Type {
+	case coding.UserMessageCompleted:
+		out = wireEvent{Type: "user_message", Text: ev.Text, Images: projectImages(ev.Images)}
+
 	case coding.TextDelta:
 		out = wireEvent{Type: "delta", Kind: "text", Delta: ev.Delta}
 
@@ -77,7 +84,12 @@ func ProjectEvent(ev coding.Event) ([]byte, bool) {
 		out = wireEvent{Type: "tool_end", ID: ev.ToolCallID, Tool: ev.ToolName, Result: wireToolResult(ev.ToolName, ev.ToolResult), Change: fileChangePayload(ev.ToolDetails), IsError: ev.IsError}
 
 	case coding.MessageCompleted:
-		out = wireEvent{Type: "message_end", Text: ev.Text}
+		out = wireEvent{
+			Type:  "message_end",
+			Text:  ev.Text,
+			Usage: projectUsage(ev.Usage),
+			Final: ev.FinalResponse,
+		}
 
 	case coding.RunCompleted:
 		out = wireEvent{Type: "done", Usage: projectUsage(ev.Usage)}
@@ -100,14 +112,14 @@ func ProjectHistory(items []coding.HistoryItem) []wireEvent {
 	for _, item := range items {
 		switch item.Type {
 		case coding.HistoryUser:
-			images := make([]wireImage, 0, len(item.Images))
-			for _, image := range item.Images {
-				images = append(images, wireImage{Data: image.Data, MIMEType: image.MIMEType})
-			}
-			out = append(out, wireEvent{Type: "user_message", Text: item.Text, Images: images})
+			out = append(out, wireEvent{Type: "user_message", Text: item.Text, Images: projectImages(item.Images)})
 
 		case coding.HistoryAssistant:
-			out = append(out, wireEvent{Type: "message_end", Text: item.Text})
+			out = append(out, wireEvent{
+				Type:  "message_end",
+				Text:  item.Text,
+				Final: item.FinalResponse,
+			})
 
 		case coding.HistoryThinking:
 			out = append(out, wireEvent{Type: "delta", Kind: "thinking", Delta: item.Text})
@@ -131,8 +143,24 @@ func ProjectHistory(items []coding.HistoryItem) []wireEvent {
 			})
 
 		case coding.HistoryUsage:
-			out = append(out, wireEvent{Type: "done", Usage: projectUsage(item.Usage)})
+			for index := len(out) - 1; index >= 0; index-- {
+				if out[index].Type == "user_message" {
+					break
+				}
+				if out[index].Type == "message_end" && out[index].Final {
+					out[index].Usage = projectUsage(item.Usage)
+					break
+				}
+			}
 		}
+	}
+	return out
+}
+
+func projectImages(images []llm.ImageContent) []wireImage {
+	out := make([]wireImage, 0, len(images))
+	for _, image := range images {
+		out = append(out, wireImage{Data: image.Data, MIMEType: image.MIMEType})
 	}
 	return out
 }

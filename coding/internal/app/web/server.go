@@ -99,6 +99,9 @@ func (s *Server) Handler() http.Handler {
 	session.DELETE("", s.handleDeleteSession)
 	session.PATCH("/settings", s.handleSessionSettings)
 	session.POST("/prompt", s.handlePrompt)
+	session.POST("/steer", s.handleSteer)
+	session.POST("/follow-up", s.handleFollowUp)
+	session.DELETE("/queue/:messageID", s.handleRemoveQueuedMessage)
 	session.POST("/confirm", s.handleConfirm)
 	session.POST("/abort", s.handleAbort)
 
@@ -248,6 +251,7 @@ func (s *Server) handleHistory(c *gin.Context) {
 	events = append(events, runtime.broker.PendingEvents()...)
 	c.JSON(http.StatusOK, gin.H{
 		"events":  events,
+		"queue":   runtime.pendingEvents(),
 		"running": runtime.running.Load(),
 	})
 }
@@ -296,22 +300,12 @@ func (s *Server) handlePrompt(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var body struct {
-		Text   string        `json:"text"`
-		Images []promptImage `json:"images"`
-	}
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxPromptRequestBytes)
-	if err := c.ShouldBindJSON(&body); err != nil || (strings.TrimSpace(body.Text) == "" && len(body.Images) == 0) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "prompt must include text or an image"})
-		return
-	}
-	images, err := decodePromptImages(body.Images)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	body, images, ok := bindMessageRequest(c)
+	if !ok {
 		return
 	}
 	sessionID := c.Param("sessionID")
-	runtime, err = s.sessions.BeginPrompt(sessionID, body.Text, len(images) > 0)
+	reserved, err := s.sessions.BeginPrompt(sessionID, body.Text, len(images) > 0)
 	if errors.Is(err, coding.ErrBusy) {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		return
@@ -324,6 +318,7 @@ func (s *Server) handlePrompt(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	runtime = reserved
 	go func() {
 		defer s.sessions.EndRun(sessionID)
 		if err := runtime.session.Prompt(s.ctx, body.Text, images...); err != nil {
@@ -332,6 +327,74 @@ func (s *Server) handlePrompt(c *gin.Context) {
 		}
 	}()
 	c.Status(http.StatusAccepted)
+}
+
+func (s *Server) handleSteer(c *gin.Context) {
+	s.handleQueuedMessage(c, deliverySteer)
+}
+
+func (s *Server) handleFollowUp(c *gin.Context) {
+	s.handleQueuedMessage(c, deliveryFollowUp)
+}
+
+func (s *Server) handleQueuedMessage(c *gin.Context, delivery queuedDelivery) {
+	runtime, ok := s.runtime(c)
+	if !ok {
+		return
+	}
+	body, images, ok := bindMessageRequest(c)
+	if !ok {
+		return
+	}
+	if runtime.broker.HasPending() {
+		c.JSON(http.StatusConflict, gin.H{"error": "resolve the pending approval before queuing a message"})
+		return
+	}
+	if len(images) > 0 && !slices.Contains(runtime.session.Snapshot().Model.Input, llm.Image) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": ErrImagesUnsupported.Error()})
+		return
+	}
+	id := strings.TrimSpace(body.ID)
+	if id == "" {
+		id = newSessionID()
+	}
+	if len(id) > 128 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "message id is too long"})
+		return
+	}
+	message := queuedMessage{
+		ID:       id,
+		Delivery: delivery,
+		Text:     body.Text,
+		Images:   images,
+	}
+	if !runtime.queuePending(message) {
+		c.JSON(http.StatusConflict, gin.H{"error": "the session is no longer running"})
+		return
+	}
+	c.JSON(http.StatusAccepted, gin.H{"id": id})
+}
+
+func (s *Server) handleRemoveQueuedMessage(c *gin.Context) {
+	runtime, ok := s.runtime(c)
+	if !ok {
+		return
+	}
+	id := strings.TrimSpace(c.Param("messageID"))
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "message id is required"})
+		return
+	}
+	found, removed := runtime.removePending(id)
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"error": "queued message not found"})
+		return
+	}
+	if !removed {
+		c.JSON(http.StatusConflict, gin.H{"error": "queued message is already being processed"})
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 const (
@@ -344,6 +407,28 @@ const (
 type promptImage struct {
 	Data     string `json:"data"`
 	MIMEType string `json:"mimeType"`
+}
+
+type messageRequest struct {
+	ID     string        `json:"id"`
+	Text   string        `json:"text"`
+	Images []promptImage `json:"images"`
+}
+
+func bindMessageRequest(c *gin.Context) (messageRequest, []llm.ImageContent, bool) {
+	var body messageRequest
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxPromptRequestBytes)
+	if err := c.ShouldBindJSON(&body); err != nil || (strings.TrimSpace(body.Text) == "" && len(body.Images) == 0) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "message must include text or an image"})
+		return messageRequest{}, nil, false
+	}
+	body.Text = strings.TrimSpace(body.Text)
+	images, err := decodePromptImages(body.Images)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return messageRequest{}, nil, false
+	}
+	return body, images, true
 }
 
 func decodePromptImages(input []promptImage) ([]llm.ImageContent, error) {

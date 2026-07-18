@@ -66,6 +66,24 @@ type sessionRuntime struct {
 	hub     *Hub
 	broker  *ConfirmBroker
 	running atomic.Bool
+
+	pendingMu sync.Mutex
+	pending   []queuedMessage
+}
+
+type queuedDelivery string
+
+const (
+	deliverySteer    queuedDelivery = "steer"
+	deliveryFollowUp queuedDelivery = "followup"
+)
+
+type queuedMessage struct {
+	ID       string
+	Delivery queuedDelivery
+	Text     string
+	Images   []llm.ImageContent
+	Handle   coding.QueueHandle
 }
 
 // SessionManager owns all web sessions for one workspace. Metadata is kept in
@@ -169,6 +187,19 @@ func (m *SessionManager) build(record sessionRecord) (*sessionRuntime, error) {
 	}
 	runtime := &sessionRuntime{record: record, session: session, hub: hub, broker: broker}
 	session.Subscribe(func(ev coding.Event) {
+		if ev.Type == coding.UserMessageCompleted {
+			if queued, found := runtime.consumePending(ev.Text, ev.Images); found {
+				data, _ := json.Marshal(wireEvent{
+					Type:     "user_message",
+					ID:       queued.ID,
+					Text:     ev.Text,
+					Images:   projectImages(ev.Images),
+					Delivery: string(queued.Delivery),
+				})
+				hub.Broadcast(data)
+				return
+			}
+		}
 		if data, ok := ProjectEvent(ev); ok {
 			hub.Broadcast(data)
 		}
@@ -399,14 +430,22 @@ func (m *SessionManager) BeginPrompt(id, prompt string, hasImages bool) (*sessio
 // optimistic prompt update.
 func (m *SessionManager) EndRun(id string) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	runtime, ok := m.sessions[id]
 	if !ok {
+		m.mu.Unlock()
 		return
 	}
 	runtime.running.Store(false)
 	runtime.record.UpdatedAt = time.Now().UTC()
 	_ = m.saveLocked()
+	m.mu.Unlock()
+
+	cancelled := runtime.cancelPending()
+	runtime.session.ClearQueuedMessages()
+	for _, message := range cancelled {
+		data, _ := json.Marshal(wireEvent{Type: "queue_cancelled", ID: message.ID})
+		runtime.hub.Broadcast(data)
+	}
 }
 
 func (m *SessionManager) saveLocked() error {
@@ -499,6 +538,98 @@ func (s *sessionRuntime) summary() SessionSummary {
 		ModelName:     modelName,
 		ThinkingLevel: llm.ModelThinkingLevel(s.record.Thinking),
 	}
+}
+
+func (s *sessionRuntime) queuePending(message queuedMessage) bool {
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	if !s.running.Load() {
+		return false
+	}
+	if message.Delivery == deliverySteer {
+		message.Handle = s.session.Steer(message.Text, message.Images...)
+	} else {
+		message.Handle = s.session.FollowUp(message.Text, message.Images...)
+	}
+	s.pending = append(s.pending, message)
+	data, _ := json.Marshal(wireEvent{
+		Type:     "user_message",
+		ID:       message.ID,
+		Text:     message.Text,
+		Images:   projectImages(message.Images),
+		Delivery: string(message.Delivery),
+		Queued:   true,
+	})
+	s.hub.Broadcast(data)
+	return true
+}
+
+func (s *sessionRuntime) removePending(id string) (found, removed bool) {
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	for index, message := range s.pending {
+		if message.ID != id {
+			continue
+		}
+		if !s.session.CancelQueuedMessage(message.Handle) {
+			return true, false
+		}
+		s.pending = append(s.pending[:index], s.pending[index+1:]...)
+		data, _ := json.Marshal(wireEvent{Type: "queue_removed", ID: id})
+		s.hub.Broadcast(data)
+		return true, true
+	}
+	return false, false
+}
+
+func (s *sessionRuntime) consumePending(text string, images []llm.ImageContent) (queuedMessage, bool) {
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	for index, message := range s.pending {
+		if message.Text != text || !sameImages(message.Images, images) {
+			continue
+		}
+		s.pending = append(s.pending[:index], s.pending[index+1:]...)
+		return message, true
+	}
+	return queuedMessage{}, false
+}
+
+func (s *sessionRuntime) pendingEvents() []wireEvent {
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	events := make([]wireEvent, 0, len(s.pending))
+	for _, message := range s.pending {
+		events = append(events, wireEvent{
+			Type:     "user_message",
+			ID:       message.ID,
+			Text:     message.Text,
+			Images:   projectImages(message.Images),
+			Delivery: string(message.Delivery),
+			Queued:   true,
+		})
+	}
+	return events
+}
+
+func (s *sessionRuntime) cancelPending() []queuedMessage {
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	cancelled := append([]queuedMessage(nil), s.pending...)
+	s.pending = nil
+	return cancelled
+}
+
+func sameImages(left, right []llm.ImageContent) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index].MIMEType != right[index].MIMEType || left[index].Data != right[index].Data {
+			return false
+		}
+	}
+	return true
 }
 
 func newSessionID() string {

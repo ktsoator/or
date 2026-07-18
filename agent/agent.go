@@ -273,14 +273,30 @@ func (a *Agent) Subscribe(listener func(AgentEvent)) (unsubscribe func()) {
 	}
 }
 
+// QueueHandle identifies one message while it remains in an Agent queue. It is
+// opaque to callers and valid only for the Agent that created it.
+type QueueHandle struct {
+	queue *messageQueue
+	id    uint64
+}
+
 // Steer queues a message to inject into the current run before its next turn.
-func (a *Agent) Steer(message AgentMessage) {
-	a.steering.enqueue(message)
+func (a *Agent) Steer(message AgentMessage) QueueHandle {
+	return QueueHandle{queue: a.steering, id: a.steering.enqueue(message)}
 }
 
 // FollowUp queues a message to process after the current run would stop.
-func (a *Agent) FollowUp(message AgentMessage) {
-	a.followUp.enqueue(message)
+func (a *Agent) FollowUp(message AgentMessage) QueueHandle {
+	return QueueHandle{queue: a.followUp, id: a.followUp.enqueue(message)}
+}
+
+// CancelQueued removes one message if it has not already been drained for
+// processing. Handles from another Agent are rejected.
+func (a *Agent) CancelQueued(handle QueueHandle) bool {
+	if handle.queue == nil || (handle.queue != a.steering && handle.queue != a.followUp) {
+		return false
+	}
+	return handle.queue.remove(handle.id)
 }
 
 // Abort cancels the current run, if any.
@@ -465,15 +481,23 @@ func (a *Agent) dispatch(event AgentEvent) {
 // messageQueue is a concurrency-safe FIFO backing the steering and follow-up
 // queues. Its mode decides how many messages one drain returns.
 type messageQueue struct {
-	mu    sync.Mutex
-	mode  QueueMode
-	items []AgentMessage
+	mu     sync.Mutex
+	mode   QueueMode
+	nextID uint64
+	items  []queuedMessage
 }
 
-func (q *messageQueue) enqueue(message AgentMessage) {
+type queuedMessage struct {
+	id      uint64
+	message AgentMessage
+}
+
+func (q *messageQueue) enqueue(message AgentMessage) uint64 {
 	q.mu.Lock()
-	q.items = append(q.items, message)
-	q.mu.Unlock()
+	defer q.mu.Unlock()
+	q.nextID++
+	q.items = append(q.items, queuedMessage{id: q.nextID, message: message})
+	return q.nextID
 }
 
 func (q *messageQueue) clear() {
@@ -488,6 +512,19 @@ func (q *messageQueue) hasItems() bool {
 	return len(q.items) > 0
 }
 
+func (q *messageQueue) remove(id uint64) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for index, item := range q.items {
+		if item.id != id {
+			continue
+		}
+		q.items = append(q.items[:index], q.items[index+1:]...)
+		return true
+	}
+	return false
+}
+
 // drain returns queued messages: the oldest one when the mode is
 // QueueOneAtATime, otherwise all of them.
 func (q *messageQueue) drain() []AgentMessage {
@@ -498,12 +535,16 @@ func (q *messageQueue) drain() []AgentMessage {
 	}
 	if q.mode == QueueOneAtATime {
 		next := q.items[0]
-		q.items = append([]AgentMessage(nil), q.items[1:]...)
-		return []AgentMessage{next}
+		q.items = append([]queuedMessage(nil), q.items[1:]...)
+		return []AgentMessage{next.message}
 	}
 	drained := q.items
 	q.items = nil
-	return drained
+	messages := make([]AgentMessage, 0, len(drained))
+	for _, item := range drained {
+		messages = append(messages, item.message)
+	}
+	return messages
 }
 
 // removeID returns ids with the first occurrence of id removed, preserving

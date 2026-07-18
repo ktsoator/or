@@ -36,6 +36,8 @@ export type WireEvent = {
     | 'tool_end'
     | 'message_end'
     | 'confirm_request'
+    | 'queue_cancelled'
+    | 'queue_removed'
     | 'error'
     | 'done'
   kind?: 'text' | 'thinking'
@@ -47,6 +49,9 @@ export type WireEvent = {
   isError?: boolean
   text?: string
   images?: MessageImage[]
+  delivery?: DeliveryMode
+  queued?: boolean
+  finalResponse?: boolean
   usage?: Usage
   id?: string
   summary?: string
@@ -59,10 +64,20 @@ export type MessageImage = {
   mimeType: string
 }
 
+export type DeliveryMode = 'steer' | 'followup'
+
 export type PendingImage = MessageImage & {
   id: string
   name: string
   size: number
+}
+
+export type QueuedMessage = {
+  id: string
+  text: string
+  images: MessageImage[]
+  delivery: DeliveryMode
+  status: 'queued' | 'removing' | 'failed'
 }
 
 export type UsageCost = {
@@ -82,8 +97,21 @@ export type Usage = {
   cost: UsageCost
 }
 
-export type UserItem = { kind: 'user'; id: string; text: string; images: MessageImage[] }
-export type AssistantItem = { kind: 'assistant'; id: string; markdown: string; open: boolean }
+export type UserItem = {
+  kind: 'user'
+  id: string
+  text: string
+  images: MessageImage[]
+  deliveryStatus?: 'sending' | 'failed'
+}
+export type AssistantItem = {
+  kind: 'assistant'
+  id: string
+  markdown: string
+  open: boolean
+  complete: boolean
+  usage?: Usage
+}
 export type ThinkingItem = { kind: 'thinking'; id: string; text: string; streaming: boolean }
 export type ToolItem = {
   kind: 'tool'
@@ -100,7 +128,6 @@ export type ConfirmItem = {
   summary: string
 }
 export type ErrorItem = { kind: 'error'; id: string; text: string }
-export type UsageItem = { kind: 'usage'; id: string; usage: Usage; responseText: string }
 
 export type Item =
   | UserItem
@@ -109,7 +136,6 @@ export type Item =
   | ToolItem
   | ConfirmItem
   | ErrorItem
-  | UsageItem
 
 export type ConnectionStatus = 'connecting' | 'ready' | 'disconnected'
 
@@ -142,5 +168,6 @@ export type SessionSummary = {
 
 export type HistoryResponse = {
   events: WireEvent[]
+  queue?: WireEvent[]
   running: boolean
 }

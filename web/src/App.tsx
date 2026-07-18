@@ -23,7 +23,7 @@ import { ToolCard } from './components/ToolCard'
 import { Composer } from './components/Composer'
 import { Thinking } from './components/Thinking'
 import { ProfileMenu } from './components/ProfileMenu'
-import { UsageSummary } from './components/UsageSummary'
+import { ResponseActions } from './components/ResponseActions'
 
 export default function App() {
   const {
@@ -31,6 +31,7 @@ export default function App() {
     activeSession,
     activeSessionID,
     items,
+    queuedMessages,
     confirmation,
     running,
     loading,
@@ -43,6 +44,7 @@ export default function App() {
     selectSession,
     updateSettings,
     send,
+    removeQueuedMessage,
     stop,
     resolveConfirm,
   } = useSession()
@@ -123,6 +125,7 @@ export default function App() {
       connected={status === 'ready'}
       running={running}
       confirmation={confirmation}
+      queuedMessages={queuedMessages}
       centered={centered}
       models={models}
       modelProvider={activeSession?.modelProvider}
@@ -130,6 +133,7 @@ export default function App() {
       thinkingLevel={activeSession?.thinkingLevel}
       updatingSettings={updatingSettings}
       onSend={send}
+      onRemoveQueued={removeQueuedMessage}
       onStop={stop}
       onResolve={resolveConfirm}
       onSettingsChange={updateSettings}
@@ -619,6 +623,11 @@ function ThreadItem({ item }: { item: Item }) {
                 {item.text}
               </div>
             )}
+            {item.deliveryStatus === 'failed' && (
+              <span className="-mt-1 inline-flex items-center gap-1.5 px-1 text-[11.5px] leading-4 text-red-600">
+                Not sent
+              </span>
+            )}
           </div>
         </section>
       )
@@ -626,6 +635,9 @@ function ThreadItem({ item }: { item: Item }) {
       return (
         <section className="my-4 animate-[fade-in_160ms_ease-out]">
           <Markdown source={item.markdown} />
+          {item.complete && (
+            <ResponseActions usage={item.usage} responseText={item.markdown} />
+          )}
         </section>
       )
     case 'thinking':
@@ -634,8 +646,6 @@ function ThreadItem({ item }: { item: Item }) {
       return <ToolCard item={item} />
     case 'confirm':
       return null
-    case 'usage':
-      return <UsageSummary usage={item.usage} responseText={item.responseText} />
     case 'error':
       return (
         <div
