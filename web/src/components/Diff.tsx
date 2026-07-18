@@ -11,7 +11,7 @@ import {
 export function FileChange({ change }: { change: Change }) {
   if (change.changeType === 'failure') {
     return (
-      <div className="mt-2 ml-5 border-l-2 border-red-300 py-1 pl-3 font-mono text-xs leading-5 text-red-700 max-md:ml-0">
+      <div className="mt-2 ml-5 border-l-2 border-red-300 py-1 pl-3 font-mono text-[13px] leading-5.5 text-red-700 max-md:ml-0">
         {(change.path ? `${change.path}: ` : '') + (change.detail || 'write failed')}
       </div>
     )
@@ -32,10 +32,10 @@ export function FileChange({ change }: { change: Change }) {
           className="group flex w-full min-w-0 cursor-pointer items-baseline gap-1.5 border-0 bg-transparent p-0 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
           disabled={hunks.length === 0}
         >
-          <span className="shrink-0 text-[14.5px] text-stone-500">
+          <span className="shrink-0 text-[15.5px] text-stone-500">
             {change.op === 'create' ? 'Created' : 'Updated'}
           </span>
-          <strong className="min-w-0 overflow-hidden text-[14.5px] font-medium text-stone-900 text-ellipsis whitespace-nowrap">
+          <strong className="min-w-0 overflow-hidden text-[15.5px] font-medium text-stone-900 text-ellipsis whitespace-nowrap">
             {filename}
           </strong>
           <span className="flex shrink-0 gap-1 font-mono text-sm font-medium">
@@ -51,7 +51,7 @@ export function FileChange({ change }: { change: Change }) {
         </CollapsibleTrigger>
         {showPath && (
           <div
-            className="mt-1.5 overflow-hidden font-mono text-xs text-stone-500 text-ellipsis whitespace-nowrap"
+            className="mt-1.5 overflow-hidden font-mono text-[13px] text-stone-500 text-ellipsis whitespace-nowrap"
             title={change.path}
           >
             {change.path}
@@ -78,7 +78,7 @@ function Hunk({ hunk, language }: { hunk: HunkType; language: string }) {
 
   return (
     <div className="border-b border-stone-300/70 last:border-b-0">
-      <div className="bg-stone-100 px-3 py-1 font-mono text-[11px] leading-4 font-medium text-stone-500">
+      <div className="bg-stone-100 px-3 py-1 font-mono text-[12px] leading-4.5 font-medium text-stone-500">
         {`@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`}
       </div>
       {(hunk.lines ?? []).map((line, index) => {
@@ -95,7 +95,7 @@ function Hunk({ hunk, language }: { hunk: HunkType; language: string }) {
           <div
             key={index}
             className={cn(
-              'grid min-h-6 grid-cols-[24px_42px_minmax(max-content,1fr)] font-mono text-[12.75px] leading-6 text-stone-900',
+              'grid min-h-6 grid-cols-[26px_46px_minmax(max-content,1fr)] font-mono text-[14px] leading-6 text-stone-900',
               isAdd && 'bg-[#dcefe2]',
               isDelete && 'bg-[#f5dddd]',
             )}

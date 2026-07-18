@@ -31,9 +31,9 @@ export function Approval({
       <div className="flex items-center gap-3 max-sm:flex-wrap">
         <ShieldAlert className="size-4 shrink-0 text-amber-700" aria-hidden="true" />
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold text-stone-900">Approval required</div>
+          <div className="text-[15px] font-semibold text-stone-900">Approval required</div>
           <code
-            className="mt-1 block overflow-hidden font-mono text-[12.5px] leading-5 text-stone-500 text-ellipsis whitespace-nowrap"
+            className="mt-1 block overflow-hidden font-mono text-[13.5px] leading-5.5 text-stone-500 text-ellipsis whitespace-nowrap"
             title={item.summary}
           >
             {item.summary || 'No details provided'}
@@ -41,7 +41,7 @@ export function Approval({
         </div>
         <div className="flex shrink-0 items-center gap-2 max-sm:ml-7">
           <button
-            className="h-8 cursor-pointer rounded-md border border-stone-300 bg-white px-3 text-xs font-semibold text-stone-700 transition-colors hover:border-stone-400 hover:bg-stone-50 disabled:cursor-wait disabled:opacity-50"
+            className="h-8 cursor-pointer rounded-md border border-stone-300 bg-white px-3 text-[13px] font-semibold text-stone-700 transition-colors hover:border-stone-400 hover:bg-stone-50 disabled:cursor-wait disabled:opacity-50"
             type="button"
             disabled={busy}
             onClick={() => decide(false)}
@@ -49,7 +49,7 @@ export function Approval({
             Deny
           </button>
           <button
-            className="h-8 cursor-pointer rounded-md bg-stone-800 px-3 text-xs font-semibold text-white transition-colors hover:bg-stone-950 disabled:cursor-wait disabled:opacity-50"
+            className="h-8 cursor-pointer rounded-md bg-stone-800 px-3 text-[13px] font-semibold text-white transition-colors hover:bg-stone-950 disabled:cursor-wait disabled:opacity-50"
             type="button"
             disabled={busy}
             onClick={() => decide(true)}
@@ -58,7 +58,7 @@ export function Approval({
           </button>
         </div>
       </div>
-      {error && <div className="mt-2 ml-7 text-xs text-red-600">{error}</div>}
+      {error && <div className="mt-2 ml-7 text-[13px] text-red-600">{error}</div>}
     </section>
   )
 }

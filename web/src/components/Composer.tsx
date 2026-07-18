@@ -1,12 +1,14 @@
 import { useEffect, useRef } from 'react'
-import { ArrowUp, Square } from 'lucide-react'
+import { ArrowUp, Plus, Square } from 'lucide-react'
 import type { ConfirmItem } from '@/types'
+import { cn } from '@/lib/utils'
 import { Approval } from './Approval'
 
 export function Composer({
   connected,
   running,
   confirmation,
+  centered = false,
   onSend,
   onStop,
   onResolve,
@@ -14,6 +16,7 @@ export function Composer({
   connected: boolean
   running: boolean
   confirmation?: ConfirmItem
+  centered?: boolean
   onSend: (text: string) => void
   onStop: () => void
   onResolve: (id: string, allow: boolean) => Promise<void>
@@ -44,22 +47,35 @@ export function Composer({
   }
 
   return (
-    <footer className="z-30 shrink-0 bg-[#fcfcfb] px-6 pt-3 pb-3 max-md:px-3 max-md:pt-2">
-      <div className="mx-auto flex w-full max-w-[896px] flex-col gap-2.5">
+    <footer
+      className={cn(
+        'z-30 w-full',
+        centered
+          ? 'bg-transparent p-0'
+          : 'shrink-0 bg-[#fcfcfb] px-6 pt-3 pb-4 max-md:px-3 max-md:pt-2',
+      )}
+    >
+      <div className="mx-auto flex w-full max-w-[896px] flex-col gap-2">
         {confirmation && <Approval key={confirmation.id} item={confirmation} onResolve={onResolve} />}
 
-        <div>
-          <div className="overflow-hidden rounded-xl border border-stone-300 bg-white transition-colors focus-within:border-stone-500">
+        <div className="rounded-[28px] border border-stone-200 bg-white shadow-[0_10px_30px_-20px_rgba(28,25,23,0.38)] transition-[border-color,box-shadow] focus-within:border-stone-400 focus-within:shadow-[0_12px_32px_-20px_rgba(28,25,23,0.48)]">
+          <div className="flex min-h-15 items-center gap-3 px-3 py-2.5 max-sm:gap-2">
+            <span
+              className="grid size-10 shrink-0 place-items-center rounded-full text-stone-700"
+              aria-hidden="true"
+            >
+              <Plus className="size-5" />
+            </span>
             <textarea
               ref={ref}
               rows={1}
               disabled={disabled}
-              className="block max-h-[168px] min-h-12 w-full resize-none border-0 bg-transparent px-3.5 pt-3 pb-1.5 text-[15px] leading-6 text-stone-900 outline-none placeholder:text-stone-400 disabled:cursor-not-allowed disabled:bg-stone-50/40"
+              className="block max-h-[168px] min-h-8 min-w-0 flex-1 resize-none border-0 bg-transparent py-1.5 text-[16.5px] leading-6 text-stone-900 outline-none placeholder:text-stone-400 disabled:cursor-not-allowed disabled:bg-transparent"
               placeholder={
                 awaitingApproval
                   ? 'Resolve the approval above to continue…'
                   : connected
-                    ? 'Ask OR coding…'
+                    ? 'Ask anything'
                     : 'Waiting for coding API…'
               }
               onInput={autosize}
@@ -70,49 +86,61 @@ export function Composer({
                 }
               }}
             />
-            <div className="flex min-h-9 items-center justify-between px-2.5 pb-2">
-              <div className="flex items-center gap-2 text-[10.5px] text-stone-400">
-                <span className="rounded bg-[#f3f1e8] px-1.5 py-0.5 font-medium text-[#7d722c]">
-                  Auto
-                </span>
-                <span className="max-md:hidden">
-                  {awaitingApproval ? 'Waiting for your decision' : 'Writes require approval'}
-                </span>
-              </div>
+            <div className="flex shrink-0 items-center gap-2.5 max-sm:gap-1.5">
+              <span
+                className="px-1 text-[15px] font-medium text-stone-400 max-sm:hidden"
+                title={awaitingApproval ? 'Waiting for your decision' : 'Writes require approval'}
+              >
+                Auto
+              </span>
               {running && !awaitingApproval ? (
                 <button
-                  className="grid size-7 place-items-center rounded-md bg-stone-700 text-white transition-colors hover:bg-stone-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
+                  className="group relative grid size-10 cursor-pointer place-items-center rounded-full bg-stone-700 text-white transition-colors hover:bg-stone-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
                   type="button"
-                  title="Stop"
+                  aria-label="Stop generating"
                   onClick={onStop}
                 >
-                  <Square className="size-2.5 fill-current" aria-hidden="true" />
-                  <span className="sr-only">Stop</span>
+                  <Square className="size-3 fill-current" aria-hidden="true" />
+                  <span
+                    className="pointer-events-none absolute right-0 bottom-[calc(100%+9px)] z-50 translate-y-1 whitespace-nowrap rounded-md bg-stone-900 px-2.5 py-1.5 text-[12px] leading-4 font-medium text-white opacity-0 shadow-lg transition-[opacity,transform] duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
+                    aria-hidden="true"
+                  >
+                    Stop generating
+                  </span>
                 </button>
               ) : (
                 <button
-                  className="grid size-7 place-items-center rounded-md bg-stone-800 text-white transition-colors hover:bg-stone-950 disabled:cursor-not-allowed disabled:opacity-25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
+                  className="group relative grid size-10 cursor-pointer place-items-center rounded-full bg-black text-white transition-colors hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
                   type="button"
-                  title={
+                  aria-label={
                     awaitingApproval
                       ? 'Resolve the approval first'
                       : connected
-                        ? 'Send'
+                        ? 'Send prompt'
                         : 'Waiting for coding API'
                   }
                   disabled={!connected || awaitingApproval}
                   onClick={submit}
                 >
-                  <ArrowUp className="size-3.5" aria-hidden="true" />
-                  <span className="sr-only">Send</span>
+                  <ArrowUp className="size-4" aria-hidden="true" />
+                  <span
+                    className="pointer-events-none absolute right-0 bottom-[calc(100%+9px)] z-50 flex translate-y-1 items-center gap-2 whitespace-nowrap rounded-md bg-stone-900 px-2.5 py-1.5 text-[12px] leading-4 font-medium text-white opacity-0 shadow-lg transition-[opacity,transform] duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
+                    aria-hidden="true"
+                  >
+                    <span>
+                      {awaitingApproval
+                        ? 'Resolve approval first'
+                        : connected
+                          ? 'Send prompt'
+                          : 'Waiting for API'}
+                    </span>
+                    {connected && !awaitingApproval && (
+                      <kbd className="font-mono text-[11px] font-normal text-stone-400">↵</kbd>
+                    )}
+                  </span>
                 </button>
               )}
             </div>
-          </div>
-          <div className="mt-1.5 text-center text-[10px] text-stone-400">
-            {awaitingApproval
-              ? 'Choose Allow once or Deny to continue'
-              : 'Enter to send · Shift + Enter for a new line'}
           </div>
         </div>
       </div>

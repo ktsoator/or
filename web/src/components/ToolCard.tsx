@@ -74,7 +74,7 @@ function explicitCommand(args: unknown): string {
 function Status({ status }: { status: ToolItem['status'] }) {
   if (status === 'running') {
     return (
-      <span className="ml-auto flex shrink-0 items-center gap-1 text-[11px] text-stone-500">
+      <span className="ml-auto flex shrink-0 items-center gap-1 text-[12px] text-stone-500">
         <LoaderCircle className="size-3 animate-spin" aria-hidden="true" />
         Running
       </span>
@@ -82,7 +82,7 @@ function Status({ status }: { status: ToolItem['status'] }) {
   }
   if (status === 'error') {
     return (
-      <span className="ml-auto flex shrink-0 items-center gap-1 text-[11px] text-red-600">
+      <span className="ml-auto flex shrink-0 items-center gap-1 text-[12px] text-red-600">
         <CircleX className="size-3" aria-hidden="true" />
         Failed
       </span>
@@ -94,7 +94,7 @@ function Status({ status }: { status: ToolItem['status'] }) {
 function DetailBlock({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="border-b border-stone-200 last:border-b-0">
-      <div className="border-b border-stone-200 bg-stone-50 px-3 py-1.5 text-[10.5px] font-semibold tracking-wide text-stone-500 uppercase">
+      <div className="border-b border-stone-200 bg-stone-50 px-3 py-1.5 text-[11.5px] font-semibold tracking-wide text-stone-500 uppercase">
         {title}
       </div>
       {children}
@@ -155,7 +155,7 @@ function ReadPreview({ output, path, failed }: { output: string; path: string; f
       )}
     >
       <div
-        className="overflow-hidden border-b border-stone-300/70 px-3.5 py-2 font-mono text-[11.5px] text-stone-500 text-ellipsis whitespace-nowrap"
+        className="overflow-hidden border-b border-stone-300/70 px-3.5 py-2 font-mono text-[12.5px] text-stone-500 text-ellipsis whitespace-nowrap"
         title={path}
       >
         {path}
@@ -168,10 +168,10 @@ function ReadPreview({ output, path, failed }: { output: string; path: string; f
             aria-label={`Contents of ${path}`}
             tabIndex={0}
           >
-            <pre className="sticky left-0 z-10 m-0 border-r border-stone-200 bg-stone-50 px-3 py-3 text-right font-mono text-[12.75px] leading-6 whitespace-pre text-stone-400 select-none">
+            <pre className="sticky left-0 z-10 m-0 border-r border-stone-200 bg-stone-50 px-3 py-3 text-right font-mono text-[14px] leading-6 whitespace-pre text-stone-400 select-none">
               {content.lineNumbers}
             </pre>
-            <pre className="m-0 min-w-full bg-transparent px-3.5 py-3 font-mono text-[12.75px] leading-6 whitespace-pre text-stone-900">
+            <pre className="m-0 min-w-full bg-transparent px-3.5 py-3 font-mono text-[14px] leading-6 whitespace-pre text-stone-900">
               <code
                 className="or-code-theme hljs block min-w-full bg-transparent! p-0!"
                 dangerouslySetInnerHTML={{ __html: html }}
@@ -179,7 +179,7 @@ function ReadPreview({ output, path, failed }: { output: string; path: string; f
             </pre>
           </div>
           {content.notice && (
-            <div className="border-t border-stone-200 bg-stone-50 px-3.5 py-2 font-mono text-[11px] text-stone-500">
+            <div className="border-t border-stone-200 bg-stone-50 px-3.5 py-2 font-mono text-[12px] text-stone-500">
               {content.notice}
             </div>
           )}
@@ -187,7 +187,7 @@ function ReadPreview({ output, path, failed }: { output: string; path: string; f
       ) : (
         <pre
           className={cn(
-            'code-scroll-area m-0 max-h-[min(52vh,520px)] overflow-auto overscroll-contain bg-transparent px-3.5 py-3 font-mono text-[12.75px] leading-6 whitespace-pre-wrap text-stone-800',
+            'code-scroll-area m-0 max-h-[min(52vh,520px)] overflow-auto overscroll-contain bg-transparent px-3.5 py-3 font-mono text-[14px] leading-6 whitespace-pre-wrap text-stone-800',
             failed && 'text-red-700',
           )}
         >
@@ -215,7 +215,7 @@ function InspectPreview({ output, failed }: { output: string; failed: boolean })
 
   return (
     <div className="mt-1.5 ml-5 max-w-full overflow-hidden rounded-lg border border-stone-200/90 bg-stone-50/70 max-md:ml-0">
-      <div className="flex h-8 items-center px-3 text-[11.5px] text-stone-500">
+      <div className="flex h-8 items-center px-3 text-[12.5px] text-stone-500">
         {empty ? 'No matching files' : `${paths.length} ${paths.length === 1 ? 'path' : 'paths'}`}
       </div>
       {!empty && (
@@ -234,14 +234,14 @@ function InspectPreview({ output, failed }: { output: string; failed: boolean })
                 className="flex min-h-7 min-w-max items-center gap-2 px-3 text-stone-700 hover:bg-stone-100/80"
               >
                 <PathIcon className="size-3.25 shrink-0 text-stone-400" aria-hidden="true" />
-                <code className="pr-4 font-mono text-[12.5px] leading-5">{path}</code>
+                <code className="pr-4 font-mono text-[13.5px] leading-5">{path}</code>
               </div>
             )
           })}
         </div>
       )}
       {notice && (
-        <div className="border-t border-stone-200/80 px-3 py-2 text-[11px] leading-4 text-stone-500">
+        <div className="border-t border-stone-200/80 px-3 py-2 text-[12px] leading-4 text-stone-500">
           {notice.slice(1, -1)}
         </div>
       )}
@@ -265,14 +265,14 @@ function ShellPreview({
         failed && 'border-red-200 bg-red-50/60',
       )}
     >
-      <div className="flex max-h-28 min-h-10 items-start gap-2 overflow-auto overscroll-contain px-3.5 py-2.5 font-mono text-[12.75px] leading-5">
+      <div className="flex max-h-28 min-h-10 items-start gap-2 overflow-auto overscroll-contain px-3.5 py-2.5 font-mono text-[14px] leading-5.5">
         <span className="shrink-0 text-stone-400 select-none">$</span>
         <code className="whitespace-pre-wrap text-stone-800">{command}</code>
       </div>
       {output && (
         <pre
           className={cn(
-            'code-scroll-area m-0 max-h-[min(46vh,420px)] overflow-auto overscroll-contain border-t border-stone-300/80 bg-[#fdfdfc] px-3.5 py-3 font-mono text-[12.75px] leading-5.5 whitespace-pre text-stone-700',
+            'code-scroll-area m-0 max-h-[min(46vh,420px)] overflow-auto overscroll-contain border-t border-stone-300/80 bg-[#fdfdfc] px-3.5 py-3 font-mono text-[14px] leading-6 whitespace-pre text-stone-700',
             failed && 'border-red-200 bg-red-50/40 text-red-700',
           )}
           role="region"
@@ -301,11 +301,11 @@ export function ToolCard({ item }: { item: ToolItem }) {
     item.result || (item.status === 'error' ? 'File could not be read.' : 'File is empty.')
 
   const summary = (
-    <span className="flex min-h-7 min-w-0 flex-1 items-center gap-2 text-[13.5px] text-stone-500">
+    <span className="flex min-h-7 min-w-0 flex-1 items-center gap-2 text-[14.5px] text-stone-500">
       <Icon className="size-3.5 shrink-0" aria-hidden="true" />
       <span>{verb}</span>
       <code
-        className="min-w-0 overflow-hidden font-mono text-[13px] leading-5 font-medium text-stone-800 text-ellipsis whitespace-nowrap"
+        className="min-w-0 overflow-hidden font-mono text-[14px] leading-5.5 font-medium text-stone-800 text-ellipsis whitespace-nowrap"
         title={target}
       >
         {target}
@@ -344,7 +344,7 @@ export function ToolCard({ item }: { item: ToolItem }) {
           <div className="mt-1.5 ml-5 overflow-hidden rounded-lg border border-stone-200 bg-white max-md:ml-0">
             {args && (
               <DetailBlock title="Input">
-                <pre className="m-0 max-h-80 overflow-auto bg-white px-3 py-2.5 font-mono text-[12.5px] leading-5 whitespace-pre-wrap text-stone-700">
+                <pre className="m-0 max-h-80 overflow-auto bg-white px-3 py-2.5 font-mono text-[13.5px] leading-5.5 whitespace-pre-wrap text-stone-700">
                   {args}
                 </pre>
               </DetailBlock>
@@ -353,7 +353,7 @@ export function ToolCard({ item }: { item: ToolItem }) {
               <DetailBlock title={item.status === 'error' ? 'Error output' : 'Output'}>
                 <pre
                   className={cn(
-                    'm-0 max-h-80 overflow-auto bg-white px-3 py-2.5 font-mono text-[12.5px] leading-5 whitespace-pre-wrap text-stone-700',
+                    'm-0 max-h-80 overflow-auto bg-white px-3 py-2.5 font-mono text-[13.5px] leading-5.5 whitespace-pre-wrap text-stone-700',
                     item.status === 'error' && 'bg-red-50/50 text-red-700',
                   )}
                 >
