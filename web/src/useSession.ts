@@ -244,10 +244,41 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
       running = false
       closeAssistant()
       completeThinking()
+      if (ev.usage && hasUsage(ev.usage)) {
+        items = [
+          ...items,
+          {
+            kind: 'usage',
+            id: nextId(),
+            usage: ev.usage,
+            responseText: finalAssistantText(items),
+          },
+        ]
+      }
       break
   }
 
   return { ...state, items, running, seq }
+}
+
+function finalAssistantText(items: Item[]): string {
+  const userIndex = lastIndex(items, (item) => item.kind === 'user')
+  for (let i = items.length - 1; i > userIndex; i--) {
+    const item = items[i]
+    if (item.kind === 'assistant') return item.markdown
+  }
+  return ''
+}
+
+function hasUsage(usage: NonNullable<WireEvent['usage']>): boolean {
+  return (
+    usage.input !== 0 ||
+    usage.output !== 0 ||
+    usage.cacheRead !== 0 ||
+    usage.cacheWrite !== 0 ||
+    usage.totalTokens !== 0 ||
+    usage.cost.total !== 0
+  )
 }
 
 function sessionURL(id: string, path: string): string {

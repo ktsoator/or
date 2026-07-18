@@ -47,6 +47,7 @@ export type WireEvent = {
   isError?: boolean
   text?: string
   images?: MessageImage[]
+  usage?: Usage
   id?: string
   summary?: string
 }
@@ -62,6 +63,23 @@ export type PendingImage = MessageImage & {
   id: string
   name: string
   size: number
+}
+
+export type UsageCost = {
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+  total: number
+}
+
+export type Usage = {
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+  totalTokens: number
+  cost: UsageCost
 }
 
 export type UserItem = { kind: 'user'; id: string; text: string; images: MessageImage[] }
@@ -82,6 +100,7 @@ export type ConfirmItem = {
   summary: string
 }
 export type ErrorItem = { kind: 'error'; id: string; text: string }
+export type UsageItem = { kind: 'usage'; id: string; usage: Usage; responseText: string }
 
 export type Item =
   | UserItem
@@ -90,6 +109,7 @@ export type Item =
   | ToolItem
   | ConfirmItem
   | ErrorItem
+  | UsageItem
 
 export type ConnectionStatus = 'connecting' | 'ready' | 'disconnected'
 

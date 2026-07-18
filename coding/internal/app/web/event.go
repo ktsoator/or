@@ -11,6 +11,7 @@ import (
 
 	"github.com/ktsoator/or/coding"
 	"github.com/ktsoator/or/coding/tools"
+	"github.com/ktsoator/or/llm"
 )
 
 // wireEvent is the JSON shape streamed to the browser. Fields are populated
@@ -31,6 +32,7 @@ type wireEvent struct {
 	// message_end fallback text (used when nothing streamed)
 	Text   string      `json:"text,omitempty"`
 	Images []wireImage `json:"images,omitempty"`
+	Usage  *wireUsage  `json:"usage,omitempty"`
 	// confirm_request
 	ID      string `json:"id,omitempty"`
 	Summary string `json:"summary,omitempty"`
@@ -39,6 +41,23 @@ type wireEvent struct {
 type wireImage struct {
 	Data     string `json:"data"`
 	MIMEType string `json:"mimeType"`
+}
+
+type wireUsage struct {
+	Input       int64         `json:"input"`
+	Output      int64         `json:"output"`
+	CacheRead   int64         `json:"cacheRead"`
+	CacheWrite  int64         `json:"cacheWrite"`
+	TotalTokens int64         `json:"totalTokens"`
+	Cost        wireUsageCost `json:"cost"`
+}
+
+type wireUsageCost struct {
+	Input      float64 `json:"input"`
+	Output     float64 `json:"output"`
+	CacheRead  float64 `json:"cacheRead"`
+	CacheWrite float64 `json:"cacheWrite"`
+	Total      float64 `json:"total"`
 }
 
 // ProjectEvent maps a UI-neutral coding event to the HTTP wire protocol.
@@ -61,7 +80,7 @@ func ProjectEvent(ev coding.Event) ([]byte, bool) {
 		out = wireEvent{Type: "message_end", Text: ev.Text}
 
 	case coding.RunCompleted:
-		out = wireEvent{Type: "done"}
+		out = wireEvent{Type: "done", Usage: projectUsage(ev.Usage)}
 
 	default:
 		return nil, false
@@ -110,9 +129,33 @@ func ProjectHistory(items []coding.HistoryItem) []wireEvent {
 				Change:  fileChangePayload(item.ToolDetails),
 				IsError: item.IsError,
 			})
+
+		case coding.HistoryUsage:
+			out = append(out, wireEvent{Type: "done", Usage: projectUsage(item.Usage)})
 		}
 	}
 	return out
+}
+
+func projectUsage(usage llm.Usage) *wireUsage {
+	if usage.Input == 0 && usage.Output == 0 && usage.CacheRead == 0 &&
+		usage.CacheWrite == 0 && usage.TotalTokens == 0 && usage.Cost.Total == 0 {
+		return nil
+	}
+	return &wireUsage{
+		Input:       usage.Input,
+		Output:      usage.Output,
+		CacheRead:   usage.CacheRead,
+		CacheWrite:  usage.CacheWrite,
+		TotalTokens: usage.TotalTokens,
+		Cost: wireUsageCost{
+			Input:      usage.Cost.Input,
+			Output:     usage.Cost.Output,
+			CacheRead:  usage.Cost.CacheRead,
+			CacheWrite: usage.Cost.CacheWrite,
+			Total:      usage.Cost.Total,
+		},
+	}
 }
 
 // wireToolResult keeps file reads inspectable in the browser while retaining a

@@ -41,6 +41,11 @@ type Event struct {
 	// on live events but absent when history is replayed.
 	ToolDetails any
 	IsError     bool
+
+	// Usage is the aggregate model consumption for a completed run. A run may
+	// contain several assistant requests while tools execute; product shells
+	// should present the aggregate once rather than exposing those internals.
+	Usage llm.Usage
 }
 
 // projectAgentEvent maps a low-level agent event into the stable coding event
@@ -89,11 +94,49 @@ func projectAgentEvent(ev agent.AgentEvent) (Event, bool) {
 		return Event{Type: MessageCompleted, Text: text}, true
 
 	case agent.AgentEnd:
-		return Event{Type: RunCompleted}, true
+		return Event{Type: RunCompleted, Usage: aggregateMessageUsage(ev.Messages)}, true
 
 	default:
 		return Event{}, false
 	}
+}
+
+func aggregateMessageUsage(messages []agent.AgentMessage) llm.Usage {
+	var total llm.Usage
+	for _, message := range messages {
+		llmMessage, ok := agent.ToLLM(message)
+		if !ok {
+			continue
+		}
+		assistant, ok := llmMessage.(*llm.AssistantMessage)
+		if !ok || assistant == nil {
+			continue
+		}
+		addUsage(&total, assistant.Usage)
+	}
+	return total
+}
+
+func addUsage(total *llm.Usage, usage llm.Usage) {
+	total.Input += usage.Input
+	total.Output += usage.Output
+	total.CacheRead += usage.CacheRead
+	total.CacheWrite += usage.CacheWrite
+	tokens := usage.TotalTokens
+	if tokens == 0 {
+		tokens = usage.Input + usage.Output + usage.CacheRead + usage.CacheWrite
+	}
+	total.TotalTokens += tokens
+	total.Cost.Input += usage.Cost.Input
+	total.Cost.Output += usage.Cost.Output
+	total.Cost.CacheRead += usage.Cost.CacheRead
+	total.Cost.CacheWrite += usage.Cost.CacheWrite
+	total.Cost.Total += usage.Cost.Total
+}
+
+func hasUsage(usage llm.Usage) bool {
+	return usage.Input != 0 || usage.Output != 0 || usage.CacheRead != 0 ||
+		usage.CacheWrite != 0 || usage.TotalTokens != 0 || usage.Cost.Total != 0
 }
 
 // eventAssistantText returns displayable assistant text. Failed and aborted

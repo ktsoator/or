@@ -23,6 +23,7 @@ import { ToolCard } from './components/ToolCard'
 import { Composer } from './components/Composer'
 import { Thinking } from './components/Thinking'
 import { ProfileMenu } from './components/ProfileMenu'
+import { UsageSummary } from './components/UsageSummary'
 
 export default function App() {
   const {
@@ -631,6 +632,8 @@ function ThreadItem({ item }: { item: Item }) {
       return <ToolCard item={item} />
     case 'confirm':
       return null
+    case 'usage':
+      return <UsageSummary usage={item.usage} responseText={item.responseText} />
     case 'error':
       return (
         <div

@@ -17,6 +17,7 @@ const (
 	HistoryThinking   HistoryItemType = "thinking"
 	HistoryToolCall   HistoryItemType = "tool_call"
 	HistoryToolResult HistoryItemType = "tool_result"
+	HistoryUsage      HistoryItemType = "usage"
 )
 
 // HistoryItem is the displayable, product-neutral history contract exposed by
@@ -37,6 +38,10 @@ type HistoryItem struct {
 	// persisted. It is nil when history replays as plain text.
 	ToolDetails any
 	IsError     bool
+
+	// Usage is populated for HistoryUsage and aggregates every assistant model
+	// request that contributed to the preceding final response.
+	Usage llm.Usage
 }
 
 // History returns a displayable snapshot of the conversation in transcript
@@ -47,6 +52,15 @@ func (s *Session) History() []HistoryItem {
 
 func projectHistory(messages []agent.AgentMessage, details map[string]any) []HistoryItem {
 	var items []HistoryItem
+	var usage llm.Usage
+	flushUsage := func() {
+		if !hasUsage(usage) {
+			usage = llm.Usage{}
+			return
+		}
+		items = append(items, HistoryItem{Type: HistoryUsage, Usage: usage})
+		usage = llm.Usage{}
+	}
 	for _, message := range messages {
 		llmMessage, ok := agent.ToLLM(message)
 		if !ok {
@@ -55,13 +69,20 @@ func projectHistory(messages []agent.AgentMessage, details map[string]any) []His
 
 		switch message := llmMessage.(type) {
 		case *llm.UserMessage:
+			// A user message normally begins a new run. Flush defensively so an
+			// interrupted transcript cannot leak old usage into the next response.
+			flushUsage()
 			text, images := userMessageContent(message)
 			if text != "" || len(images) > 0 {
 				items = append(items, HistoryItem{Type: HistoryUser, Text: text, Images: images})
 			}
 
 		case *llm.AssistantMessage:
+			addUsage(&usage, message.Usage)
 			items = append(items, assistantHistory(message)...)
+			if message.StopReason != llm.StopReasonToolUse {
+				flushUsage()
+			}
 
 		case *llm.ToolResultMessage:
 			items = append(items, HistoryItem{
@@ -74,6 +95,7 @@ func projectHistory(messages []agent.AgentMessage, details map[string]any) []His
 			})
 		}
 	}
+	flushUsage()
 	return items
 }
 
