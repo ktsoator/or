@@ -204,99 +204,101 @@ export default function App() {
           </button>
         </div>
 
-        <div className="w-[256px] shrink-0 px-3 pb-3 max-md:w-[280px]">
-          <button
-            className={cn(
-              'flex h-11 w-full cursor-pointer items-center gap-3 rounded-xl px-3 text-left text-[14.5px] font-[540] text-stone-950 transition-colors duration-100 motion-reduce:transition-none disabled:cursor-wait disabled:opacity-50',
-              sidebarCollapsed ? 'bg-transparent' : 'bg-stone-200/75 hover:bg-stone-200',
-            )}
-            type="button"
-            title="New session"
-            disabled={creating}
-            onClick={addSession}
-          >
-            {creating ? (
-              <LoaderCircle className="size-[18px] shrink-0 animate-spin" aria-hidden="true" />
-            ) : (
-              <SquarePen className="size-[18px] shrink-0" aria-hidden="true" />
-            )}
-            <span
+        <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+          <div className="w-[256px] px-3 pb-3 max-md:w-[280px]">
+            <button
               className={cn(
-                'whitespace-nowrap transition-opacity duration-100 ease-out motion-reduce:transition-none',
-                sidebarCollapsed ? 'opacity-0' : 'opacity-100',
+                'flex h-11 w-full cursor-pointer items-center gap-3 rounded-xl px-3 text-left text-[14.5px] font-[540] text-stone-950 transition-colors duration-100 motion-reduce:transition-none disabled:cursor-wait disabled:opacity-50',
+                sidebarCollapsed ? 'bg-transparent' : 'bg-stone-200/75 hover:bg-stone-200',
               )}
+              type="button"
+              title="New session"
+              disabled={creating}
+              onClick={addSession}
             >
-              New session
-            </span>
-          </button>
+              {creating ? (
+                <LoaderCircle className="size-[18px] shrink-0 animate-spin" aria-hidden="true" />
+              ) : (
+                <SquarePen className="size-[18px] shrink-0" aria-hidden="true" />
+              )}
+              <span
+                className={cn(
+                  'whitespace-nowrap transition-opacity duration-100 ease-out motion-reduce:transition-none',
+                  sidebarCollapsed ? 'opacity-0' : 'opacity-100',
+                )}
+              >
+                New session
+              </span>
+            </button>
 
-          <div className="mt-1 space-y-0.5" aria-label="Workspace shortcuts">
-            <SidebarNavItem
-              icon={FolderOpen}
-              label="Workspace"
-              collapsed={sidebarCollapsed}
-              active={activeShortcut === 'Workspace'}
-              onClick={() => setActiveShortcut('Workspace')}
-            />
-            <SidebarNavItem
-              icon={Files}
-              label="Files"
-              collapsed={sidebarCollapsed}
-              active={activeShortcut === 'Files'}
-              onClick={() => setActiveShortcut('Files')}
-            />
-            <SidebarNavItem
-              icon={Clock3}
-              label="Scheduled"
-              collapsed={sidebarCollapsed}
-              active={activeShortcut === 'Scheduled'}
-              onClick={() => setActiveShortcut('Scheduled')}
-            />
-            <SidebarNavItem
-              icon={Wrench}
-              label="Tools"
-              collapsed={sidebarCollapsed}
-              active={activeShortcut === 'Tools'}
-              onClick={() => setActiveShortcut('Tools')}
-            />
-            <SidebarNavItem
-              icon={Ellipsis}
-              label="More"
-              collapsed={sidebarCollapsed}
-              active={activeShortcut === 'More'}
-              onClick={() => setActiveShortcut('More')}
-            />
-          </div>
-        </div>
-
-        <div
-          className={cn(
-            'w-[256px] px-5 pt-2 pb-2 text-[13px] font-[620] tracking-[-0.01em] whitespace-nowrap text-stone-900 transition-opacity duration-100 ease-out motion-reduce:transition-none max-md:w-[280px]',
-            sidebarCollapsed ? 'pointer-events-none opacity-0' : 'opacity-100',
-          )}
-        >
-          Recents
-        </div>
-        <nav
-          className={cn(
-            'min-h-0 w-[256px] flex-1 overflow-y-auto px-3 pb-3 transition-opacity duration-100 ease-out motion-reduce:transition-none max-md:w-[280px]',
-            sidebarCollapsed ? 'pointer-events-none opacity-0' : 'opacity-100',
-          )}
-          aria-hidden={sidebarCollapsed}
-          aria-label="Coding sessions"
-        >
-          <div className="space-y-px">
-            {sessions.map((session) => (
-              <SessionRow
-                key={session.id}
-                session={session}
-                active={session.id === activeSessionID}
-                onSelect={() => chooseSession(session.id)}
-                onDelete={() => requestDelete(session)}
+            <div className="mt-1 space-y-0.5" aria-label="Workspace shortcuts">
+              <SidebarNavItem
+                icon={FolderOpen}
+                label="Workspace"
+                collapsed={sidebarCollapsed}
+                active={activeShortcut === 'Workspace'}
+                onClick={() => setActiveShortcut('Workspace')}
               />
-            ))}
+              <SidebarNavItem
+                icon={Files}
+                label="Files"
+                collapsed={sidebarCollapsed}
+                active={activeShortcut === 'Files'}
+                onClick={() => setActiveShortcut('Files')}
+              />
+              <SidebarNavItem
+                icon={Clock3}
+                label="Scheduled"
+                collapsed={sidebarCollapsed}
+                active={activeShortcut === 'Scheduled'}
+                onClick={() => setActiveShortcut('Scheduled')}
+              />
+              <SidebarNavItem
+                icon={Wrench}
+                label="Tools"
+                collapsed={sidebarCollapsed}
+                active={activeShortcut === 'Tools'}
+                onClick={() => setActiveShortcut('Tools')}
+              />
+              <SidebarNavItem
+                icon={Ellipsis}
+                label="More"
+                collapsed={sidebarCollapsed}
+                active={activeShortcut === 'More'}
+                onClick={() => setActiveShortcut('More')}
+              />
+            </div>
           </div>
-        </nav>
+
+          <div
+            className={cn(
+              'w-[256px] px-5 pt-2 pb-2 text-[13px] font-[620] tracking-[-0.01em] whitespace-nowrap text-stone-900 transition-opacity duration-100 ease-out motion-reduce:transition-none max-md:w-[280px]',
+              sidebarCollapsed ? 'pointer-events-none opacity-0' : 'opacity-100',
+            )}
+          >
+            Recents
+          </div>
+          <nav
+            className={cn(
+              'w-[256px] px-3 pb-3 transition-opacity duration-100 ease-out motion-reduce:transition-none max-md:w-[280px]',
+              sidebarCollapsed ? 'pointer-events-none opacity-0' : 'opacity-100',
+            )}
+            aria-hidden={sidebarCollapsed}
+            aria-label="Coding sessions"
+          >
+            <div className="space-y-px">
+              {sessions.map((session) => (
+                <SessionRow
+                  key={session.id}
+                  session={session}
+                  active={session.id === activeSessionID}
+                  onSelect={() => chooseSession(session.id)}
+                  onDelete={() => requestDelete(session)}
+                />
+              ))}
+            </div>
+          </nav>
+        </div>
 
         <ProfileMenu collapsed={sidebarCollapsed} />
       </aside>

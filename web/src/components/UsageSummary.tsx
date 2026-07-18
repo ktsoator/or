@@ -75,7 +75,7 @@ export function UsageSummary({ usage, responseText }: { usage: Usage; responseTe
 
           <Tooltip.Portal>
             <Tooltip.Content
-              side="top"
+              side="bottom"
               align="start"
               sideOffset={7}
               collisionPadding={10}
@@ -134,7 +134,7 @@ function ActionButton({
       </Tooltip.Trigger>
       <Tooltip.Portal>
         <Tooltip.Content
-          side="top"
+          side="bottom"
           sideOffset={6}
           collisionPadding={8}
           className="z-[150] animate-[fade-in_100ms_ease-out] rounded-md bg-stone-900 px-2 py-1 text-[11px] leading-4 font-medium whitespace-nowrap text-white shadow-lg"

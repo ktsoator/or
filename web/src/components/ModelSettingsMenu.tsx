@@ -3,6 +3,11 @@ import { Check, ChevronDown, ChevronRight } from 'lucide-react'
 import { DropdownMenu } from 'radix-ui'
 import type { ModelOption, ThinkingLevel } from '@/types'
 import { cn } from '@/lib/utils'
+import deepseekIcon from '@/assets/providers/deepseek.svg'
+import kimiIcon from '@/assets/providers/kimi.svg'
+import minimaxIcon from '@/assets/providers/minimax.svg'
+import xiaomiMimoIcon from '@/assets/providers/xiaomi-mimo.svg'
+import zaiIcon from '@/assets/providers/zai.svg'
 
 export function ModelSettingsMenu({
   models,
@@ -80,6 +85,7 @@ export function ModelSettingsMenu({
           aria-label="Model and thinking settings"
           disabled={unavailable}
         >
+          <ProviderIcon provider={modelProvider ?? ''} />
           <span className="max-w-[150px] truncate text-stone-800 max-sm:max-w-[88px]">
             {modelName}
           </span>
@@ -103,6 +109,7 @@ export function ModelSettingsMenu({
             <DropdownMenu.SubTrigger className={subTriggerClass}>
               <span>Provider</span>
               <span className="ml-auto flex min-w-0 items-center gap-1.5 text-stone-500">
+                <ProviderIcon provider={selectedProvider || modelProvider || ''} />
                 <span className="max-w-[128px] truncate">{selectedProviderName}</span>
                 <ChevronRight className="size-3.5 shrink-0" aria-hidden="true" />
               </span>
@@ -127,6 +134,7 @@ export function ModelSettingsMenu({
                       className={radioItemClass}
                       onSelect={(event) => event.preventDefault()}
                     >
+                      <ProviderIcon provider={provider} />
                       <span className="min-w-0 flex-1 truncate">{providerName(provider)}</span>
                       <DropdownMenu.ItemIndicator className="absolute right-2.5 grid size-4 place-items-center text-stone-700">
                         <Check className="size-3.5" aria-hidden="true" />
@@ -224,7 +232,7 @@ const subTriggerClass = cn(
 )
 
 const radioItemClass = cn(
-  'relative flex h-9 cursor-default select-none items-center rounded-[10px] px-2.5 pr-9 text-[14px] outline-none',
+  'relative flex h-9 cursor-default select-none items-center gap-2 rounded-[10px] px-2.5 pr-9 text-[14px] outline-none',
   'data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(241,241,241)] data-[state=checked]:font-medium',
 )
 
@@ -246,6 +254,7 @@ const providerNames: Record<string, string> = {
   google: 'Google',
   minimax: 'MiniMax',
   'minimax-cn': 'MiniMax CN',
+  'kimi-coding': 'Kimi Coding',
   moonshotai: 'Moonshot AI',
   'moonshotai-cn': 'Moonshot AI CN',
   openai: 'OpenAI',
@@ -253,8 +262,54 @@ const providerNames: Record<string, string> = {
   openrouter: 'OpenRouter',
   xai: 'xAI',
   xiaomi: 'Xiaomi',
+  'xiaomi-token-plan-ams': 'Xiaomi MiMo AMS',
+  'xiaomi-token-plan-cn': 'Xiaomi MiMo CN',
+  'xiaomi-token-plan-sgp': 'Xiaomi MiMo SGP',
   zai: 'Z.AI',
   'zai-coding-cn': 'Z.AI Coding CN',
+}
+
+const providerIcons: Record<string, string> = {
+  deepseek: deepseekIcon,
+  minimax: minimaxIcon,
+  'minimax-cn': minimaxIcon,
+  'kimi-coding': kimiIcon,
+  moonshotai: kimiIcon,
+  'moonshotai-cn': kimiIcon,
+  xiaomi: xiaomiMimoIcon,
+  'xiaomi-token-plan-ams': xiaomiMimoIcon,
+  'xiaomi-token-plan-cn': xiaomiMimoIcon,
+  'xiaomi-token-plan-sgp': xiaomiMimoIcon,
+  zai: zaiIcon,
+  'zai-coding-cn': zaiIcon,
+}
+
+function ProviderIcon({ provider }: { provider: string }) {
+  const source = providerIcons[provider]
+  const kimi = source === kimiIcon
+
+  if (!source) {
+    return (
+      <span
+        className="grid size-[17px] shrink-0 place-items-center rounded-[5px] bg-stone-100 text-[9px] font-semibold text-stone-500"
+        aria-hidden="true"
+      >
+        {providerName(provider).charAt(0) || '·'}
+      </span>
+    )
+  }
+
+  return (
+    <span
+      className={cn(
+        'grid size-[17px] shrink-0 place-items-center overflow-hidden',
+        kimi && 'rounded-[5px] bg-[#1783ff] p-[2px]',
+      )}
+      aria-hidden="true"
+    >
+      <img className="size-full object-contain" src={source} alt="" />
+    </span>
+  )
 }
 
 function providerName(provider: string): string {
