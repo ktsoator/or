@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ShieldAlert } from 'lucide-react'
 import type { ConfirmItem } from '@/types'
+import { useI18n } from '@/i18n'
 
 export function Approval({
   item,
@@ -9,6 +10,7 @@ export function Approval({
   item: ConfirmItem
   onResolve: (id: string, allow: boolean) => Promise<void>
 }) {
+  const { t } = useI18n()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -18,7 +20,7 @@ export function Approval({
     try {
       await onResolve(item.id, allow)
     } catch {
-      setError('Could not send decision')
+      setError(t('approval.couldNotSend'))
       setBusy(false)
     }
   }
@@ -31,12 +33,14 @@ export function Approval({
       <div className="flex items-center gap-3 max-sm:flex-wrap">
         <ShieldAlert className="size-4 shrink-0 text-amber-700" aria-hidden="true" />
         <div className="min-w-0 flex-1">
-          <div className="text-[15px] font-semibold text-stone-900">Approval required</div>
+          <div className="text-[15px] font-semibold text-stone-900">
+            {t('approval.required')}
+          </div>
           <code
             className="mt-1 block overflow-hidden font-mono text-[13.5px] leading-5.5 text-stone-500 text-ellipsis whitespace-nowrap"
             title={item.summary}
           >
-            {item.summary || 'No details provided'}
+            {item.summary || t('approval.noDetails')}
           </code>
         </div>
         <div className="flex shrink-0 items-center gap-2 max-sm:ml-7">
@@ -46,7 +50,7 @@ export function Approval({
             disabled={busy}
             onClick={() => decide(false)}
           >
-            Deny
+            {t('approval.deny')}
           </button>
           <button
             className="h-8 cursor-pointer rounded-md bg-stone-800 px-3 text-[13px] font-semibold text-white transition-colors hover:bg-stone-950 disabled:cursor-wait disabled:opacity-50"
@@ -54,7 +58,7 @@ export function Approval({
             disabled={busy}
             onClick={() => decide(true)}
           >
-            Allow once
+            {t('approval.allowOnce')}
           </button>
         </div>
       </div>

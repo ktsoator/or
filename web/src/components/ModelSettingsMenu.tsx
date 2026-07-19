@@ -8,6 +8,7 @@ import kimiIcon from '@/assets/providers/kimi.svg'
 import minimaxIcon from '@/assets/providers/minimax.svg'
 import xiaomiMimoIcon from '@/assets/providers/xiaomi-mimo.svg'
 import zaiIcon from '@/assets/providers/zai.svg'
+import { useI18n } from '@/i18n'
 
 export function ModelSettingsMenu({
   models,
@@ -30,6 +31,7 @@ export function ModelSettingsMenu({
     thinkingLevel: ThinkingLevel,
   ) => Promise<void>
 }) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [selectedProvider, setSelectedProvider] = useState(modelProvider ?? '')
   const currentModel = models.find(
@@ -47,10 +49,10 @@ export function ModelSettingsMenu({
   )
   const providers = Object.keys(groupedModels)
   const providerModels = groupedModels[selectedProvider] ?? []
-  const modelName = currentModel?.name ?? modelID ?? 'Model'
-  const selectedModelName = selectedProvider === modelProvider ? modelName : 'Select model'
+  const modelName = currentModel?.name ?? modelID ?? t('model.fallback')
+  const selectedModelName = selectedProvider === modelProvider ? modelName : t('model.select')
   const selectedProviderName = providerName(selectedProvider || modelProvider || '')
-  const effortName = thinkingLevel ? thinkingLabel[thinkingLevel] : 'Effort'
+  const effortName = thinkingLevel ? t(`effort.${thinkingLevel}`) : t('model.effort')
   const unavailable = disabled || !modelKey || models.length === 0
   const contextWindow = currentModel?.contextWindow ?? contextUsage?.contextWindow ?? 0
   const currentContextUsage =
@@ -89,7 +91,7 @@ export function ModelSettingsMenu({
         <button
           type="button"
           className="group inline-flex h-9 max-w-[248px] cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[14px] font-medium outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(241,241,241)] disabled:cursor-not-allowed disabled:opacity-40 max-sm:max-w-[128px] max-sm:px-2"
-          aria-label="Model and thinking settings"
+          aria-label={t('model.settings')}
           disabled={unavailable}
         >
           <ProviderIcon provider={modelProvider ?? ''} />
@@ -114,7 +116,7 @@ export function ModelSettingsMenu({
         >
           <DropdownMenu.Sub>
             <DropdownMenu.SubTrigger className={subTriggerClass}>
-              <span>Provider</span>
+              <span>{t('model.provider')}</span>
               <span className="ml-auto flex min-w-0 items-center gap-1.5 text-stone-500">
                 <ProviderIcon provider={selectedProvider || modelProvider || ''} />
                 <span className="max-w-[128px] truncate">{selectedProviderName}</span>
@@ -128,7 +130,9 @@ export function ModelSettingsMenu({
                 collisionPadding={10}
                 className="z-[110] min-w-[208px] animate-[fade-in_110ms_ease-out] rounded-2xl border border-stone-200 bg-white p-1 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
               >
-                <DropdownMenu.Label className={menuLabelClass}>Provider</DropdownMenu.Label>
+                <DropdownMenu.Label className={menuLabelClass}>
+                  {t('model.provider')}
+                </DropdownMenu.Label>
                 <DropdownMenu.Separator className={separatorClass} />
                 <DropdownMenu.RadioGroup
                   value={selectedProvider}
@@ -155,7 +159,7 @@ export function ModelSettingsMenu({
 
           <DropdownMenu.Sub>
             <DropdownMenu.SubTrigger className={subTriggerClass}>
-              <span>Model</span>
+              <span>{t('model.model')}</span>
               <span className="ml-auto flex min-w-0 items-center gap-1.5 text-stone-500">
                 <span className="max-w-[128px] truncate">{selectedModelName}</span>
                 <ChevronRight className="size-3.5 shrink-0" aria-hidden="true" />
@@ -169,7 +173,7 @@ export function ModelSettingsMenu({
                 className="z-[110] max-h-[min(420px,var(--radix-dropdown-menu-content-available-height))] min-w-[260px] animate-[fade-in_110ms_ease-out] overflow-y-auto rounded-2xl border border-stone-200 bg-white p-1 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
               >
                 <DropdownMenu.Label className={menuLabelClass}>
-                  {selectedProviderName} models
+                  {t('model.models', { provider: selectedProviderName })}
                 </DropdownMenu.Label>
                 <DropdownMenu.Separator className={separatorClass} />
                 <DropdownMenu.RadioGroup value={modelKey} onValueChange={selectModel}>
@@ -195,7 +199,7 @@ export function ModelSettingsMenu({
               className={subTriggerClass}
               disabled={selectedProvider !== modelProvider}
             >
-              <span>Effort</span>
+              <span>{t('model.effort')}</span>
               <span className="ml-auto flex items-center gap-1.5 text-stone-500">
                 <span>{effortName}</span>
                 <ChevronRight className="size-3.5" aria-hidden="true" />
@@ -208,7 +212,9 @@ export function ModelSettingsMenu({
                 collisionPadding={10}
                 className="z-[110] min-w-[208px] animate-[fade-in_110ms_ease-out] rounded-2xl border border-stone-200 bg-white p-1 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
               >
-                <DropdownMenu.Label className={menuLabelClass}>Effort</DropdownMenu.Label>
+                <DropdownMenu.Label className={menuLabelClass}>
+                  {t('model.effort')}
+                </DropdownMenu.Label>
                 <DropdownMenu.Separator className={separatorClass} />
                 <DropdownMenu.RadioGroup
                   value={thinkingLevel ?? ''}
@@ -216,7 +222,7 @@ export function ModelSettingsMenu({
                 >
                   {thinkingLevels.map((level) => (
                     <DropdownMenu.RadioItem key={level} value={level} className={radioItemClass}>
-                      <span>{thinkingLabel[level]}</span>
+                      <span>{t(`effort.${level}`)}</span>
                       <DropdownMenu.ItemIndicator className="absolute right-2.5 grid size-4 place-items-center text-stone-700">
                         <Check className="size-3.5" aria-hidden="true" />
                       </DropdownMenu.ItemIndicator>
@@ -242,17 +248,19 @@ function ContextMeter({
   usage?: ContextUsage
   contextWindow: number
 }) {
+  const { t, formatNumber } = useI18n()
   const measured = Boolean(usage?.measured && usage.usedTokens > 0 && contextWindow > 0)
   const usedTokens = measured ? usage?.usedTokens ?? 0 : 0
   const percentage = measured ? Math.min((usedTokens / contextWindow) * 100, 100) : 0
 
   return (
-    <div className="px-2.5 pt-1.5 pb-2" aria-label="Model context usage">
+    <div className="px-2.5 pt-1.5 pb-2" aria-label={t('model.contextUsage')}>
       <div className="flex items-baseline justify-between gap-4 text-[12px] leading-5 tabular-nums">
-        <span className="font-[560] text-stone-600">Context</span>
+        <span className="font-[560] text-stone-600">{t('model.context')}</span>
         <span className="text-stone-400">
-          {measured ? formatTokens(usedTokens) : '—'} / {formatTokens(contextWindow)}
-          {measured && <span> · {Math.round(percentage)}%</span>}
+          {measured ? formatTokens(usedTokens, formatNumber) : '—'} /{' '}
+          {formatTokens(contextWindow, formatNumber)}
+          {measured && <span> · {formatNumber(Math.round(percentage))}%</span>}
         </span>
       </div>
       <div className="mt-1 h-1 overflow-hidden rounded-full bg-stone-100">
@@ -271,22 +279,24 @@ function ContextMeter({
       </div>
       {!measured && contextWindow > 0 && (
         <p className="mt-1 text-[11px] leading-4 text-stone-400">
-          Measures after the next response
+          {t('model.measureAfterResponse')}
         </p>
       )}
     </div>
   )
 }
 
-function formatTokens(value: number): string {
+type NumberFormatter = (value: number, options?: Intl.NumberFormatOptions) => string
+
+function formatTokens(value: number, formatNumber: NumberFormatter): string {
   if (value <= 0) return '—'
-  if (value >= 1_000_000) return `${formatTokenDecimal(value / 1_000_000)}m`
-  if (value >= 1_000) return `${formatTokenDecimal(value / 1_000)}k`
-  return Math.round(value).toLocaleString('en-US')
+  if (value >= 1_000_000) return `${formatTokenDecimal(value / 1_000_000, formatNumber)}m`
+  if (value >= 1_000) return `${formatTokenDecimal(value / 1_000, formatNumber)}k`
+  return formatNumber(Math.round(value))
 }
 
-function formatTokenDecimal(value: number): string {
-  return value.toLocaleString('en-US', { maximumFractionDigits: value >= 100 ? 0 : 1 })
+function formatTokenDecimal(value: number, formatNumber: NumberFormatter): string {
+  return formatNumber(value, { maximumFractionDigits: value >= 100 ? 0 : 1 })
 }
 
 const subTriggerClass = cn(
@@ -302,15 +312,6 @@ const radioItemClass = cn(
 
 const menuLabelClass = 'px-2.5 py-1.5 text-[12px] font-semibold text-stone-400'
 const separatorClass = 'mx-1.5 my-0.5 h-px bg-stone-100'
-
-const thinkingLabel: Record<ThinkingLevel, string> = {
-  off: 'Off',
-  minimal: 'Minimal',
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-  xhigh: 'Extra High',
-}
 
 const providerNames: Record<string, string> = {
   anthropic: 'Anthropic',

@@ -7,12 +7,14 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
+import { useI18n } from '@/i18n'
 
 export function FileChange({ change }: { change: Change }) {
+  const { t } = useI18n()
   if (change.changeType === 'failure') {
     return (
       <div className="mt-2 ml-5 border-l-2 border-red-300 py-1 pl-3 font-mono text-[13px] leading-5.5 text-red-700 max-md:ml-0">
-        {(change.path ? `${change.path}: ` : '') + (change.detail || 'write failed')}
+        {(change.path ? `${change.path}: ` : '') + (change.detail || t('diff.writeFailed'))}
       </div>
     )
   }
@@ -33,7 +35,7 @@ export function FileChange({ change }: { change: Change }) {
           disabled={hunks.length === 0}
         >
           <span className="shrink-0 text-[15.5px] text-stone-500">
-            {change.op === 'create' ? 'Created' : 'Updated'}
+            {change.op === 'create' ? t('diff.created') : t('diff.updated')}
           </span>
           <strong className="min-w-0 overflow-hidden text-[15.5px] font-medium text-stone-900 text-ellipsis whitespace-nowrap">
             {filename}

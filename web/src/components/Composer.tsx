@@ -14,6 +14,7 @@ import type {
 import { cn } from '@/lib/utils'
 import { Approval } from './Approval'
 import { ModelSettingsMenu } from './ModelSettingsMenu'
+import { useI18n } from '@/i18n'
 
 export function Composer({
   connected,
@@ -54,6 +55,7 @@ export function Composer({
     thinkingLevel: ThinkingLevel,
   ) => Promise<void>
 }) {
+  const { t } = useI18n()
   const ref = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const [settingsError, setSettingsError] = useState('')
@@ -97,7 +99,7 @@ export function Composer({
     const text = el.value.trim()
     if ((!text && images.length === 0) || inputDisabled) return
     if (images.length > 0 && !supportsImages) {
-      setAttachmentError('The selected model does not support images')
+      setAttachmentError(t('composer.modelNoImages'))
       return
     }
     onSend(
@@ -116,30 +118,30 @@ export function Composer({
     setAttachmentError('')
     const selected = Array.from(files)
     if (images.length + selected.length > maxImages) {
-      setAttachmentError(`You can attach up to ${maxImages} images`)
+      setAttachmentError(t('composer.maxImages', { count: maxImages }))
       return
     }
     const allowed = new Set(['image/gif', 'image/jpeg', 'image/png', 'image/webp'])
     if (selected.some((file) => !allowed.has(file.type))) {
-      setAttachmentError('Use PNG, JPEG, WebP, or GIF images')
+      setAttachmentError(t('composer.imageTypes'))
       return
     }
     if (selected.some((file) => file.size > maxImageBytes)) {
-      setAttachmentError('Each image must be 10 MB or smaller')
+      setAttachmentError(t('composer.imageTooLarge'))
       return
     }
     const totalBytes =
       images.reduce((total, image) => total + image.size, 0) +
       selected.reduce((total, file) => total + file.size, 0)
     if (totalBytes > maxImagesBytes) {
-      setAttachmentError('Images must total 20 MB or less')
+      setAttachmentError(t('composer.imagesTooLarge'))
       return
     }
     try {
       const added = await Promise.all(selected.map(readImage))
       setImages((current) => [...current, ...added])
     } catch {
-      setAttachmentError('Could not read the selected image')
+      setAttachmentError(t('composer.couldNotReadImage'))
     }
   }
 
@@ -152,7 +154,7 @@ export function Composer({
     try {
       await onSettingsChange(provider, model, nextThinking)
     } catch (error) {
-      setSettingsError(error instanceof Error ? error.message : 'Could not update model settings')
+      setSettingsError(error instanceof Error ? error.message : t('composer.couldNotUpdateSettings'))
     }
   }
 
@@ -161,7 +163,7 @@ export function Composer({
     try {
       await onRemoveQueued(id)
     } catch (error) {
-      setQueueError(error instanceof Error ? error.message : 'Could not remove queued message')
+      setQueueError(error instanceof Error ? error.message : t('composer.couldNotRemoveQueued'))
     }
   }
 
@@ -187,8 +189,12 @@ export function Composer({
             <button
               className="group relative col-start-1 row-start-2 grid size-10 cursor-pointer place-items-center rounded-full text-stone-700 transition-colors hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-30"
               type="button"
-              aria-label={supportsImages ? 'Attach images' : 'Current model does not support images'}
-              title={supportsImages ? 'Attach images' : 'Current model does not support images'}
+              aria-label={
+                supportsImages ? t('composer.attachImages') : t('composer.currentModelNoImages')
+              }
+              title={
+                supportsImages ? t('composer.attachImages') : t('composer.currentModelNoImages')
+              }
               disabled={inputDisabled || !supportsImages || images.length >= maxImages}
               onClick={() => fileRef.current?.click()}
             >
@@ -222,7 +228,7 @@ export function Composer({
                       <button
                         className="absolute top-1 right-1 grid size-5 cursor-pointer place-items-center rounded-full bg-stone-900/85 text-white opacity-100 shadow-sm transition-opacity focus-visible:opacity-100 md:opacity-0 md:group-hover/image:opacity-100"
                         type="button"
-                        aria-label={`Remove ${image.name}`}
+                        aria-label={t('composer.removeImage', { name: image.name })}
                         onClick={() => {
                           setImages((current) =>
                             current.filter((item) => item.id !== image.id),
@@ -243,16 +249,16 @@ export function Composer({
                 className="block max-h-[240px] min-h-8 w-full min-w-0 resize-none overflow-y-auto border-0 bg-transparent px-1 py-1.5 text-[16.5px] leading-6 text-stone-900 outline-none placeholder:text-stone-400 disabled:cursor-not-allowed disabled:bg-transparent"
                 placeholder={
                   awaitingApproval
-                    ? 'Resolve the approval above to continue…'
+                    ? t('composer.resolveApprovalPlaceholder')
                     : updatingSettings
-                      ? 'Updating model settings…'
+                      ? t('composer.updatingSettings')
                     : connected
                       ? running
                         ? delivery === 'steer'
-                          ? 'Guide the current run…'
-                          : 'Queue a follow-up…'
-                        : 'Ask anything'
-                      : 'Waiting for coding API…'
+                          ? t('composer.guideRun')
+                          : t('composer.queueFollowUpPlaceholder')
+                        : t('composer.askAnything')
+                      : t('composer.waitingForAPI')
                 }
                 onInput={autosize}
                 onKeyDown={(event) => {
@@ -282,7 +288,7 @@ export function Composer({
                 <button
                   className="group relative grid size-9 cursor-pointer place-items-center rounded-full bg-stone-200 text-stone-700 transition-colors hover:bg-stone-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
                   type="button"
-                  aria-label="Stop generating"
+                  aria-label={t('composer.stopGenerating')}
                   onClick={onStop}
                 >
                   <Square className="size-3 fill-current" aria-hidden="true" />
@@ -290,7 +296,7 @@ export function Composer({
                     className="pointer-events-none absolute right-0 bottom-[calc(100%+9px)] z-50 translate-y-1 whitespace-nowrap rounded-md bg-stone-900 px-2.5 py-1.5 text-[12px] leading-4 font-medium text-white opacity-0 shadow-lg transition-[opacity,transform] duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
                     aria-hidden="true"
                   >
-                    Stop generating
+                    {t('composer.stopGenerating')}
                   </span>
                 </button>
               )}
@@ -299,14 +305,14 @@ export function Composer({
                 type="button"
                 aria-label={
                   awaitingApproval
-                    ? 'Resolve the approval first'
+                    ? t('composer.resolveApprovalFirst')
                     : connected
                       ? running
                         ? delivery === 'steer'
-                          ? 'Steer current run'
-                          : 'Queue follow-up'
-                        : 'Send prompt'
-                      : 'Waiting for coding API'
+                          ? t('composer.steerRun')
+                          : t('composer.queueFollowUp')
+                        : t('composer.sendPrompt')
+                      : t('composer.waitingForCodingAPI')
                 }
                 disabled={inputDisabled}
                 onClick={submit}
@@ -318,14 +324,14 @@ export function Composer({
                 >
                   <span>
                     {awaitingApproval
-                      ? 'Resolve approval first'
+                      ? t('composer.resolveApprovalFirst')
                       : connected
                         ? running
                           ? delivery === 'steer'
-                            ? 'Steer current run'
-                            : 'Queue follow-up'
-                          : 'Send prompt'
-                        : 'Waiting for API'}
+                            ? t('composer.steerRun')
+                            : t('composer.queueFollowUp')
+                          : t('composer.sendPrompt')
+                        : t('composer.waitingForAPIShort')}
                   </span>
                   {connected && !awaitingApproval && (
                     <kbd className="font-mono text-[11px] font-normal text-stone-400">↵</kbd>
@@ -352,14 +358,15 @@ function PendingQueue({
   messages: QueuedMessage[]
   onRemove: (id: string) => void
 }) {
+  const { t } = useI18n()
   return (
     <section
       className="overflow-hidden rounded-[18px] border border-stone-200/90 bg-[rgb(252,252,252)] text-stone-700 shadow-[0_8px_24px_-22px_rgba(28,25,23,0.5)]"
-      aria-label="Pending messages"
+      aria-label={t('queue.pendingMessages')}
       aria-live="polite"
     >
       <div className="flex h-8 items-center justify-between px-3.5 text-[11.5px] leading-none text-stone-500">
-        <span className="font-[580] text-stone-600">Up next</span>
+        <span className="font-[580] text-stone-600">{t('queue.upNext')}</span>
         <span>{messages.length}</span>
       </div>
       <div className="max-h-[132px] overflow-y-auto border-t border-stone-200/80">
@@ -379,14 +386,18 @@ function PendingQueue({
               aria-hidden="true"
             />
             <span className="shrink-0 font-[590] text-stone-700">
-              {message.delivery === 'steer' ? 'Steer' : 'Follow-up'}
+              {message.delivery === 'steer' ? t('queue.steer') : t('queue.followUp')}
             </span>
             <span className="min-w-0 flex-1 truncate text-stone-500">
-              {message.text || imageLabel(message.images.length)}
+              {message.text ||
+                `${message.images.length} ${
+                  message.images.length === 1 ? t('queue.image') : t('queue.images')
+                }`}
             </span>
             {message.text && message.images.length > 0 && (
               <span className="shrink-0 text-[11.5px] text-stone-400">
-                +{message.images.length} {message.images.length === 1 ? 'image' : 'images'}
+                +{message.images.length}{' '}
+                {message.images.length === 1 ? t('queue.image') : t('queue.images')}
               </span>
             )}
             <span
@@ -396,16 +407,20 @@ function PendingQueue({
               )}
             >
               {message.status === 'failed'
-                ? 'Not sent'
+                ? t('app.notSent')
                 : message.status === 'removing'
-                  ? 'Removing\u2026'
-                  : 'Waiting'}
+                  ? t('queue.removing')
+                  : t('queue.waiting')}
             </span>
             <button
               className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-lg text-stone-400 outline-none transition-colors hover:bg-stone-200/80 hover:text-stone-700 focus-visible:ring-2 focus-visible:ring-stone-300 disabled:cursor-wait disabled:opacity-55"
               type="button"
-              aria-label={`Remove queued ${message.delivery === 'steer' ? 'steer' : 'follow-up'} message`}
-              title="Remove from queue"
+              aria-label={
+                message.delivery === 'steer'
+                  ? t('queue.removeSteer')
+                  : t('queue.removeFollowUp')
+              }
+              title={t('queue.remove')}
               disabled={message.status === 'removing'}
               onClick={() => onRemove(message.id)}
             >
@@ -422,10 +437,6 @@ function PendingQueue({
   )
 }
 
-function imageLabel(count: number): string {
-  return count === 1 ? '1 image' : `${count} images`
-}
-
 function RunDeliveryMenu({
   value,
   onValueChange,
@@ -433,15 +444,16 @@ function RunDeliveryMenu({
   value: DeliveryMode
   onValueChange: (value: DeliveryMode) => void
 }) {
+  const { t } = useI18n()
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <button
           className="group inline-flex h-9 cursor-pointer items-center gap-1 rounded-full px-2.5 text-[13px] font-medium text-stone-600 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(241,241,241)]"
           type="button"
-          aria-label="Choose how this message is delivered"
+          aria-label={t('delivery.choose')}
         >
-          <span>{value === 'steer' ? 'Steer' : 'Follow-up'}</span>
+          <span>{value === 'steer' ? t('queue.steer') : t('queue.followUp')}</span>
           <ChevronDown
             className="size-3.5 text-stone-400 transition-transform group-data-[state=open]:rotate-180"
             aria-hidden="true"
@@ -460,8 +472,16 @@ function RunDeliveryMenu({
             value={value}
             onValueChange={(next) => onValueChange(next as DeliveryMode)}
           >
-            <DeliveryOption value="steer" label="Steer current run" hint="Apply on the next turn" />
-            <DeliveryOption value="followup" label="Queue follow-up" hint="Run after this reply" />
+            <DeliveryOption
+              value="steer"
+              label={t('composer.steerRun')}
+              hint={t('delivery.steerHint')}
+            />
+            <DeliveryOption
+              value="followup"
+              label={t('composer.queueFollowUp')}
+              hint={t('delivery.followUpHint')}
+            />
           </DropdownMenu.RadioGroup>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>

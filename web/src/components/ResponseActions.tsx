@@ -3,6 +3,7 @@ import { Check, Copy, ThumbsDown, ThumbsUp, type LucideIcon } from 'lucide-react
 import { Tooltip } from 'radix-ui'
 import type { Usage } from '@/types'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/i18n'
 
 export function ResponseActions({
   usage,
@@ -11,6 +12,7 @@ export function ResponseActions({
   usage?: Usage
   responseText: string
 }) {
+  const { t, formatNumber } = useI18n()
   const [copied, setCopied] = useState(false)
   const [feedback, setFeedback] = useState<'up' | 'down'>()
   const resetCopyRef = useRef<number>(undefined)
@@ -42,19 +44,19 @@ export function ResponseActions({
       <Tooltip.Provider delayDuration={80} skipDelayDuration={100}>
         <ActionButton
           icon={copied ? Check : Copy}
-          label={copied ? 'Copied' : 'Copy response'}
+          label={copied ? t('actions.copied') : t('actions.copyResponse')}
           disabled={!responseText}
           onClick={() => void copyResponse()}
         />
         <ActionButton
           icon={ThumbsUp}
-          label="Good response"
+          label={t('actions.goodResponse')}
           pressed={feedback === 'up'}
           onClick={() => setFeedback((current) => (current === 'up' ? undefined : 'up'))}
         />
         <ActionButton
           icon={ThumbsDown}
-          label="Bad response"
+          label={t('actions.badResponse')}
           pressed={feedback === 'down'}
           onClick={() => setFeedback((current) => (current === 'down' ? undefined : 'down'))}
         />
@@ -67,11 +69,13 @@ export function ResponseActions({
                 <button
                   className="group inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg px-2 text-[12px] leading-5 text-stone-400 tabular-nums outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-600 focus-visible:bg-[rgb(241,241,241)] focus-visible:text-stone-600 focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=delayed-open]:bg-[rgb(241,241,241)] data-[state=delayed-open]:text-stone-600"
                   type="button"
-                  aria-label="Show token usage details"
+                  aria-label={t('actions.showUsage')}
                 >
-                  <span className="font-[560] text-stone-500">Usage</span>
+                  <span className="font-[560] text-stone-500">{t('actions.usage')}</span>
                   <span className="text-stone-300">·</span>
-                  <span>{formatCompactNumber(totalTokens)} tokens</span>
+                  <span>
+                    {formatCompactNumber(totalTokens, formatNumber)} {t('actions.tokens')}
+                  </span>
                   {usage.cost.total > 0 && (
                     <>
                       <span className="text-stone-300">·</span>
@@ -90,16 +94,16 @@ export function ResponseActions({
                   className="z-[150] animate-[fade-in_110ms_ease-out] rounded-[10px] border border-stone-200 bg-white px-3 py-2 text-[12px] leading-5 text-stone-700 tabular-nums shadow-[0_14px_38px_-20px_rgba(28,25,23,0.5)] outline-none"
                 >
                   <div className="flex items-center gap-3 whitespace-nowrap">
-                    <Metric label="Input" value={formatInteger(usage.input)} />
-                    <Metric label="Output" value={formatInteger(usage.output)} />
+                    <Metric label={t('actions.input')} value={formatNumber(usage.input)} />
+                    <Metric label={t('actions.output')} value={formatNumber(usage.output)} />
                     {usage.cacheRead > 0 && (
-                      <Metric label="Cache read" value={formatInteger(usage.cacheRead)} />
+                      <Metric label={t('actions.cacheRead')} value={formatNumber(usage.cacheRead)} />
                     )}
                     {usage.cacheWrite > 0 && (
-                      <Metric label="Cache write" value={formatInteger(usage.cacheWrite)} />
+                      <Metric label={t('actions.cacheWrite')} value={formatNumber(usage.cacheWrite)} />
                     )}
                     {usage.cost.total > 0 && (
-                      <Metric label="Cost" value={formatExactCost(usage.cost.total)} />
+                      <Metric label={t('actions.cost')} value={formatExactCost(usage.cost.total)} />
                     )}
                   </div>
                 </Tooltip.Content>
@@ -176,18 +180,16 @@ function hasUsage(usage: Usage): boolean {
   )
 }
 
-function formatCompactNumber(value: number): string {
-  if (value >= 1_000_000) return `${formatDecimal(value / 1_000_000)}m`
-  if (value >= 1_000) return `${formatDecimal(value / 1_000)}k`
-  return formatInteger(value)
+type NumberFormatter = (value: number, options?: Intl.NumberFormatOptions) => string
+
+function formatCompactNumber(value: number, formatNumber: NumberFormatter): string {
+  if (value >= 1_000_000) return `${formatDecimal(value / 1_000_000, formatNumber)}m`
+  if (value >= 1_000) return `${formatDecimal(value / 1_000, formatNumber)}k`
+  return formatNumber(Math.round(value))
 }
 
-function formatDecimal(value: number): string {
-  return value.toLocaleString('en-US', { maximumFractionDigits: value >= 100 ? 0 : 1 })
-}
-
-function formatInteger(value: number): string {
-  return Math.round(value).toLocaleString('en-US')
+function formatDecimal(value: number, formatNumber: NumberFormatter): string {
+  return formatNumber(value, { maximumFractionDigits: value >= 100 ? 0 : 1 })
 }
 
 function formatSummaryCost(value: number): string {

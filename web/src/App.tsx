@@ -24,8 +24,11 @@ import { Composer } from './components/Composer'
 import { Thinking } from './components/Thinking'
 import { ProfileMenu } from './components/ProfileMenu'
 import { ResponseActions } from './components/ResponseActions'
+import { SettingsPage } from './components/SettingsPage'
+import { useI18n } from './i18n'
 
 export default function App() {
+  const { t } = useI18n()
   const {
     sessions,
     activeSession,
@@ -58,6 +61,20 @@ export default function App() {
   const [deleteTarget, setDeleteTarget] = useState<SessionSummary>()
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+  const [settingsOpen, setSettingsOpen] = useState(false)
+
+  useEffect(() => {
+    const handleSettingsShortcut = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === ',') {
+        event.preventDefault()
+        setSettingsOpen(true)
+      } else if (event.key === 'Escape' && settingsOpen) {
+        setSettingsOpen(false)
+      }
+    }
+    window.addEventListener('keydown', handleSettingsShortcut)
+    return () => window.removeEventListener('keydown', handleSettingsShortcut)
+  }, [settingsOpen])
 
   useLayoutEffect(() => {
     const el = logRef.current
@@ -113,7 +130,7 @@ export default function App() {
       setDeleteTarget(undefined)
       setMobileSessionsOpen(false)
     } catch (error) {
-      setDeleteError(error instanceof Error ? error.message : 'Could not delete the session')
+      setDeleteError(error instanceof Error ? error.message : t('app.couldNotDelete'))
     } finally {
       setDeleting(false)
     }
@@ -142,6 +159,10 @@ export default function App() {
     />
   )
 
+  if (settingsOpen) {
+    return <SettingsPage onBack={() => setSettingsOpen(false)} />
+  }
+
   return (
     <div
       className={cn(
@@ -155,7 +176,7 @@ export default function App() {
         <button
           className="fixed inset-0 z-40 bg-stone-950/15 backdrop-blur-[1px] md:hidden"
           type="button"
-          aria-label="Close sessions"
+          aria-label={t('app.closeSessions')}
           onClick={() => setMobileSessionsOpen(false)}
         />
       )}
@@ -165,7 +186,7 @@ export default function App() {
           'max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:w-[280px] max-md:shadow-2xl',
           mobileSessionsOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full',
         )}
-        aria-label="Sessions"
+        aria-label={t('app.sessions')}
       >
         <div className="relative h-16 w-[256px] shrink-0 max-md:w-[280px]">
           <div
@@ -185,8 +206,8 @@ export default function App() {
               activeShortcut === 'Search' && 'bg-stone-200/80 text-stone-950',
             )}
             type="button"
-            title="Search sessions"
-            aria-label="Search sessions"
+            title={t('app.searchSessions')}
+            aria-label={t('app.searchSessions')}
             aria-pressed={activeShortcut === 'Search'}
             onClick={() =>
               setActiveShortcut((current) => (current === 'Search' ? undefined : 'Search'))
@@ -201,8 +222,8 @@ export default function App() {
               'max-md:translate-x-[216px]',
             )}
             type="button"
-            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={sidebarCollapsed ? t('app.expandSidebar') : t('app.collapseSidebar')}
+            aria-label={sidebarCollapsed ? t('app.expandSidebar') : t('app.collapseSidebar')}
             aria-expanded={!sidebarCollapsed}
             onClick={toggleSidebar}
           >
@@ -218,7 +239,7 @@ export default function App() {
                 sidebarCollapsed ? 'bg-transparent' : 'bg-stone-200/75 hover:bg-stone-200',
               )}
               type="button"
-              title="New session"
+              title={t('app.newSession')}
               disabled={creating}
               onClick={addSession}
             >
@@ -233,42 +254,42 @@ export default function App() {
                   sidebarCollapsed ? 'opacity-0' : 'opacity-100',
                 )}
               >
-                New session
+                {t('app.newSession')}
               </span>
             </button>
 
-            <div className="mt-1 space-y-0.5" aria-label="Workspace shortcuts">
+            <div className="mt-1 space-y-0.5" aria-label={t('app.workspaceShortcuts')}>
               <SidebarNavItem
                 icon={FolderOpen}
-                label="Workspace"
+                label={t('app.workspace')}
                 collapsed={sidebarCollapsed}
                 active={activeShortcut === 'Workspace'}
                 onClick={() => setActiveShortcut('Workspace')}
               />
               <SidebarNavItem
                 icon={Files}
-                label="Files"
+                label={t('app.files')}
                 collapsed={sidebarCollapsed}
                 active={activeShortcut === 'Files'}
                 onClick={() => setActiveShortcut('Files')}
               />
               <SidebarNavItem
                 icon={Clock3}
-                label="Scheduled"
+                label={t('app.scheduled')}
                 collapsed={sidebarCollapsed}
                 active={activeShortcut === 'Scheduled'}
                 onClick={() => setActiveShortcut('Scheduled')}
               />
               <SidebarNavItem
                 icon={Wrench}
-                label="Tools"
+                label={t('app.tools')}
                 collapsed={sidebarCollapsed}
                 active={activeShortcut === 'Tools'}
                 onClick={() => setActiveShortcut('Tools')}
               />
               <SidebarNavItem
                 icon={Ellipsis}
-                label="More"
+                label={t('app.more')}
                 collapsed={sidebarCollapsed}
                 active={activeShortcut === 'More'}
                 onClick={() => setActiveShortcut('More')}
@@ -282,7 +303,7 @@ export default function App() {
               sidebarCollapsed ? 'pointer-events-none opacity-0' : 'opacity-100',
             )}
           >
-            Recents
+            {t('app.recents')}
           </div>
           <nav
             className={cn(
@@ -290,7 +311,7 @@ export default function App() {
               sidebarCollapsed ? 'pointer-events-none opacity-0' : 'opacity-100',
             )}
             aria-hidden={sidebarCollapsed}
-            aria-label="Coding sessions"
+            aria-label={t('app.codingSessions')}
           >
             <div className="space-y-px">
               {sessions.map((session) => (
@@ -306,7 +327,10 @@ export default function App() {
           </nav>
         </div>
 
-        <ProfileMenu collapsed={sidebarCollapsed} />
+        <ProfileMenu
+          collapsed={sidebarCollapsed}
+          onOpenSettings={() => setSettingsOpen(true)}
+        />
       </aside>
 
       <div className="relative flex h-full min-w-0 flex-col">
@@ -315,20 +339,22 @@ export default function App() {
             <button
               className="-ml-1 grid size-7 shrink-0 place-items-center rounded-md text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-900 md:hidden"
               type="button"
-              title="Sessions"
+              title={t('app.sessions')}
               onClick={() => {
                 setSidebarCollapsed(false)
                 setMobileSessionsOpen(true)
               }}
             >
               <PanelLeft className="size-4" aria-hidden="true" />
-              <span className="sr-only">Open sessions</span>
+              <span className="sr-only">{t('app.openSessions')}</span>
             </button>
             <span
               className="truncate text-[15px] font-[620] tracking-[-0.015em] text-stone-900"
               title={activeSession?.title}
             >
-              {activeSession?.title ?? 'OR coding'}
+              {activeSession?.title === 'New session'
+                ? t('app.newSession')
+                : (activeSession?.title ?? 'OR coding')}
             </span>
           </div>
         </header>
@@ -347,16 +373,16 @@ export default function App() {
             {loading ? (
               <div className="flex items-center gap-2 pb-[8vh] text-xs text-stone-400">
                 <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
-                Loading session
+                {t('app.loadingSession')}
               </div>
             ) : emptySession ? (
               <div className="flex w-full -translate-y-[3vh] flex-col items-center gap-9">
                 <div className="max-w-lg text-center">
                   <h1 className="m-0 text-[28px] leading-tight font-[560] tracking-[-0.03em] text-stone-900 max-sm:text-2xl">
-                    What should we work on?
+                    {t('app.emptyTitle')}
                   </h1>
                   <p className="mt-2.5 text-[15px] leading-6 text-stone-500">
-                    Ask for a change, an explanation, or a closer look at the codebase.
+                    {t('app.emptyDescription')}
                   </p>
                 </div>
                 {composer(true)}
@@ -396,6 +422,8 @@ function SessionRow({
   onSelect: () => void
   onDelete: () => void
 }) {
+  const { t } = useI18n()
+  const title = session.title === 'New session' ? t('app.newSession') : session.title
   return (
     <div className="group relative">
       <button
@@ -410,20 +438,20 @@ function SessionRow({
         onClick={onSelect}
       >
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[14px] font-[510] leading-5" title={session.title}>
-            {session.title}
+          <span className="block truncate text-[14px] font-[510] leading-5" title={title}>
+            {title}
           </span>
           {(session.hasApproval || session.running) && (
             <span className="mt-0.5 flex items-center gap-1.5 text-[11.5px] leading-4 text-stone-500">
               {session.hasApproval ? (
               <>
                 <ShieldAlert className="size-3 text-amber-700" aria-hidden="true" />
-                Approval needed
+                {t('app.approvalNeeded')}
               </>
               ) : (
               <>
                 <LoaderCircle className="size-3 animate-spin text-stone-500" aria-hidden="true" />
-                Working
+                {t('app.working')}
               </>
               )}
             </span>
@@ -433,8 +461,8 @@ function SessionRow({
       <button
         className="absolute top-1.5 right-1.5 grid size-7 cursor-pointer place-items-center rounded-md text-stone-400 opacity-0 transition-[opacity,color,background-color] group-hover:opacity-100 hover:bg-stone-300/60 hover:text-red-700 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-stone-400 max-md:opacity-100"
         type="button"
-        title={`Delete ${session.title}`}
-        aria-label={`Delete ${session.title}`}
+        title={t('app.deleteNamedSession', { title })}
+        aria-label={t('app.deleteNamedSession', { title })}
         onClick={onDelete}
       >
         <Trash2 className="size-3.5" aria-hidden="true" />
@@ -507,6 +535,8 @@ function DeleteSessionDialog({
   onConfirm: () => void
 }) {
   const blocked = session.running || session.hasApproval
+  const { t } = useI18n()
+  const title = session.title === 'New session' ? t('app.newSession') : session.title
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -534,7 +564,7 @@ function DeleteSessionDialog({
         <button
           className="absolute top-4 right-4 grid size-8 cursor-pointer place-items-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700 disabled:cursor-wait disabled:opacity-40"
           type="button"
-          aria-label="Close delete confirmation"
+          aria-label={t('delete.close')}
           disabled={deleting}
           onClick={onCancel}
         >
@@ -546,29 +576,29 @@ function DeleteSessionDialog({
             id="delete-session-title"
             className="text-[19px] leading-6 font-[650] tracking-[-0.02em] text-stone-950"
           >
-            Delete session?
+            {t('delete.title')}
           </h2>
           <p
             id="delete-session-description"
             className="mt-1.5 text-[14px] leading-[1.55] text-stone-500"
           >
-            Messages, tool output, and settings in this session will be permanently removed.
+            {t('delete.description')}
           </p>
         </div>
 
         <div className="mt-5 border-y border-stone-200/80 py-3.5">
           <div className="text-[11px] leading-4 font-semibold tracking-[0.08em] text-stone-400 uppercase">
-            Session
+            {t('delete.session')}
           </div>
           <div className="mt-1 truncate text-[14.5px] leading-5 font-[560] text-stone-800">
-            {session.title}
+            {title}
           </div>
         </div>
 
         {blocked && (
           <div className="mt-4 flex gap-2.5 rounded-xl border border-amber-200/70 bg-amber-50/70 px-3.5 py-3 text-[13px] leading-5 text-amber-900">
             <ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-            <span>Stop this session or resolve its approval request before deleting it.</span>
+            <span>{t('delete.blocked')}</span>
           </div>
         )}
         {error && (
@@ -585,7 +615,7 @@ function DeleteSessionDialog({
             disabled={deleting}
             onClick={onCancel}
           >
-            Cancel
+            {t('delete.cancel')}
           </button>
           <button
             className="flex h-10 min-w-[126px] cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#b42318] px-4 text-[14px] font-[600] text-white shadow-[0_5px_14px_-8px_rgba(180,35,24,0.85)] transition-[background-color,transform] hover:bg-[#991b1b] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-35"
@@ -594,7 +624,7 @@ function DeleteSessionDialog({
             onClick={onConfirm}
           >
             {deleting && <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />}
-            {deleting ? 'Deleting…' : 'Delete session'}
+            {deleting ? t('delete.deleting') : t('delete.confirm')}
           </button>
         </div>
       </section>
@@ -603,6 +633,7 @@ function DeleteSessionDialog({
 }
 
 function ThreadItem({ item }: { item: Item }) {
+  const { t } = useI18n()
   switch (item.kind) {
     case 'user':
       return (
@@ -615,7 +646,7 @@ function ThreadItem({ item }: { item: Item }) {
                     key={`${image.mimeType}-${index}`}
                     className="size-[136px] shrink-0 rounded-2xl border border-stone-200 bg-white object-cover shadow-[0_7px_18px_-15px_rgba(28,25,23,0.55)] max-sm:size-28"
                     src={`data:${image.mimeType};base64,${image.data}`}
-                    alt={`Uploaded image ${index + 1}`}
+                    alt={t('app.uploadedImage', { index: index + 1 })}
                   />
                 ))}
               </div>
@@ -627,7 +658,7 @@ function ThreadItem({ item }: { item: Item }) {
             )}
             {item.deliveryStatus === 'failed' && (
               <span className="-mt-1 inline-flex items-center gap-1.5 px-1 text-[11.5px] leading-4 text-red-600">
-                Not sent
+                {t('app.notSent')}
               </span>
             )}
           </div>
@@ -656,7 +687,7 @@ function ThreadItem({ item }: { item: Item }) {
         >
           <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <div className="flex flex-col gap-0.5">
-            <strong className="text-[13px] font-semibold">Something went wrong</strong>
+            <strong className="text-[13px] font-semibold">{t('app.somethingWentWrong')}</strong>
             <span className="text-[13px]">{item.text}</span>
           </div>
         </div>
