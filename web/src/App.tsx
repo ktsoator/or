@@ -18,6 +18,7 @@ import {
   FolderOpen,
   LoaderCircle,
   PanelLeft,
+  Pin,
   Search,
   ShieldAlert,
   SquarePen,
@@ -25,6 +26,7 @@ import {
   Wrench,
   X,
 } from 'lucide-react'
+import { DropdownMenu } from 'radix-ui'
 import { useSession } from './useSession'
 import type { Item, SessionSummary } from './types'
 import { cn } from './lib/utils'
@@ -42,9 +44,25 @@ import logoImage from './assets/logo.svg'
 const DEFAULT_SIDEBAR_WIDTH = 240
 const MIN_SIDEBAR_WIDTH = 206
 const MAX_SIDEBAR_WIDTH = 338
+const PINNED_SESSIONS_KEY = 'coding.pinned-session-ids'
 
 function clampSidebarWidth(width: number) {
   return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width))
+}
+
+function readPinnedSessionIDs(): string[] {
+  try {
+    const value = JSON.parse(localStorage.getItem(PINNED_SESSIONS_KEY) ?? '[]')
+    return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function pinnedFirst(items: SessionSummary[], pinned: Set<string>): SessionSummary[] {
+  return [...items].sort(
+    (left, right) => Number(pinned.has(right.id)) - Number(pinned.has(left.id)),
+  )
 }
 
 export default function App() {
@@ -98,6 +116,8 @@ export default function App() {
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
   const [workspacePickerOpen, setWorkspacePickerOpen] = useState(false)
   const [selectedWorkspacePath, setSelectedWorkspacePath] = useState<string>()
+  const [pinnedSessionIDs, setPinnedSessionIDs] = useState(readPinnedSessionIDs)
+  const pinnedSessionIDSet = useMemo(() => new Set(pinnedSessionIDs), [pinnedSessionIDs])
 
   const workspaceGroups = useMemo(() => {
     const groups = new Map<
@@ -125,14 +145,21 @@ export default function App() {
         })
       }
     }
-    return [...groups.values()]
-  }, [sessions, t, workspaces])
+    return [...groups.values()].map((group) => ({
+      ...group,
+      sessions: pinnedFirst(group.sessions, pinnedSessionIDSet),
+    }))
+  }, [pinnedSessionIDSet, sessions, t, workspaces])
   const chatSessions = useMemo(
-    () => sessions.filter((session) => session.scope === 'chat'),
-    [sessions],
+    () => pinnedFirst(sessions.filter((session) => session.scope === 'chat'), pinnedSessionIDSet),
+    [pinnedSessionIDSet, sessions],
   )
   const workspacePickerPath =
     selectedWorkspacePath || draft?.workspacePath || activeSession?.workspacePath || workspaceGroups[0]?.path
+
+  useEffect(() => {
+    localStorage.setItem(PINNED_SESSIONS_KEY, JSON.stringify(pinnedSessionIDs))
+  }, [pinnedSessionIDs])
 
   useEffect(() => {
     if (draft || selectedWorkspacePath) return
@@ -252,12 +279,19 @@ export default function App() {
     setDeleteTarget(session)
   }
 
+  const togglePinnedSession = (id: string) => {
+    setPinnedSessionIDs((current) =>
+      current.includes(id) ? current.filter((sessionID) => sessionID !== id) : [...current, id],
+    )
+  }
+
   const confirmDelete = async () => {
     if (!deleteTarget || deleteTarget.running || deleteTarget.hasApproval) return
     setDeleting(true)
     setDeleteError('')
     try {
       await deleteSession(deleteTarget.id)
+      setPinnedSessionIDs((current) => current.filter((id) => id !== deleteTarget.id))
       setDeleteTarget(undefined)
       setMobileSessionsOpen(false)
     } catch (error) {
@@ -462,7 +496,9 @@ export default function App() {
                     key={session.id}
                     session={session}
                     active={session.id === activeSessionID}
+                    pinned={pinnedSessionIDSet.has(session.id)}
                     onSelect={() => chooseSession(session.id)}
+                    onTogglePin={() => togglePinnedSession(session.id)}
                     onDelete={() => requestDelete(session)}
                   />
                 ))
@@ -497,6 +533,8 @@ export default function App() {
                   onSelectWorkspace={(path) => setSelectedWorkspacePath(path)}
                   onSelectSession={chooseSession}
                   onCreateSession={(path) => addSession(path, true)}
+                  pinnedSessionIDs={pinnedSessionIDSet}
+                  onTogglePinnedSession={togglePinnedSession}
                   onDeleteSession={requestDelete}
                 />
               ))}
@@ -645,6 +683,8 @@ function WorkspaceSessions({
   onSelectWorkspace,
   onSelectSession,
   onCreateSession,
+  pinnedSessionIDs,
+  onTogglePinnedSession,
   onDeleteSession,
 }: {
   path: string
@@ -654,6 +694,8 @@ function WorkspaceSessions({
   onSelectWorkspace: (path: string) => void
   onSelectSession: (id: string) => void
   onCreateSession: (path: string) => void
+  pinnedSessionIDs: Set<string>
+  onTogglePinnedSession: (id: string) => void
   onDeleteSession: (session: SessionSummary) => void
 }) {
   const { t } = useI18n()
@@ -708,7 +750,9 @@ function WorkspaceSessions({
                 key={session.id}
                 session={session}
                 active={session.id === activeSessionID}
+                pinned={pinnedSessionIDs.has(session.id)}
                 onSelect={() => onSelectSession(session.id)}
+                onTogglePin={() => onTogglePinnedSession(session.id)}
                 onDelete={() => onDeleteSession(session)}
                 indented
               />
@@ -723,23 +767,28 @@ function WorkspaceSessions({
 function SessionRow({
   session,
   active,
+  pinned,
   onSelect,
+  onTogglePin,
   onDelete,
   indented = false,
 }: {
   session: SessionSummary
   active: boolean
+  pinned: boolean
   onSelect: () => void
+  onTogglePin: () => void
   onDelete: () => void
   indented?: boolean
 }) {
   const { t } = useI18n()
   const title = session.title === 'New session' ? t('app.newSession') : session.title
+  const [menuOpen, setMenuOpen] = useState(false)
   return (
-    <div className="group relative">
+    <div className="group/session relative">
       <button
         className={cn(
-          'flex h-8 w-full cursor-pointer items-center rounded-[10px] pr-9 text-left transition-colors',
+          'flex h-8 w-full cursor-pointer items-center rounded-[10px] pr-[4.125rem] text-left transition-colors',
           indented ? 'pl-[2.375rem]' : 'pl-2.5',
           active
             ? 'bg-[rgb(237,237,237)] text-stone-950'
@@ -752,31 +801,82 @@ function SessionRow({
         <span className="min-w-0 flex-1 truncate text-[0.875rem] font-normal leading-5" title={title}>
           {title}
         </span>
-        {(session.hasApproval || session.running) && (
-          <span className="ml-2 flex shrink-0 items-center gap-1.5 text-[0.71875rem] leading-4 text-stone-500 transition-opacity group-hover:opacity-0">
-            {session.hasApproval ? (
-              <>
-                <ShieldAlert className="size-3 text-amber-700" aria-hidden="true" />
-                {t('app.approvalNeeded')}
-              </>
-            ) : (
-              <>
-                <LoaderCircle className="size-3 animate-spin text-stone-500" aria-hidden="true" />
-                {t('app.working')}
-              </>
-            )}
+      </button>
+      {(session.hasApproval || session.running) && (
+        <span
+          className={cn(
+            'pointer-events-none absolute top-1/2 right-3 grid size-4 -translate-y-1/2 place-items-center transition-opacity duration-100 group-hover/session:opacity-0 group-focus-within/session:opacity-0 max-md:opacity-0',
+            menuOpen && 'opacity-0',
+          )}
+          title={session.hasApproval ? t('app.approvalNeeded') : t('app.working')}
+        >
+          {session.hasApproval ? (
+            <CircleAlert className="size-3.5 text-amber-700" aria-hidden="true" />
+          ) : (
+            <LoaderCircle className="size-3.5 animate-spin text-stone-500" aria-hidden="true" />
+          )}
+          <span className="sr-only">
+            {session.hasApproval ? t('app.approvalNeeded') : t('app.working')}
           </span>
+        </span>
+      )}
+      <div
+        className={cn(
+          'absolute top-0.5 right-0.5 flex items-center opacity-0 transition-opacity duration-100 group-hover/session:opacity-100 group-focus-within/session:opacity-100 max-md:opacity-100',
+          menuOpen && 'opacity-100',
         )}
-      </button>
-      <button
-        className="absolute top-0.5 right-0.5 grid size-7 cursor-pointer place-items-center rounded-[9px] text-stone-400 opacity-0 transition-[opacity,color,background-color] group-hover:opacity-100 hover:bg-stone-200 hover:text-red-700 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-stone-400 max-md:opacity-100"
-        type="button"
-        title={t('app.deleteNamedSession', { title })}
-        aria-label={t('app.deleteNamedSession', { title })}
-        onClick={onDelete}
       >
-        <Trash2 className="size-3.5" aria-hidden="true" />
-      </button>
+        <button
+          className={cn(
+            'grid size-7 cursor-pointer place-items-center rounded-[9px] text-stone-400 transition-colors hover:text-stone-950 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-stone-400',
+            pinned && 'text-stone-500',
+          )}
+          type="button"
+          title={pinned ? t('app.unpinSession') : t('app.pinSession')}
+          aria-label={pinned ? t('app.unpinNamedSession', { title }) : t('app.pinNamedSession', { title })}
+          aria-pressed={pinned}
+          onClick={onTogglePin}
+        >
+          <Pin className={cn('size-3.5', pinned && 'fill-current')} aria-hidden="true" />
+        </button>
+        <DropdownMenu.Root open={menuOpen} onOpenChange={setMenuOpen}>
+          <DropdownMenu.Trigger asChild>
+            <button
+              className="grid size-7 cursor-pointer place-items-center rounded-[9px] text-stone-400 transition-colors hover:text-stone-950 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-stone-400 data-[state=open]:text-stone-950"
+              type="button"
+              title={t('app.sessionActions')}
+              aria-label={t('app.sessionActionsNamed', { title })}
+            >
+              <Ellipsis className="size-4" aria-hidden="true" />
+            </button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content
+              side="right"
+              align="start"
+              sideOffset={6}
+              collisionPadding={10}
+              className="z-[120] min-w-[10.5rem] animate-[fade-in_100ms_ease-out] rounded-[14px] border border-stone-200 bg-white p-1 text-[0.84375rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+            >
+              <DropdownMenu.Item
+                className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)]"
+                onSelect={onTogglePin}
+              >
+                <Pin className="size-4 text-stone-600" aria-hidden="true" />
+                <span>{pinned ? t('app.unpinSession') : t('app.pinSession')}</span>
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator className="mx-1 my-1 h-px bg-stone-100" />
+              <DropdownMenu.Item
+                className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 text-red-700 outline-none data-[highlighted]:bg-red-50"
+                onSelect={onDelete}
+              >
+                <Trash2 className="size-4" aria-hidden="true" />
+                <span>{t('app.deleteSession')}</span>
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
+      </div>
     </div>
   )
 }

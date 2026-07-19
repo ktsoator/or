@@ -173,10 +173,10 @@ function ReadPreview({ output, path, failed }: { output: string; path: string; f
             aria-label={t('tool.contentsOf', { path })}
             tabIndex={0}
           >
-            <pre className="sticky left-0 z-10 m-0 border-r border-stone-200 bg-stone-50 px-2.5 py-1.5 text-right font-mono text-[var(--tool-font-size)] leading-4.5 whitespace-pre text-stone-400 select-none">
+            <pre className="sticky left-0 z-10 m-0 border-r border-stone-200 bg-stone-50 px-2.5 py-1.5 text-right font-mono text-[var(--tool-detail-font-size)] leading-4.5 whitespace-pre text-stone-400 select-none">
               {content.lineNumbers}
             </pre>
-            <pre className="m-0 min-w-full bg-transparent px-2.5 py-1.5 font-mono text-[var(--tool-font-size)] leading-4.5 whitespace-pre text-stone-900">
+            <pre className="m-0 min-w-full bg-transparent px-2.5 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-4.5 whitespace-pre text-stone-900">
               <code
                 className="or-code-theme hljs block min-w-full bg-transparent! p-0!"
                 dangerouslySetInnerHTML={{ __html: html }}
@@ -192,7 +192,7 @@ function ReadPreview({ output, path, failed }: { output: string; path: string; f
       ) : (
         <pre
           className={cn(
-            'code-scroll-area m-0 max-h-[min(52vh,32.5rem)] overflow-auto overscroll-contain bg-transparent px-2.5 py-1.5 font-mono text-[var(--tool-font-size)] leading-4.5 whitespace-pre-wrap text-stone-800',
+            'code-scroll-area m-0 max-h-[min(52vh,32.5rem)] overflow-auto overscroll-contain bg-transparent px-2.5 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-4.5 whitespace-pre-wrap text-stone-800',
             failed && 'text-red-700',
           )}
         >
@@ -207,7 +207,7 @@ function InspectPreview({ output, failed }: { output: string; failed: boolean })
   const { t } = useI18n()
   if (failed) {
     return (
-      <div className="mt-1.5 ml-5 rounded-md border-l-2 border-red-300 bg-red-50/50 px-3 py-1.5 font-mono text-[var(--tool-font-size)] leading-5 text-red-700 max-md:ml-0">
+      <div className="mt-1.5 ml-5 rounded-md border-l-2 border-red-300 bg-red-50/50 px-3 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-5 text-red-700 max-md:ml-0">
         {output || t('tool.inspectionFailed')}
       </div>
     )
@@ -245,7 +245,7 @@ function InspectPreview({ output, failed }: { output: string; failed: boolean })
                   className="size-3.25 shrink-0 text-stone-400 transition-colors group-hover:text-stone-500"
                   aria-hidden="true"
                 />
-                <code className="pr-4 font-mono text-[var(--tool-font-size)] leading-4.5">{path}</code>
+                <code className="pr-4 font-mono text-[var(--tool-detail-font-size)] leading-4.5">{path}</code>
               </div>
             )
           })}
@@ -273,18 +273,18 @@ function ShellPreview({
   return (
     <div
       className={cn(
-        'mt-1.5 ml-5 overflow-hidden rounded-lg border border-stone-300/90 bg-[#f3f3f1] max-md:ml-0',
+        'mt-1.5 ml-5 overflow-hidden rounded-lg border border-stone-200 bg-white antialiased max-md:ml-0',
         failed && 'border-red-200 bg-red-50/60',
       )}
     >
-      <div className="flex max-h-24 min-h-7 items-start gap-2 overflow-auto overscroll-contain px-2.5 py-1 font-mono text-[var(--tool-font-size)] leading-4.5">
+      <div className="flex max-h-24 min-h-7 items-start gap-2 overflow-auto overscroll-contain px-2.5 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-4.5 font-normal">
         <span className="shrink-0 text-stone-400 select-none">$</span>
-        <code className="whitespace-pre-wrap text-stone-800">{command}</code>
+        <code className="whitespace-pre-wrap text-stone-700">{command}</code>
       </div>
       {output && (
         <pre
           className={cn(
-            'code-scroll-area m-0 max-h-[min(46vh,26.25rem)] overflow-auto overscroll-contain border-t border-stone-300/80 bg-[#fdfdfc] px-2.5 py-1.5 font-mono text-[var(--tool-font-size)] leading-4.5 whitespace-pre text-stone-700',
+            'code-scroll-area m-0 max-h-[min(46vh,26.25rem)] overflow-auto overscroll-contain border-t border-stone-200 bg-white px-2.5 py-2 font-mono text-[var(--tool-detail-font-size)] leading-4.5 font-normal tracking-[0.005em] whitespace-pre text-stone-600',
             failed && 'border-red-200 bg-red-50/40 text-red-700',
           )}
           role="region"
@@ -306,6 +306,8 @@ export function ToolCard({ item }: { item: ToolItem }) {
   const verb = t(`tool.${kind}`)
   const command = explicitCommand(item.args) || (hint ? `${item.name} ${hint}` : item.name)
   const target = kind === 'run' ? command : hint || item.name
+  const fileChange = item.change?.changeType === 'file' ? item.change : undefined
+  const changedFilename = fileChange?.path.split('/').filter(Boolean).pop() || fileChange?.path
   const hasDetails =
     kind === 'read'
       ? item.status !== 'running'
@@ -316,29 +318,50 @@ export function ToolCard({ item }: { item: ToolItem }) {
     item.result || (item.status === 'error' ? t('tool.fileCouldNotRead') : t('tool.fileEmpty'))
 
   const summary = (
-    <span className="flex min-h-6 min-w-0 flex-1 items-center gap-2 text-[0.8125rem] text-stone-500 transition-colors group-hover:text-stone-700">
-      <Icon className="size-3.5 shrink-0 transition-colors" aria-hidden="true" />
-      <span>{verb}</span>
-      <code
-        className="min-w-0 overflow-hidden font-mono text-[var(--tool-font-size)] leading-4.5 font-medium text-stone-800 text-ellipsis whitespace-nowrap transition-colors group-hover:text-stone-950"
-        title={target}
-      >
-        {target}
-      </code>
+    <span className="flex min-h-6 min-w-0 flex-1 items-center gap-2 text-[var(--chat-font-size)] leading-6 text-stone-500 transition-colors group-hover:text-stone-900">
+      <Icon className="size-4 shrink-0 transition-colors" aria-hidden="true" />
+      <span>
+        {fileChange
+          ? fileChange.op === 'create'
+            ? t('diff.created')
+            : t('diff.edited')
+          : verb}
+      </span>
+      {fileChange ? (
+        <>
+          <span
+            className="min-w-0 overflow-hidden font-normal text-stone-500 underline decoration-stone-400/70 underline-offset-2 text-ellipsis whitespace-nowrap transition-colors group-hover:text-stone-950"
+            title={fileChange.path}
+          >
+            {changedFilename}
+          </span>
+          <span className="flex shrink-0 gap-1 font-mono text-[0.75rem] font-normal">
+            <span className="text-emerald-700">+{fileChange.additions || 0}</span>
+            <span className="text-rose-700">-{fileChange.deletions || 0}</span>
+          </span>
+        </>
+      ) : (
+        <code
+          className="min-w-0 overflow-hidden font-mono text-[var(--chat-font-size)] leading-6 font-normal text-stone-500 text-ellipsis whitespace-nowrap transition-colors group-hover:text-stone-950"
+          title={target}
+        >
+          {target}
+        </code>
+      )}
       <Status status={item.status} />
     </span>
   )
 
   if (!hasDetails) {
-    return <div className="my-1.5 flex animate-[fade-in_160ms_ease-out]">{summary}</div>
+    return <div className="group my-1.5 flex w-fit max-w-full animate-[fade-in_160ms_ease-out]">{summary}</div>
   }
 
   return (
     <Collapsible className="my-1.5 animate-[fade-in_160ms_ease-out]">
-      <CollapsibleTrigger className="group -mx-1.5 flex w-[calc(100%+0.75rem)] cursor-pointer items-center rounded-lg border-0 bg-transparent px-1.5 text-left transition-colors duration-100 hover:bg-[rgb(247,247,247)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400">
+      <CollapsibleTrigger className="group inline-flex max-w-full cursor-pointer items-center border-0 bg-transparent p-0 text-left focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-400">
         {summary}
         <ChevronRight
-          className="ml-1 size-3.5 shrink-0 text-stone-400 transition-[transform,color] group-hover:text-stone-600 group-data-[state=open]:rotate-90"
+          className="ml-1 size-3.5 shrink-0 text-stone-400 transition-[transform,color] group-hover:text-stone-950 group-data-[state=open]:rotate-90"
           aria-hidden="true"
         />
       </CollapsibleTrigger>
@@ -359,7 +382,7 @@ export function ToolCard({ item }: { item: ToolItem }) {
           <div className="mt-1.5 ml-5 overflow-hidden rounded-lg border border-stone-200 bg-white max-md:ml-0">
             {args && (
               <DetailBlock title={t('tool.input')}>
-                <pre className="m-0 max-h-80 overflow-auto bg-white px-2.5 py-1.5 font-mono text-[var(--tool-font-size)] leading-4.5 whitespace-pre-wrap text-stone-700">
+                <pre className="m-0 max-h-80 overflow-auto bg-white px-2.5 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-4.5 whitespace-pre-wrap text-stone-700">
                   {args}
                 </pre>
               </DetailBlock>
@@ -370,7 +393,7 @@ export function ToolCard({ item }: { item: ToolItem }) {
               >
                 <pre
                   className={cn(
-                    'm-0 max-h-80 overflow-auto bg-white px-2.5 py-1.5 font-mono text-[var(--tool-font-size)] leading-4.5 whitespace-pre-wrap text-stone-700',
+                    'm-0 max-h-80 overflow-auto bg-white px-2.5 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-4.5 whitespace-pre-wrap text-stone-700',
                     item.status === 'error' && 'bg-red-50/50 text-red-700',
                   )}
                 >

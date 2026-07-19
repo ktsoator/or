@@ -1,16 +1,13 @@
-import { ChevronRight } from 'lucide-react'
+import { useState } from 'react'
+import { Check, Copy } from 'lucide-react'
 import type { Change, Hunk as HunkType } from '@/types'
 import { highlightCode, languageForPath } from '@/lib/highlight'
 import { cn } from '@/lib/utils'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
 import { useI18n } from '@/i18n'
 
 export function FileChange({ change }: { change: Change }) {
   const { t } = useI18n()
+  const [copied, setCopied] = useState(false)
   if (change.changeType === 'failure') {
     return (
       <div className="mt-2 ml-5 border-l-2 border-red-300 py-1 pl-3 font-mono text-[0.8125rem] leading-5.5 text-red-700 max-md:ml-0">
@@ -21,56 +18,60 @@ export function FileChange({ change }: { change: Change }) {
 
   const hunks = Array.isArray(change.hunks) ? change.hunks : []
   const filename = change.path.split('/').filter(Boolean).pop() || change.path
-  const showPath = change.path !== filename
   const language = languageForPath(change.path)
 
+  const copyDiff = async () => {
+    const diff = hunks
+      .map((hunk) => [
+        `@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`,
+        ...(hunk.lines ?? []),
+      ].join('\n'))
+      .join('\n')
+    try {
+      await navigator.clipboard.writeText(diff)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1600)
+    } catch {
+      // Clipboard access can be unavailable in non-secure browser contexts.
+    }
+  }
+
   return (
-    <Collapsible
-      defaultOpen
-      className="mt-1.5 ml-5 overflow-hidden rounded-lg border border-stone-300/80 bg-white max-md:ml-0"
-    >
-      <div className={cn('px-2.5', showPath ? 'py-1.5' : 'py-1')}>
-        <CollapsibleTrigger
-          className="group flex w-full min-w-0 cursor-pointer items-baseline gap-1.5 border-0 bg-transparent p-0 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
-          disabled={hunks.length === 0}
+    <div className="mt-1.5 ml-5 overflow-hidden rounded-lg border border-stone-300/80 bg-white max-md:ml-0">
+      <div className="flex h-8 min-w-0 items-center gap-1.5 border-b border-stone-300/70 bg-stone-50/60 px-2.5">
+        <span
+          className="min-w-0 overflow-hidden text-[0.8125rem] font-normal text-stone-700 underline decoration-stone-400/70 underline-offset-2 text-ellipsis whitespace-nowrap"
+          title={change.path}
         >
-          <span className="shrink-0 text-[0.8125rem] text-stone-500">
-            {change.op === 'create' ? t('diff.created') : t('diff.updated')}
-          </span>
-          <strong className="min-w-0 overflow-hidden text-[0.8125rem] font-medium text-stone-900 text-ellipsis whitespace-nowrap">
-            {filename}
-          </strong>
-          <span className="flex shrink-0 gap-1 font-mono text-[0.75rem] font-medium">
-            <b className="font-inherit text-emerald-700">+{change.additions || 0}</b>
-            <b className="font-inherit text-rose-700">-{change.deletions || 0}</b>
-          </span>
-          {hunks.length > 0 && (
-            <ChevronRight
-              className="size-3.5 shrink-0 text-stone-500 transition-transform group-data-[state=open]:rotate-90"
-              aria-hidden="true"
-            />
+          {filename}
+        </span>
+        <span className="flex shrink-0 gap-1 font-mono text-[0.75rem] font-normal">
+          <span className="text-emerald-700">+{change.additions || 0}</span>
+          <span className="text-rose-700">-{change.deletions || 0}</span>
+        </span>
+        <button
+          className="ml-auto grid size-6 shrink-0 cursor-pointer place-items-center text-stone-400 transition-colors hover:text-stone-950 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-stone-400"
+          type="button"
+          title={copied ? t('diff.copied') : t('diff.copy')}
+          aria-label={copied ? t('diff.copied') : t('diff.copy')}
+          onClick={copyDiff}
+        >
+          {copied ? (
+            <Check className="size-3.5" aria-hidden="true" />
+          ) : (
+            <Copy className="size-3.5" aria-hidden="true" />
           )}
-        </CollapsibleTrigger>
-        {showPath && (
-          <div
-            className="mt-1 overflow-hidden font-mono text-[0.75rem] text-stone-500 text-ellipsis whitespace-nowrap"
-            title={change.path}
-          >
-            {change.path}
-          </div>
-        )}
+        </button>
       </div>
 
       {hunks.length > 0 && (
-        <CollapsibleContent>
-          <div className="max-h-[28.75rem] overflow-auto border-t border-stone-300/80 bg-[#fdfdfc] [scrollbar-color:#8f8f89_transparent] [scrollbar-width:thin]">
-            {hunks.map((hunk, index) => (
-              <Hunk key={index} hunk={hunk} language={language} />
-            ))}
-          </div>
-        </CollapsibleContent>
+        <div className="max-h-[28.75rem] overflow-auto bg-[#fdfdfc] [scrollbar-color:#8f8f89_transparent] [scrollbar-width:thin]">
+          {hunks.map((hunk, index) => (
+            <Hunk key={index} hunk={hunk} language={language} />
+          ))}
+        </div>
       )}
-    </Collapsible>
+    </div>
   )
 }
 
@@ -97,7 +98,7 @@ function Hunk({ hunk, language }: { hunk: HunkType; language: string }) {
           <div
             key={index}
             className={cn(
-              'grid min-h-[1.125rem] grid-cols-[1.375rem_2.25rem_minmax(max-content,1fr)] font-mono text-[var(--tool-font-size)] leading-4.5 text-stone-900',
+              'grid min-h-[1.125rem] grid-cols-[1.375rem_2.25rem_minmax(max-content,1fr)] font-mono text-[var(--tool-detail-font-size)] leading-4.5 text-stone-900',
               isAdd && 'bg-[#dcefe2]',
               isDelete && 'bg-[#f5dddd]',
             )}

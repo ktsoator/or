@@ -15,6 +15,7 @@
     --chat-font-size: 1.03125rem;
     --code-font-size: 0.875rem;
     --tool-font-size: 0.75rem;
+    --tool-detail-font-size: 0.625rem;
     font-family: var(--font-sans);
     font-size: var(--ui-root-font-size);
   }

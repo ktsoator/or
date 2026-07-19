@@ -39,6 +39,12 @@ const toolTextSizes: Record<TextSize, string> = {
   large: '0.8125rem',
 }
 
+const toolDetailTextSizes: Record<TextSize, string> = {
+  small: '0.6rem',
+  default: '0.625rem',
+  large: '0.675rem',
+}
+
 export function readAppearancePreferences(): AppearancePreferences {
   try {
     const stored = JSON.parse(localStorage.getItem(storageKey) ?? '{}') as Partial<AppearancePreferences>
@@ -67,6 +73,7 @@ export function applyAppearancePreferences(preferences: AppearancePreferences): 
   root.style.setProperty('--chat-font-size', chatTextSizes[preferences.chatText])
   root.style.setProperty('--code-font-size', codeTextSizes[preferences.codeText])
   root.style.setProperty('--tool-font-size', toolTextSizes[preferences.codeText])
+  root.style.setProperty('--tool-detail-font-size', toolDetailTextSizes[preferences.codeText])
 }
 
 function isDensity(value: unknown): value is InterfaceDensity {
