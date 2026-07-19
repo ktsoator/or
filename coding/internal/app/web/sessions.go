@@ -130,11 +130,16 @@ type SessionManager struct {
 	mu         sync.RWMutex
 	sessions   map[string]*sessionRuntime
 	workspaces map[string]workspaceRecord
+	usage      *UsageStore
 }
 
 // NewSessionManager restores the global Web session and workspace indexes.
 func NewSessionManager(ctx context.Context, cfg config.Config) (*SessionManager, error) {
 	dir := filepath.Join(cfg.DataDir, "sessions")
+	usage, err := NewUsageStore(filepath.Join(cfg.DataDir, "usage", "events.jsonl"))
+	if err != nil {
+		return nil, err
+	}
 	m := &SessionManager{
 		ctx:                ctx,
 		cfg:                cfg,
@@ -142,6 +147,7 @@ func NewSessionManager(ctx context.Context, cfg config.Config) (*SessionManager,
 		workspaceIndexPath: filepath.Join(dir, "workspaces.json"),
 		sessions:           make(map[string]*sessionRuntime),
 		workspaces:         make(map[string]workspaceRecord),
+		usage:              usage,
 	}
 
 	workspaceRecords, err := m.loadWorkspaceRecords()
@@ -167,6 +173,9 @@ func NewSessionManager(ctx context.Context, cfg config.Config) (*SessionManager,
 			return nil, fmt.Errorf("web: restore session %s: %w", record.ID, err)
 		}
 		m.sessions[record.ID] = runtime
+		if err := m.usage.Backfill(record.ID, runtime.session.Messages()); err != nil {
+			return nil, fmt.Errorf("web: backfill usage for session %s: %w", record.ID, err)
+		}
 		if runtime.record.Scope == sessionScopeProject {
 			m.ensureWorkspaceLocked(runtime.record.WorkspacePath, runtime.record.CreatedAt)
 		}
@@ -263,6 +272,12 @@ func (m *SessionManager) build(record sessionRecord) (*sessionRuntime, error) {
 	}
 	runtime := &sessionRuntime{record: record, session: session, hub: hub, broker: broker}
 	session.Subscribe(func(ev coding.Event) {
+		if ev.Type == coding.MessageCompleted {
+			// Usage accounting must not interrupt a successful model run. The
+			// transcript remains available for idempotent startup backfill if an
+			// append fails transiently.
+			_ = m.usage.RecordEvent(record.ID, ev)
+		}
 		if ev.Type == coding.UserMessageCompleted {
 			if queued, found := runtime.consumePending(ev.Text, ev.Images); found {
 				data, _ := json.Marshal(wireEvent{
@@ -406,6 +421,16 @@ func (m *SessionManager) ListWorkspaces() []WorkspaceSummary {
 		return out[i].AddedAt.After(out[j].AddedAt)
 	})
 	return out
+}
+
+// UsageReport returns the durable aggregate across conversations since the cutoff.
+func (m *SessionManager) UsageReport(since time.Time) UsageReport {
+	return m.usage.Report(since)
+}
+
+// UsageEvents returns paginated per-request usage details.
+func (m *SessionManager) UsageEvents(provider, model string, since time.Time, offset, limit int) UsageEventPage {
+	return m.usage.Events(provider, model, since, offset, limit)
 }
 
 func (m *SessionManager) ensureWorkspaceLocked(path string, addedAt time.Time) (workspaceRecord, bool) {

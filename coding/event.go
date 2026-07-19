@@ -1,6 +1,8 @@
 package coding
 
 import (
+	"time"
+
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/llm"
 )
@@ -51,6 +53,15 @@ type Event struct {
 	// aggregate consumption on RunCompleted. Product adapters may accumulate
 	// tool-use requests until FinalResponse to show one total per visible reply.
 	Usage llm.Usage
+
+	// Response metadata identifies the exact provider request represented by a
+	// MessageCompleted event. It lets product shells build durable, per-model
+	// usage reports without inferring the active model from mutable UI state.
+	Provider      string
+	Model         string
+	ResponseModel string
+	ResponseID    string
+	Timestamp     time.Time
 }
 
 // projectAgentEvent maps a low-level agent event into the stable coding event
@@ -104,6 +115,11 @@ func projectAgentEvent(ev agent.AgentEvent) (Event, bool) {
 			Text:          displayAssistantText(assistant),
 			FinalResponse: assistant.StopReason != llm.StopReasonToolUse,
 			Usage:         assistant.Usage,
+			Provider:      assistant.Provider,
+			Model:         assistant.Model,
+			ResponseModel: assistant.ResponseModel,
+			ResponseID:    assistant.ResponseID,
+			Timestamp:     time.UnixMilli(assistant.Timestamp).UTC(),
 		}, true
 
 	case agent.AgentEnd:

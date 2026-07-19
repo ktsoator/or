@@ -7,6 +7,7 @@ import {
   Check,
   ChevronDown,
   Cpu,
+  Gauge,
   Keyboard,
   Search,
   Settings2,
@@ -18,9 +19,18 @@ import {
 import { DropdownMenu } from 'radix-ui'
 import { cn } from '@/lib/utils'
 import { useI18n, type Locale } from '@/i18n'
+import { UsageSettings } from '@/components/UsageSettings'
+import {
+  readAppearancePreferences,
+  saveAppearancePreferences,
+  type AppearancePreferences,
+  type InterfaceDensity,
+  type TextSize,
+} from '@/lib/appearance'
 
-type SettingsSection =
+export type SettingsSection =
   | 'general'
+  | 'usage'
   | 'profile'
   | 'appearance'
   | 'models'
@@ -41,9 +51,15 @@ type NavGroup = {
   items: NavItem[]
 }
 
-export function SettingsPage({ onBack }: { onBack: () => void }) {
+export function SettingsPage({
+  onBack,
+  initialSection = 'general',
+}: {
+  onBack: () => void
+  initialSection?: SettingsSection
+}) {
   const { t } = useI18n()
-  const [active, setActive] = useState<SettingsSection>('general')
+  const [active, setActive] = useState<SettingsSection>(initialSection)
   const [query, setQuery] = useState('')
   const [fileChanges, setFileChanges] = useState(true)
   const [commands, setCommands] = useState(true)
@@ -52,6 +68,7 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
   const [backgroundRuns, setBackgroundRuns] = useState(true)
   const [fileOpener, setFileOpener] = useState('vscode')
   const [toolResults, setToolResults] = useState('collapsed')
+  const [appearance, setAppearance] = useState(readAppearancePreferences)
 
   const groups = useMemo<NavGroup[]>(
     () => [
@@ -60,6 +77,7 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
         items: [
           { id: 'general', label: t('settings.general'), icon: Settings2 },
           { id: 'profile', label: t('settings.profile'), icon: UserRound },
+          { id: 'usage', label: t('settings.usage'), icon: Gauge },
           { id: 'appearance', label: t('settings.appearance'), icon: Sun },
           { id: 'models', label: t('settings.models'), icon: Cpu },
           { id: 'permissions', label: t('settings.permissions'), icon: ShieldCheck },
@@ -102,12 +120,16 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
     setCommands,
     setReadAccess,
   }
+  const updateAppearance = (next: AppearancePreferences) => {
+    setAppearance(next)
+    saveAppearancePreferences(next)
+  }
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-[256px_minmax(0,1fr)] overflow-hidden bg-white max-md:grid-cols-1 max-md:grid-rows-[auto_minmax(0,1fr)]">
+    <div className="grid h-full min-h-0 grid-cols-[16rem_minmax(0,1fr)] overflow-hidden bg-white max-md:grid-cols-1 max-md:grid-rows-[auto_minmax(0,1fr)]">
       <aside className="flex min-h-0 flex-col border-r border-stone-200/80 bg-[#fbfbfa] px-3 py-4 max-md:border-r-0 max-md:border-b max-md:px-3 max-md:py-2.5">
         <button
-          className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-[10px] px-2.5 text-[13.5px] font-[520] text-stone-500 outline-none transition-colors hover:bg-stone-200/65 hover:text-stone-900 focus-visible:ring-2 focus-visible:ring-stone-300 max-md:w-fit"
+          className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-[10px] px-2.5 text-[0.84375rem] font-normal text-stone-500 outline-none transition-colors hover:bg-stone-200/65 hover:text-stone-900 focus-visible:ring-2 focus-visible:ring-stone-300 max-md:w-fit"
           type="button"
           onClick={onBack}
         >
@@ -115,13 +137,13 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
           <span>{t('settings.back')}</span>
         </button>
 
-        <label className="relative mt-3 block max-md:absolute max-md:top-2.5 max-md:right-3 max-md:mt-0 max-md:w-[min(48vw,240px)]">
+        <label className="relative mt-3 block max-md:absolute max-md:top-2.5 max-md:right-3 max-md:mt-0 max-md:w-[min(48vw,15rem)]">
           <Search
             className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-stone-400"
             aria-hidden="true"
           />
           <input
-            className="h-8 w-full rounded-[10px] border border-stone-200 bg-white pr-2.5 pl-8 text-[13px] text-stone-800 outline-none transition-[border-color,box-shadow] placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200"
+            className="h-8 w-full rounded-[10px] border border-stone-200 bg-white pr-2.5 pl-8 text-[0.8125rem] text-stone-800 outline-none transition-[border-color,box-shadow] placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200"
             type="search"
             value={query}
             placeholder={t('settings.search')}
@@ -133,7 +155,7 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
         <nav className="mt-4 min-h-0 flex-1 overflow-y-auto pb-3 max-md:mt-3 max-md:flex max-md:max-w-full max-md:gap-1 max-md:overflow-x-auto max-md:overflow-y-hidden max-md:pb-0">
           {visibleGroups.map((group) => (
             <div key={group.label} className="mt-4 first:mt-0 max-md:mt-0 max-md:flex max-md:gap-1">
-              <div className="mb-1 px-2 text-[11.5px] font-[560] text-stone-400 max-md:hidden">
+              <div className="mb-1 px-2 text-[0.71875rem] font-medium text-stone-400 max-md:hidden">
                 {group.label}
               </div>
               {group.items.map((item) => (
@@ -150,7 +172,7 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
             </div>
           ))}
           {visibleGroups.length === 0 && (
-            <div className="px-2 py-4 text-[12.5px] text-stone-400">
+            <div className="px-2 py-4 text-[0.78125rem] text-stone-400">
               {t('settings.noResults')}
             </div>
           )}
@@ -158,12 +180,12 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
       </aside>
 
       <main className="min-h-0 overflow-y-auto bg-white">
-        <div className="mx-auto w-full max-w-[940px] px-10 pt-14 pb-24 max-lg:px-7 max-md:px-4 max-md:pt-7">
-          <h1 className="text-[28px] leading-9 font-[620] tracking-[-0.035em] text-stone-950 max-md:text-[24px]">
+        <div className="mx-auto w-full max-w-[58.75rem] px-10 pt-14 pb-24 max-lg:px-7 max-md:px-4 max-md:pt-7">
+          <h1 className="text-[1.75rem] leading-9 font-semibold tracking-[-0.035em] text-stone-950 max-md:text-[1.5rem]">
             {activeItem?.label ?? t('settings.general')}
           </h1>
 
-          <div className="mt-11 max-md:mt-7">
+          <div className={active === 'usage' ? 'mt-8 max-md:mt-6' : 'mt-11 max-md:mt-7'}>
             {active === 'general' ? (
               <GeneralSettings
                 permissionState={permissionState}
@@ -178,6 +200,10 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
               />
             ) : active === 'permissions' ? (
               <PermissionsCard {...permissionState} />
+            ) : active === 'usage' ? (
+              <UsageSettings />
+            ) : active === 'appearance' ? (
+              <AppearanceSettings preferences={appearance} onChange={updateAppearance} />
             ) : (
               <SettingsPlaceholder section={activeItem?.label ?? ''} icon={activeItem?.icon} />
             )}
@@ -201,7 +227,7 @@ function SettingsNavItem({
   return (
     <button
       className={cn(
-        'mb-0.5 flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[13.5px] font-[510] text-stone-700 outline-none transition-colors hover:bg-stone-200/60 hover:text-stone-950 focus-visible:ring-2 focus-visible:ring-stone-300 max-md:mb-0 max-md:w-auto max-md:shrink-0 max-md:pr-3',
+        'mb-0.5 flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[0.84375rem] font-normal text-stone-700 outline-none transition-colors hover:bg-stone-200/60 hover:text-stone-950 focus-visible:ring-2 focus-visible:ring-stone-300 max-md:mb-0 max-md:w-auto max-md:shrink-0 max-md:pr-3',
         active && 'bg-[rgb(237,237,237)] text-stone-950 hover:bg-[rgb(237,237,237)]',
       )}
       type="button"
@@ -211,6 +237,75 @@ function SettingsNavItem({
       <Icon className="size-4 shrink-0" strokeWidth={1.8} aria-hidden="true" />
       <span className="whitespace-nowrap">{item.label}</span>
     </button>
+  )
+}
+
+function AppearanceSettings({
+  preferences,
+  onChange,
+}: {
+  preferences: AppearancePreferences
+  onChange: (preferences: AppearancePreferences) => void
+}) {
+  const { t } = useI18n()
+  const densityOptions: Array<{ value: InterfaceDensity; label: string }> = [
+    { value: 'compact', label: t('settings.compact') },
+    { value: 'default', label: t('settings.defaultSize') },
+    { value: 'comfortable', label: t('settings.comfortable') },
+  ]
+  const textOptions: Array<{ value: TextSize; label: string }> = [
+    { value: 'small', label: t('settings.small') },
+    { value: 'default', label: t('settings.defaultSize') },
+    { value: 'large', label: t('settings.large') },
+  ]
+
+  return (
+    <SettingsSection title={t('settings.display')}>
+      <SettingsCard>
+        <SettingsRow
+          label={t('settings.interfaceDensity')}
+          description={t('settings.interfaceDensityDescription')}
+          control={
+            <SelectControl
+              value={preferences.density}
+              ariaLabel={t('settings.interfaceDensity')}
+              options={densityOptions}
+              onChange={(density) =>
+                onChange({ ...preferences, density: density as InterfaceDensity })
+              }
+            />
+          }
+        />
+        <SettingsRow
+          label={t('settings.chatText')}
+          description={t('settings.chatTextDescription')}
+          control={
+            <SelectControl
+              value={preferences.chatText}
+              ariaLabel={t('settings.chatText')}
+              options={textOptions}
+              onChange={(chatText) =>
+                onChange({ ...preferences, chatText: chatText as TextSize })
+              }
+            />
+          }
+        />
+        <SettingsRow
+          label={t('settings.codeText')}
+          description={t('settings.codeTextDescription')}
+          control={
+            <SelectControl
+              value={preferences.codeText}
+              ariaLabel={t('settings.codeText')}
+              options={textOptions}
+              onChange={(codeText) =>
+                onChange({ ...preferences, codeText: codeText as TextSize })
+              }
+            />
+          }
+        />
+      </SettingsCard>
+    </SettingsSection>
   )
 }
 
@@ -381,7 +476,7 @@ function PermissionsCard({
 function SettingsSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section>
-      <h2 className="mb-3 text-[14px] leading-5 font-[620] text-stone-800">{title}</h2>
+      <h2 className="mb-3 text-[0.875rem] leading-5 font-medium text-stone-800">{title}</h2>
       {children}
     </section>
   )
@@ -405,10 +500,10 @@ function SettingsRow({
   control: ReactNode
 }) {
   return (
-    <div className="flex min-h-[70px] items-center gap-6 border-b border-stone-200/75 py-3 last:border-b-0 max-sm:items-start max-sm:gap-3">
+    <div className="flex min-h-[4.375rem] items-center gap-6 border-b border-stone-200/75 py-3 last:border-b-0 max-sm:items-start max-sm:gap-3">
       <div className="min-w-0 flex-1">
-        <div className="text-[13.5px] leading-5 font-[590] text-stone-900">{label}</div>
-        <p className="mt-0.5 max-w-[620px] text-[12.5px] leading-[1.45] text-stone-500">
+        <div className="text-[0.84375rem] leading-5 font-medium text-stone-900">{label}</div>
+        <p className="mt-0.5 max-w-[38.75rem] text-[0.78125rem] leading-[1.45] text-stone-500">
           {description}
         </p>
       </div>
@@ -429,7 +524,7 @@ function Toggle({
   return (
     <button
       className={cn(
-        'relative h-[22px] w-9 cursor-pointer rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-stone-400 focus-visible:ring-offset-2',
+        'relative h-[1.375rem] w-9 cursor-pointer rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-stone-400 focus-visible:ring-offset-2',
         checked ? 'bg-stone-900' : 'bg-stone-300',
       )}
       type="button"
@@ -440,8 +535,8 @@ function Toggle({
     >
       <span
         className={cn(
-          'absolute top-[3px] left-[3px] size-4 rounded-full bg-white shadow-sm transition-transform duration-150 ease-out',
-          checked && 'translate-x-[14px]',
+          'absolute top-[0.1875rem] left-[0.1875rem] size-4 rounded-full bg-white shadow-sm transition-transform duration-150 ease-out',
+          checked && 'translate-x-[0.875rem]',
         )}
         aria-hidden="true"
       />
@@ -481,7 +576,7 @@ function SelectControl({
     >
       <DropdownMenu.Trigger asChild>
         <button
-          className="group inline-flex h-9 min-w-[156px] max-w-[224px] cursor-pointer items-center justify-between gap-2 rounded-[11px] border border-stone-200 bg-white px-3 text-[13px] font-[520] text-stone-800 outline-none transition-[background-color,border-color,box-shadow] hover:bg-[rgb(241,241,241)] focus-visible:border-stone-400 focus-visible:ring-2 focus-visible:ring-stone-200 data-[state=open]:bg-[rgb(237,237,237)] max-sm:min-w-[124px] max-sm:max-w-[156px]"
+          className="group inline-flex h-9 min-w-[9.75rem] max-w-[14rem] cursor-pointer items-center justify-between gap-2 rounded-[11px] border border-stone-200 bg-white px-3 text-[0.8125rem] font-normal text-stone-800 outline-none transition-[background-color,border-color,box-shadow] hover:bg-[rgb(241,241,241)] focus-visible:border-stone-400 focus-visible:ring-2 focus-visible:ring-stone-200 data-[state=open]:bg-[rgb(237,237,237)] max-sm:min-w-[7.75rem] max-sm:max-w-[9.75rem]"
           type="button"
           aria-label={ariaLabel}
         >
@@ -500,8 +595,8 @@ function SelectControl({
           sideOffset={6}
           collisionPadding={10}
           className={cn(
-            'z-[120] max-h-[min(420px,var(--radix-dropdown-menu-content-available-height))] min-w-[var(--radix-dropdown-menu-trigger-width)] animate-[fade-in_110ms_ease-out] overflow-y-auto rounded-2xl border border-stone-200 bg-white p-1 text-[13.5px] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none',
-            searchPlaceholder && 'w-[280px] max-w-[calc(100vw-20px)]',
+            'z-[120] max-h-[min(420px,var(--radix-dropdown-menu-content-available-height))] min-w-[var(--radix-dropdown-menu-trigger-width)] animate-[fade-in_110ms_ease-out] overflow-y-auto rounded-2xl border border-stone-200 bg-white p-1 text-[0.84375rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none',
+            searchPlaceholder && 'w-[17.5rem] max-w-[calc(100vw-1.25rem)]',
           )}
         >
           {searchPlaceholder && (
@@ -513,7 +608,7 @@ function SelectControl({
               />
               <input
                 autoFocus
-                className="h-9 w-full rounded-[10px] bg-transparent pr-2 pl-8 text-[13.5px] text-stone-900 outline-none placeholder:text-stone-400"
+                className="h-9 w-full rounded-[10px] bg-transparent pr-2 pl-8 text-[0.84375rem] text-stone-900 outline-none placeholder:text-stone-400"
                 type="search"
                 value={query}
                 placeholder={searchPlaceholder}
@@ -544,7 +639,7 @@ function SelectControl({
           </DropdownMenu.RadioGroup>
 
           {visibleOptions.length === 0 && (
-            <div className="px-2.5 py-3 text-center text-[12.5px] text-stone-400">
+            <div className="px-2.5 py-3 text-center text-[0.78125rem] text-stone-400">
               {t('settings.noResults')}
             </div>
           )}
@@ -557,16 +652,16 @@ function SelectControl({
 function SettingsPlaceholder({ section, icon: Icon }: { section: string; icon?: LucideIcon }) {
   const { t } = useI18n()
   return (
-    <div className="flex min-h-[260px] flex-col items-center justify-center rounded-[20px] border border-stone-200/90 bg-[#fdfdfc] px-8 text-center">
+    <div className="flex min-h-[16.25rem] flex-col items-center justify-center rounded-[20px] border border-stone-200/90 bg-[#fdfdfc] px-8 text-center">
       {Icon && (
         <div className="grid size-10 place-items-center rounded-xl bg-stone-100 text-stone-500">
           <Icon className="size-5" strokeWidth={1.7} aria-hidden="true" />
         </div>
       )}
-      <h2 className="mt-4 text-[16px] font-[620] text-stone-900">
+      <h2 className="mt-4 text-[1rem] font-medium text-stone-900">
         {t('settings.previewTitle', { section })}
       </h2>
-      <p className="mt-1.5 text-[13px] leading-5 text-stone-500">
+      <p className="mt-1.5 text-[0.8125rem] leading-5 text-stone-500">
         {t('settings.previewDescription')}
       </p>
     </div>

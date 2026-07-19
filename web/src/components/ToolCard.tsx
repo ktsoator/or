@@ -78,7 +78,7 @@ function Status({ status }: { status: ToolItem['status'] }) {
   const { t } = useI18n()
   if (status === 'running') {
     return (
-      <span className="ml-auto flex shrink-0 items-center gap-1 text-[12px] text-stone-500">
+      <span className="ml-auto flex shrink-0 items-center gap-1 text-[0.75rem] text-stone-500">
         <LoaderCircle className="size-3 animate-spin" aria-hidden="true" />
         {t('tool.running')}
       </span>
@@ -86,7 +86,7 @@ function Status({ status }: { status: ToolItem['status'] }) {
   }
   if (status === 'error') {
     return (
-      <span className="ml-auto flex shrink-0 items-center gap-1 text-[12px] text-red-600">
+      <span className="ml-auto flex shrink-0 items-center gap-1 text-[0.75rem] text-red-600">
         <CircleX className="size-3" aria-hidden="true" />
         {t('tool.failed')}
       </span>
@@ -98,7 +98,7 @@ function Status({ status }: { status: ToolItem['status'] }) {
 function DetailBlock({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="border-b border-stone-200 last:border-b-0">
-      <div className="border-b border-stone-200 bg-stone-50 px-3 py-1.5 text-[11.5px] font-semibold tracking-wide text-stone-500 uppercase">
+      <div className="border-b border-stone-200 bg-stone-50 px-3 py-1.5 text-[0.71875rem] font-medium tracking-wide text-stone-500 uppercase">
         {title}
       </div>
       {children}
@@ -160,7 +160,7 @@ function ReadPreview({ output, path, failed }: { output: string; path: string; f
       )}
     >
       <div
-        className="overflow-hidden border-b border-stone-300/70 px-3.5 py-2 font-mono text-[12.5px] text-stone-500 text-ellipsis whitespace-nowrap"
+        className="overflow-hidden border-b border-stone-300/70 px-3 py-1.5 font-mono text-[0.75rem] text-stone-500 text-ellipsis whitespace-nowrap"
         title={path}
       >
         {path}
@@ -168,15 +168,15 @@ function ReadPreview({ output, path, failed }: { output: string; path: string; f
       {content.hasLineNumbers && !failed ? (
         <>
           <div
-            className="code-scroll-area grid max-h-[min(52vh,520px)] grid-cols-[52px_minmax(max-content,1fr)] overflow-auto overscroll-contain bg-[#fdfdfc]"
+            className="code-scroll-area grid max-h-[min(52vh,32.5rem)] grid-cols-[3.25rem_minmax(max-content,1fr)] overflow-auto overscroll-contain bg-[#fdfdfc]"
             role="region"
             aria-label={t('tool.contentsOf', { path })}
             tabIndex={0}
           >
-            <pre className="sticky left-0 z-10 m-0 border-r border-stone-200 bg-stone-50 px-3 py-3 text-right font-mono text-[14px] leading-6 whitespace-pre text-stone-400 select-none">
+            <pre className="sticky left-0 z-10 m-0 border-r border-stone-200 bg-stone-50 px-2.5 py-1.5 text-right font-mono text-[var(--tool-font-size)] leading-4.5 whitespace-pre text-stone-400 select-none">
               {content.lineNumbers}
             </pre>
-            <pre className="m-0 min-w-full bg-transparent px-3.5 py-3 font-mono text-[14px] leading-6 whitespace-pre text-stone-900">
+            <pre className="m-0 min-w-full bg-transparent px-2.5 py-1.5 font-mono text-[var(--tool-font-size)] leading-4.5 whitespace-pre text-stone-900">
               <code
                 className="or-code-theme hljs block min-w-full bg-transparent! p-0!"
                 dangerouslySetInnerHTML={{ __html: html }}
@@ -184,7 +184,7 @@ function ReadPreview({ output, path, failed }: { output: string; path: string; f
             </pre>
           </div>
           {content.notice && (
-            <div className="border-t border-stone-200 bg-stone-50 px-3.5 py-2 font-mono text-[12px] text-stone-500">
+            <div className="border-t border-stone-200 bg-stone-50 px-3 py-1.5 font-mono text-[0.71875rem] text-stone-500">
               {content.notice}
             </div>
           )}
@@ -192,7 +192,7 @@ function ReadPreview({ output, path, failed }: { output: string; path: string; f
       ) : (
         <pre
           className={cn(
-            'code-scroll-area m-0 max-h-[min(52vh,520px)] overflow-auto overscroll-contain bg-transparent px-3.5 py-3 font-mono text-[14px] leading-6 whitespace-pre-wrap text-stone-800',
+            'code-scroll-area m-0 max-h-[min(52vh,32.5rem)] overflow-auto overscroll-contain bg-transparent px-2.5 py-1.5 font-mono text-[var(--tool-font-size)] leading-4.5 whitespace-pre-wrap text-stone-800',
             failed && 'text-red-700',
           )}
         >
@@ -207,7 +207,7 @@ function InspectPreview({ output, failed }: { output: string; failed: boolean })
   const { t } = useI18n()
   if (failed) {
     return (
-      <div className="mt-1.5 ml-5 rounded-md border-l-2 border-red-300 bg-red-50/50 px-3 py-2 font-mono text-xs leading-5 text-red-700 max-md:ml-0">
+      <div className="mt-1.5 ml-5 rounded-md border-l-2 border-red-300 bg-red-50/50 px-3 py-1.5 font-mono text-[var(--tool-font-size)] leading-5 text-red-700 max-md:ml-0">
         {output || t('tool.inspectionFailed')}
       </div>
     )
@@ -221,7 +221,7 @@ function InspectPreview({ output, failed }: { output: string; failed: boolean })
 
   return (
     <div className="mt-1.5 ml-5 max-w-full overflow-hidden rounded-lg border border-stone-200/90 bg-stone-50/70 max-md:ml-0">
-      <div className="flex h-8 items-center px-3 text-[12.5px] text-stone-500">
+      <div className="flex h-7 items-center px-3 text-[0.75rem] text-stone-500">
         {empty
           ? t('tool.noMatchingFiles')
           : `${paths.length} ${paths.length === 1 ? t('tool.path') : t('tool.paths')}`}
@@ -239,20 +239,20 @@ function InspectPreview({ output, failed }: { output: string; failed: boolean })
             return (
               <div
                 key={`${path}-${index}`}
-                className="group flex min-h-7 min-w-max items-center gap-2 px-3 text-stone-700 transition-colors duration-100 hover:bg-[rgb(241,241,241)] hover:text-stone-900"
+                className="group flex min-h-5 min-w-max items-center gap-2 px-2.5 text-stone-700 transition-colors duration-100 hover:bg-[rgb(241,241,241)] hover:text-stone-900"
               >
                 <PathIcon
                   className="size-3.25 shrink-0 text-stone-400 transition-colors group-hover:text-stone-500"
                   aria-hidden="true"
                 />
-                <code className="pr-4 font-mono text-[13.5px] leading-5">{path}</code>
+                <code className="pr-4 font-mono text-[var(--tool-font-size)] leading-4.5">{path}</code>
               </div>
             )
           })}
         </div>
       )}
       {notice && (
-        <div className="border-t border-stone-200/80 px-3 py-2 text-[12px] leading-4 text-stone-500">
+        <div className="border-t border-stone-200/80 px-3 py-1.5 text-[0.71875rem] leading-4 text-stone-500">
           {notice.slice(1, -1)}
         </div>
       )}
@@ -277,14 +277,14 @@ function ShellPreview({
         failed && 'border-red-200 bg-red-50/60',
       )}
     >
-      <div className="flex max-h-28 min-h-10 items-start gap-2 overflow-auto overscroll-contain px-3.5 py-2.5 font-mono text-[14px] leading-5.5">
+      <div className="flex max-h-24 min-h-7 items-start gap-2 overflow-auto overscroll-contain px-2.5 py-1 font-mono text-[var(--tool-font-size)] leading-4.5">
         <span className="shrink-0 text-stone-400 select-none">$</span>
         <code className="whitespace-pre-wrap text-stone-800">{command}</code>
       </div>
       {output && (
         <pre
           className={cn(
-            'code-scroll-area m-0 max-h-[min(46vh,420px)] overflow-auto overscroll-contain border-t border-stone-300/80 bg-[#fdfdfc] px-3.5 py-3 font-mono text-[14px] leading-6 whitespace-pre text-stone-700',
+            'code-scroll-area m-0 max-h-[min(46vh,26.25rem)] overflow-auto overscroll-contain border-t border-stone-300/80 bg-[#fdfdfc] px-2.5 py-1.5 font-mono text-[var(--tool-font-size)] leading-4.5 whitespace-pre text-stone-700',
             failed && 'border-red-200 bg-red-50/40 text-red-700',
           )}
           role="region"
@@ -316,11 +316,11 @@ export function ToolCard({ item }: { item: ToolItem }) {
     item.result || (item.status === 'error' ? t('tool.fileCouldNotRead') : t('tool.fileEmpty'))
 
   const summary = (
-    <span className="flex min-h-7 min-w-0 flex-1 items-center gap-2 text-[14.5px] text-stone-500 transition-colors group-hover:text-stone-700">
+    <span className="flex min-h-6 min-w-0 flex-1 items-center gap-2 text-[0.8125rem] text-stone-500 transition-colors group-hover:text-stone-700">
       <Icon className="size-3.5 shrink-0 transition-colors" aria-hidden="true" />
       <span>{verb}</span>
       <code
-        className="min-w-0 overflow-hidden font-mono text-[14px] leading-5.5 font-medium text-stone-800 text-ellipsis whitespace-nowrap transition-colors group-hover:text-stone-950"
+        className="min-w-0 overflow-hidden font-mono text-[var(--tool-font-size)] leading-4.5 font-medium text-stone-800 text-ellipsis whitespace-nowrap transition-colors group-hover:text-stone-950"
         title={target}
       >
         {target}
@@ -335,7 +335,7 @@ export function ToolCard({ item }: { item: ToolItem }) {
 
   return (
     <Collapsible className="my-1.5 animate-[fade-in_160ms_ease-out]">
-      <CollapsibleTrigger className="group -mx-1.5 flex w-[calc(100%+12px)] cursor-pointer items-center rounded-lg border-0 bg-transparent px-1.5 text-left transition-colors duration-100 hover:bg-[rgb(247,247,247)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400">
+      <CollapsibleTrigger className="group -mx-1.5 flex w-[calc(100%+0.75rem)] cursor-pointer items-center rounded-lg border-0 bg-transparent px-1.5 text-left transition-colors duration-100 hover:bg-[rgb(247,247,247)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400">
         {summary}
         <ChevronRight
           className="ml-1 size-3.5 shrink-0 text-stone-400 transition-[transform,color] group-hover:text-stone-600 group-data-[state=open]:rotate-90"
@@ -359,7 +359,7 @@ export function ToolCard({ item }: { item: ToolItem }) {
           <div className="mt-1.5 ml-5 overflow-hidden rounded-lg border border-stone-200 bg-white max-md:ml-0">
             {args && (
               <DetailBlock title={t('tool.input')}>
-                <pre className="m-0 max-h-80 overflow-auto bg-white px-3 py-2.5 font-mono text-[13.5px] leading-5.5 whitespace-pre-wrap text-stone-700">
+                <pre className="m-0 max-h-80 overflow-auto bg-white px-2.5 py-1.5 font-mono text-[var(--tool-font-size)] leading-4.5 whitespace-pre-wrap text-stone-700">
                   {args}
                 </pre>
               </DetailBlock>
@@ -370,7 +370,7 @@ export function ToolCard({ item }: { item: ToolItem }) {
               >
                 <pre
                   className={cn(
-                    'm-0 max-h-80 overflow-auto bg-white px-3 py-2.5 font-mono text-[13.5px] leading-5.5 whitespace-pre-wrap text-stone-700',
+                    'm-0 max-h-80 overflow-auto bg-white px-2.5 py-1.5 font-mono text-[var(--tool-font-size)] leading-4.5 whitespace-pre-wrap text-stone-700',
                     item.status === 'error' && 'bg-red-50/50 text-red-700',
                   )}
                 >

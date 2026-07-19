@@ -10,13 +10,20 @@
 @layer base {
   *, *::before, *::after { box-sizing: border-box; }
   html, body, #root { height: 100%; }
-  html { font-family: var(--font-sans); }
+  html {
+    --ui-root-font-size: 15px;
+    --chat-font-size: 1.03125rem;
+    --code-font-size: 0.875rem;
+    --tool-font-size: 0.75rem;
+    font-family: var(--font-sans);
+    font-size: var(--ui-root-font-size);
+  }
   body {
     margin: 0;
     overflow: hidden;
     background: #fff;
     color: #292927;
-    font-size: 16px;
+    font-size: 1rem;
   }
   button, textarea { font: inherit; }
   .lucide { stroke-width: 1.7; }

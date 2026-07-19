@@ -416,6 +416,9 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
             open: false,
             complete: true,
             usage: hasUsage(responseUsage) ? responseUsage : undefined,
+            provider: ev.provider,
+            model: ev.model,
+            modelName: ev.modelName,
           })
           responseUsage = emptyUsage()
         }

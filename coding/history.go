@@ -31,6 +31,8 @@ type HistoryItem struct {
 	// FinalResponse is true for the assistant item that completes one visible
 	// reply. Tool-use pauses remain false even when they contain explanatory text.
 	FinalResponse bool
+	Provider      string
+	Model         string
 
 	ToolCallID string
 	ToolName   string
@@ -131,7 +133,13 @@ func assistantHistory(message *llm.AssistantMessage) []HistoryItem {
 	}
 	if message.StopReason == llm.StopReasonError || message.StopReason == llm.StopReasonAborted {
 		text, _ := eventAssistantText(agent.FromLLM(message))
-		return []HistoryItem{{Type: HistoryAssistant, Text: text, FinalResponse: true}}
+		return []HistoryItem{{
+			Type:          HistoryAssistant,
+			Text:          text,
+			FinalResponse: true,
+			Provider:      message.Provider,
+			Model:         message.Model,
+		}}
 	}
 
 	var items []HistoryItem
@@ -141,7 +149,12 @@ func assistantHistory(message *llm.AssistantMessage) []HistoryItem {
 		if text.Len() == 0 {
 			return
 		}
-		items = append(items, HistoryItem{Type: HistoryAssistant, Text: text.String()})
+		items = append(items, HistoryItem{
+			Type:     HistoryAssistant,
+			Text:     text.String(),
+			Provider: message.Provider,
+			Model:    message.Model,
+		})
 		text.Reset()
 	}
 	flushThinking := func() {

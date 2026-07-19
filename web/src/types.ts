@@ -53,6 +53,9 @@ export type WireEvent = {
   queued?: boolean
   finalResponse?: boolean
   usage?: Usage
+  provider?: string
+  model?: string
+  modelName?: string
   id?: string
   summary?: string
 }
@@ -97,6 +100,42 @@ export type Usage = {
   cost: UsageCost
 }
 
+export type UsageTotals = Usage & {
+  requests: number
+}
+
+export type ModelUsageSummary = UsageTotals & {
+  provider: string
+  model: string
+  name: string
+  responseModel?: string
+  lastUsedAt: string
+}
+
+export type UsageReport = {
+  total: UsageTotals
+  models: ModelUsageSummary[]
+  generatedAt: string
+}
+
+export type UsageEvent = {
+  id: string
+  sessionId: string
+  provider: string
+  model: string
+  responseModel?: string
+  responseId?: string
+  timestamp: string
+  usage: Usage
+}
+
+export type UsageEventPage = {
+  events: UsageEvent[]
+  total: number
+  limit: number
+  offset: number
+}
+
 export type UserItem = {
   kind: 'user'
   id: string
@@ -111,6 +150,9 @@ export type AssistantItem = {
   open: boolean
   complete: boolean
   usage?: Usage
+  provider?: string
+  model?: string
+  modelName?: string
 }
 export type ThinkingItem = { kind: 'thinking'; id: string; text: string; streaming: boolean }
 export type ToolItem = {

@@ -13,7 +13,7 @@ export function FileChange({ change }: { change: Change }) {
   const { t } = useI18n()
   if (change.changeType === 'failure') {
     return (
-      <div className="mt-2 ml-5 border-l-2 border-red-300 py-1 pl-3 font-mono text-[13px] leading-5.5 text-red-700 max-md:ml-0">
+      <div className="mt-2 ml-5 border-l-2 border-red-300 py-1 pl-3 font-mono text-[0.8125rem] leading-5.5 text-red-700 max-md:ml-0">
         {(change.path ? `${change.path}: ` : '') + (change.detail || t('diff.writeFailed'))}
       </div>
     )
@@ -27,20 +27,20 @@ export function FileChange({ change }: { change: Change }) {
   return (
     <Collapsible
       defaultOpen
-      className="mt-2 ml-5 overflow-hidden rounded-lg border border-stone-300/80 bg-white max-md:ml-0"
+      className="mt-1.5 ml-5 overflow-hidden rounded-lg border border-stone-300/80 bg-white max-md:ml-0"
     >
-      <div className={cn('px-3.5', showPath ? 'py-3' : 'py-2.5')}>
+      <div className={cn('px-2.5', showPath ? 'py-1.5' : 'py-1')}>
         <CollapsibleTrigger
           className="group flex w-full min-w-0 cursor-pointer items-baseline gap-1.5 border-0 bg-transparent p-0 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
           disabled={hunks.length === 0}
         >
-          <span className="shrink-0 text-[15.5px] text-stone-500">
+          <span className="shrink-0 text-[0.8125rem] text-stone-500">
             {change.op === 'create' ? t('diff.created') : t('diff.updated')}
           </span>
-          <strong className="min-w-0 overflow-hidden text-[15.5px] font-medium text-stone-900 text-ellipsis whitespace-nowrap">
+          <strong className="min-w-0 overflow-hidden text-[0.8125rem] font-medium text-stone-900 text-ellipsis whitespace-nowrap">
             {filename}
           </strong>
-          <span className="flex shrink-0 gap-1 font-mono text-sm font-medium">
+          <span className="flex shrink-0 gap-1 font-mono text-[0.75rem] font-medium">
             <b className="font-inherit text-emerald-700">+{change.additions || 0}</b>
             <b className="font-inherit text-rose-700">-{change.deletions || 0}</b>
           </span>
@@ -53,7 +53,7 @@ export function FileChange({ change }: { change: Change }) {
         </CollapsibleTrigger>
         {showPath && (
           <div
-            className="mt-1.5 overflow-hidden font-mono text-[13px] text-stone-500 text-ellipsis whitespace-nowrap"
+            className="mt-1 overflow-hidden font-mono text-[0.75rem] text-stone-500 text-ellipsis whitespace-nowrap"
             title={change.path}
           >
             {change.path}
@@ -63,7 +63,7 @@ export function FileChange({ change }: { change: Change }) {
 
       {hunks.length > 0 && (
         <CollapsibleContent>
-          <div className="max-h-[460px] overflow-auto border-t border-stone-300/80 bg-[#fdfdfc] [scrollbar-color:#8f8f89_transparent] [scrollbar-width:thin]">
+          <div className="max-h-[28.75rem] overflow-auto border-t border-stone-300/80 bg-[#fdfdfc] [scrollbar-color:#8f8f89_transparent] [scrollbar-width:thin]">
             {hunks.map((hunk, index) => (
               <Hunk key={index} hunk={hunk} language={language} />
             ))}
@@ -80,7 +80,7 @@ function Hunk({ hunk, language }: { hunk: HunkType; language: string }) {
 
   return (
     <div className="border-b border-stone-300/70 last:border-b-0">
-      <div className="bg-stone-100 px-3 py-1 font-mono text-[12px] leading-4.5 font-medium text-stone-500">
+      <div className="bg-stone-100 px-2.5 py-0.5 font-mono text-[0.6875rem] leading-4 font-medium text-stone-500">
         {`@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`}
       </div>
       {(hunk.lines ?? []).map((line, index) => {
@@ -97,23 +97,23 @@ function Hunk({ hunk, language }: { hunk: HunkType; language: string }) {
           <div
             key={index}
             className={cn(
-              'grid min-h-6 grid-cols-[26px_46px_minmax(max-content,1fr)] font-mono text-[14px] leading-6 text-stone-900',
+              'grid min-h-[1.125rem] grid-cols-[1.375rem_2.25rem_minmax(max-content,1fr)] font-mono text-[var(--tool-font-size)] leading-4.5 text-stone-900',
               isAdd && 'bg-[#dcefe2]',
               isDelete && 'bg-[#f5dddd]',
             )}
           >
             <span
               className={cn(
-                'pl-2.5 text-stone-400 select-none',
+                'pl-2 text-stone-400 select-none',
                 isAdd && 'text-emerald-700',
                 isDelete && 'text-rose-700',
               )}
             >
               {isAdd ? '+' : isDelete ? '−' : ''}
             </span>
-            <span className="pr-2.5 text-right text-stone-500 select-none">{number}</span>
+            <span className="pr-2 text-right text-stone-500 select-none">{number}</span>
             <code
-              className="or-code-theme hljs block min-w-full overflow-visible bg-transparent! px-3.5 whitespace-pre"
+              className="or-code-theme hljs block min-w-full overflow-visible bg-transparent! px-2.5 whitespace-pre"
               dangerouslySetInnerHTML={{ __html: html }}
             />
           </div>

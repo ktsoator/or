@@ -34,14 +34,14 @@ import { Composer } from './components/Composer'
 import { Thinking } from './components/Thinking'
 import { ProfileMenu } from './components/ProfileMenu'
 import { ResponseActions } from './components/ResponseActions'
-import { SettingsPage } from './components/SettingsPage'
+import { SettingsPage, type SettingsSection } from './components/SettingsPage'
 import { WorkspacePickerDialog } from './components/WorkspacePickerDialog'
 import { useI18n } from './i18n'
 import logoImage from './assets/logo.svg'
 
-const DEFAULT_SIDEBAR_WIDTH = 256
-const MIN_SIDEBAR_WIDTH = 220
-const MAX_SIDEBAR_WIDTH = 360
+const DEFAULT_SIDEBAR_WIDTH = 240
+const MIN_SIDEBAR_WIDTH = 206
+const MAX_SIDEBAR_WIDTH = 338
 
 function clampSidebarWidth(width: number) {
   return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width))
@@ -95,6 +95,7 @@ export default function App() {
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
   const [workspacePickerOpen, setWorkspacePickerOpen] = useState(false)
   const [selectedWorkspacePath, setSelectedWorkspacePath] = useState<string>()
 
@@ -145,6 +146,7 @@ export default function App() {
     const handleSettingsShortcut = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key === ',') {
         event.preventDefault()
+        setSettingsSection('general')
         setSettingsOpen(true)
       } else if (event.key === 'Escape' && settingsOpen) {
         setSettingsOpen(false)
@@ -300,7 +302,12 @@ export default function App() {
   )
 
   if (settingsOpen) {
-    return <SettingsPage onBack={() => setSettingsOpen(false)} />
+    return (
+      <SettingsPage
+        initialSection={settingsSection}
+        onBack={() => setSettingsOpen(false)}
+      />
+    )
   }
 
   return (
@@ -312,7 +319,7 @@ export default function App() {
       )}
       style={
         {
-          '--sidebar-width': `${sidebarCollapsed ? 64 : sidebarWidth}px`,
+          '--sidebar-width': `${sidebarCollapsed ? 60 : sidebarWidth}px`,
         } as CSSProperties
       }
     >
@@ -327,19 +334,19 @@ export default function App() {
       <aside
         className={cn(
           'relative z-50 flex min-h-0 min-w-0 flex-col overflow-hidden border-r border-stone-200/75 bg-white text-stone-700 transition-transform duration-200 ease-out',
-          'max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:w-[280px] max-md:shadow-2xl',
+          'max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:w-[17.5rem] max-md:shadow-2xl',
           mobileSessionsOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full',
         )}
         aria-label={t('app.sessions')}
       >
-        <div className="relative h-16 w-full shrink-0 max-md:w-[280px]">
+        <div className="relative h-16 w-full shrink-0 max-md:w-[17.5rem]">
           <div
             className={cn(
               'absolute inset-y-0 left-3.5 flex items-center transition-opacity duration-100 ease-out motion-reduce:transition-none',
               sidebarCollapsed ? 'opacity-0' : 'opacity-100',
             )}
           >
-            <img className="size-[25px] shrink-0" src={logoImage} alt="" aria-hidden="true" />
+            <img className="size-[1.5625rem] shrink-0" src={logoImage} alt="" aria-hidden="true" />
           </div>
           <button
             className={cn(
@@ -350,7 +357,7 @@ export default function App() {
             title={t('app.searchSessions')}
             aria-label={t('app.searchSessions')}
           >
-            <Search className="size-[18px]" aria-hidden="true" />
+            <Search className="size-[1.125rem]" aria-hidden="true" />
           </button>
           <button
             className="absolute top-4 right-4 grid size-8 cursor-pointer place-items-center rounded-lg text-stone-500 transition-colors duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none hover:bg-stone-200/75 hover:text-stone-950"
@@ -360,19 +367,17 @@ export default function App() {
             aria-expanded={!sidebarCollapsed}
             onClick={toggleSidebar}
           >
-            <PanelLeft className="size-[18px]" aria-hidden="true" />
+            <PanelLeft className="size-[1.125rem]" aria-hidden="true" />
           </button>
         </div>
 
         <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
-          <div className="w-full px-3 pb-3 max-md:w-[280px]">
+          <div className="w-full px-3 pb-3 max-md:w-[17.5rem]">
             <button
               className={cn(
-                'group flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[14px] font-[540] text-stone-900 transition-colors duration-100 motion-reduce:transition-none disabled:cursor-wait disabled:opacity-50',
+                'group flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[0.875rem] font-normal text-stone-900 transition-colors duration-100 motion-reduce:transition-none disabled:cursor-wait disabled:opacity-50',
                 !sidebarCollapsed &&
-                  (draft
-                    ? 'bg-[rgb(237,237,237)] text-stone-950'
-                    : 'hover:bg-[rgb(246,246,246)] hover:text-stone-950'),
+                  'hover:bg-[rgb(246,246,246)] hover:text-stone-950',
               )}
               type="button"
               title={t('app.newSession')}
@@ -383,20 +388,17 @@ export default function App() {
                 <span
                   className={cn(
                     'pointer-events-none absolute -inset-1.5 rounded-[9px] transition-colors duration-100',
-                    sidebarCollapsed &&
-                      (draft
-                        ? 'bg-[rgb(237,237,237)]'
-                        : 'group-hover:bg-[rgb(246,246,246)]'),
+                    sidebarCollapsed && 'group-hover:bg-[rgb(246,246,246)]',
                   )}
                   aria-hidden="true"
                 />
                 {creating ? (
                   <LoaderCircle
-                    className="relative size-[18px] animate-spin"
+                    className="relative size-[1.125rem] animate-spin"
                     aria-hidden="true"
                   />
                 ) : (
-                  <SquarePen className="relative size-[18px]" aria-hidden="true" />
+                  <SquarePen className="relative size-[1.125rem]" aria-hidden="true" />
                 )}
               </span>
               <span
@@ -435,7 +437,7 @@ export default function App() {
 
           <div
             className={cn(
-              'w-full px-5 pt-2 pb-2 text-[13px] font-[620] tracking-[-0.01em] whitespace-nowrap text-stone-900 transition-opacity duration-100 ease-out motion-reduce:transition-none max-md:w-[280px]',
+              'w-full px-5 pt-2 pb-2 text-[0.8125rem] font-medium tracking-[-0.01em] whitespace-nowrap text-stone-400 transition-opacity duration-100 ease-out motion-reduce:transition-none max-md:w-[17.5rem]',
               sidebarCollapsed ? 'pointer-events-none opacity-0' : 'opacity-100',
             )}
           >
@@ -443,7 +445,7 @@ export default function App() {
           </div>
           <nav
             className={cn(
-              'w-full px-3 pb-2 transition-opacity duration-100 ease-out motion-reduce:transition-none max-md:w-[280px]',
+              'w-full px-3 pb-2 transition-opacity duration-100 ease-out motion-reduce:transition-none max-md:w-[17.5rem]',
               sidebarCollapsed ? 'pointer-events-none opacity-0' : 'opacity-100',
             )}
             aria-hidden={sidebarCollapsed}
@@ -451,7 +453,7 @@ export default function App() {
           >
             <div className="space-y-1">
               {chatSessions.length === 0 ? (
-                <div className="ml-7 flex h-8 items-center px-2.5 text-[13.5px] text-stone-400">
+                <div className="ml-7 flex h-8 items-center px-2.5 text-[0.84375rem] text-stone-400">
                   {t('workspace.noChats')}
                 </div>
               ) : (
@@ -470,7 +472,7 @@ export default function App() {
 
           <div
             className={cn(
-              'w-full px-5 pt-2 pb-2 text-[13px] font-[620] tracking-[-0.01em] whitespace-nowrap text-stone-900 transition-opacity duration-100 ease-out motion-reduce:transition-none max-md:w-[280px]',
+              'w-full px-5 pt-2 pb-2 text-[0.8125rem] font-medium tracking-[-0.01em] whitespace-nowrap text-stone-400 transition-opacity duration-100 ease-out motion-reduce:transition-none max-md:w-[17.5rem]',
               sidebarCollapsed ? 'pointer-events-none opacity-0' : 'opacity-100',
             )}
           >
@@ -478,7 +480,7 @@ export default function App() {
           </div>
           <nav
             className={cn(
-              'w-full px-3 pb-3 transition-opacity duration-100 ease-out motion-reduce:transition-none max-md:w-[280px]',
+              'w-full px-3 pb-3 transition-opacity duration-100 ease-out motion-reduce:transition-none max-md:w-[17.5rem]',
               sidebarCollapsed ? 'pointer-events-none opacity-0' : 'opacity-100',
             )}
             aria-hidden={sidebarCollapsed}
@@ -504,7 +506,14 @@ export default function App() {
 
         <ProfileMenu
           collapsed={sidebarCollapsed}
-          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenUsage={() => {
+            setSettingsSection('usage')
+            setSettingsOpen(true)
+          }}
+          onOpenSettings={() => {
+            setSettingsSection('general')
+            setSettingsOpen(true)
+          }}
         />
 
         {!sidebarCollapsed && (
@@ -550,7 +559,7 @@ export default function App() {
               <span className="sr-only">{t('app.openSessions')}</span>
             </button>
             <span
-              className="truncate text-[15px] font-[620] tracking-[-0.015em] text-stone-900"
+              className="truncate text-[0.9375rem] font-medium tracking-[-0.015em] text-stone-900"
               title={activeSession?.title}
             >
               {draft || activeSession?.title === 'New session'
@@ -567,7 +576,7 @@ export default function App() {
         >
           <div
             className={cn(
-              'mx-auto min-h-full w-full max-w-[896px] py-8 pb-12 max-md:py-6',
+              'mx-auto min-h-full w-full max-w-[56rem] py-8 pb-12 max-md:py-6',
               (loading || emptySession) && 'grid place-items-center',
             )}
           >
@@ -579,10 +588,10 @@ export default function App() {
             ) : emptySession ? (
               <div className="flex w-full -translate-y-[3vh] flex-col items-center gap-9">
                 <div className="max-w-lg text-center">
-                  <h1 className="m-0 text-[28px] leading-tight font-[560] tracking-[-0.03em] text-stone-900 max-sm:text-2xl">
+                  <h1 className="m-0 text-[1.75rem] leading-tight font-medium tracking-[-0.03em] text-stone-900 max-sm:text-2xl">
                     {t('app.emptyTitle')}
                   </h1>
-                  <p className="mt-2.5 text-[15px] leading-6 text-stone-500">
+                  <p className="mt-2.5 text-[0.9375rem] leading-6 text-stone-500">
                     {t('app.emptyDescription')}
                   </p>
                 </div>
@@ -653,7 +662,7 @@ function WorkspaceSessions({
     <section aria-label={name}>
       <div className="group/workspace relative flex h-8 items-center">
         <button
-          className="flex h-8 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-[10px] px-2.5 text-left text-[14px] font-[570] text-stone-800 transition-colors hover:bg-[rgb(246,246,246)] hover:text-stone-950"
+          className="flex h-8 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-[10px] px-2.5 text-left text-[0.875rem] font-normal text-stone-800 transition-colors hover:bg-[rgb(246,246,246)] hover:text-stone-950"
           type="button"
           title={path}
           aria-expanded={expanded}
@@ -664,13 +673,13 @@ function WorkspaceSessions({
         >
           {expanded ? (
             <FolderOpen
-              className="size-[17px] shrink-0 text-stone-600"
+              className="size-[1.0625rem] shrink-0 text-stone-600"
               strokeWidth={1.8}
               aria-hidden="true"
             />
           ) : (
             <Folder
-              className="size-[17px] shrink-0 text-stone-600"
+              className="size-[1.0625rem] shrink-0 text-stone-600"
               strokeWidth={1.8}
               aria-hidden="true"
             />
@@ -688,9 +697,9 @@ function WorkspaceSessions({
         </button>
       </div>
       {expanded && (
-        <div className="mt-1 ml-7 space-y-1">
+        <div className="mt-1 space-y-1">
           {sessions.length === 0 ? (
-            <div className="flex h-8 items-center px-2.5 text-[13.5px] text-stone-400">
+            <div className="flex h-8 items-center pr-2.5 pl-[2.375rem] text-[0.84375rem] text-stone-400">
               {t('workspace.noChats')}
             </div>
           ) : (
@@ -701,6 +710,7 @@ function WorkspaceSessions({
                 active={session.id === activeSessionID}
                 onSelect={() => onSelectSession(session.id)}
                 onDelete={() => onDeleteSession(session)}
+                indented
               />
             ))
           )}
@@ -715,11 +725,13 @@ function SessionRow({
   active,
   onSelect,
   onDelete,
+  indented = false,
 }: {
   session: SessionSummary
   active: boolean
   onSelect: () => void
   onDelete: () => void
+  indented?: boolean
 }) {
   const { t } = useI18n()
   const title = session.title === 'New session' ? t('app.newSession') : session.title
@@ -727,7 +739,8 @@ function SessionRow({
     <div className="group relative">
       <button
         className={cn(
-          'flex h-8 w-full cursor-pointer items-center rounded-[10px] px-2.5 pr-9 text-left transition-colors',
+          'flex h-8 w-full cursor-pointer items-center rounded-[10px] pr-9 text-left transition-colors',
+          indented ? 'pl-[2.375rem]' : 'pl-2.5',
           active
             ? 'bg-[rgb(237,237,237)] text-stone-950'
             : 'text-stone-700 hover:bg-[rgb(246,246,246)] hover:text-stone-950',
@@ -736,11 +749,11 @@ function SessionRow({
         aria-current={active ? 'page' : undefined}
         onClick={onSelect}
       >
-        <span className="min-w-0 flex-1 truncate text-[14px] font-[510] leading-5" title={title}>
+        <span className="min-w-0 flex-1 truncate text-[0.875rem] font-normal leading-5" title={title}>
           {title}
         </span>
         {(session.hasApproval || session.running) && (
-          <span className="ml-2 flex shrink-0 items-center gap-1.5 text-[11.5px] leading-4 text-stone-500 transition-opacity group-hover:opacity-0">
+          <span className="ml-2 flex shrink-0 items-center gap-1.5 text-[0.71875rem] leading-4 text-stone-500 transition-opacity group-hover:opacity-0">
             {session.hasApproval ? (
               <>
                 <ShieldAlert className="size-3 text-amber-700" aria-hidden="true" />
@@ -780,7 +793,7 @@ function SidebarNavItem({
   return (
     <button
       className={cn(
-        'group flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[14px] font-[500] text-stone-800 transition-[background-color,color,transform] duration-100 active:scale-[0.985] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-stone-400',
+        'group flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[0.875rem] font-normal text-stone-800 transition-[background-color,color,transform] duration-100 active:scale-[0.985] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-stone-400',
         !collapsed && 'hover:bg-[rgb(246,246,246)] hover:text-stone-950',
       )}
       type="button"
@@ -795,7 +808,7 @@ function SidebarNavItem({
           aria-hidden="true"
         />
         <Icon
-          className="relative size-[18px] text-stone-700"
+          className="relative size-[1.125rem] text-stone-700"
           strokeWidth={1.85}
           aria-hidden="true"
         />
@@ -846,7 +859,7 @@ function DeleteSessionDialog({
       }}
     >
       <section
-        className="relative w-full max-w-[468px] animate-[fade-in_140ms_ease-out] rounded-[22px] border border-white/80 bg-white p-6 shadow-[0_30px_90px_-32px_rgba(28,25,23,0.62)] max-sm:rounded-[18px] max-sm:p-5"
+        className="relative w-full max-w-[29.25rem] animate-[fade-in_140ms_ease-out] rounded-[22px] border border-white/80 bg-white p-6 shadow-[0_30px_90px_-32px_rgba(28,25,23,0.62)] max-sm:rounded-[18px] max-sm:p-5"
         role="dialog"
         aria-modal="true"
         aria-labelledby="delete-session-title"
@@ -865,35 +878,35 @@ function DeleteSessionDialog({
         <div className="pr-9">
           <h2
             id="delete-session-title"
-            className="text-[19px] leading-6 font-[650] tracking-[-0.02em] text-stone-950"
+            className="text-[1.1875rem] leading-6 font-semibold tracking-[-0.02em] text-stone-950"
           >
             {t('delete.title')}
           </h2>
           <p
             id="delete-session-description"
-            className="mt-1.5 text-[14px] leading-[1.55] text-stone-500"
+            className="mt-1.5 text-[0.875rem] leading-[1.55] text-stone-500"
           >
             {t('delete.description')}
           </p>
         </div>
 
         <div className="mt-5 border-y border-stone-200/80 py-3.5">
-          <div className="text-[11px] leading-4 font-semibold tracking-[0.08em] text-stone-400 uppercase">
+          <div className="text-[0.6875rem] leading-4 font-medium tracking-[0.08em] text-stone-400 uppercase">
             {t('delete.session')}
           </div>
-          <div className="mt-1 truncate text-[14.5px] leading-5 font-[560] text-stone-800">
+          <div className="mt-1 truncate text-[0.90625rem] leading-5 font-medium text-stone-800">
             {title}
           </div>
         </div>
 
         {blocked && (
-          <div className="mt-4 flex gap-2.5 rounded-xl border border-amber-200/70 bg-amber-50/70 px-3.5 py-3 text-[13px] leading-5 text-amber-900">
+          <div className="mt-4 flex gap-2.5 rounded-xl border border-amber-200/70 bg-amber-50/70 px-3.5 py-3 text-[0.8125rem] leading-5 text-amber-900">
             <ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
             <span>{t('delete.blocked')}</span>
           </div>
         )}
         {error && (
-          <div className="mt-4 flex gap-2.5 rounded-xl border border-red-200/70 bg-red-50/70 px-3.5 py-3 text-[13px] leading-5 text-red-800">
+          <div className="mt-4 flex gap-2.5 rounded-xl border border-red-200/70 bg-red-50/70 px-3.5 py-3 text-[0.8125rem] leading-5 text-red-800">
             <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
             <span>{error}</span>
           </div>
@@ -901,7 +914,7 @@ function DeleteSessionDialog({
 
         <div className="mt-6 flex justify-end gap-2.5">
           <button
-            className="h-10 cursor-pointer rounded-xl border border-stone-300 bg-white px-4 text-[14px] font-[560] text-stone-700 transition-[border-color,background-color,color] hover:border-stone-400 hover:bg-stone-50 hover:text-stone-950 disabled:cursor-wait disabled:opacity-50"
+            className="h-10 cursor-pointer rounded-xl border border-stone-300 bg-white px-4 text-[0.875rem] font-medium text-stone-700 transition-[border-color,background-color,color] hover:border-stone-400 hover:bg-stone-50 hover:text-stone-950 disabled:cursor-wait disabled:opacity-50"
             type="button"
             disabled={deleting}
             onClick={onCancel}
@@ -909,7 +922,7 @@ function DeleteSessionDialog({
             {t('delete.cancel')}
           </button>
           <button
-            className="flex h-10 min-w-[126px] cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#b42318] px-4 text-[14px] font-[600] text-white shadow-[0_5px_14px_-8px_rgba(180,35,24,0.85)] transition-[background-color,transform] hover:bg-[#991b1b] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-35"
+            className="flex h-10 min-w-[7.875rem] cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#b42318] px-4 text-[0.875rem] font-medium text-white shadow-[0_5px_14px_-8px_rgba(180,35,24,0.85)] transition-[background-color,transform] hover:bg-[#991b1b] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-35"
             type="button"
             disabled={deleting || blocked}
             onClick={onConfirm}
@@ -935,7 +948,7 @@ function ThreadItem({ item }: { item: Item }) {
                 {item.images.map((image, index) => (
                   <img
                     key={`${image.mimeType}-${index}`}
-                    className="size-[136px] shrink-0 rounded-2xl border border-stone-200 bg-white object-cover shadow-[0_7px_18px_-15px_rgba(28,25,23,0.55)] max-sm:size-28"
+                    className="size-[8.5rem] shrink-0 rounded-2xl border border-stone-200 bg-white object-cover shadow-[0_7px_18px_-15px_rgba(28,25,23,0.55)] max-sm:size-28"
                     src={`data:${image.mimeType};base64,${image.data}`}
                     alt={t('app.uploadedImage', { index: index + 1 })}
                   />
@@ -943,12 +956,12 @@ function ThreadItem({ item }: { item: Item }) {
               </div>
             )}
             {item.text && (
-              <div className="rounded-xl bg-stone-100 px-3.5 py-2.5 text-[16.5px] leading-[1.58] whitespace-pre-wrap">
+              <div className="rounded-xl bg-stone-100 px-3.5 py-2.5 text-[var(--chat-font-size)] leading-[1.58] whitespace-pre-wrap">
                 {item.text}
               </div>
             )}
             {item.deliveryStatus === 'failed' && (
-              <span className="-mt-1 inline-flex items-center gap-1.5 px-1 text-[11.5px] leading-4 text-red-600">
+              <span className="-mt-1 inline-flex items-center gap-1.5 px-1 text-[0.71875rem] leading-4 text-red-600">
                 {t('app.notSent')}
               </span>
             )}
@@ -960,7 +973,11 @@ function ThreadItem({ item }: { item: Item }) {
         <section className="my-4 animate-[fade-in_160ms_ease-out]">
           <Markdown source={item.markdown} />
           {item.complete && (
-            <ResponseActions usage={item.usage} responseText={item.markdown} />
+            <ResponseActions
+              usage={item.usage}
+              modelName={item.modelName || item.model}
+              responseText={item.markdown}
+            />
           )}
         </section>
       )
@@ -978,8 +995,8 @@ function ThreadItem({ item }: { item: Item }) {
         >
           <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <div className="flex flex-col gap-0.5">
-            <strong className="text-[13px] font-semibold">{t('app.somethingWentWrong')}</strong>
-            <span className="text-[13px]">{item.text}</span>
+            <strong className="text-[0.8125rem] font-semibold">{t('app.somethingWentWrong')}</strong>
+            <span className="text-[0.8125rem]">{item.text}</span>
           </div>
         </div>
       )

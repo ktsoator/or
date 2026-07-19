@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -93,6 +94,8 @@ func (s *Server) Handler() http.Handler {
 
 	api := r.Group("/api")
 	api.GET("/models", s.handleModels)
+	api.GET("/usage", s.handleUsage)
+	api.GET("/usage/events", s.handleUsageEvents)
 	api.GET("/directories", s.handleDirectories)
 	api.GET("/workspaces", s.handleWorkspaces)
 	api.POST("/workspaces", s.handleRegisterWorkspace)
@@ -111,6 +114,56 @@ func (s *Server) Handler() http.Handler {
 	session.POST("/abort", s.handleAbort)
 
 	return allowFrontendOrigin(r, s.frontendOrigin)
+}
+
+func (s *Server) handleUsage(c *gin.Context) {
+	since, err := usageQueryTime(c.Query("since"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid usage start time"})
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, s.sessions.UsageReport(since))
+}
+
+func (s *Server) handleUsageEvents(c *gin.Context) {
+	since, err := usageQueryTime(c.Query("since"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid usage start time"})
+		return
+	}
+	offset, err := usageQueryInt(c.Query("offset"), 0)
+	if err != nil || offset < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid usage offset"})
+		return
+	}
+	limit, err := usageQueryInt(c.Query("limit"), 50)
+	if err != nil || limit <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid usage limit"})
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, s.sessions.UsageEvents(
+		strings.TrimSpace(c.Query("provider")),
+		strings.TrimSpace(c.Query("model")),
+		since,
+		offset,
+		limit,
+	))
+}
+
+func usageQueryTime(value string) (time.Time, error) {
+	if value == "" {
+		return time.Time{}, nil
+	}
+	return time.Parse(time.RFC3339, value)
+}
+
+func usageQueryInt(value string, fallback int) (int, error) {
+	if value == "" {
+		return fallback, nil
+	}
+	return strconv.Atoi(value)
 }
 
 type modelOption struct {

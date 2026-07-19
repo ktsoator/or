@@ -34,6 +34,11 @@ type wireEvent struct {
 	Images []wireImage `json:"images,omitempty"`
 	Usage  *wireUsage  `json:"usage,omitempty"`
 	Final  bool        `json:"finalResponse,omitempty"`
+	// Completed-response metadata. ModelName is the stable catalog display name;
+	// Provider and Model keep the exact identity available to other clients.
+	Provider  string `json:"provider,omitempty"`
+	Model     string `json:"model,omitempty"`
+	ModelName string `json:"modelName,omitempty"`
 	// queued-message metadata
 	Delivery string `json:"delivery,omitempty"`
 	Queued   bool   `json:"queued,omitempty"`
@@ -103,10 +108,13 @@ func ProjectEvent(ev coding.Event) ([]byte, bool) {
 
 	case coding.MessageCompleted:
 		out = wireEvent{
-			Type:  "message_end",
-			Text:  ev.Text,
-			Usage: projectUsage(ev.Usage),
-			Final: ev.FinalResponse,
+			Type:      "message_end",
+			Text:      ev.Text,
+			Usage:     projectUsage(ev.Usage),
+			Final:     ev.FinalResponse,
+			Provider:  ev.Provider,
+			Model:     ev.Model,
+			ModelName: displayModelName(ev.Provider, ev.Model),
 		}
 
 	case coding.RunCompleted:
@@ -134,9 +142,12 @@ func ProjectHistory(items []coding.HistoryItem) []wireEvent {
 
 		case coding.HistoryAssistant:
 			out = append(out, wireEvent{
-				Type:  "message_end",
-				Text:  item.Text,
-				Final: item.FinalResponse,
+				Type:      "message_end",
+				Text:      item.Text,
+				Final:     item.FinalResponse,
+				Provider:  item.Provider,
+				Model:     item.Model,
+				ModelName: displayModelName(item.Provider, item.Model),
 			})
 
 		case coding.HistoryThinking:
@@ -173,6 +184,13 @@ func ProjectHistory(items []coding.HistoryItem) []wireEvent {
 		}
 	}
 	return out
+}
+
+func displayModelName(provider, modelID string) string {
+	if model, ok := llm.LookupModel(provider, modelID); ok && model.Name != "" {
+		return model.Name
+	}
+	return modelID
 }
 
 func projectImages(images []llm.ImageContent) []wireImage {

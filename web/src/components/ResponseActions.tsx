@@ -7,9 +7,11 @@ import { useI18n } from '@/i18n'
 
 export function ResponseActions({
   usage,
+  modelName,
   responseText,
 }: {
   usage?: Usage
+  modelName?: string
   responseText: string
 }) {
   const { t, formatNumber } = useI18n()
@@ -67,11 +69,11 @@ export function ResponseActions({
             <Tooltip.Root>
               <Tooltip.Trigger asChild>
                 <button
-                  className="group inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg px-2 text-[12px] leading-5 text-stone-400 tabular-nums outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-600 focus-visible:bg-[rgb(241,241,241)] focus-visible:text-stone-600 focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=delayed-open]:bg-[rgb(241,241,241)] data-[state=delayed-open]:text-stone-600"
+                  className="group inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg px-2 text-[0.75rem] leading-5 text-stone-400 tabular-nums outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-600 focus-visible:bg-[rgb(241,241,241)] focus-visible:text-stone-600 focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=delayed-open]:bg-[rgb(241,241,241)] data-[state=delayed-open]:text-stone-600"
                   type="button"
                   aria-label={t('actions.showUsage')}
                 >
-                  <span className="font-[560] text-stone-500">{t('actions.usage')}</span>
+                  <span className="font-medium text-stone-500">{t('actions.usage')}</span>
                   <span className="text-stone-300">·</span>
                   <span>
                     {formatCompactNumber(totalTokens, formatNumber)} {t('actions.tokens')}
@@ -80,6 +82,14 @@ export function ResponseActions({
                     <>
                       <span className="text-stone-300">·</span>
                       <span>{formatSummaryCost(usage.cost.total)}</span>
+                    </>
+                  )}
+                  {modelName && (
+                    <>
+                      <span className="text-stone-300">·</span>
+                      <span className="max-w-[9rem] truncate max-sm:max-w-[6rem]">
+                        {modelName}
+                      </span>
                     </>
                   )}
                 </button>
@@ -91,7 +101,7 @@ export function ResponseActions({
                   align="start"
                   sideOffset={7}
                   collisionPadding={10}
-                  className="z-[150] animate-[fade-in_110ms_ease-out] rounded-[10px] border border-stone-200 bg-white px-3 py-2 text-[12px] leading-5 text-stone-700 tabular-nums shadow-[0_14px_38px_-20px_rgba(28,25,23,0.5)] outline-none"
+                  className="z-[150] animate-[fade-in_110ms_ease-out] rounded-[10px] border border-stone-200 bg-white px-3 py-2 text-[0.75rem] leading-5 text-stone-700 tabular-nums shadow-[0_14px_38px_-20px_rgba(28,25,23,0.5)] outline-none"
                 >
                   <div className="flex items-center gap-3 whitespace-nowrap">
                     <Metric label={t('actions.input')} value={formatNumber(usage.input)} />
@@ -143,7 +153,7 @@ function ActionButton({
           disabled={disabled}
           onClick={onClick}
         >
-          <Icon className="size-[15px]" aria-hidden="true" />
+          <Icon className="size-[0.9375rem]" aria-hidden="true" />
         </button>
       </Tooltip.Trigger>
       <Tooltip.Portal>
@@ -151,7 +161,7 @@ function ActionButton({
           side="bottom"
           sideOffset={6}
           collisionPadding={8}
-          className="z-[150] animate-[fade-in_100ms_ease-out] rounded-md bg-stone-900 px-2 py-1 text-[11px] leading-4 font-medium whitespace-nowrap text-white shadow-lg"
+          className="z-[150] animate-[fade-in_100ms_ease-out] rounded-md bg-stone-900 px-2 py-1 text-[0.6875rem] leading-4 font-medium whitespace-nowrap text-white shadow-lg"
         >
           {label}
         </Tooltip.Content>
@@ -164,7 +174,7 @@ function Metric({ label, value }: { label: string; value: string }) {
   return (
     <span className="flex items-baseline gap-1">
       <span className="text-stone-400">{label}</span>
-      <span className="font-[540] text-stone-700">{value}</span>
+      <span className="font-medium text-stone-700">{value}</span>
     </span>
   )
 }

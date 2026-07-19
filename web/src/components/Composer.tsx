@@ -70,6 +70,7 @@ export function Composer({
   const { t } = useI18n()
   const ref = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const composingRef = useRef(false)
   const [settingsError, setSettingsError] = useState('')
   const [attachmentError, setAttachmentError] = useState('')
   const [queueError, setQueueError] = useState('')
@@ -188,7 +189,7 @@ export function Composer({
           : 'shrink-0 bg-white px-3 pt-3 pb-4 md:px-8 max-md:pt-2',
       )}
     >
-      <div className="mx-auto flex w-full max-w-[896px] flex-col gap-2">
+      <div className="mx-auto flex w-full max-w-[56rem] flex-col gap-2">
         {confirmation && <Approval key={confirmation.id} item={confirmation} onResolve={onResolve} />}
         {queuedMessages.length > 0 && (
           <PendingQueue messages={queuedMessages} onRemove={(id) => void removeQueued(id)} />
@@ -196,13 +197,13 @@ export function Composer({
 
         <div
           className={cn(
-            'rounded-[28px] border border-stone-200 bg-white shadow-[0_10px_30px_-20px_rgba(28,25,23,0.38)]',
+            'rounded-[28px] border border-stone-200 bg-white',
             !centered &&
-              'transition-[border-color,box-shadow] focus-within:border-stone-400 focus-within:shadow-[0_12px_32px_-20px_rgba(28,25,23,0.48)]',
+              'transition-colors focus-within:border-stone-300',
           )}
         >
           <div
-            className="grid min-h-24 grid-cols-[40px_minmax(0,1fr)_auto] grid-rows-[auto_40px] items-center gap-x-3 gap-y-1 px-3 py-2.5 max-sm:gap-x-2"
+            className="grid min-h-24 grid-cols-[2.5rem_minmax(0,1fr)_auto] grid-rows-[auto_2.5rem] items-center gap-x-3 gap-y-1 px-3 py-2.5 max-sm:gap-x-2"
           >
             <button
               className="group relative col-start-1 row-start-2 grid size-10 cursor-pointer place-items-center rounded-full text-stone-700 transition-colors hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-30"
@@ -275,7 +276,7 @@ export function Composer({
                 ref={ref}
                 rows={1}
                 disabled={inputDisabled}
-                className="block max-h-[240px] min-h-8 w-full min-w-0 resize-none overflow-y-auto border-0 bg-transparent px-1 py-1.5 text-[16.5px] leading-6 text-stone-900 outline-none placeholder:text-stone-400 disabled:cursor-not-allowed disabled:bg-transparent"
+                className="block max-h-[15rem] min-h-8 w-full min-w-0 resize-none overflow-y-auto border-0 bg-transparent px-1 py-1.5 text-[var(--chat-font-size)] leading-6 text-stone-900 outline-none placeholder:text-stone-400 disabled:cursor-not-allowed disabled:bg-transparent"
                 placeholder={
                   awaitingApproval
                     ? t('composer.resolveApprovalPlaceholder')
@@ -290,7 +291,20 @@ export function Composer({
                       : t('composer.waitingForAPI')
                 }
                 onInput={autosize}
+                onCompositionStart={() => {
+                  composingRef.current = true
+                }}
+                onCompositionEnd={() => {
+                  composingRef.current = false
+                }}
                 onKeyDown={(event) => {
+                  if (
+                    composingRef.current ||
+                    event.nativeEvent.isComposing ||
+                    event.nativeEvent.keyCode === 229
+                  ) {
+                    return
+                  }
                   if (event.key === 'Enter' && !event.shiftKey) {
                     event.preventDefault()
                     submit()
@@ -322,7 +336,7 @@ export function Composer({
                 >
                   <Square className="size-3 fill-current" aria-hidden="true" />
                   <span
-                    className="pointer-events-none absolute right-0 bottom-[calc(100%+9px)] z-50 translate-y-1 whitespace-nowrap rounded-md bg-stone-900 px-2.5 py-1.5 text-[12px] leading-4 font-medium text-white opacity-0 shadow-lg transition-[opacity,transform] duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
+                    className="pointer-events-none absolute right-0 bottom-[calc(100%+0.5625rem)] z-50 translate-y-1 whitespace-nowrap rounded-md bg-stone-900 px-2.5 py-1.5 text-[0.75rem] leading-4 font-medium text-white opacity-0 shadow-lg transition-[opacity,transform] duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
                     aria-hidden="true"
                   >
                     {t('composer.stopGenerating')}
@@ -348,7 +362,7 @@ export function Composer({
               >
                 <ArrowUp className="size-4" aria-hidden="true" />
                 <span
-                  className="pointer-events-none absolute right-0 bottom-[calc(100%+9px)] z-50 flex translate-y-1 items-center gap-2 whitespace-nowrap rounded-md bg-stone-900 px-2.5 py-1.5 text-[12px] leading-4 font-medium text-white opacity-0 shadow-lg transition-[opacity,transform] duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
+                  className="pointer-events-none absolute right-0 bottom-[calc(100%+0.5625rem)] z-50 flex translate-y-1 items-center gap-2 whitespace-nowrap rounded-md bg-stone-900 px-2.5 py-1.5 text-[0.75rem] leading-4 font-medium text-white opacity-0 shadow-lg transition-[opacity,transform] duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
                   aria-hidden="true"
                 >
                   <span>
@@ -363,7 +377,7 @@ export function Composer({
                         : t('composer.waitingForAPIShort')}
                   </span>
                   {connected && !awaitingApproval && (
-                    <kbd className="font-mono text-[11px] font-normal text-stone-400">↵</kbd>
+                    <kbd className="font-mono text-[0.6875rem] font-normal text-stone-400">↵</kbd>
                   )}
                 </span>
               </button>
@@ -371,7 +385,7 @@ export function Composer({
           </div>
         </div>
         {(settingsError || attachmentError || queueError) && (
-          <p className="px-4 text-[12px] leading-5 text-red-700" role="alert">
+          <p className="px-4 text-[0.75rem] leading-5 text-red-700" role="alert">
             {settingsError || attachmentError || queueError}
           </p>
         )}
@@ -394,16 +408,16 @@ function PendingQueue({
       aria-label={t('queue.pendingMessages')}
       aria-live="polite"
     >
-      <div className="flex h-8 items-center justify-between px-3.5 text-[11.5px] leading-none text-stone-500">
-        <span className="font-[580] text-stone-600">{t('queue.upNext')}</span>
+      <div className="flex h-8 items-center justify-between px-3.5 text-[0.71875rem] leading-none text-stone-500">
+        <span className="font-medium text-stone-600">{t('queue.upNext')}</span>
         <span>{messages.length}</span>
       </div>
-      <div className="max-h-[132px] overflow-y-auto border-t border-stone-200/80">
+      <div className="max-h-[8.25rem] overflow-y-auto border-t border-stone-200/80">
         {messages.map((message, index) => (
           <div
             key={message.id}
             className={cn(
-              'group/queue flex min-h-11 items-center gap-2.5 py-2 pr-2 pl-3.5 text-[13px]',
+              'group/queue flex min-h-11 items-center gap-2.5 py-2 pr-2 pl-3.5 text-[0.8125rem]',
               index > 0 && 'border-t border-stone-200/70',
             )}
           >
@@ -414,7 +428,7 @@ function PendingQueue({
               )}
               aria-hidden="true"
             />
-            <span className="shrink-0 font-[590] text-stone-700">
+            <span className="shrink-0 font-medium text-stone-700">
               {message.delivery === 'steer' ? t('queue.steer') : t('queue.followUp')}
             </span>
             <span className="min-w-0 flex-1 truncate text-stone-500">
@@ -424,14 +438,14 @@ function PendingQueue({
                 }`}
             </span>
             {message.text && message.images.length > 0 && (
-              <span className="shrink-0 text-[11.5px] text-stone-400">
+              <span className="shrink-0 text-[0.71875rem] text-stone-400">
                 +{message.images.length}{' '}
                 {message.images.length === 1 ? t('queue.image') : t('queue.images')}
               </span>
             )}
             <span
               className={cn(
-                'shrink-0 text-[11.5px]',
+                'shrink-0 text-[0.71875rem]',
                 message.status === 'failed' ? 'text-red-600' : 'text-stone-400',
               )}
             >
@@ -478,7 +492,7 @@ function RunDeliveryMenu({
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <button
-          className="group inline-flex h-9 cursor-pointer items-center gap-1 rounded-full px-2.5 text-[13px] font-medium text-stone-600 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(237,237,237)]"
+          className="group inline-flex h-9 cursor-pointer items-center gap-1 rounded-full px-2.5 text-[0.8125rem] font-medium text-stone-600 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(237,237,237)]"
           type="button"
           aria-label={t('delivery.choose')}
         >
@@ -495,9 +509,10 @@ function RunDeliveryMenu({
           align="end"
           sideOffset={7}
           collisionPadding={10}
-          className="z-[110] min-w-[236px] animate-[fade-in_110ms_ease-out] rounded-2xl border border-stone-200 bg-white p-1 text-[13px] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+          className="z-[110] min-w-[14.75rem] animate-[fade-in_110ms_ease-out] rounded-2xl border border-stone-200 bg-white p-1 text-[0.8125rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
         >
           <DropdownMenu.RadioGroup
+            className="flex flex-col gap-0.5"
             value={value}
             onValueChange={(next) => onValueChange(next as DeliveryMode)}
           >
@@ -525,7 +540,7 @@ function DeliveryOption({ value, label, hint }: { value: DeliveryMode; label: st
       className="relative flex h-10 cursor-default select-none items-center gap-2 rounded-[10px] px-2.5 pr-8 outline-none data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(237,237,237)]"
     >
       <span className="font-medium">{label}</span>
-      <span className="ml-auto text-[11.5px] text-stone-400">{hint}</span>
+      <span className="ml-auto text-[0.71875rem] text-stone-400">{hint}</span>
       <DropdownMenu.ItemIndicator className="absolute right-2 grid size-4 place-items-center text-stone-700">
         <Check className="size-3.5" aria-hidden="true" />
       </DropdownMenu.ItemIndicator>
