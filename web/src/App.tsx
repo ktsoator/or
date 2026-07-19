@@ -50,6 +50,12 @@ function clampSidebarWidth(width: number) {
   return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width))
 }
 
+function wheelDeltaInPixels(event: WheelEvent, pageHeight: number) {
+  if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) return event.deltaY * 16
+  if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) return event.deltaY * pageHeight
+  return event.deltaY
+}
+
 function readPinnedSessionIDs(): string[] {
   try {
     const value = JSON.parse(localStorage.getItem(PINNED_SESSIONS_KEY) ?? '[]')
@@ -207,6 +213,37 @@ export default function App() {
       el.scrollTop = el.scrollHeight
     }
   }, [activeSessionID, items])
+
+  useEffect(() => {
+    const transcript = logRef.current
+    if (!transcript) return
+
+    const routeWheelToCode = (event: WheelEvent) => {
+      if (event.ctrlKey || event.defaultPrevented) return
+      if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return
+
+      const hitTarget = document.elementFromPoint(event.clientX, event.clientY)
+      const codeArea = hitTarget?.closest<HTMLElement>('.code-scroll-area')
+      if (!codeArea || !transcript.contains(codeArea)) return
+
+      const maxScrollTop = codeArea.scrollHeight - codeArea.clientHeight
+      if (maxScrollTop <= 1) return
+
+      const deltaY = wheelDeltaInPixels(event, codeArea.clientHeight)
+      const canScrollUp = deltaY < 0 && codeArea.scrollTop > 0
+      const canScrollDown = deltaY > 0 && codeArea.scrollTop < maxScrollTop
+      if (!canScrollUp && !canScrollDown) return
+
+      event.preventDefault()
+      event.stopPropagation()
+      codeArea.scrollTop = Math.min(maxScrollTop, Math.max(0, codeArea.scrollTop + deltaY))
+    }
+
+    // A native non-passive capture listener bypasses the browser's wheel target
+    // latching and gives the code under the pointer the first scroll gesture.
+    transcript.addEventListener('wheel', routeWheelToCode, { capture: true, passive: false })
+    return () => transcript.removeEventListener('wheel', routeWheelToCode, { capture: true })
+  }, [])
 
   const toggleSidebar = () => {
     if (mobileSessionsOpen) {

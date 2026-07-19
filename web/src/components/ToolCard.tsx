@@ -155,12 +155,12 @@ function ReadPreview({ output, path, failed }: { output: string; path: string; f
   return (
     <div
       className={cn(
-        'mt-1.5 ml-5 overflow-hidden rounded-lg border border-stone-300/80 bg-[#fdfdfc] max-md:ml-0',
+        'mt-1.5 ml-5 overflow-hidden rounded-lg border border-stone-300/80 bg-white max-md:ml-0',
         failed && 'border-red-200 bg-red-50/60',
       )}
     >
       <div
-        className="overflow-hidden border-b border-stone-300/70 px-3 py-1.5 font-mono text-[0.75rem] text-stone-500 text-ellipsis whitespace-nowrap"
+        className="overflow-hidden border-b border-stone-300/70 bg-white px-3 py-1.5 font-mono text-[0.75rem] text-stone-500 text-ellipsis whitespace-nowrap"
         title={path}
       >
         {path}
@@ -168,12 +168,12 @@ function ReadPreview({ output, path, failed }: { output: string; path: string; f
       {content.hasLineNumbers && !failed ? (
         <>
           <div
-            className="code-scroll-area grid max-h-[min(52vh,32.5rem)] grid-cols-[3.25rem_minmax(max-content,1fr)] overflow-auto overscroll-contain bg-[#fdfdfc]"
+            className="code-scroll-area grid max-h-[min(52vh,32.5rem)] grid-cols-[3.25rem_minmax(max-content,1fr)] overflow-auto bg-white"
             role="region"
             aria-label={t('tool.contentsOf', { path })}
             tabIndex={0}
           >
-            <pre className="sticky left-0 z-10 m-0 border-r border-stone-200 bg-stone-50 px-2.5 py-1.5 text-right font-mono text-[var(--tool-detail-font-size)] leading-4.5 whitespace-pre text-stone-400 select-none">
+            <pre className="sticky left-0 z-10 m-0 border-r border-stone-200 bg-white px-2.5 py-1.5 text-right font-mono text-[var(--tool-detail-font-size)] leading-4.5 whitespace-pre text-stone-400 select-none">
               {content.lineNumbers}
             </pre>
             <pre className="m-0 min-w-full bg-transparent px-2.5 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-4.5 whitespace-pre text-stone-900">
@@ -184,7 +184,7 @@ function ReadPreview({ output, path, failed }: { output: string; path: string; f
             </pre>
           </div>
           {content.notice && (
-            <div className="border-t border-stone-200 bg-stone-50 px-3 py-1.5 font-mono text-[0.71875rem] text-stone-500">
+            <div className="border-t border-stone-200 bg-white px-3 py-1.5 font-mono text-[0.71875rem] text-stone-500">
               {content.notice}
             </div>
           )}
@@ -192,7 +192,7 @@ function ReadPreview({ output, path, failed }: { output: string; path: string; f
       ) : (
         <pre
           className={cn(
-            'code-scroll-area m-0 max-h-[min(52vh,32.5rem)] overflow-auto overscroll-contain bg-transparent px-2.5 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-4.5 whitespace-pre-wrap text-stone-800',
+            'code-scroll-area m-0 max-h-[min(52vh,32.5rem)] overflow-auto bg-transparent px-2.5 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-4.5 whitespace-pre-wrap text-stone-800',
             failed && 'text-red-700',
           )}
         >
@@ -228,7 +228,7 @@ function InspectPreview({ output, failed }: { output: string; failed: boolean })
       </div>
       {!empty && (
         <div
-          className="code-scroll-area max-h-72 overflow-auto overscroll-contain border-t border-stone-200/80 bg-[#fdfdfc] py-1"
+          className="code-scroll-area max-h-72 overflow-auto border-t border-stone-200/80 bg-[#fdfdfc] py-1"
           role="region"
           aria-label={t('tool.matchingFiles')}
           tabIndex={0}
@@ -277,14 +277,14 @@ function ShellPreview({
         failed && 'border-red-200 bg-red-50/60',
       )}
     >
-      <div className="flex max-h-24 min-h-7 items-start gap-2 overflow-auto overscroll-contain px-2.5 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-4.5 font-normal">
+      <div className="flex max-h-24 min-h-7 items-start gap-2 overflow-auto px-2.5 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-4.5 font-normal">
         <span className="shrink-0 text-stone-400 select-none">$</span>
         <code className="whitespace-pre-wrap text-stone-700">{command}</code>
       </div>
       {output && (
         <pre
           className={cn(
-            'code-scroll-area m-0 max-h-[min(46vh,26.25rem)] overflow-auto overscroll-contain border-t border-stone-200 bg-white px-2.5 py-2 font-mono text-[var(--tool-detail-font-size)] leading-4.5 font-normal tracking-[0.005em] whitespace-pre text-stone-600',
+            'code-scroll-area m-0 max-h-[min(46vh,26.25rem)] overflow-auto border-t border-stone-200 bg-white px-2.5 py-2 font-mono text-[var(--tool-detail-font-size)] leading-4.5 font-normal tracking-[0.005em] whitespace-pre text-stone-600',
             failed && 'border-red-200 bg-red-50/40 text-red-700',
           )}
           role="region"

@@ -41,6 +41,10 @@
 }
 
 .code-scroll-area {
+  /* Keep horizontal gestures inside code, but let vertical scrolling continue
+     into the conversation when the code reaches either edge. */
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
   scrollbar-color: #a6a69f #f4f4f1;
   scrollbar-gutter: stable;
   scrollbar-width: thin;

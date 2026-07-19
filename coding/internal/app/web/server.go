@@ -480,7 +480,7 @@ func (s *Server) handlePrompt(c *gin.Context) {
 	runtime = reserved
 	go func() {
 		defer s.sessions.EndRun(sessionID)
-		if err := runtime.session.Prompt(s.ctx, body.Text, images...); err != nil {
+		if err := runtime.session.Prompt(s.ctx, body.Text, images...); err != nil && !errors.Is(err, context.Canceled) {
 			payload, _ := json.Marshal(wireEvent{Type: "error", Text: err.Error()})
 			runtime.hub.Broadcast(payload)
 		}

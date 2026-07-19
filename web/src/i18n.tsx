@@ -282,6 +282,7 @@ const en = {
   'actions.input': 'Input',
   'actions.output': 'Output',
   'actions.cacheRead': 'Cache read',
+  'actions.cacheHitRate': 'Cache hit',
   'actions.cacheWrite': 'Cache write',
   'actions.cost': 'Cost',
 } as const
@@ -569,6 +570,7 @@ const zh: Record<TranslationKey, string> = {
   'actions.input': '输入',
   'actions.output': '输出',
   'actions.cacheRead': '缓存读取',
+  'actions.cacheHitRate': '缓存命中率',
   'actions.cacheWrite': '缓存写入',
   'actions.cost': '费用',
 }

@@ -181,8 +181,9 @@ func hasUsage(usage llm.Usage) bool {
 		usage.CacheWrite != 0 || usage.TotalTokens != 0 || usage.Cost.Total != 0
 }
 
-// eventAssistantText returns displayable assistant text. Failed and aborted
-// messages retain their terminal state in a compact textual form.
+// eventAssistantText returns displayable assistant text. Failed messages retain
+// their terminal state; aborted messages keep only content that actually
+// streamed before the user stopped the run.
 func eventAssistantText(message agent.AgentMessage) (string, bool) {
 	assistant, ok := eventAssistantMessage(message)
 	if !ok {
@@ -204,7 +205,10 @@ func eventAssistantMessage(message agent.AgentMessage) (*llm.AssistantMessage, b
 }
 
 func displayAssistantText(assistant *llm.AssistantMessage) string {
-	if assistant.StopReason == llm.StopReasonError || assistant.StopReason == llm.StopReasonAborted {
+	if assistant.StopReason == llm.StopReasonAborted {
+		return assistant.Text()
+	}
+	if assistant.StopReason == llm.StopReasonError {
 		if assistant.ErrorMessage != "" {
 			return "[" + string(assistant.StopReason) + "] " + assistant.ErrorMessage
 		}

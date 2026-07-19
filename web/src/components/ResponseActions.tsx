@@ -21,6 +21,8 @@ export function ResponseActions({
   const totalTokens = usage
     ? usage.totalTokens || usage.input + usage.output + usage.cacheRead + usage.cacheWrite
     : 0
+  const promptTokens = usage ? usage.input + usage.cacheRead : 0
+  const cacheHitRate = usage && promptTokens > 0 ? usage.cacheRead / promptTokens : 0
 
   useEffect(
     () => () => {
@@ -101,13 +103,22 @@ export function ResponseActions({
                   align="start"
                   sideOffset={7}
                   collisionPadding={10}
-                  className="z-[150] animate-[fade-in_110ms_ease-out] rounded-[10px] border border-stone-200 bg-white px-3 py-2 text-[0.75rem] leading-5 text-stone-700 tabular-nums shadow-[0_14px_38px_-20px_rgba(28,25,23,0.5)] outline-none"
+                  className="z-[150] animate-[fade-in_110ms_ease-out] rounded-lg border border-stone-200/80 bg-white px-2.5 py-1.5 text-[0.6875rem] leading-4 text-stone-700 tabular-nums shadow-[0_10px_28px_-20px_rgba(28,25,23,0.4)] outline-none"
                 >
-                  <div className="flex items-center gap-3 whitespace-nowrap">
+                  <div className="flex items-center gap-2.5 whitespace-nowrap">
                     <Metric label={t('actions.input')} value={formatNumber(usage.input)} />
                     <Metric label={t('actions.output')} value={formatNumber(usage.output)} />
                     {usage.cacheRead > 0 && (
                       <Metric label={t('actions.cacheRead')} value={formatNumber(usage.cacheRead)} />
+                    )}
+                    {promptTokens > 0 && (
+                      <Metric
+                        label={t('actions.cacheHitRate')}
+                        value={formatNumber(cacheHitRate, {
+                          style: 'percent',
+                          maximumFractionDigits: 1,
+                        })}
+                      />
                     )}
                     {usage.cacheWrite > 0 && (
                       <Metric label={t('actions.cacheWrite')} value={formatNumber(usage.cacheWrite)} />

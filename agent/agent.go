@@ -240,6 +240,7 @@ func (a *Agent) run(ctx context.Context, prompts []AgentMessage, skipInitialStee
 	}
 
 	errText := lastAssistantError(appended)
+	runContextErr := runCtx.Err()
 
 	a.mu.Lock()
 	a.isStreaming = false
@@ -250,6 +251,11 @@ func (a *Agent) run(ctx context.Context, prompts []AgentMessage, skipInitialStee
 	a.mu.Unlock()
 
 	if errText != "" {
+		// Preserve cancellation identity so product adapters can distinguish an
+		// intentional abort from an actual model or transport failure.
+		if runContextErr != nil {
+			return runContextErr
+		}
 		return errors.New(errText)
 	}
 	return nil

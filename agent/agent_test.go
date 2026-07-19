@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 
@@ -424,8 +425,8 @@ func TestAgentAbortCancelsRun(t *testing.T) {
 	<-started
 	a.Abort()
 
-	if err := <-result; err == nil {
-		t.Fatal("aborted prompt returned nil error, want non-nil")
+	if err := <-result; !errors.Is(err, context.Canceled) {
+		t.Fatalf("aborted prompt error = %v, want context.Canceled", err)
 	}
 	if a.Snapshot().IsStreaming {
 		t.Fatal("IsStreaming should be false after abort")
