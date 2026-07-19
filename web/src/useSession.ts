@@ -12,6 +12,7 @@ import type {
   MessageImage,
   QueuedMessage,
   SessionSummary,
+  WorkspaceSummary,
   ThinkingLevel,
   Usage,
   WireEvent,
@@ -523,6 +524,8 @@ function promptTitle(text: string): string {
 
 export type Session = {
   sessions: SessionSummary[]
+  workspaces: WorkspaceSummary[]
+  draft?: SessionDraft
   activeSession?: SessionSummary
   activeSessionID?: string
   items: Item[]
@@ -535,7 +538,9 @@ export type Session = {
   updatingSettings: boolean
   status: ConnectionStatus
   models: ModelOption[]
-  createSession: () => Promise<void>
+  registerWorkspace: (path: string) => Promise<WorkspaceSummary>
+  startDraft: (workspacePath?: string, projectScoped?: boolean) => void
+  updateDraftWorkspace: (workspacePath?: string, projectScoped?: boolean) => void
   deleteSession: (id: string) => Promise<void>
   selectSession: (id: string) => void
   updateSettings: (provider: string, model: string, thinkingLevel: ThinkingLevel) => Promise<void>
@@ -545,18 +550,84 @@ export type Session = {
   resolveConfirm: (id: string, allow: boolean) => Promise<void>
 }
 
+export type SessionDraft = {
+  id: string
+  workspacePath?: string
+  projectScoped: boolean
+  modelProvider?: string
+  modelID?: string
+  thinkingLevel?: ThinkingLevel
+}
+
+type DraftSubmission = {
+  sessionID: string
+  text: string
+  images: MessageImage[]
+}
+
+type ModelDefaults = {
+  provider: string
+  model: string
+  thinkingLevel: ThinkingLevel
+}
+
 const selectedSessionKey = 'or-coding-active-session'
+
+function newSessionDraft(
+  workspacePath?: string,
+  projectScoped = false,
+  base?: SessionSummary,
+  models: ModelOption[] = [],
+  defaults?: ModelDefaults,
+): SessionDraft {
+  const fallback =
+    models.find(
+      (model) => model.provider === defaults?.provider && model.id === defaults?.model,
+    ) ?? models[0]
+  const fallbackThinking =
+    (fallback?.provider === defaults?.provider && fallback?.id === defaults?.model
+      ? defaults?.thinkingLevel
+      : undefined) ??
+    fallback?.thinkingLevels.find((level) => level === 'medium') ??
+    fallback?.thinkingLevels.find((level) => level !== 'off') ??
+    fallback?.thinkingLevels[0]
+  return {
+    id: crypto.randomUUID(),
+    workspacePath,
+    projectScoped,
+    modelProvider: base?.modelProvider ?? fallback?.provider,
+    modelID: base?.modelId ?? fallback?.id,
+    thinkingLevel: base?.thinkingLevel ?? fallbackThinking,
+  }
+}
+
+function resolveSessionDraft(
+  draft: SessionDraft,
+  models: ModelOption[],
+  defaults?: ModelDefaults,
+): SessionDraft {
+  if (draft.modelProvider && draft.modelID && draft.thinkingLevel) return draft
+  return {
+    ...newSessionDraft(draft.workspacePath, draft.projectScoped, undefined, models, defaults),
+    id: draft.id,
+  }
+}
 
 export function useSession(): Session {
   const [threads, dispatch] = useReducer(threadsReducer, {})
   const [sessions, setSessions] = useState<SessionSummary[]>([])
+  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([])
+  const [draft, setDraft] = useState<SessionDraft>()
+  const [pendingDraftSend, setPendingDraftSend] = useState<DraftSubmission>()
   const [activeSessionID, setActiveSessionID] = useState<string>()
   const [initializing, setInitializing] = useState(true)
   const [creating, setCreating] = useState(false)
   const [updatingSettings, setUpdatingSettings] = useState(false)
   const [models, setModels] = useState<ModelOption[]>([])
+  const [modelDefaults, setModelDefaults] = useState<ModelDefaults>()
   const [serviceStatus, setServiceStatus] = useState<ConnectionStatus>('connecting')
   const deletedSessionIDs = useRef(new Set<string>())
+  const draftRef = useRef<SessionDraft | undefined>(undefined)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -566,7 +637,14 @@ export function useSession(): Session {
           ? response.json()
           : Promise.reject(new Error(`model catalog failed (${response.status})`)),
       )
-      .then((catalog: ModelCatalogResponse) => setModels(catalog.models))
+      .then((catalog: ModelCatalogResponse) => {
+        setModels(catalog.models)
+        setModelDefaults({
+          provider: catalog.defaultProvider,
+          model: catalog.defaultModel,
+          thinkingLevel: catalog.defaultThinkingLevel,
+        })
+      })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === 'AbortError') return
         setModels([])
@@ -579,6 +657,11 @@ export function useSession(): Session {
     if (!response.ok) throw new Error(`session list failed (${response.status})`)
     const received = (await response.json()) as SessionSummary[]
     const next = received.filter((session) => !deletedSessionIDs.current.has(session.id))
+    if (next.length === 0 && !draftRef.current) {
+      const initialDraft = newSessionDraft()
+      draftRef.current = initialDraft
+      setDraft(initialDraft)
+    }
     setSessions((current) =>
       next.map((remote) => {
         const local = current.find((session) => session.id === remote.id)
@@ -589,12 +672,21 @@ export function useSession(): Session {
       }),
     )
     setActiveSessionID((current) => {
+      if (draftRef.current) return undefined
       if (current && next.some((session) => session.id === current)) return current
       const stored = localStorage.getItem(selectedSessionKey)
       if (stored && next.some((session) => session.id === stored)) return stored
       return next[0]?.id
     })
     return next
+  }, [])
+
+  const refreshWorkspaces = useCallback(async (signal?: AbortSignal) => {
+    const response = await fetch(apiURL('/workspaces'), { cache: 'no-store', signal })
+    if (!response.ok) throw new Error(`workspace list failed (${response.status})`)
+    const received = (await response.json()) as WorkspaceSummary[]
+    setWorkspaces(received)
+    return received
   }, [])
 
   useEffect(() => {
@@ -604,12 +696,18 @@ export function useSession(): Session {
     const refresh = (initial = false) => {
       controller?.abort()
       controller = new AbortController()
-      void refreshSessions(controller.signal).catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === 'AbortError') return
-        setServiceStatus('disconnected')
-      }).finally(() => {
-        if (active && initial) setInitializing(false)
-      })
+      void Promise.all([
+        refreshSessions(controller.signal),
+        refreshWorkspaces(controller.signal),
+      ])
+        .then(() => setServiceStatus('ready'))
+        .catch((error: unknown) => {
+          if (error instanceof DOMException && error.name === 'AbortError') return
+          setServiceStatus('disconnected')
+        })
+        .finally(() => {
+          if (active && initial) setInitializing(false)
+        })
     }
 
     const refreshWhenVisible = () => {
@@ -628,7 +726,7 @@ export function useSession(): Session {
       window.removeEventListener('focus', refreshOnFocus)
       document.removeEventListener('visibilitychange', refreshWhenVisible)
     }
-  }, [refreshSessions])
+  }, [refreshSessions, refreshWorkspaces])
 
   useEffect(() => {
     if (!activeSessionID) return
@@ -710,26 +808,93 @@ export function useSession(): Session {
     }
   }, [activeSessionID])
 
+  const activeSession = sessions.find((session) => session.id === activeSessionID)
+  const effectiveDraft = draft ? resolveSessionDraft(draft, models, modelDefaults) : undefined
+
   const selectSession = (id: string) => {
-    if (sessions.some((session) => session.id === id)) setActiveSessionID(id)
+    if (!sessions.some((session) => session.id === id)) return
+    draftRef.current = undefined
+    setDraft(undefined)
+    setActiveSessionID(id)
   }
 
-  const createSession = async () => {
-    if (creating) return
-    setCreating(true)
-    try {
-      const response = await fetch(apiURL('/sessions'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      if (!response.ok) throw new Error(`create session failed (${response.status})`)
-      const created = (await response.json()) as SessionSummary
-      setSessions((current) => [created, ...current.filter((session) => session.id !== created.id)])
-      setActiveSessionID(created.id)
-    } finally {
-      setCreating(false)
+  const startDraft = (workspacePath?: string, projectScoped = false) => {
+    const next = newSessionDraft(
+      workspacePath,
+      projectScoped,
+      activeSession,
+      models,
+      modelDefaults,
+    )
+    draftRef.current = next
+    setDraft(next)
+    setPendingDraftSend(undefined)
+    setActiveSessionID(undefined)
+  }
+
+  const updateDraftWorkspace = (workspacePath?: string, projectScoped = false) => {
+    const current = draftRef.current
+    if (!current) return
+    const next = {
+      ...current,
+      workspacePath: projectScoped ? workspacePath : undefined,
+      projectScoped,
     }
+    draftRef.current = next
+    setDraft(next)
+  }
+
+  const registerWorkspace = async (path: string) => {
+    const response = await fetch(apiURL('/workspaces'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    })
+    if (!response.ok) {
+      let message = `register workspace failed (${response.status})`
+      try {
+        const body = (await response.json()) as { error?: string }
+        if (body.error) message = body.error
+      } catch {
+        // Keep the status-based fallback when the response has no JSON body.
+      }
+      throw new Error(message)
+    }
+    const workspace = (await response.json()) as WorkspaceSummary
+    setWorkspaces((current) => [
+      workspace,
+      ...current.filter((candidate) => candidate.path !== workspace.path),
+    ])
+    return workspace
+  }
+
+  const createSessionRecord = async (workspacePath?: string, projectScoped = false) => {
+    const response = await fetch(apiURL('/sessions'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        workspacePath: projectScoped ? workspacePath : undefined,
+        scope: projectScoped ? 'project' : 'chat',
+      }),
+    })
+    if (!response.ok) throw new Error(`create session failed (${response.status})`)
+    const created = (await response.json()) as SessionSummary
+    setSessions((current) => [created, ...current.filter((session) => session.id !== created.id)])
+    if (created.scope === 'project') {
+      setWorkspaces((current) => {
+        if (current.some((workspace) => workspace.path === created.workspacePath)) return current
+        return [
+          {
+            path: created.workspacePath,
+            name: created.workspaceName,
+            addedAt: created.createdAt,
+          },
+          ...current,
+        ]
+      })
+    }
+    setActiveSessionID(created.id)
+    return created
   }
 
   const deleteSession = async (id: string) => {
@@ -752,31 +917,46 @@ export function useSession(): Session {
     await refreshSessions()
   }
 
+  const patchSessionSettings = async (
+    sessionID: string,
+    provider: string,
+    model: string,
+    thinkingLevel: ThinkingLevel,
+  ) => {
+    const response = await fetch(sessionURL(sessionID, '/settings'), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider, model, thinkingLevel }),
+    })
+    if (!response.ok) {
+      let message = `update settings failed (${response.status})`
+      try {
+        const body = (await response.json()) as { error?: string }
+        if (body.error) message = body.error
+      } catch {
+        // Keep the status-based fallback when the response has no JSON body.
+      }
+      throw new Error(message)
+    }
+    return (await response.json()) as SessionSummary
+  }
+
   const updateSettings = async (
     provider: string,
     model: string,
     thinkingLevel: ThinkingLevel,
   ) => {
+    if (draftRef.current) {
+      const next = { ...draftRef.current, modelProvider: provider, modelID: model, thinkingLevel }
+      draftRef.current = next
+      setDraft(next)
+      return
+    }
     if (!activeSessionID || updatingSettings) return
     const sessionID = activeSessionID
     setUpdatingSettings(true)
     try {
-      const response = await fetch(sessionURL(sessionID, '/settings'), {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider, model, thinkingLevel }),
-      })
-      if (!response.ok) {
-        let message = `update settings failed (${response.status})`
-        try {
-          const body = (await response.json()) as { error?: string }
-          if (body.error) message = body.error
-        } catch {
-          // Keep the status-based fallback when the response has no JSON body.
-        }
-        throw new Error(message)
-      }
-      const updated = (await response.json()) as SessionSummary
+      const updated = await patchSessionSettings(sessionID, provider, model, thinkingLevel)
       const previous = sessions.find((session) => session.id === sessionID)
       setSessions((current) => [
         updated,
@@ -804,7 +984,6 @@ export function useSession(): Session {
     }
   }
 
-  const activeSession = sessions.find((session) => session.id === activeSessionID)
   const thread = activeSessionID ? threads[activeSessionID] : undefined
   const activeSessionRunning = activeSession?.running
 
@@ -817,9 +996,106 @@ export function useSession(): Session {
     })
   }, [activeSessionID, activeSessionRunning, thread?.loaded])
 
+  useEffect(() => {
+    if (
+      !pendingDraftSend ||
+      pendingDraftSend.sessionID !== activeSessionID ||
+      !thread?.loaded ||
+      thread.status !== 'ready'
+    ) {
+      return
+    }
+    const submission = pendingDraftSend
+    setPendingDraftSend(undefined)
+    const id = `local-${submission.sessionID}-${crypto.randomUUID()}`
+    dispatch({
+      t: 'sendUser',
+      sessionID: submission.sessionID,
+      id,
+      text: submission.text,
+      images: submission.images,
+    })
+    setSessions((current) =>
+      current.map((session) =>
+        session.id === submission.sessionID
+          ? {
+              ...session,
+              title:
+                session.title === 'New session'
+                  ? promptTitle(submission.text || 'Image')
+                  : session.title,
+              running: true,
+              updatedAt: new Date().toISOString(),
+            }
+          : session,
+      ),
+    )
+    void fetch(sessionURL(submission.sessionID, '/prompt'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: submission.text, images: submission.images }),
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error(`prompt request failed (${response.status})`)
+      })
+      .catch((error: unknown) => {
+        dispatch({ t: 'queueFailed', sessionID: submission.sessionID, id })
+        dispatch({
+          t: 'wire',
+          sessionID: submission.sessionID,
+          ev: {
+            type: 'error',
+            text: error instanceof Error ? error.message : 'Prompt request failed.',
+          },
+        })
+        void refreshSessions().catch(() => undefined)
+      })
+  }, [activeSessionID, pendingDraftSend, refreshSessions, thread?.loaded, thread?.status])
+
   const send = (text: string, images: MessageImage[], delivery?: DeliveryMode) => {
-    if (!activeSessionID || !thread) return
     const trimmed = text.trim()
+    if ((!trimmed && images.length === 0)) return
+    if (effectiveDraft) {
+      if (delivery || creating || serviceStatus !== 'ready') return
+      const requestedDraft = effectiveDraft
+      setCreating(true)
+      void (async () => {
+        try {
+          const created = await createSessionRecord(
+            requestedDraft.workspacePath,
+            requestedDraft.projectScoped,
+          )
+          if (
+            requestedDraft.modelProvider &&
+            requestedDraft.modelID &&
+            requestedDraft.thinkingLevel &&
+            (created.modelProvider !== requestedDraft.modelProvider ||
+              created.modelId !== requestedDraft.modelID ||
+              created.thinkingLevel !== requestedDraft.thinkingLevel)
+          ) {
+            const configured = await patchSessionSettings(
+              created.id,
+              requestedDraft.modelProvider,
+              requestedDraft.modelID,
+              requestedDraft.thinkingLevel,
+            )
+            setSessions((current) => [
+              configured,
+              ...current.filter((session) => session.id !== configured.id),
+            ])
+          }
+          draftRef.current = undefined
+          setDraft(undefined)
+          setPendingDraftSend({ sessionID: created.id, text: trimmed, images })
+        } catch {
+          // Keep the unsaved draft active so the user can retry the first send.
+        } finally {
+          setCreating(false)
+        }
+      })()
+      return
+    }
+    if (!activeSessionID || !thread) return
     if ((!trimmed && images.length === 0) || thread.status !== 'ready') return
     const sessionID = activeSessionID
     const queued = thread.running
@@ -942,6 +1218,8 @@ export function useSession(): Session {
 
   return {
     sessions,
+    workspaces,
+    draft: effectiveDraft,
     activeSession,
     activeSessionID,
     items,
@@ -954,7 +1232,9 @@ export function useSession(): Session {
     updatingSettings,
     status: thread?.status ?? serviceStatus,
     models,
-    createSession,
+    registerWorkspace,
+    startDraft,
+    updateDraftWorkspace,
     deleteSession,
     selectSession,
     updateSettings,

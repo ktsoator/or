@@ -1,10 +1,20 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
   CircleAlert,
   Clock3,
   Ellipsis,
   Files,
+  Folder,
   FolderOpen,
   LoaderCircle,
   PanelLeft,
@@ -25,12 +35,24 @@ import { Thinking } from './components/Thinking'
 import { ProfileMenu } from './components/ProfileMenu'
 import { ResponseActions } from './components/ResponseActions'
 import { SettingsPage } from './components/SettingsPage'
+import { WorkspacePickerDialog } from './components/WorkspacePickerDialog'
 import { useI18n } from './i18n'
+import logoImage from './assets/logo.svg'
+
+const DEFAULT_SIDEBAR_WIDTH = 256
+const MIN_SIDEBAR_WIDTH = 220
+const MAX_SIDEBAR_WIDTH = 360
+
+function clampSidebarWidth(width: number) {
+  return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width))
+}
 
 export default function App() {
   const { t } = useI18n()
   const {
     sessions,
+    workspaces,
+    draft,
     activeSession,
     activeSessionID,
     items,
@@ -43,7 +65,9 @@ export default function App() {
     updatingSettings,
     status,
     models,
-    createSession,
+    registerWorkspace,
+    startDraft,
+    updateDraftWorkspace,
     deleteSession,
     selectSession,
     updateSettings,
@@ -55,13 +79,67 @@ export default function App() {
   const logRef = useRef<HTMLDivElement>(null)
   const followLatestRef = useRef(true)
   const previousSessionIDRef = useRef<string | undefined>(undefined)
+  const sidebarResizeRef = useRef<
+    | {
+        pointerID: number
+        startX: number
+        startWidth: number
+      }
+    | undefined
+  >(undefined)
   const [mobileSessionsOpen, setMobileSessionsOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [activeShortcut, setActiveShortcut] = useState<string>()
+  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH)
+  const [sidebarResizing, setSidebarResizing] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<SessionSummary>()
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [workspacePickerOpen, setWorkspacePickerOpen] = useState(false)
+  const [selectedWorkspacePath, setSelectedWorkspacePath] = useState<string>()
+
+  const workspaceGroups = useMemo(() => {
+    const groups = new Map<
+      string,
+      { path: string; name: string; sessions: SessionSummary[] }
+    >()
+    for (const workspace of workspaces) {
+      groups.set(workspace.path, {
+        path: workspace.path,
+        name: workspace.name,
+        sessions: [],
+      })
+    }
+    for (const session of sessions) {
+      if (session.scope !== 'project') continue
+      const path = session.workspacePath || ''
+      const existing = groups.get(path)
+      if (existing) {
+        existing.sessions.push(session)
+      } else {
+        groups.set(path, {
+          path,
+          name: session.workspaceName || path.split('/').filter(Boolean).pop() || t('app.workspace'),
+          sessions: [session],
+        })
+      }
+    }
+    return [...groups.values()]
+  }, [sessions, t, workspaces])
+  const chatSessions = useMemo(
+    () => sessions.filter((session) => session.scope === 'chat'),
+    [sessions],
+  )
+  const workspacePickerPath =
+    selectedWorkspacePath || draft?.workspacePath || activeSession?.workspacePath || workspaceGroups[0]?.path
+
+  useEffect(() => {
+    if (draft || selectedWorkspacePath) return
+    const initialPath = activeSession?.scope === 'project'
+      ? activeSession.workspacePath
+      : workspaceGroups[0]?.path
+    if (initialPath) setSelectedWorkspacePath(initialPath)
+  }, [activeSession, draft, selectedWorkspacePath, workspaceGroups])
 
   useEffect(() => {
     const handleSettingsShortcut = (event: KeyboardEvent) => {
@@ -75,6 +153,18 @@ export default function App() {
     window.addEventListener('keydown', handleSettingsShortcut)
     return () => window.removeEventListener('keydown', handleSettingsShortcut)
   }, [settingsOpen])
+
+  useEffect(() => {
+    if (!sidebarResizing) return
+    const previousCursor = document.body.style.cursor
+    const previousUserSelect = document.body.style.userSelect
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    return () => {
+      document.body.style.cursor = previousCursor
+      document.body.style.userSelect = previousUserSelect
+    }
+  }, [sidebarResizing])
 
   useLayoutEffect(() => {
     const el = logRef.current
@@ -97,6 +187,45 @@ export default function App() {
     setSidebarCollapsed((collapsed) => !collapsed)
   }
 
+  const startSidebarResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (sidebarCollapsed) return
+    event.preventDefault()
+    sidebarResizeRef.current = {
+      pointerID: event.pointerId,
+      startX: event.clientX,
+      startWidth: sidebarWidth,
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setSidebarResizing(true)
+  }
+
+  const resizeSidebar = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const resize = sidebarResizeRef.current
+    if (!resize || resize.pointerID !== event.pointerId) return
+    setSidebarWidth(clampSidebarWidth(resize.startWidth + event.clientX - resize.startX))
+  }
+
+  const stopSidebarResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const resize = sidebarResizeRef.current
+    if (!resize || resize.pointerID !== event.pointerId) return
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    sidebarResizeRef.current = undefined
+    setSidebarResizing(false)
+  }
+
+  const resizeSidebarWithKeyboard = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    let nextWidth: number | undefined
+    if (event.key === 'ArrowLeft') nextWidth = sidebarWidth - 8
+    if (event.key === 'ArrowRight') nextWidth = sidebarWidth + 8
+    if (event.key === 'Home') nextWidth = MIN_SIDEBAR_WIDTH
+    if (event.key === 'End') nextWidth = MAX_SIDEBAR_WIDTH
+    if (nextWidth === undefined) return
+    event.preventDefault()
+    setSidebarWidth(clampSidebarWidth(nextWidth))
+  }
+
   const trackScrollPosition = () => {
     const el = logRef.current
     if (!el) return
@@ -104,16 +233,16 @@ export default function App() {
   }
 
   const chooseSession = (id: string) => {
-    setActiveShortcut(undefined)
+    const session = sessions.find((candidate) => candidate.id === id)
+    if (session) setSelectedWorkspacePath(session.scope === 'project' ? session.workspacePath : undefined)
     selectSession(id)
     setMobileSessionsOpen(false)
   }
 
-  const addSession = () => {
-    setActiveShortcut(undefined)
-    void createSession()
-      .then(() => setMobileSessionsOpen(false))
-      .catch(() => undefined)
+  const addSession = (workspacePath?: string, projectScoped = false) => {
+    setSelectedWorkspacePath(projectScoped ? workspacePath : undefined)
+    startDraft(workspacePath, projectScoped)
+    setMobileSessionsOpen(false)
   }
 
   const requestDelete = (session: SessionSummary) => {
@@ -140,21 +269,32 @@ export default function App() {
 
   const composer = (centered = false) => (
     <Composer
-      connected={status === 'ready'}
+      key={draft?.id ?? activeSessionID ?? 'empty-session'}
+      connected={status === 'ready' && !creating}
       running={running}
       confirmation={confirmation}
       queuedMessages={queuedMessages}
       contextUsage={contextUsage}
       centered={centered}
+      projectPickerVisible={Boolean(draft)}
+      workspaces={workspaces}
+      workspacePath={draft?.projectScoped ? draft.workspacePath : undefined}
       models={models}
-      modelProvider={activeSession?.modelProvider}
-      modelID={activeSession?.modelId}
-      thinkingLevel={activeSession?.thinkingLevel}
+      modelProvider={draft?.modelProvider ?? activeSession?.modelProvider}
+      modelID={draft?.modelID ?? activeSession?.modelId}
+      thinkingLevel={draft?.thinkingLevel ?? activeSession?.thinkingLevel}
       updatingSettings={updatingSettings}
       onSend={send}
       onRemoveQueued={removeQueuedMessage}
       onStop={stop}
       onResolve={resolveConfirm}
+      onSelectProject={(path) => {
+        updateDraftWorkspace(path, Boolean(path))
+        setSelectedWorkspacePath(path)
+      }}
+      onBrowseProjects={() => {
+        setWorkspacePickerOpen(true)
+      }}
       onSettingsChange={updateSettings}
     />
   )
@@ -166,11 +306,15 @@ export default function App() {
   return (
     <div
       className={cn(
-        'grid h-full grid-rows-[minmax(0,1fr)] overflow-hidden bg-white transition-[grid-template-columns] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none max-md:grid-cols-1',
-        sidebarCollapsed
-          ? 'grid-cols-[64px_minmax(0,1fr)]'
-          : 'grid-cols-[256px_minmax(0,1fr)]',
+        'grid h-full grid-cols-[var(--sidebar-width)_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] overflow-hidden bg-white motion-reduce:transition-none max-md:grid-cols-1',
+        !sidebarResizing &&
+          'transition-[grid-template-columns] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]',
       )}
+      style={
+        {
+          '--sidebar-width': `${sidebarCollapsed ? 64 : sidebarWidth}px`,
+        } as CSSProperties
+      }
     >
       {mobileSessionsOpen && (
         <button
@@ -182,45 +326,34 @@ export default function App() {
       )}
       <aside
         className={cn(
-          'z-50 flex min-h-0 min-w-0 flex-col overflow-hidden border-r border-stone-200/75 bg-white text-stone-700 transition-transform duration-200 ease-out',
+          'relative z-50 flex min-h-0 min-w-0 flex-col overflow-hidden border-r border-stone-200/75 bg-white text-stone-700 transition-transform duration-200 ease-out',
           'max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:w-[280px] max-md:shadow-2xl',
           mobileSessionsOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full',
         )}
         aria-label={t('app.sessions')}
       >
-        <div className="relative h-16 w-[256px] shrink-0 max-md:w-[280px]">
+        <div className="relative h-16 w-full shrink-0 max-md:w-[280px]">
           <div
             className={cn(
-              'absolute inset-y-0 left-4 flex items-center whitespace-nowrap transition-opacity duration-100 ease-out motion-reduce:transition-none',
+              'absolute inset-y-0 left-3.5 flex items-center transition-opacity duration-100 ease-out motion-reduce:transition-none',
               sidebarCollapsed ? 'opacity-0' : 'opacity-100',
             )}
           >
-            <span className="truncate text-[15.5px] font-[640] tracking-[-0.02em] text-stone-950">
-              OR coding
-            </span>
+            <img className="size-[25px] shrink-0" src={logoImage} alt="" aria-hidden="true" />
           </div>
           <button
             className={cn(
               'absolute top-4 right-14 grid size-8 cursor-pointer place-items-center rounded-lg text-stone-500 transition-[opacity,color,background-color,transform] duration-100 ease-out motion-reduce:transition-none hover:bg-stone-200/75 hover:text-stone-950 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-stone-400',
               sidebarCollapsed ? 'pointer-events-none opacity-0' : 'opacity-100',
-              activeShortcut === 'Search' && 'bg-stone-200/80 text-stone-950',
             )}
             type="button"
             title={t('app.searchSessions')}
             aria-label={t('app.searchSessions')}
-            aria-pressed={activeShortcut === 'Search'}
-            onClick={() =>
-              setActiveShortcut((current) => (current === 'Search' ? undefined : 'Search'))
-            }
           >
             <Search className="size-[18px]" aria-hidden="true" />
           </button>
           <button
-            className={cn(
-              'absolute top-4 left-4 grid size-8 cursor-pointer place-items-center rounded-lg text-stone-500 transition-[transform,color,background-color] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none hover:bg-stone-200/75 hover:text-stone-950',
-              sidebarCollapsed ? 'translate-x-0' : 'translate-x-[192px]',
-              'max-md:translate-x-[216px]',
-            )}
+            className="absolute top-4 right-4 grid size-8 cursor-pointer place-items-center rounded-lg text-stone-500 transition-colors duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none hover:bg-stone-200/75 hover:text-stone-950"
             type="button"
             title={sidebarCollapsed ? t('app.expandSidebar') : t('app.collapseSidebar')}
             aria-label={sidebarCollapsed ? t('app.expandSidebar') : t('app.collapseSidebar')}
@@ -232,22 +365,40 @@ export default function App() {
         </div>
 
         <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
-          <div className="w-[256px] px-3 pb-3 max-md:w-[280px]">
+          <div className="w-full px-3 pb-3 max-md:w-[280px]">
             <button
               className={cn(
-                'flex h-11 w-full cursor-pointer items-center gap-3 rounded-xl px-3 text-left text-[14.5px] font-[540] text-stone-950 transition-colors duration-100 motion-reduce:transition-none disabled:cursor-wait disabled:opacity-50',
-                sidebarCollapsed ? 'bg-transparent' : 'bg-stone-200/75 hover:bg-stone-200',
+                'group flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[14px] font-[540] text-stone-900 transition-colors duration-100 motion-reduce:transition-none disabled:cursor-wait disabled:opacity-50',
+                !sidebarCollapsed &&
+                  (draft
+                    ? 'bg-[rgb(237,237,237)] text-stone-950'
+                    : 'hover:bg-[rgb(246,246,246)] hover:text-stone-950'),
               )}
               type="button"
               title={t('app.newSession')}
               disabled={creating}
-              onClick={addSession}
+              onClick={() => addSession(undefined, false)}
             >
-              {creating ? (
-                <LoaderCircle className="size-[18px] shrink-0 animate-spin" aria-hidden="true" />
-              ) : (
-                <SquarePen className="size-[18px] shrink-0" aria-hidden="true" />
-              )}
+              <span className="relative shrink-0">
+                <span
+                  className={cn(
+                    'pointer-events-none absolute -inset-1.5 rounded-[9px] transition-colors duration-100',
+                    sidebarCollapsed &&
+                      (draft
+                        ? 'bg-[rgb(237,237,237)]'
+                        : 'group-hover:bg-[rgb(246,246,246)]'),
+                  )}
+                  aria-hidden="true"
+                />
+                {creating ? (
+                  <LoaderCircle
+                    className="relative size-[18px] animate-spin"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <SquarePen className="relative size-[18px]" aria-hidden="true" />
+                )}
+              </span>
               <span
                 className={cn(
                   'whitespace-nowrap transition-opacity duration-100 ease-out motion-reduce:transition-none',
@@ -258,69 +409,93 @@ export default function App() {
               </span>
             </button>
 
-            <div className="mt-1 space-y-0.5" aria-label={t('app.workspaceShortcuts')}>
-              <SidebarNavItem
-                icon={FolderOpen}
-                label={t('app.workspace')}
-                collapsed={sidebarCollapsed}
-                active={activeShortcut === 'Workspace'}
-                onClick={() => setActiveShortcut('Workspace')}
-              />
+            <div className="mt-1 space-y-1" aria-label={t('app.workspaceShortcuts')}>
               <SidebarNavItem
                 icon={Files}
                 label={t('app.files')}
                 collapsed={sidebarCollapsed}
-                active={activeShortcut === 'Files'}
-                onClick={() => setActiveShortcut('Files')}
               />
               <SidebarNavItem
                 icon={Clock3}
                 label={t('app.scheduled')}
                 collapsed={sidebarCollapsed}
-                active={activeShortcut === 'Scheduled'}
-                onClick={() => setActiveShortcut('Scheduled')}
               />
               <SidebarNavItem
                 icon={Wrench}
                 label={t('app.tools')}
                 collapsed={sidebarCollapsed}
-                active={activeShortcut === 'Tools'}
-                onClick={() => setActiveShortcut('Tools')}
               />
               <SidebarNavItem
                 icon={Ellipsis}
                 label={t('app.more')}
                 collapsed={sidebarCollapsed}
-                active={activeShortcut === 'More'}
-                onClick={() => setActiveShortcut('More')}
               />
             </div>
           </div>
 
           <div
             className={cn(
-              'w-[256px] px-5 pt-2 pb-2 text-[13px] font-[620] tracking-[-0.01em] whitespace-nowrap text-stone-900 transition-opacity duration-100 ease-out motion-reduce:transition-none max-md:w-[280px]',
+              'w-full px-5 pt-2 pb-2 text-[13px] font-[620] tracking-[-0.01em] whitespace-nowrap text-stone-900 transition-opacity duration-100 ease-out motion-reduce:transition-none max-md:w-[280px]',
               sidebarCollapsed ? 'pointer-events-none opacity-0' : 'opacity-100',
             )}
           >
-            {t('app.recents')}
+            {t('workspace.chats')}
           </div>
           <nav
             className={cn(
-              'w-[256px] px-3 pb-3 transition-opacity duration-100 ease-out motion-reduce:transition-none max-md:w-[280px]',
+              'w-full px-3 pb-2 transition-opacity duration-100 ease-out motion-reduce:transition-none max-md:w-[280px]',
+              sidebarCollapsed ? 'pointer-events-none opacity-0' : 'opacity-100',
+            )}
+            aria-hidden={sidebarCollapsed}
+            aria-label={t('workspace.chats')}
+          >
+            <div className="space-y-1">
+              {chatSessions.length === 0 ? (
+                <div className="ml-7 flex h-8 items-center px-2.5 text-[13.5px] text-stone-400">
+                  {t('workspace.noChats')}
+                </div>
+              ) : (
+                chatSessions.map((session) => (
+                  <SessionRow
+                    key={session.id}
+                    session={session}
+                    active={session.id === activeSessionID}
+                    onSelect={() => chooseSession(session.id)}
+                    onDelete={() => requestDelete(session)}
+                  />
+                ))
+              )}
+            </div>
+          </nav>
+
+          <div
+            className={cn(
+              'w-full px-5 pt-2 pb-2 text-[13px] font-[620] tracking-[-0.01em] whitespace-nowrap text-stone-900 transition-opacity duration-100 ease-out motion-reduce:transition-none max-md:w-[280px]',
+              sidebarCollapsed ? 'pointer-events-none opacity-0' : 'opacity-100',
+            )}
+          >
+            {t('workspace.projects')}
+          </div>
+          <nav
+            className={cn(
+              'w-full px-3 pb-3 transition-opacity duration-100 ease-out motion-reduce:transition-none max-md:w-[280px]',
               sidebarCollapsed ? 'pointer-events-none opacity-0' : 'opacity-100',
             )}
             aria-hidden={sidebarCollapsed}
             aria-label={t('app.codingSessions')}
           >
-            <div className="space-y-px">
-              {sessions.map((session) => (
-                <SessionRow
-                  key={session.id}
-                  session={session}
-                  active={session.id === activeSessionID}
-                  onSelect={() => chooseSession(session.id)}
-                  onDelete={() => requestDelete(session)}
+            <div className="space-y-2">
+              {workspaceGroups.map((workspace) => (
+                <WorkspaceSessions
+                  key={workspace.path}
+                  path={workspace.path}
+                  name={workspace.name}
+                  sessions={workspace.sessions}
+                  activeSessionID={activeSessionID}
+                  onSelectWorkspace={(path) => setSelectedWorkspacePath(path)}
+                  onSelectSession={chooseSession}
+                  onCreateSession={(path) => addSession(path, true)}
+                  onDeleteSession={requestDelete}
                 />
               ))}
             </div>
@@ -331,6 +506,32 @@ export default function App() {
           collapsed={sidebarCollapsed}
           onOpenSettings={() => setSettingsOpen(true)}
         />
+
+        {!sidebarCollapsed && (
+          <div
+            className="group absolute inset-y-0 right-0 z-[60] w-1.5 touch-none cursor-col-resize outline-none max-md:hidden"
+            role="separator"
+            aria-label={t('app.resizeSidebar')}
+            aria-orientation="vertical"
+            aria-valuemin={MIN_SIDEBAR_WIDTH}
+            aria-valuemax={MAX_SIDEBAR_WIDTH}
+            aria-valuenow={sidebarWidth}
+            tabIndex={0}
+            onPointerDown={startSidebarResize}
+            onPointerMove={resizeSidebar}
+            onPointerUp={stopSidebarResize}
+            onPointerCancel={stopSidebarResize}
+            onKeyDown={resizeSidebarWithKeyboard}
+          >
+            <span
+              className={cn(
+                'absolute inset-y-0 right-0 w-px transition-colors group-hover:bg-stone-400/60 group-focus-visible:bg-stone-500/70',
+                sidebarResizing && 'bg-stone-500/70',
+              )}
+              aria-hidden="true"
+            />
+          </div>
+        )}
       </aside>
 
       <div className="relative flex h-full min-w-0 flex-col">
@@ -352,7 +553,7 @@ export default function App() {
               className="truncate text-[15px] font-[620] tracking-[-0.015em] text-stone-900"
               title={activeSession?.title}
             >
-              {activeSession?.title === 'New session'
+              {draft || activeSession?.title === 'New session'
                 ? t('app.newSession')
                 : (activeSession?.title ?? 'OR coding')}
             </span>
@@ -407,7 +608,105 @@ export default function App() {
           onConfirm={() => void confirmDelete()}
         />
       )}
+
+      {workspacePickerOpen && (
+        <WorkspacePickerDialog
+          initialPath={workspacePickerPath}
+          onClose={() => {
+            setWorkspacePickerOpen(false)
+          }}
+          onSelect={async (path) => {
+            const workspace = await registerWorkspace(path)
+            updateDraftWorkspace(workspace.path, true)
+            setSelectedWorkspacePath(workspace.path)
+            setWorkspacePickerOpen(false)
+            setMobileSessionsOpen(false)
+          }}
+        />
+      )}
     </div>
+  )
+}
+
+function WorkspaceSessions({
+  path,
+  name,
+  sessions,
+  activeSessionID,
+  onSelectWorkspace,
+  onSelectSession,
+  onCreateSession,
+  onDeleteSession,
+}: {
+  path: string
+  name: string
+  sessions: SessionSummary[]
+  activeSessionID?: string
+  onSelectWorkspace: (path: string) => void
+  onSelectSession: (id: string) => void
+  onCreateSession: (path: string) => void
+  onDeleteSession: (session: SessionSummary) => void
+}) {
+  const { t } = useI18n()
+  const [expanded, setExpanded] = useState(true)
+  return (
+    <section aria-label={name}>
+      <div className="group/workspace relative flex h-8 items-center">
+        <button
+          className="flex h-8 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-[10px] px-2.5 text-left text-[14px] font-[570] text-stone-800 transition-colors hover:bg-[rgb(246,246,246)] hover:text-stone-950"
+          type="button"
+          title={path}
+          aria-expanded={expanded}
+          onClick={() => {
+            onSelectWorkspace(path)
+            setExpanded((current) => !current)
+          }}
+        >
+          {expanded ? (
+            <FolderOpen
+              className="size-[17px] shrink-0 text-stone-600"
+              strokeWidth={1.8}
+              aria-hidden="true"
+            />
+          ) : (
+            <Folder
+              className="size-[17px] shrink-0 text-stone-600"
+              strokeWidth={1.8}
+              aria-hidden="true"
+            />
+          )}
+          <span className="min-w-0 flex-1 truncate">{name}</span>
+        </button>
+        <button
+          className="absolute right-1 grid size-7 cursor-pointer place-items-center rounded-md text-stone-400 opacity-0 transition-[opacity,color,background-color] group-hover/workspace:opacity-100 hover:bg-stone-200/70 hover:text-stone-900 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-stone-400 max-md:opacity-100"
+          type="button"
+          title={t('workspace.newSession', { name })}
+          aria-label={t('workspace.newSession', { name })}
+          onClick={() => onCreateSession(path)}
+        >
+          <SquarePen className="size-3.5" aria-hidden="true" />
+        </button>
+      </div>
+      {expanded && (
+        <div className="mt-1 ml-7 space-y-1">
+          {sessions.length === 0 ? (
+            <div className="flex h-8 items-center px-2.5 text-[13.5px] text-stone-400">
+              {t('workspace.noChats')}
+            </div>
+          ) : (
+            sessions.map((session) => (
+              <SessionRow
+                key={session.id}
+                session={session}
+                active={session.id === activeSessionID}
+                onSelect={() => onSelectSession(session.id)}
+                onDelete={() => onDeleteSession(session)}
+              />
+            ))
+          )}
+        </div>
+      )}
+    </section>
   )
 }
 
@@ -428,38 +727,36 @@ function SessionRow({
     <div className="group relative">
       <button
         className={cn(
-          'flex min-h-9 w-full cursor-pointer items-center rounded-lg px-3 py-2 pr-9 text-left transition-colors',
+          'flex h-8 w-full cursor-pointer items-center rounded-[10px] px-2.5 pr-9 text-left transition-colors',
           active
-            ? 'bg-stone-200/75 text-stone-950'
-            : 'text-stone-700 hover:bg-stone-200/55 hover:text-stone-950',
+            ? 'bg-[rgb(237,237,237)] text-stone-950'
+            : 'text-stone-700 hover:bg-[rgb(246,246,246)] hover:text-stone-950',
         )}
         type="button"
         aria-current={active ? 'page' : undefined}
         onClick={onSelect}
       >
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[14px] font-[510] leading-5" title={title}>
-            {title}
-          </span>
-          {(session.hasApproval || session.running) && (
-            <span className="mt-0.5 flex items-center gap-1.5 text-[11.5px] leading-4 text-stone-500">
-              {session.hasApproval ? (
+        <span className="min-w-0 flex-1 truncate text-[14px] font-[510] leading-5" title={title}>
+          {title}
+        </span>
+        {(session.hasApproval || session.running) && (
+          <span className="ml-2 flex shrink-0 items-center gap-1.5 text-[11.5px] leading-4 text-stone-500 transition-opacity group-hover:opacity-0">
+            {session.hasApproval ? (
               <>
                 <ShieldAlert className="size-3 text-amber-700" aria-hidden="true" />
                 {t('app.approvalNeeded')}
               </>
-              ) : (
+            ) : (
               <>
                 <LoaderCircle className="size-3 animate-spin text-stone-500" aria-hidden="true" />
                 {t('app.working')}
               </>
-              )}
-            </span>
-          )}
-        </span>
+            )}
+          </span>
+        )}
       </button>
       <button
-        className="absolute top-1.5 right-1.5 grid size-7 cursor-pointer place-items-center rounded-md text-stone-400 opacity-0 transition-[opacity,color,background-color] group-hover:opacity-100 hover:bg-stone-300/60 hover:text-red-700 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-stone-400 max-md:opacity-100"
+        className="absolute top-0.5 right-0.5 grid size-7 cursor-pointer place-items-center rounded-[9px] text-stone-400 opacity-0 transition-[opacity,color,background-color] group-hover:opacity-100 hover:bg-stone-200 hover:text-red-700 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-stone-400 max-md:opacity-100"
         type="button"
         title={t('app.deleteNamedSession', { title })}
         aria-label={t('app.deleteNamedSession', { title })}
@@ -475,31 +772,25 @@ function SidebarNavItem({
   icon: Icon,
   label,
   collapsed = false,
-  active = false,
-  onClick,
 }: {
   icon: LucideIcon
   label: string
   collapsed?: boolean
-  active?: boolean
-  onClick: () => void
 }) {
   return (
     <button
       className={cn(
-        'group flex h-10 w-full cursor-pointer items-center gap-3 rounded-lg px-3 text-left text-[14.5px] font-[480] text-stone-800 transition-[background-color,color,transform] duration-100 active:scale-[0.985] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-stone-400',
-        !collapsed && (active ? 'bg-stone-200/80 text-stone-950' : 'hover:bg-stone-200/55'),
+        'group flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[14px] font-[500] text-stone-800 transition-[background-color,color,transform] duration-100 active:scale-[0.985] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-stone-400',
+        !collapsed && 'hover:bg-[rgb(246,246,246)] hover:text-stone-950',
       )}
       type="button"
       title={label}
-      aria-pressed={active}
-      onClick={onClick}
     >
       <span className="relative shrink-0">
         <span
           className={cn(
-            'pointer-events-none absolute -inset-2 rounded-lg transition-colors duration-100',
-            collapsed && (active ? 'bg-stone-200/80' : 'group-hover:bg-stone-200/65'),
+            'pointer-events-none absolute -inset-1.5 rounded-[9px] transition-colors duration-100',
+            collapsed && 'group-hover:bg-[rgb(246,246,246)]',
           )}
           aria-hidden="true"
         />

@@ -32,6 +32,9 @@ type ContextFile struct {
 type Options struct {
 	// Instructions is the base preamble that opens the prompt.
 	Instructions string
+	// WorkspaceRoot is the absolute directory all relative tool paths resolve
+	// against. An empty value omits the workspace section.
+	WorkspaceRoot string
 	// Tools are the active tools' prompt contributions, in advertise order.
 	Tools []ToolInfo
 	// ContextFiles are project context documents included after the tool
@@ -61,6 +64,13 @@ func Build(opts Options) string {
 	b.WriteString(instructions)
 	b.WriteString("\n\n")
 	b.WriteString(responseStyle)
+
+	if strings.TrimSpace(opts.WorkspaceRoot) != "" {
+		b.WriteString("\n\n## Workspace\n")
+		fmt.Fprintf(&b, "- Root: %q\n", opts.WorkspaceRoot)
+		b.WriteString("- Resolve relative file paths from this directory.\n")
+		b.WriteString("- Never guess or substitute a different workspace path; use a tool when verification is needed.")
+	}
 
 	if snippets := toolSnippets(opts.Tools); len(snippets) > 0 {
 		b.WriteString("\n\n## Available tools\n")

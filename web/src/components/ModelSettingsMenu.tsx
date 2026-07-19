@@ -90,7 +90,7 @@ export function ModelSettingsMenu({
       <DropdownMenu.Trigger asChild>
         <button
           type="button"
-          className="group inline-flex h-9 max-w-[248px] cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[14px] font-medium outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(241,241,241)] disabled:cursor-not-allowed disabled:opacity-40 max-sm:max-w-[128px] max-sm:px-2"
+          className="group inline-flex h-9 max-w-[248px] cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[14px] font-medium outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:bg-[rgb(241,241,241)] data-[state=open]:bg-[rgb(237,237,237)] disabled:cursor-not-allowed disabled:opacity-40 max-sm:max-w-[128px] max-sm:px-2"
           aria-label={t('model.settings')}
           disabled={unavailable}
         >
@@ -301,13 +301,13 @@ function formatTokenDecimal(value: number, formatNumber: NumberFormatter): strin
 
 const subTriggerClass = cn(
   'flex h-9 cursor-default select-none items-center rounded-[10px] px-2.5 outline-none',
-  'data-[highlighted]:bg-[rgb(241,241,241)] data-[state=open]:bg-[rgb(241,241,241)]',
+  'data-[highlighted]:bg-[rgb(241,241,241)] data-[state=open]:bg-[rgb(237,237,237)]',
   'data-[disabled]:opacity-40',
 )
 
 const radioItemClass = cn(
   'relative flex h-9 cursor-default select-none items-center gap-2 rounded-[10px] px-2.5 pr-9 text-[14px] outline-none',
-  'data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(241,241,241)] data-[state=checked]:font-medium',
+  'data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(237,237,237)] data-[state=checked]:font-medium',
 )
 
 const menuLabelClass = 'px-2.5 py-1.5 text-[12px] font-semibold text-stone-400'

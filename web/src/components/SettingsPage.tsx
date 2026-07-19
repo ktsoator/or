@@ -202,7 +202,7 @@ function SettingsNavItem({
     <button
       className={cn(
         'mb-0.5 flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[13.5px] font-[510] text-stone-700 outline-none transition-colors hover:bg-stone-200/60 hover:text-stone-950 focus-visible:ring-2 focus-visible:ring-stone-300 max-md:mb-0 max-md:w-auto max-md:shrink-0 max-md:pr-3',
-        active && 'bg-[rgb(235,235,235)] text-stone-950 hover:bg-[rgb(235,235,235)]',
+        active && 'bg-[rgb(237,237,237)] text-stone-950 hover:bg-[rgb(237,237,237)]',
       )}
       type="button"
       aria-current={active ? 'page' : undefined}
@@ -481,7 +481,7 @@ function SelectControl({
     >
       <DropdownMenu.Trigger asChild>
         <button
-          className="group inline-flex h-9 min-w-[156px] max-w-[224px] cursor-pointer items-center justify-between gap-2 rounded-[11px] border border-stone-200 bg-white px-3 text-[13px] font-[520] text-stone-800 outline-none transition-[background-color,border-color,box-shadow] hover:bg-[rgb(241,241,241)] focus-visible:border-stone-400 focus-visible:ring-2 focus-visible:ring-stone-200 data-[state=open]:bg-[rgb(241,241,241)] max-sm:min-w-[124px] max-sm:max-w-[156px]"
+          className="group inline-flex h-9 min-w-[156px] max-w-[224px] cursor-pointer items-center justify-between gap-2 rounded-[11px] border border-stone-200 bg-white px-3 text-[13px] font-[520] text-stone-800 outline-none transition-[background-color,border-color,box-shadow] hover:bg-[rgb(241,241,241)] focus-visible:border-stone-400 focus-visible:ring-2 focus-visible:ring-stone-200 data-[state=open]:bg-[rgb(237,237,237)] max-sm:min-w-[124px] max-sm:max-w-[156px]"
           type="button"
           aria-label={ariaLabel}
         >
@@ -533,7 +533,7 @@ function SelectControl({
               <DropdownMenu.RadioItem
                 key={option.value}
                 value={option.value}
-                className="relative flex h-9 cursor-default select-none items-center rounded-[10px] px-2.5 pr-9 outline-none data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(241,241,241)] data-[state=checked]:font-medium"
+                className="relative flex h-9 cursor-default select-none items-center rounded-[10px] px-2.5 pr-9 outline-none data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(237,237,237)] data-[state=checked]:font-medium"
               >
                 <span className="min-w-0 flex-1 truncate">{option.label}</span>
                 <DropdownMenu.ItemIndicator className="absolute right-2.5 grid size-4 place-items-center text-stone-700">

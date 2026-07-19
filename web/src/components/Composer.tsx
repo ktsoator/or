@@ -10,10 +10,12 @@ import type {
   PendingImage,
   QueuedMessage,
   ThinkingLevel,
+  WorkspaceSummary,
 } from '@/types'
 import { cn } from '@/lib/utils'
 import { Approval } from './Approval'
 import { ModelSettingsMenu } from './ModelSettingsMenu'
+import { ProjectPicker } from './ProjectPicker'
 import { useI18n } from '@/i18n'
 
 export function Composer({
@@ -23,6 +25,9 @@ export function Composer({
   queuedMessages,
   contextUsage,
   centered = false,
+  projectPickerVisible = false,
+  workspaces,
+  workspacePath,
   models,
   modelProvider,
   modelID,
@@ -32,6 +37,8 @@ export function Composer({
   onRemoveQueued,
   onStop,
   onResolve,
+  onSelectProject,
+  onBrowseProjects,
   onSettingsChange,
 }: {
   connected: boolean
@@ -40,6 +47,9 @@ export function Composer({
   queuedMessages: QueuedMessage[]
   contextUsage?: ContextUsage
   centered?: boolean
+  projectPickerVisible?: boolean
+  workspaces: WorkspaceSummary[]
+  workspacePath?: string
   models: ModelOption[]
   modelProvider?: string
   modelID?: string
@@ -49,6 +59,8 @@ export function Composer({
   onRemoveQueued: (id: string) => Promise<void>
   onStop: () => void
   onResolve: (id: string, allow: boolean) => Promise<void>
+  onSelectProject: (path?: string) => void
+  onBrowseProjects: () => void
   onSettingsChange: (
     provider: string,
     model: string,
@@ -182,7 +194,13 @@ export function Composer({
           <PendingQueue messages={queuedMessages} onRemove={(id) => void removeQueued(id)} />
         )}
 
-        <div className="rounded-[28px] border border-stone-200 bg-white shadow-[0_10px_30px_-20px_rgba(28,25,23,0.38)] transition-[border-color,box-shadow] focus-within:border-stone-400 focus-within:shadow-[0_12px_32px_-20px_rgba(28,25,23,0.48)]">
+        <div
+          className={cn(
+            'rounded-[28px] border border-stone-200 bg-white shadow-[0_10px_30px_-20px_rgba(28,25,23,0.38)]',
+            !centered &&
+              'transition-[border-color,box-shadow] focus-within:border-stone-400 focus-within:shadow-[0_12px_32px_-20px_rgba(28,25,23,0.48)]',
+          )}
+        >
           <div
             className="grid min-h-24 grid-cols-[40px_minmax(0,1fr)_auto] grid-rows-[auto_40px] items-center gap-x-3 gap-y-1 px-3 py-2.5 max-sm:gap-x-2"
           >
@@ -212,6 +230,17 @@ export function Composer({
                 event.target.value = ''
               }}
             />
+            {projectPickerVisible && (
+              <div className="col-start-2 row-start-2 flex min-w-0 items-center">
+                <ProjectPicker
+                  workspaces={workspaces}
+                  selectedPath={workspacePath}
+                  disabled={inputDisabled}
+                  onSelect={onSelectProject}
+                  onBrowse={onBrowseProjects}
+                />
+              </div>
+            )}
             <div className="col-span-3 col-start-1 row-start-1 flex min-w-0 flex-col gap-2">
               {images.length > 0 && (
                 <div className="flex flex-wrap gap-2 px-1 pt-1">
@@ -449,7 +478,7 @@ function RunDeliveryMenu({
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <button
-          className="group inline-flex h-9 cursor-pointer items-center gap-1 rounded-full px-2.5 text-[13px] font-medium text-stone-600 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(241,241,241)]"
+          className="group inline-flex h-9 cursor-pointer items-center gap-1 rounded-full px-2.5 text-[13px] font-medium text-stone-600 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(237,237,237)]"
           type="button"
           aria-label={t('delivery.choose')}
         >
@@ -493,7 +522,7 @@ function DeliveryOption({ value, label, hint }: { value: DeliveryMode; label: st
   return (
     <DropdownMenu.RadioItem
       value={value}
-      className="relative flex h-10 cursor-default select-none items-center gap-2 rounded-[10px] px-2.5 pr-8 outline-none data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(241,241,241)]"
+      className="relative flex h-10 cursor-default select-none items-center gap-2 rounded-[10px] px-2.5 pr-8 outline-none data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(237,237,237)]"
     >
       <span className="font-medium">{label}</span>
       <span className="ml-auto text-[11.5px] text-stone-400">{hint}</span>

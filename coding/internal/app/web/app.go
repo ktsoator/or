@@ -18,7 +18,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 
 	server := NewServer(ctx, manager, cfg.FrontendOrigin)
 	model, _ := cfg.ResolveModel()
-	fmt.Printf("coding API — %s/%s in %s\n", model.Provider, model.ID, cfg.Cwd)
+	fmt.Printf("coding API — %s/%s\n", model.Provider, model.ID)
 	fmt.Printf("listening on http://%s/api/\n", cfg.Addr)
 	if cfg.FrontendOrigin != "" {
 		fmt.Printf("allowing front-end origin %s\n", cfg.FrontendOrigin)

@@ -135,7 +135,7 @@ function ActionButton({
         <button
           className={cn(
             'grid size-7 cursor-pointer place-items-center rounded-lg text-stone-400 outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-700 focus-visible:ring-2 focus-visible:ring-stone-300 disabled:cursor-not-allowed disabled:opacity-30',
-            pressed && 'bg-[rgb(241,241,241)] text-stone-800',
+            pressed && 'bg-[rgb(237,237,237)] text-stone-800',
           )}
           type="button"
           aria-label={label}

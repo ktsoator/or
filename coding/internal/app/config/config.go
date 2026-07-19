@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/ktsoator/or/llm"
 )
@@ -28,8 +29,13 @@ type Config struct {
 	// ThinkingLevel is the reasoning effort, as a raw string. Use Thinking to get
 	// the typed value.
 	ThinkingLevel string
-	// Cwd is the workspace root.
+	// Cwd is the default workspace root. In Web mode it is only the initial
+	// directory-browser location. Every created session carries an explicit
+	// project folder or manager-owned scratch workspace.
 	Cwd string
+	// DataDir stores Web session indexes and transcripts independently from any
+	// project workspace.
+	DataDir string
 	// SessionFile is where the transcript is persisted.
 	SessionFile string
 	// Mode selects the terminal or HTTP API product adapter.
@@ -55,7 +61,8 @@ func Defaults() Config {
 		Provider:       provider,
 		Model:          model,
 		ThinkingLevel:  envOr("OR_THINKING", "medium"),
-		Cwd:            ".",
+		Cwd:            envOr("OR_CWD", ""),
+		DataDir:        envOr("OR_DATA_DIR", ""),
 		SessionFile:    "",
 		Mode:           ModeCLI,
 		Addr:           "localhost:8787",
@@ -71,8 +78,9 @@ func Parse(args []string) (Config, error) {
 
 	flags.StringVar(&cfg.Provider, "provider", cfg.Provider, "model provider (e.g. anthropic, openai)")
 	flags.StringVar(&cfg.Model, "model", cfg.Model, "model id")
-	flags.StringVar(&cfg.Cwd, "cwd", cfg.Cwd, "workspace root directory")
-	flags.StringVar(&cfg.SessionFile, "session", cfg.SessionFile, "session transcript file (default .coding/session.jsonl under cwd)")
+	flags.StringVar(&cfg.Cwd, "cwd", cfg.Cwd, "default workspace (optional in Web mode)")
+	flags.StringVar(&cfg.DataDir, "data-dir", cfg.DataDir, "coding data directory (Web default: ~/.or/coding)")
+	flags.StringVar(&cfg.SessionFile, "session", cfg.SessionFile, "session transcript file (CLI default: <data-dir>/session.jsonl)")
 	flags.StringVar(&cfg.ThinkingLevel, "thinking", cfg.ThinkingLevel, "reasoning level: off, minimal, low, medium, high, xhigh")
 	flags.StringVar(&cfg.Addr, "addr", cfg.Addr, "web API listen address (with -web)")
 	flags.StringVar(&cfg.FrontendOrigin, "web-origin", cfg.FrontendOrigin, "allowed front-end origin for cross-origin API access")
@@ -93,19 +101,59 @@ func Parse(args []string) (Config, error) {
 // IsHelp reports whether Parse stopped after printing flag help.
 func IsHelp(err error) bool { return errors.Is(err, flag.ErrHelp) }
 
-// Resolve finalizes derived fields: it absolutizes Cwd and, when SessionFile is
-// empty, defaults it to .coding/session.jsonl under the workspace.
+// Resolve finalizes derived fields. CLI mode keeps its current-directory
+// workspace and local .coding data. Web mode instead starts directory browsing
+// from the user's home directory and stores state under ~/.or/coding, so the
+// server is not bound to whichever project launched it.
 func (c *Config) Resolve() error {
 	if !validThinkingLevel(c.ThinkingLevel) {
 		return fmt.Errorf("invalid thinking level %q", c.ThinkingLevel)
+	}
+	if strings.TrimSpace(c.Cwd) == "" {
+		var err error
+		if c.Mode == ModeWeb {
+			c.Cwd, err = os.UserHomeDir()
+		} else {
+			c.Cwd, err = os.Getwd()
+		}
+		if err != nil {
+			return fmt.Errorf("resolve default workspace: %w", err)
+		}
 	}
 	abs, err := filepath.Abs(c.Cwd)
 	if err != nil {
 		return err
 	}
 	c.Cwd = abs
+
+	if c.SessionFile != "" {
+		sessionFile, err := filepath.Abs(c.SessionFile)
+		if err != nil {
+			return err
+		}
+		c.SessionFile = sessionFile
+	}
+	if strings.TrimSpace(c.DataDir) == "" {
+		switch {
+		case c.SessionFile != "":
+			c.DataDir = filepath.Dir(c.SessionFile)
+		case c.Mode == ModeWeb:
+			homeDir, err := os.UserHomeDir()
+			if err != nil {
+				return fmt.Errorf("resolve Web data directory: %w", err)
+			}
+			c.DataDir = filepath.Join(homeDir, ".or", "coding")
+		default:
+			c.DataDir = filepath.Join(c.Cwd, ".coding")
+		}
+	}
+	dataDir, err := filepath.Abs(c.DataDir)
+	if err != nil {
+		return err
+	}
+	c.DataDir = dataDir
 	if c.SessionFile == "" {
-		c.SessionFile = filepath.Join(abs, ".coding", "session.jsonl")
+		c.SessionFile = filepath.Join(c.DataDir, "session.jsonl")
 	}
 	return nil
 }

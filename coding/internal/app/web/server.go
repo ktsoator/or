@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -91,6 +93,9 @@ func (s *Server) Handler() http.Handler {
 
 	api := r.Group("/api")
 	api.GET("/models", s.handleModels)
+	api.GET("/directories", s.handleDirectories)
+	api.GET("/workspaces", s.handleWorkspaces)
+	api.POST("/workspaces", s.handleRegisterWorkspace)
 	api.GET("/sessions", s.handleSessions)
 	api.POST("/sessions", s.handleCreateSession)
 	session := api.Group("/sessions/:sessionID")
@@ -138,12 +143,28 @@ func (s *Server) handleModels(c *gin.Context) {
 			})
 		}
 	}
+	defaultProvider := ""
+	defaultModelID := ""
+	defaultThinking := llm.ModelThinkingOff
+	if model, err := s.sessions.cfg.ResolveModel(); err == nil {
+		defaultProvider = model.Provider
+		defaultModelID = model.ID
+		defaultThinking = llm.ClampThinkingLevel(model, s.sessions.cfg.Thinking())
+	}
 	c.Header("Cache-Control", "no-store")
-	c.JSON(http.StatusOK, gin.H{"models": models})
+	c.JSON(http.StatusOK, gin.H{
+		"models":               models,
+		"defaultProvider":      defaultProvider,
+		"defaultModel":         defaultModelID,
+		"defaultThinkingLevel": defaultThinking,
+	})
 }
 
 func (s *Server) providerAvailable(provider string) bool {
 	if s.sessions.UsesProvider(provider) {
+		return true
+	}
+	if model, err := s.sessions.cfg.ResolveModel(); err == nil && model.Provider == provider {
 		return true
 	}
 	status, ok := llm.DefaultProviderRegistry().AuthStatus(provider, nil)
@@ -214,9 +235,36 @@ func (s *Server) handleSessions(c *gin.Context) {
 	c.JSON(http.StatusOK, s.sessions.List())
 }
 
+func (s *Server) handleWorkspaces(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, s.sessions.ListWorkspaces())
+}
+
+func (s *Server) handleRegisterWorkspace(c *gin.Context) {
+	var body struct {
+		Path string `json:"path"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON body"})
+		return
+	}
+	workspace, err := s.sessions.RegisterWorkspace(body.Path)
+	if errors.Is(err, ErrInvalidWorkspace) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, workspace)
+}
+
 func (s *Server) handleCreateSession(c *gin.Context) {
 	var body struct {
-		Title string `json:"title"`
+		Title         string `json:"title"`
+		WorkspacePath string `json:"workspacePath"`
+		Scope         string `json:"scope"`
 	}
 	if c.Request.ContentLength > 0 {
 		if err := c.ShouldBindJSON(&body); err != nil {
@@ -224,12 +272,67 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 			return
 		}
 	}
-	summary, err := s.sessions.Create(body.Title)
+	summary, err := s.sessions.Create(body.Title, body.WorkspacePath, body.Scope)
+	if errors.Is(err, ErrInvalidWorkspace) || errors.Is(err, ErrInvalidSessionScope) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusCreated, summary)
+}
+
+type directoryEntry struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+}
+
+// handleDirectories provides a local directory browser for the React workspace
+// picker. The API is intentionally directory-only; files are never returned.
+func (s *Server) handleDirectories(c *gin.Context) {
+	path := strings.TrimSpace(c.Query("path"))
+	if path == "" {
+		path = s.sessions.cfg.Cwd
+	}
+	cleaned, err := validateWorkspacePath(path)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	entries, err := os.ReadDir(cleaned)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	directories := make([]directoryEntry, 0)
+	for _, entry := range entries {
+		// Match the native folder-picker convention: internal dot-directories
+		// stay out of the primary workspace browsing flow.
+		if strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+		candidate := filepath.Join(cleaned, entry.Name())
+		info, infoErr := os.Stat(candidate)
+		if infoErr != nil || !info.IsDir() {
+			continue
+		}
+		directories = append(directories, directoryEntry{Name: entry.Name(), Path: candidate})
+	}
+	sort.Slice(directories, func(i, j int) bool {
+		return strings.ToLower(directories[i].Name) < strings.ToLower(directories[j].Name)
+	})
+	parent := filepath.Dir(cleaned)
+	if parent == cleaned {
+		parent = ""
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{
+		"path":        cleaned,
+		"parent":      parent,
+		"directories": directories,
+	})
 }
 
 func (s *Server) runtime(c *gin.Context) (*sessionRuntime, bool) {

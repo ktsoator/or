@@ -8,8 +8,13 @@ The React application is independent from the Go coding API. Vite proxies
 Start the API from the repository root:
 
 ```sh
-go run ./coding/cmd/coding -web -cwd .
+go run ./coding/cmd/coding -web
 ```
+
+Web sessions select their project directory in the browser. The directory
+picker and ordinary Chats start from the current user's home directory, while
+session metadata and transcripts are stored under `~/.or/coding`. Override that
+storage location with `OR_DATA_DIR` or `-data-dir` when needed.
 
 Start the front-end in another terminal:
 

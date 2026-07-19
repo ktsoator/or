@@ -152,11 +152,18 @@ export type ModelOption = {
 
 export type ModelCatalogResponse = {
   models: ModelOption[]
+  defaultProvider: string
+  defaultModel: string
+  defaultThinkingLevel: ThinkingLevel
 }
 
 export type SessionSummary = {
   id: string
   title: string
+  workspacePath: string
+  workspaceName: string
+  scope: 'chat' | 'project'
+  workspaceKind: 'scratch' | 'folder'
   createdAt: string
   updatedAt: string
   running: boolean
@@ -165,6 +172,23 @@ export type SessionSummary = {
   modelId: string
   modelName: string
   thinkingLevel: ThinkingLevel
+}
+
+export type WorkspaceSummary = {
+  path: string
+  name: string
+  addedAt: string
+}
+
+export type DirectoryEntry = {
+  name: string
+  path: string
+}
+
+export type DirectoryListing = {
+  path: string
+  parent: string
+  directories: DirectoryEntry[]
 }
 
 export type ContextUsage = {

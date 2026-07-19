@@ -338,9 +338,10 @@ func (s *Session) buildSystemPrompt(instructions string) string {
 		}
 	}
 	return prompt.Build(prompt.Options{
-		Instructions: instructions,
-		Tools:        infos,
-		ContextFiles: prompt.LoadContextFiles(s.cwd),
+		Instructions:  instructions,
+		WorkspaceRoot: s.cwd,
+		Tools:         infos,
+		ContextFiles:  prompt.LoadContextFiles(s.cwd),
 	})
 }
 

@@ -1,8 +1,6 @@
-import { useState } from 'react'
 import {
   Check,
   ChevronRight,
-  CircleHelp,
   Gauge,
   Ghost,
   Languages,
@@ -23,20 +21,19 @@ export function ProfileMenu({
   collapsed: boolean
   onOpenSettings: () => void
 }) {
-  const [helpActive, setHelpActive] = useState(false)
   const { locale, setLocale, t } = useI18n()
 
   return (
-    <div className="w-[256px] shrink-0 border-t border-stone-200/70 p-3 max-md:w-[280px]">
+    <div className="w-full shrink-0 border-t border-stone-200/70 p-3 max-md:w-[280px]">
       <div className="flex items-center gap-2">
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
             <button
               className={cn(
-                'flex h-9 cursor-pointer items-center overflow-hidden outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(241,241,241)]',
+                'flex h-8 cursor-pointer items-center overflow-hidden outline-none transition-colors hover:bg-[rgb(246,246,246)] focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(237,237,237)]',
                 collapsed
-                  ? 'ml-0.5 w-9 flex-none justify-center rounded-full p-1'
-                  : 'min-w-0 flex-1 gap-2.5 rounded-[10px] px-2 text-left',
+                  ? 'w-8 flex-none justify-center rounded-full p-0.5'
+                  : 'min-w-0 flex-1 gap-2.5 rounded-[10px] px-2.5 text-left',
               )}
               type="button"
               aria-label={t('profile.openMenu')}
@@ -60,7 +57,12 @@ export function ProfileMenu({
               align="start"
               sideOffset={7}
               collisionPadding={10}
-              className="z-[120] w-[232px] animate-[fade-in_110ms_ease-out] rounded-2xl border border-stone-200 bg-white p-1 text-[14px] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+              className="z-[120] animate-[fade-in_110ms_ease-out] rounded-2xl border border-stone-200 bg-white p-1 text-[14px] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+              style={{
+                width: collapsed
+                  ? 232
+                  : 'calc(var(--radix-dropdown-menu-trigger-width) + 2.5rem)',
+              }}
             >
               <DropdownMenu.Label className="flex h-9 items-center gap-2.5 px-2.5">
                 <Avatar />
@@ -114,20 +116,6 @@ export function ProfileMenu({
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
 
-        <button
-          className={cn(
-            'grid size-8 shrink-0 cursor-pointer place-items-center rounded-full text-stone-500 outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-800 focus-visible:ring-2 focus-visible:ring-stone-300',
-            helpActive && 'bg-[rgb(241,241,241)] text-stone-800',
-            collapsed && 'pointer-events-none opacity-0',
-          )}
-          type="button"
-          title={t('profile.help')}
-          aria-label={t('profile.help')}
-          aria-pressed={helpActive}
-          onClick={() => setHelpActive((active) => !active)}
-        >
-          <CircleHelp className="size-[17px]" aria-hidden="true" />
-        </button>
       </div>
     </div>
   )
@@ -173,7 +161,7 @@ function LanguageItem({ value, label }: { value: Locale; label: string }) {
   return (
     <DropdownMenu.RadioItem
       value={value}
-      className="relative flex h-9 cursor-default select-none items-center rounded-[10px] px-2.5 pr-8 outline-none data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(241,241,241)]"
+      className="relative flex h-9 cursor-default select-none items-center rounded-[10px] px-2.5 pr-8 outline-none data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(237,237,237)]"
     >
       <span>{label}</span>
       <DropdownMenu.ItemIndicator className="absolute right-2.5 grid size-4 place-items-center text-stone-700">
@@ -184,4 +172,4 @@ function LanguageItem({ value, label }: { value: Locale; label: string }) {
 }
 
 const profileItemClass =
-  'relative flex h-9 cursor-default select-none items-center gap-2.5 rounded-[10px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)] data-[state=open]:bg-[rgb(241,241,241)]'
+  'relative flex h-9 cursor-default select-none items-center gap-2.5 rounded-[10px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)] data-[state=open]:bg-[rgb(237,237,237)]'
