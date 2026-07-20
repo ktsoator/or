@@ -19,6 +19,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/ktsoator/or/coding"
+	"github.com/ktsoator/or/coding/internal/app/providerconfig"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -72,14 +73,24 @@ func (h *Hub) remove(ch chan []byte) {
 // built and deployed independently from this service.
 type Server struct {
 	sessions       *SessionManager
+	registry       *llm.ProviderRegistry
+	providers      *providerconfig.Store
 	ctx            context.Context
 	frontendOrigin string
 }
 
 // NewServer builds a Server. ctx is the base context for background runs.
-func NewServer(ctx context.Context, sessions *SessionManager, frontendOrigin string) *Server {
+func NewServer(
+	ctx context.Context,
+	sessions *SessionManager,
+	registry *llm.ProviderRegistry,
+	providers *providerconfig.Store,
+	frontendOrigin string,
+) *Server {
 	return &Server{
 		sessions:       sessions,
+		registry:       registry,
+		providers:      providers,
 		ctx:            ctx,
 		frontendOrigin: frontendOrigin,
 	}
@@ -94,6 +105,12 @@ func (s *Server) Handler() http.Handler {
 
 	api := r.Group("/api")
 	api.GET("/models", s.handleModels)
+	api.GET("/providers", s.handleProviders)
+	api.PUT("/model-selection", s.handleActivateModel)
+	api.PUT("/providers/:providerID", s.handleSetProvider)
+	api.PATCH("/providers/:providerID/active-connection", s.handleActivateProviderConnection)
+	api.PATCH("/providers/:providerID/connections/:connectionID/active-key", s.handleActivateProviderKey)
+	api.DELETE("/providers/:providerID", s.handleClearProvider)
 	api.GET("/usage", s.handleUsage)
 	api.GET("/usage/events", s.handleUsageEvents)
 	api.GET("/directories", s.handleDirectories)
@@ -176,9 +193,10 @@ type modelOption struct {
 }
 
 func (s *Server) handleModels(c *gin.Context) {
+	includeCatalog := c.Query("scope") == "catalog"
 	models := make([]modelOption, 0)
 	for _, provider := range llm.GetProviders() {
-		if !s.providerAvailable(provider) {
+		if !includeCatalog && !s.providerAvailable(provider) {
 			continue
 		}
 		for _, model := range llm.GetRunnableModels(provider) {
@@ -199,10 +217,12 @@ func (s *Server) handleModels(c *gin.Context) {
 	defaultProvider := ""
 	defaultModelID := ""
 	defaultThinking := llm.ModelThinkingOff
-	if model, err := s.sessions.cfg.ResolveModel(); err == nil {
-		defaultProvider = model.Provider
-		defaultModelID = model.ID
-		defaultThinking = llm.ClampThinkingLevel(model, s.sessions.cfg.Thinking())
+	if selection, ok := s.providers.ActiveModel(); ok && s.providerAvailable(selection.Provider) {
+		if model, found := llm.LookupModel(selection.Provider, selection.Model); found {
+			defaultProvider = model.Provider
+			defaultModelID = model.ID
+			defaultThinking = llm.ClampThinkingLevel(model, selection.ThinkingLevel)
+		}
 	}
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, gin.H{
@@ -214,13 +234,7 @@ func (s *Server) handleModels(c *gin.Context) {
 }
 
 func (s *Server) providerAvailable(provider string) bool {
-	if s.sessions.UsesProvider(provider) {
-		return true
-	}
-	if model, err := s.sessions.cfg.ResolveModel(); err == nil && model.Provider == provider {
-		return true
-	}
-	status, ok := llm.DefaultProviderRegistry().AuthStatus(provider, nil)
+	status, ok := s.registry.AuthStatus(provider, nil)
 	return ok && status.Configured
 }
 
@@ -318,6 +332,9 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 		Title         string `json:"title"`
 		WorkspacePath string `json:"workspacePath"`
 		Scope         string `json:"scope"`
+		Provider      string `json:"provider"`
+		Model         string `json:"model"`
+		ThinkingLevel string `json:"thinkingLevel"`
 	}
 	if c.Request.ContentLength > 0 {
 		if err := c.ShouldBindJSON(&body); err != nil {
@@ -325,7 +342,21 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 			return
 		}
 	}
-	summary, err := s.sessions.Create(body.Title, body.WorkspacePath, body.Scope)
+	model, ok := llm.LookupModel(body.Provider, body.Model)
+	if !ok || !llm.SupportsProtocol(model.Protocol) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "configure a model before creating a session"})
+		return
+	}
+	if !s.providerAvailable(model.Provider) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "model provider is not configured"})
+		return
+	}
+	thinking := llm.ModelThinkingLevel(body.ThinkingLevel)
+	if !slices.Contains(llm.SupportedThinkingLevels(model), thinking) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "thinking level is not supported by this model"})
+		return
+	}
+	summary, err := s.sessions.Create(body.Title, body.WorkspacePath, body.Scope, model, thinking)
 	if errors.Is(err, ErrInvalidWorkspace) || errors.Is(err, ErrInvalidSessionScope) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

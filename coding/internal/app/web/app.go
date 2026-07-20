@@ -6,6 +6,8 @@ import (
 	"net/http"
 
 	"github.com/ktsoator/or/coding/internal/app/config"
+	"github.com/ktsoator/or/coding/internal/app/providerconfig"
+	"github.com/ktsoator/or/llm"
 )
 
 // Run serves the workspace's multi-session HTTP API at cfg.Addr. The React
@@ -16,9 +18,18 @@ func Run(ctx context.Context, cfg config.Config) error {
 		return err
 	}
 
-	server := NewServer(ctx, manager, cfg.FrontendOrigin)
-	model, _ := cfg.ResolveModel()
-	fmt.Printf("coding API — %s/%s\n", model.Provider, model.ID)
+	registry := llm.DefaultProviderRegistry()
+	providers, err := providerconfig.NewStore(
+		cfg.DataDir,
+		registry,
+	)
+	if err != nil {
+		return err
+	}
+	providers.Apply()
+
+	server := NewServer(ctx, manager, registry, providers, cfg.FrontendOrigin)
+	fmt.Println("coding API")
 	fmt.Printf("listening on http://%s/api/\n", cfg.Addr)
 	if cfg.FrontendOrigin != "" {
 		fmt.Printf("allowing front-end origin %s\n", cfg.FrontendOrigin)

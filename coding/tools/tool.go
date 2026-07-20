@@ -45,9 +45,19 @@ func (t Tool) Name() string { return t.Definition.Name }
 // CodingTools returns the default v1 tool set rooted at the given workspace
 // directory and backed by ops. One file-state store is shared by Read, Edit,
 // and Write for this tool-set lifetime. Pass LocalOps{} for the local filesystem
-// and shell.
+// and shell. Background shells started by this set are abandoned when it is
+// discarded; use CodingToolsWithShells when the caller needs to stop them.
 func CodingTools(root string, ops Ops) []Tool {
+	set, _ := CodingToolsWithShells(root, ops)
+	return set
+}
+
+// CodingToolsWithShells is CodingTools plus the BackgroundShells manager backing
+// the bash run_in_background workflow, so the caller can Shutdown any long-lived
+// processes when the session ends.
+func CodingToolsWithShells(root string, ops Ops) ([]Tool, *BackgroundShells) {
 	files := NewFileStateStore()
+	shells := NewBackgroundShells()
 	return []Tool{
 		Read(root, ops, files),
 		Grep(root, ops),
@@ -55,8 +65,10 @@ func CodingTools(root string, ops Ops) []Tool {
 		LS(root, ops),
 		Edit(root, ops, files),
 		Write(root, ops, files),
-		Bash(root, ops),
-	}
+		Bash(root, ops, shells),
+		BashOutput(shells),
+		KillBash(shells),
+	}, shells
 }
 
 // AgentTools extracts the executable agent.AgentTool from each Tool, for handing

@@ -105,9 +105,33 @@ Usage:
 - Do not use bash as a substitute for read, grep, glob, ls, edit, or write.
 - Create or replace files with write, not echo or printf redirection, tee, or heredocs. Modify existing files with edit, not sed -i, awk, or perl.
 - If edit or write requires a prior read, call read and retry the same tool.
-- A non-zero exit code is reported as output, not as a failure, so you can react to it.`,
+- A non-zero exit code is reported as output, not as a failure, so you can react to it.
+- Always set description to a short active-voice summary of the command (about 5-10 words); it is shown in the UI in place of the raw command.
+- For a long-lived process that does not exit on its own — a dev server, a watcher, a database — set run_in_background instead of waiting for it. bash returns a shell id immediately; read its output with bash_output and stop it with kill_bash. Never wait on such a command in the foreground.`,
 	snippet: "bash — run a shell command in the workspace",
 	guidelines: []string{
 		"Never bypass a `read`, `edit`, or `write` error with `bash`; satisfy the requested precondition and retry the same tool.",
+		"Set `bash`'s `description` to a short active-voice summary of each command; it is what the UI shows instead of the raw command.",
+		"Start long-lived processes (servers, watchers) with `bash` `run_in_background`, then inspect them with `bash_output` and stop them with `kill_bash`; never run them in the foreground.",
 	},
+}
+
+var bashOutputText = toolText{
+	description: `Read new output from a background shell started by bash with run_in_background.
+
+Usage:
+- shell_id is the id bash returned when the command was started.
+- Each call returns only the output produced since the previous call, plus whether the shell is still running and, once finished, its exit code.
+- Poll after starting a background server to confirm it came up, or to collect logs while other work proceeds.`,
+	snippet: "bash_output — read new output from a background shell",
+}
+
+var killBashText = toolText{
+	description: `Stop a background shell started by bash with run_in_background, terminating its whole process group.
+
+Usage:
+- shell_id is the id bash returned when the command was started.
+- Stopping an already-finished shell is a no-op.
+- Kill a background server or watcher once you are done with it so it does not keep holding its port.`,
+	snippet: "kill_bash — stop a background shell",
 }

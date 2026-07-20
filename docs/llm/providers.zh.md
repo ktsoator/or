@@ -180,6 +180,10 @@ registry.SetOverride("deepseek", llm.ProviderOverride{
 `SetOverride` 会保存一份独立快照，因此调用后可以安全复用或修改传入的值、map
 和请求级环境变量。条件允许时，override 仍建议在启动阶段设置。完整的凭证优先级见[请求选项](configuration.md)。
 
+如果应用只允许显式的 `StreamOptions.APIKey` 或 `ProviderOverride.APIKey`
+提供凭证，可设置 `DisableEnv: true`；此时请求解析和 `AuthStatus` 都不会再读取
+provider 的环境变量。
+
 ### 注册自定义 provider
 
 `Register` 加入模型清单中未内置的 provider。它从自己的环境变量解析 key，也能像内置 provider 一样被 override；这是除了直接传一个裸 `Model` 之外，接入本地服务器的另一种方式。

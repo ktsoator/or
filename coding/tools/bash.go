@@ -15,14 +15,18 @@ import (
 const DefaultBashTimeout = 120 * time.Second
 
 type bashArgs struct {
-	Command string `json:"command" jsonschema:"description=The bash command to run,minLength=1"`
-	Timeout int    `json:"timeout,omitempty" jsonschema:"description=Timeout in seconds; defaults to 120,minimum=1"`
+	Command         string `json:"command" jsonschema:"description=The bash command to run,minLength=1"`
+	Description     string `json:"description,omitempty" jsonschema:"description=A short active-voice summary of what this command does (about 5-10 words), such as 'Install dependencies' or 'Run the test suite'. Shown in the UI in place of the raw command; always set it."`
+	Timeout         int    `json:"timeout,omitempty" jsonschema:"description=Timeout in seconds; defaults to 120,minimum=1"`
+	RunInBackground bool   `json:"run_in_background,omitempty" jsonschema:"description=Run the command in the background and return immediately with a shell id, instead of waiting for it to exit. Use this for long-lived processes such as dev servers. Read its output later with bash_output and stop it with kill_bash."`
 }
 
 // Bash returns a tool that runs a shell command in the workspace directory and
 // returns its combined output and exit code. A non-zero exit is reported to the
-// model as content, not as a failure, so the model can react to it.
-func Bash(root string, ops ExecOps) Tool {
+// model as content, not as a failure, so the model can react to it. When shells
+// is non-nil, run_in_background starts long-lived commands detached and returns a
+// shell id instead of blocking.
+func Bash(root string, ops ExecOps, shells *BackgroundShells) Tool {
 	def := llm.MustTool[bashArgs]("bash", bashText.description)
 	return Tool{
 		AgentTool: agent.AgentTool{
@@ -32,6 +36,20 @@ func Bash(root string, ops ExecOps) Tool {
 				var in bashArgs
 				if err := json.Unmarshal(raw, &in); err != nil {
 					return agent.ToolResult{}, err
+				}
+
+				if in.RunInBackground {
+					if shells == nil {
+						return textResult("background execution is not available in this session"), nil
+					}
+					id, err := shells.Start(in.Command, root)
+					if err != nil {
+						return textResult(fmt.Sprintf("command failed to start: %v", err)), err
+					}
+					return textResult(fmt.Sprintf(
+						"Started background shell %s.\nRead new output with bash_output(shell_id=%q); stop it with kill_bash(shell_id=%q).",
+						id, id, id,
+					)), nil
 				}
 
 				timeout := DefaultBashTimeout

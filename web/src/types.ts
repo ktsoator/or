@@ -192,6 +192,43 @@ export type ModelOption = {
   supportsImages: boolean
 }
 
+export type ProviderInfo = {
+  id: string
+  name: string
+  configured: boolean
+  models: number
+  officialBaseURL?: string
+  effectiveBaseURL?: string
+  activeConnectionId: string
+  connections: ProviderConnectionInfo[]
+}
+
+export type ActiveModelSelection = {
+  provider: string
+  model: string
+  thinkingLevel: ThinkingLevel
+}
+
+export type ProviderListResponse = {
+  providers: ProviderInfo[]
+  activeModel?: ActiveModelSelection
+}
+
+export type ProviderConnectionInfo = {
+  id: string
+  name: string
+  baseURL: string
+  official: boolean
+  activeKeyId?: string
+  keys: ProviderKeyInfo[]
+}
+
+export type ProviderKeyInfo = {
+  id: string
+  name: string
+  preview: string
+}
+
 export type ModelCatalogResponse = {
   models: ModelOption[]
   defaultProvider: string

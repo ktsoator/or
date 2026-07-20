@@ -40,9 +40,9 @@ const toolTextSizes: Record<TextSize, string> = {
 }
 
 const toolDetailTextSizes: Record<TextSize, string> = {
-  small: '0.6rem',
-  default: '0.625rem',
-  large: '0.675rem',
+  small: '0.75rem',
+  default: '0.8125rem',
+  large: '0.875rem',
 }
 
 export function readAppearancePreferences(): AppearancePreferences {

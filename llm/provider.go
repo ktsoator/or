@@ -47,6 +47,11 @@ type ProviderOverride struct {
 	// APIKey, when set and non-empty, supplies the credential unless the
 	// request passes StreamOptions.APIKey explicitly.
 	APIKey *string
+	// DisableEnv prevents provider environment variables from supplying a
+	// credential. Explicit StreamOptions.APIKey and APIKey above still work.
+	// Product shells can use this when credentials must come exclusively from
+	// their own persisted settings.
+	DisableEnv bool
 	// Headers are merged into every request, overriding same-named model and
 	// provider spec headers. StreamOptions.Headers still win over these.
 	Headers map[string]string
@@ -142,7 +147,8 @@ func (provider *Provider) EnvKeys() []string {
 // to lowest, is:
 //
 //	APIKey:  StreamOptions.APIKey > override.APIKey > EnvKeys via
-//	         StreamOptions.Env > override.Env > process environment
+//	         StreamOptions.Env > override.Env > process environment;
+//	         DisableEnv removes the final environment lookup layer
 //	BaseURL: override.BaseURL > Model.BaseURL
 //	Headers: StreamOptions.Headers > override.Headers > spec.Headers >
 //	         Model.Headers (per key; adapters merge StreamOptions.Headers
@@ -158,7 +164,7 @@ func (provider *Provider) resolve(model Model, options StreamOptions, override P
 		switch {
 		case override.APIKey != nil && *override.APIKey != "":
 			options.APIKey = *override.APIKey
-		default:
+		case !override.DisableEnv:
 			env := mergeEnv(override.Env, options.Env)
 			options.APIKey = envAPIKeyFrom(provider.spec.EnvKeys, env)
 		}
@@ -175,6 +181,9 @@ func (provider *Provider) authStatus(env ProviderEnv, override ProviderOverride)
 	if override.APIKey != nil && *override.APIKey != "" {
 		status.Configured = true
 		status.Source = "override"
+		return status
+	}
+	if override.DisableEnv {
 		return status
 	}
 

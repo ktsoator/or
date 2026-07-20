@@ -34,6 +34,8 @@ import { Markdown } from './components/Markdown'
 import { ToolCard } from './components/ToolCard'
 import { Composer } from './components/Composer'
 import { Thinking } from './components/Thinking'
+import { StepGroup } from './components/StepGroup'
+import { groupItems } from './lib/steps'
 import { ProfileMenu } from './components/ProfileMenu'
 import { ResponseActions } from './components/ResponseActions'
 import { SettingsPage, type SettingsSection } from './components/SettingsPage'
@@ -89,6 +91,7 @@ export default function App() {
     updatingSettings,
     status,
     models,
+    refreshModels,
     registerWorkspace,
     startDraft,
     updateDraftWorkspace,
@@ -368,6 +371,10 @@ export default function App() {
       onBrowseProjects={() => {
         setWorkspacePickerOpen(true)
       }}
+      onConfigureModel={() => {
+        setSettingsSection('models')
+        setSettingsOpen(true)
+      }}
       onSettingsChange={updateSettings}
     />
   )
@@ -377,6 +384,7 @@ export default function App() {
       <SettingsPage
         initialSection={settingsSection}
         onBack={() => setSettingsOpen(false)}
+        onProvidersChanged={refreshModels}
       />
     )
   }
@@ -619,7 +627,7 @@ export default function App() {
       </aside>
 
       <div className="relative flex h-full min-w-0 flex-col">
-        <header className="z-20 flex h-13 shrink-0 items-center border-b border-stone-200/80 bg-white px-6 max-md:h-12 max-md:px-4">
+        <header className="z-20 flex h-13 shrink-0 items-center justify-between gap-3 border-b border-stone-200/80 bg-white px-6 max-md:h-12 max-md:px-4">
           <div className="flex min-w-0 items-center gap-2.5">
             <button
               className="-ml-1 grid size-7 shrink-0 place-items-center rounded-md text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-900 md:hidden"
@@ -633,15 +641,43 @@ export default function App() {
               <PanelLeft className="size-4" aria-hidden="true" />
               <span className="sr-only">{t('app.openSessions')}</span>
             </button>
-            <span
-              className="truncate text-[0.9375rem] font-medium tracking-[-0.015em] text-stone-900"
-              title={activeSession?.title}
-            >
-              {draft || activeSession?.title === 'New session'
-                ? t('app.newSession')
-                : (activeSession?.title ?? 'OR coding')}
-            </span>
+            <div className="flex min-w-0 items-center gap-1.5">
+              {!draft && activeSession?.scope === 'project' && activeSession.workspaceName && (
+                <>
+                  <span
+                    className="shrink-0 text-[0.9375rem] text-stone-400 max-sm:hidden"
+                    title={activeSession.workspacePath}
+                  >
+                    {activeSession.workspaceName}
+                  </span>
+                  <span className="shrink-0 text-stone-300 max-sm:hidden" aria-hidden="true">
+                    /
+                  </span>
+                </>
+              )}
+              <span
+                className="truncate text-[0.9375rem] font-medium tracking-[-0.015em] text-stone-900"
+                title={activeSession?.title}
+              >
+                {draft || activeSession?.title === 'New session'
+                  ? t('app.newSession')
+                  : (activeSession?.title ?? 'OR coding')}
+              </span>
+            </div>
           </div>
+          {activeSession?.modelName && (
+            <div className="flex shrink-0 items-center gap-1.5 text-[0.8125rem] text-stone-400 max-sm:hidden">
+              <span className="font-medium text-stone-500">{activeSession.modelName}</span>
+              {activeSession.thinkingLevel && activeSession.thinkingLevel !== 'off' && (
+                <>
+                  <span className="text-stone-300" aria-hidden="true">
+                    ·
+                  </span>
+                  <span>{t(`effort.${activeSession.thinkingLevel}` as Parameters<typeof t>[0])}</span>
+                </>
+              )}
+            </div>
+          )}
         </header>
 
         <main
@@ -673,7 +709,17 @@ export default function App() {
                 {composer(true)}
               </div>
             ) : (
-              items.map((item) => <ThreadItem key={item.id} item={item} />)
+              groupItems(items).map((unit) =>
+                unit.kind === 'steps' ? (
+                  <StepGroup key={unit.id} items={unit.items} cwd={activeSession?.workspacePath} />
+                ) : (
+                  <ThreadItem
+                    key={unit.item.id}
+                    item={unit.item}
+                    cwd={activeSession?.workspacePath}
+                  />
+                ),
+              )
             )}
           </div>
         </main>
@@ -1073,7 +1119,7 @@ function DeleteSessionDialog({
   )
 }
 
-function ThreadItem({ item }: { item: Item }) {
+function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
   const { t } = useI18n()
   switch (item.kind) {
     case 'user':
@@ -1121,7 +1167,7 @@ function ThreadItem({ item }: { item: Item }) {
     case 'thinking':
       return <Thinking item={item} />
     case 'tool':
-      return <ToolCard item={item} />
+      return <ToolCard item={item} cwd={cwd} />
     case 'confirm':
       return null
     case 'error':

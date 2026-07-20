@@ -73,6 +73,7 @@ type Session struct {
 	store    store.Store
 	tools    []tools.Tool
 	readOnly map[string]tools.Tool // tool name -> tool, for per-call read-only checks
+	shells   *tools.BackgroundShells
 	cwd      string
 
 	maxRetries    int
@@ -103,8 +104,9 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	}
 
 	toolSet := opts.Tools
+	var shells *tools.BackgroundShells
 	if toolSet == nil {
-		toolSet = tools.CodingTools(cwd, tools.LocalOps{})
+		toolSet, shells = tools.CodingToolsWithShells(cwd, tools.LocalOps{})
 	}
 
 	var seed []agent.AgentMessage
@@ -138,6 +140,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		store:         opts.Store,
 		tools:         toolSet,
 		readOnly:      toolsByName(toolSet),
+		shells:        shells,
 		cwd:           cwd,
 		maxRetries:    maxRetries,
 		contextWindow: opts.Model.ContextWindow,
@@ -288,6 +291,17 @@ func (s *Session) CancelQueuedMessage(handle QueueHandle) bool {
 
 // Abort cancels an in-progress run.
 func (s *Session) Abort() { s.agent.Abort() }
+
+// Close releases resources the session owns. It stops any background shells the
+// default tool set started so long-lived processes do not outlive the session.
+// It does not abort an in-progress run; call Abort first if one may be active.
+// Close is safe to call more than once, and a no-op when the session was built
+// with a caller-supplied tool set.
+func (s *Session) Close() {
+	if s.shells != nil {
+		s.shells.Shutdown()
+	}
+}
 
 // ClearQueuedMessages drops steering and follow-up messages that have not yet
 // entered the transcript. Product adapters use it when a run is stopped or

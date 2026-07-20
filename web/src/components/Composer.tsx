@@ -39,6 +39,7 @@ export function Composer({
   onResolve,
   onSelectProject,
   onBrowseProjects,
+  onConfigureModel,
   onSettingsChange,
 }: {
   connected: boolean
@@ -61,6 +62,7 @@ export function Composer({
   onResolve: (id: string, allow: boolean) => Promise<void>
   onSelectProject: (path?: string) => void
   onBrowseProjects: () => void
+  onConfigureModel: () => void
   onSettingsChange: (
     provider: string,
     model: string,
@@ -77,7 +79,8 @@ export function Composer({
   const [images, setImages] = useState<PendingImage[]>([])
   const [delivery, setDelivery] = useState<DeliveryMode>('steer')
   const awaitingApproval = Boolean(confirmation)
-  const inputDisabled = awaitingApproval || !connected || updatingSettings
+  const modelConfigured = Boolean(modelProvider && modelID && thinkingLevel)
+  const inputDisabled = awaitingApproval || !connected || updatingSettings || !modelConfigured
   const settingsDisabled = running || inputDisabled
   const supportsImages = Boolean(
     models.find((model) => model.provider === modelProvider && model.id === modelID)
@@ -282,6 +285,8 @@ export function Composer({
                     ? t('composer.resolveApprovalPlaceholder')
                     : updatingSettings
                       ? t('composer.updatingSettings')
+                    : !modelConfigured
+                      ? t('composer.configureModelPlaceholder')
                     : connected
                       ? running
                         ? delivery === 'steer'
@@ -315,15 +320,25 @@ export function Composer({
             <div
               className="col-start-3 row-start-2 flex shrink-0 items-center gap-2.5 max-sm:gap-1.5"
             >
-              <ModelSettingsMenu
-                models={models}
-                modelProvider={modelProvider}
-                modelID={modelID}
-                thinkingLevel={thinkingLevel}
-                contextUsage={contextUsage}
-                disabled={settingsDisabled}
-                onChange={changeSettings}
-              />
+              {modelConfigured ? (
+                <ModelSettingsMenu
+                  models={models}
+                  modelProvider={modelProvider}
+                  modelID={modelID}
+                  thinkingLevel={thinkingLevel}
+                  contextUsage={contextUsage}
+                  disabled={settingsDisabled}
+                  onChange={changeSettings}
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={onConfigureModel}
+                  className="inline-flex h-9 cursor-pointer items-center rounded-full px-3 text-[0.8125rem] font-medium text-stone-500 outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-950 focus-visible:bg-[rgb(241,241,241)]"
+                >
+                  {t('composer.configureModel')}
+                </button>
+              )}
               {running && !awaitingApproval && (
                 <RunDeliveryMenu value={delivery} onValueChange={setDelivery} />
               )}

@@ -13,13 +13,27 @@ import (
 
 	"github.com/ktsoator/or/coding/internal/app/bootstrap"
 	"github.com/ktsoator/or/coding/internal/app/config"
+	"github.com/ktsoator/or/coding/internal/app/providerconfig"
 	"github.com/ktsoator/or/coding/policy"
+	"github.com/ktsoator/or/llm"
 )
 
 // Run starts an interactive terminal session. It reads prompts from stdin until
 // EOF or an "exit"/"quit" line, and returns when the loop ends.
 func Run(ctx context.Context, cfg config.Config) error {
 	reader := bufio.NewReader(os.Stdin)
+	providers, err := providerconfig.NewStore(cfg.DataDir, llm.DefaultProviderRegistry())
+	if err != nil {
+		return err
+	}
+	providers.Apply()
+	selection, ok := providers.ActiveModel()
+	if !ok {
+		return fmt.Errorf("no model is configured; start coding with -web and configure one in Settings")
+	}
+	cfg.Provider = selection.Provider
+	cfg.Model = selection.Model
+	cfg.ThinkingLevel = string(selection.ThinkingLevel)
 
 	session, err := bootstrap.NewSession(ctx, cfg, bootstrap.Dependencies{
 		Confirm: confirmer(reader, os.Stdout),
@@ -27,6 +41,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 	if err != nil {
 		return err
 	}
+	defer session.Close()
 
 	printer := NewRenderer(os.Stdout)
 	unsubscribe := session.Subscribe(printer.Handle)

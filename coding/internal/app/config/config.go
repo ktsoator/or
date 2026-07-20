@@ -1,5 +1,5 @@
-// Package config resolves the coding CLI's runtime configuration from flags and
-// environment. It is part of the product shell.
+// Package config resolves product-shell settings. Model routing is persisted by
+// the provider settings store rather than accepted as process configuration.
 package config
 
 import (
@@ -23,11 +23,10 @@ const (
 
 // Config is the resolved settings for one coding product process.
 type Config struct {
-	// Provider and Model select the model, e.g. "anthropic" / "claude-opus-4-5".
-	Provider string
-	Model    string
-	// ThinkingLevel is the reasoning effort, as a raw string. Use Thinking to get
-	// the typed value.
+	// Provider, Model, and ThinkingLevel are populated from persisted application
+	// settings or an existing session record. They are not command-line inputs.
+	Provider      string
+	Model         string
 	ThinkingLevel string
 	// Cwd is the default workspace root. In Web mode it is only the initial
 	// directory-browser location. Every created session carries an explicit
@@ -52,15 +51,11 @@ func (c Config) Thinking() llm.ModelThinkingLevel {
 	return llm.ModelThinkingLevel(c.ThinkingLevel)
 }
 
-// Defaults returns a Config seeded from environment variables, used as flag
-// defaults. OR_PROVIDER, OR_MODEL, and OR_THINKING override built-in defaults.
+// Defaults returns shell-only defaults. A model is intentionally not selected:
+// first launch remains unconfigured until the settings UI activates one.
 func Defaults() Config {
-	provider := envOr("OR_PROVIDER", "deepseek")
-	model := envOr("OR_MODEL", "deepseek-v4-pro")
 	return Config{
-		Provider:       provider,
-		Model:          model,
-		ThinkingLevel:  envOr("OR_THINKING", "medium"),
+		ThinkingLevel:  "medium",
 		Cwd:            envOr("OR_CWD", ""),
 		DataDir:        envOr("OR_DATA_DIR", ""),
 		SessionFile:    "",
@@ -76,12 +71,9 @@ func Parse(args []string) (Config, error) {
 	cfg := Defaults()
 	flags := flag.NewFlagSet("coding", flag.ContinueOnError)
 
-	flags.StringVar(&cfg.Provider, "provider", cfg.Provider, "model provider (e.g. anthropic, openai)")
-	flags.StringVar(&cfg.Model, "model", cfg.Model, "model id")
 	flags.StringVar(&cfg.Cwd, "cwd", cfg.Cwd, "default workspace (optional in Web mode)")
 	flags.StringVar(&cfg.DataDir, "data-dir", cfg.DataDir, "coding data directory (Web default: ~/.or/coding)")
 	flags.StringVar(&cfg.SessionFile, "session", cfg.SessionFile, "session transcript file (CLI default: <data-dir>/session.jsonl)")
-	flags.StringVar(&cfg.ThinkingLevel, "thinking", cfg.ThinkingLevel, "reasoning level: off, minimal, low, medium, high, xhigh")
 	flags.StringVar(&cfg.Addr, "addr", cfg.Addr, "web API listen address (with -web)")
 	flags.StringVar(&cfg.FrontendOrigin, "web-origin", cfg.FrontendOrigin, "allowed front-end origin for cross-origin API access")
 	webUI := flags.Bool("web", false, "serve the HTTP API instead of the terminal REPL")

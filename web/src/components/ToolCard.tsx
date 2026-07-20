@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import {
   ChevronRight,
+  CircleStop,
   CircleX,
   File,
   FileCode2,
@@ -10,6 +11,7 @@ import {
   FolderSearch,
   LoaderCircle,
   PencilLine,
+  ScrollText,
   Search,
   Terminal,
 } from 'lucide-react'
@@ -23,6 +25,7 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
 import { FileChange } from './Diff'
+import { CopyButton } from './CopyButton'
 import { useI18n } from '@/i18n'
 
 function prettyArgs(args: unknown): string {
@@ -35,7 +38,30 @@ function prettyArgs(args: unknown): string {
   }
 }
 
-type ToolKind = 'read' | 'write' | 'edit' | 'patch' | 'inspect' | 'search' | 'run'
+// relativize trims the workspace root off absolute paths so tool rows show
+// "work/main.go" instead of a long ".../workspaces/<date>/<id>/work/main.go",
+// falling back to "~" for anything still under the user's home directory.
+function relativize(text: string, cwd?: string): string {
+  if (!text) return text
+  let out = text
+  if (cwd) {
+    out = out.split(`${cwd}/`).join('')
+    out = out.split(cwd).join('.')
+  }
+  const home = cwd?.match(/^(\/(?:Users|home)\/[^/]+)/)?.[1]
+  if (home) out = out.split(`${home}/`).join('~/').split(home).join('~')
+  return out
+}
+
+// stripLeadingCd drops an infrastructural "cd <dir> &&" prefix from a command so
+// the collapsed row leads with the actual work; the full command still shows
+// when the card is expanded.
+function stripLeadingCd(command: string): string {
+  const match = /^cd\s+\S+\s+&&\s+([\s\S]*)$/.exec(command)
+  return match ? match[1] : command
+}
+
+type ToolKind = 'read' | 'write' | 'edit' | 'patch' | 'inspect' | 'search' | 'run' | 'logs' | 'kill'
 
 function toolPresentation(name: string): { Icon: LucideIcon; kind: ToolKind } {
   const value = name.toLowerCase()
@@ -49,6 +75,8 @@ function toolPresentation(name: string): { Icon: LucideIcon; kind: ToolKind } {
   if (value.includes('search') || value.includes('grep') || value === 'rg') {
     return { Icon: Search, kind: 'search' }
   }
+  if (value.includes('kill')) return { Icon: CircleStop, kind: 'kill' }
+  if (value.includes('output') || value.includes('log')) return { Icon: ScrollText, kind: 'logs' }
   if (value.includes('file')) return { Icon: FileCode2, kind: 'inspect' }
   return { Icon: Terminal, kind: 'run' }
 }
@@ -63,7 +91,8 @@ function argHint(args: unknown): string {
     record.file_path ??
     record.file ??
     record.command ??
-    record.cmd
+    record.cmd ??
+    record.shell_id
   return typeof value === 'string' ? value : ''
 }
 
@@ -72,6 +101,15 @@ function explicitCommand(args: unknown): string {
   const record = args as Record<string, unknown>
   const value = record.command ?? record.cmd
   return typeof value === 'string' ? value : ''
+}
+
+// commandDescription returns the model-written summary of a bash command, shown
+// in the row in place of the raw command (the command stays in the expanded
+// detail). Empty when the model omitted it, so the row falls back to the command.
+function commandDescription(args: unknown): string {
+  if (!args || typeof args !== 'object') return ''
+  const value = (args as Record<string, unknown>).description
+  return typeof value === 'string' ? value.trim() : ''
 }
 
 function Status({ status }: { status: ToolItem['status'] }) {
@@ -260,6 +298,59 @@ function InspectPreview({ output, failed }: { output: string; failed: boolean })
   )
 }
 
+type ShellStatus = { running: boolean; exitCode: number; command: string }
+
+// parseBackgroundStatus recognizes the header line bash_output emits, e.g.
+// "[bg_1: running] go run ." or "[bg_1: exited with code 0] ...", so the status
+// can be shown as a badge instead of raw text and the body kept clean.
+function parseBackgroundStatus(output: string): { status: ShellStatus | null; body: string } {
+  const newline = output.indexOf('\n')
+  const firstLine = newline >= 0 ? output.slice(0, newline) : output
+  const match = /^\[\S+: (running|exited with code (-?\d+))\] ?(.*)$/.exec(firstLine)
+  if (!match) return { status: null, body: output }
+  const running = match[1] === 'running'
+  return {
+    status: { running, exitCode: running ? 0 : Number(match[2] ?? 0), command: match[3] ?? '' },
+    body: newline >= 0 ? output.slice(newline + 1) : '',
+  }
+}
+
+function ShellStatusBadge({ status }: { status: ShellStatus }) {
+  const { t } = useI18n()
+  const ok = !status.running && status.exitCode === 0
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      <span
+        className={cn(
+          'size-1.5 shrink-0 rounded-full',
+          status.running ? 'animate-pulse bg-emerald-500' : ok ? 'bg-stone-400' : 'bg-rose-500',
+        )}
+        aria-hidden="true"
+      />
+      <span
+        className={cn(
+          'shrink-0 text-[0.6875rem] font-medium tracking-wide uppercase',
+          status.running ? 'text-emerald-700' : ok ? 'text-stone-500' : 'text-rose-600',
+        )}
+      >
+        {status.running
+          ? t('tool.bgRunning')
+          : ok
+            ? t('tool.bgExited')
+            : t('tool.bgExitedCode', { code: status.exitCode })}
+      </span>
+      {status.command && (
+        <code
+          className="min-w-0 overflow-hidden font-mono text-[var(--tool-detail-font-size)] text-stone-400 text-ellipsis whitespace-nowrap"
+          title={status.command}
+        >
+          {status.command}
+        </code>
+      )}
+    </span>
+  )
+}
+
 function ShellPreview({
   command,
   output,
@@ -270,6 +361,8 @@ function ShellPreview({
   failed: boolean
 }) {
   const { t } = useI18n()
+  const { status, body } = parseBackgroundStatus(output)
+  const log = status ? body : output
   return (
     <div
       className={cn(
@@ -277,11 +370,20 @@ function ShellPreview({
         failed && 'border-red-200 bg-red-50/60',
       )}
     >
-      <div className="flex max-h-24 min-h-7 items-start gap-2 overflow-auto px-2.5 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-4.5 font-normal">
-        <span className="shrink-0 text-stone-400 select-none">$</span>
-        <code className="whitespace-pre-wrap text-stone-700">{command}</code>
+      <div className="flex min-h-7 items-start gap-2 px-2.5 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-4.5 font-normal">
+        {status ? (
+          <ShellStatusBadge status={status} />
+        ) : (
+          <>
+            <span className="shrink-0 text-stone-400 select-none">$</span>
+            <code className="min-w-0 flex-1 overflow-auto whitespace-pre-wrap text-stone-700">
+              {command}
+            </code>
+          </>
+        )}
+        {log && <CopyButton value={log} className="ml-auto -mr-0.5" />}
       </div>
-      {output && (
+      {log && (
         <pre
           className={cn(
             'code-scroll-area m-0 max-h-[min(46vh,26.25rem)] overflow-auto border-t border-stone-200 bg-white px-2.5 py-2 font-mono text-[var(--tool-detail-font-size)] leading-4.5 font-normal tracking-[0.005em] whitespace-pre text-stone-600',
@@ -291,21 +393,25 @@ function ShellPreview({
           aria-label={t('tool.shellOutput')}
           tabIndex={0}
         >
-          {output}
+          {log}
         </pre>
       )}
     </div>
   )
 }
 
-export function ToolCard({ item }: { item: ToolItem }) {
+export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
   const { t } = useI18n()
   const args = prettyArgs(item.args)
-  const hint = argHint(item.args)
+  const rawHint = argHint(item.args)
+  const rawCommand = explicitCommand(item.args) || (rawHint ? `${item.name} ${rawHint}` : item.name)
   const { Icon, kind } = toolPresentation(item.name)
   const verb = t(`tool.${kind}`)
-  const command = explicitCommand(item.args) || (hint ? `${item.name} ${hint}` : item.name)
-  const target = kind === 'run' ? command : hint || item.name
+  const hint = relativize(rawHint, cwd)
+  const command = relativize(rawCommand, cwd)
+  const description = kind === 'run' ? commandDescription(item.args) : ''
+  const target = kind === 'run' ? stripLeadingCd(command) : hint || item.name
+  const targetTitle = kind === 'run' ? rawCommand : rawHint || item.name
   const fileChange = item.change?.changeType === 'file' ? item.change : undefined
   const changedFilename = fileChange?.path.split('/').filter(Boolean).pop() || fileChange?.path
   const hasDetails =
@@ -319,14 +425,22 @@ export function ToolCard({ item }: { item: ToolItem }) {
 
   const summary = (
     <span className="flex min-h-6 min-w-0 flex-1 items-center gap-2 text-[var(--chat-font-size)] leading-6 text-stone-500 transition-colors group-hover:text-stone-900">
-      <Icon className="size-4 shrink-0 transition-colors" aria-hidden="true" />
-      <span>
-        {fileChange
-          ? fileChange.op === 'create'
-            ? t('diff.created')
-            : t('diff.edited')
-          : verb}
-      </span>
+      <Icon
+        className={cn(
+          'size-4 shrink-0 transition-colors',
+          kind === 'kill' && 'text-rose-400 group-hover:text-rose-600',
+        )}
+        aria-hidden="true"
+      />
+      {!description && (
+        <span>
+          {fileChange
+            ? fileChange.op === 'create'
+              ? t('diff.created')
+              : t('diff.edited')
+            : verb}
+        </span>
+      )}
       {fileChange ? (
         <>
           <span
@@ -340,10 +454,17 @@ export function ToolCard({ item }: { item: ToolItem }) {
             <span className="text-rose-700">-{fileChange.deletions || 0}</span>
           </span>
         </>
+      ) : description ? (
+        <span
+          className="min-w-0 overflow-hidden font-normal text-ellipsis whitespace-nowrap transition-colors"
+          title={targetTitle}
+        >
+          {description}
+        </span>
       ) : (
         <code
           className="min-w-0 overflow-hidden font-mono text-[var(--chat-font-size)] leading-6 font-normal text-stone-500 text-ellipsis whitespace-nowrap transition-colors group-hover:text-stone-950"
-          title={target}
+          title={targetTitle}
         >
           {target}
         </code>
@@ -370,7 +491,7 @@ export function ToolCard({ item }: { item: ToolItem }) {
           <ReadPreview output={readOutput} path={target} failed={item.status === 'error'} />
         ) : kind === 'inspect' && !item.change ? (
           <InspectPreview output={item.result || ''} failed={item.status === 'error'} />
-        ) : kind === 'run' && !item.change ? (
+        ) : (kind === 'run' || kind === 'logs' || kind === 'kill') && !item.change ? (
           <ShellPreview
             command={command}
             output={shellOutput}

@@ -71,6 +71,11 @@ func TestResolveAPIKeyPrecedence(t *testing.T) {
 			name: "process env is the last resort",
 			want: "from-process",
 		},
+		{
+			name:     "disabled environment does not supply a key",
+			override: ProviderOverride{DisableEnv: true},
+			want:     "",
+		},
 	}
 
 	for _, test := range tests {
@@ -214,6 +219,16 @@ func TestAuthStatus(t *testing.T) {
 		registry.SetOverride("acme", ProviderOverride{APIKey: &key})
 		status, _ := registry.AuthStatus("acme", nil)
 		if !status.Configured || status.Source != "override" {
+			t.Fatalf("status = %+v", status)
+		}
+	})
+
+	t.Run("disabled environment remains unconfigured", func(t *testing.T) {
+		t.Setenv("ACME_API_KEY", "from-process")
+		registry := registryWithProvider(t, provider)
+		registry.SetOverride("acme", ProviderOverride{DisableEnv: true})
+		status, _ := registry.AuthStatus("acme", nil)
+		if status.Configured || status.Source != "" || status.Missing != nil {
 			t.Fatalf("status = %+v", status)
 		}
 	})

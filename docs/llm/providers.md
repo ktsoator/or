@@ -216,6 +216,10 @@ request-scoped environment passed to it may be reused or mutated after the call.
 Set overrides at startup when possible. Credential precedence is listed in
 [request configuration](configuration.md).
 
+Set `DisableEnv: true` when an application must accept credentials only from
+an explicit `StreamOptions.APIKey` or `ProviderOverride.APIKey`; in that mode,
+provider environment variables are not consulted by resolution or `AuthStatus`.
+
 ### Register a custom provider
 
 `Register` adds a provider the catalog does not ship. It resolves its key from

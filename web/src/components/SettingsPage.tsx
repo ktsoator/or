@@ -20,6 +20,7 @@ import { DropdownMenu } from 'radix-ui'
 import { cn } from '@/lib/utils'
 import { useI18n, type Locale } from '@/i18n'
 import { UsageSettings } from '@/components/UsageSettings'
+import { ProvidersSettings } from '@/components/ProvidersSettings'
 import {
   readAppearancePreferences,
   saveAppearancePreferences,
@@ -54,9 +55,11 @@ type NavGroup = {
 export function SettingsPage({
   onBack,
   initialSection = 'general',
+  onProvidersChanged,
 }: {
   onBack: () => void
   initialSection?: SettingsSection
+  onProvidersChanged?: () => void
 }) {
   const { t } = useI18n()
   const [active, setActive] = useState<SettingsSection>(initialSection)
@@ -202,6 +205,8 @@ export function SettingsPage({
               <PermissionsCard {...permissionState} />
             ) : active === 'usage' ? (
               <UsageSettings />
+            ) : active === 'models' ? (
+              <ProvidersSettings onChanged={onProvidersChanged} />
             ) : active === 'appearance' ? (
               <AppearanceSettings preferences={appearance} onChange={updateAppearance} />
             ) : (

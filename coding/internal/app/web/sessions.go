@@ -310,7 +310,11 @@ func (m *SessionManager) build(record sessionRecord) (*sessionRuntime, error) {
 // Create adds an empty, independently persisted conversation. Chat sessions
 // receive an isolated, manager-owned workspace; project sessions use the
 // caller-selected folder and never fall back to the process working directory.
-func (m *SessionManager) Create(title, workspacePath, scope string) (SessionSummary, error) {
+func (m *SessionManager) Create(
+	title, workspacePath, scope string,
+	model llm.Model,
+	thinking llm.ModelThinkingLevel,
+) (SessionSummary, error) {
 	startedAt := time.Now()
 	now := startedAt.UTC()
 	title = strings.TrimSpace(title)
@@ -362,6 +366,9 @@ func (m *SessionManager) Create(title, workspacePath, scope string) (SessionSumm
 		UpdatedAt:     now,
 		Transcript:    filepath.Join(filepath.Dir(m.indexPath), id+".jsonl"),
 		AutoTitle:     autoTitle,
+		Provider:      model.Provider,
+		Model:         model.ID,
+		Thinking:      string(llm.ClampThinkingLevel(model, thinking)),
 	}
 	runtime, err := m.build(record)
 	if err != nil {
@@ -479,6 +486,9 @@ func (m *SessionManager) Delete(id string) error {
 		return err
 	}
 	m.mu.Unlock()
+
+	// Stop any background shells the session started before its files go away.
+	runtime.session.Close()
 
 	for _, path := range staged {
 		_ = removeStagedPath(path.staged)
