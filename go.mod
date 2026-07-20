@@ -6,7 +6,7 @@ require (
 	github.com/anthropics/anthropic-sdk-go v1.57.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/invopop/jsonschema v0.14.0
-	github.com/openai/openai-go/v3 v3.42.0
+	github.com/openai/openai-go/v3 v3.44.0
 )
 
 require (
