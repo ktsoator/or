@@ -240,6 +240,14 @@ function DefaultModelSection({ onChanged }: { onChanged?: () => void }) {
   const providerLabel = provider ? providerName(provider) : t('settings.defaultModelNone')
   const modelLabel = current?.name ?? (model || t('settings.defaultModelNone'))
 
+  // The three selectors are one control, so they share a trigger style. The
+  // cursor has to say why a trigger is dead: a wait cursor during a save, and
+  // not-allowed when there is simply nothing to choose from yet.
+  const triggerClass = cn(
+    'inline-flex h-9 min-w-0 items-center gap-1.5 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-left text-[0.8125rem] text-stone-800 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(237,237,237)] disabled:opacity-60',
+    saving ? 'cursor-wait' : 'cursor-pointer disabled:cursor-not-allowed',
+  )
+
   return (
     <section className="mb-8">
       <h2 className="mb-3 text-[0.875rem] leading-5 font-medium text-stone-800">
@@ -263,7 +271,7 @@ function DefaultModelSection({ onChanged }: { onChanged?: () => void }) {
                     <button
                       type="button"
                       aria-label={t('settings.defaultModelProvider')}
-                      className="inline-flex h-9 min-w-0 cursor-pointer items-center gap-1.5 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-left text-[0.8125rem] text-stone-800 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(237,237,237)] disabled:cursor-wait disabled:opacity-60"
+                      className={triggerClass}
                       disabled={saving}
                     >
                       {provider && <ProviderIcon provider={provider} />}
@@ -306,7 +314,7 @@ function DefaultModelSection({ onChanged }: { onChanged?: () => void }) {
                     <button
                       type="button"
                       aria-label={t('settings.defaultModelModel')}
-                      className="inline-flex h-9 min-w-0 cursor-pointer items-center gap-1.5 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-left text-[0.8125rem] text-stone-800 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(237,237,237)] disabled:cursor-wait disabled:opacity-60"
+                      className={triggerClass}
                       disabled={saving || providerModels.length === 0}
                     >
                       <span className="max-w-[9rem] truncate">{modelLabel}</span>
@@ -347,7 +355,7 @@ function DefaultModelSection({ onChanged }: { onChanged?: () => void }) {
                     <button
                       type="button"
                       aria-label={t('settings.defaultModelThinking')}
-                      className="inline-flex h-9 min-w-0 cursor-pointer items-center gap-1.5 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-left text-[0.8125rem] text-stone-800 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(237,237,237)] disabled:cursor-not-allowed disabled:opacity-50"
+                      className={triggerClass}
                       disabled={saving || thinkingLevels.length === 0}
                     >
                       <span className="truncate">{t(`effort.${thinking}` as Parameters<typeof t>[0])}</span>
