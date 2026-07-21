@@ -53,7 +53,16 @@ func (s *Server) Handler() http.Handler {
 	s.mountSkills(api)
 	s.mountDirectories(api)
 
-	return allowFrontendOrigin(r, s.frontendOrigin)
+	return allowFrontendOrigin(r, s.frontendOrigin, routedMethods(r))
+}
+
+// routedMethods reports every verb the mounted routes serve.
+func routedMethods(r *gin.Engine) []string {
+	methods := make([]string, 0, len(r.Routes()))
+	for _, route := range r.Routes() {
+		methods = append(methods, route.Method)
+	}
+	return methods
 }
 
 const (
