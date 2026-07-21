@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Check, ChevronDown, LoaderCircle, Plus, Trash2 } from 'lucide-react'
 import { DropdownMenu } from 'radix-ui'
 import { apiURL } from '@/api'
@@ -7,9 +7,11 @@ import { cn } from '@/lib/utils'
 import { ProviderIcon } from '@/components/ProviderIdentity'
 import { providerName } from '@/lib/provider'
 import type {
+  ModelOption,
   ProviderConnectionInfo,
   ProviderInfo,
   ProviderListResponse,
+  ThinkingLevel,
 } from '@/types'
 
 type KeyDraft = {
@@ -72,6 +74,8 @@ export function ProvidersSettings({ onChanged }: { onChanged?: () => void }) {
 
   return (
     <div>
+      <DefaultModelSection onChanged={afterChange} />
+
       <p className="mb-6 max-w-2xl text-[0.875rem] leading-6 text-stone-500">
         {t('providers.intro')}
       </p>
@@ -103,6 +107,303 @@ export function ProvidersSettings({ onChanged }: { onChanged?: () => void }) {
           />
         </div>
       )}
+    </div>
+  )
+}
+
+type ModelsResponse = {
+  models: ModelOption[]
+  defaultProvider: string
+  defaultModel: string
+  defaultThinkingLevel: ThinkingLevel
+}
+
+// DefaultModelSection lets the user pick the application-wide default model and
+// thinking effort that new sessions start with. It reads the model catalog and
+// current default from /api/models and persists changes to /api/model-selection.
+// The UI uses three cascading rows: Provider → Model → Thinking effort.
+function DefaultModelSection({ onChanged }: { onChanged?: () => void }) {
+  const { t } = useI18n()
+  const [models, setModels] = useState<ModelOption[]>([])
+  const [provider, setProvider] = useState('')
+  const [model, setModel] = useState('')
+  const [thinking, setThinking] = useState<ThinkingLevel>('medium')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const loadModels = useCallback(
+    async (signal?: AbortSignal) => {
+      try {
+        const response = await fetch(apiURL('/models'), { cache: 'no-store', signal })
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        const data = (await response.json()) as ModelsResponse
+        setModels(data.models)
+        setProvider(data.defaultProvider)
+        setModel(data.defaultModel)
+        if (data.defaultThinkingLevel) setThinking(data.defaultThinkingLevel)
+        setError('')
+      } catch (cause) {
+        if (cause instanceof DOMException && cause.name === 'AbortError') return
+        setError(t('providers.loadFailed'))
+      } finally {
+        if (!signal?.aborted) setLoading(false)
+      }
+    },
+    [t],
+  )
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void loadModels(controller.signal)
+    return () => controller.abort()
+  }, [loadModels])
+
+  // Unique providers from the model catalog.
+  const providers = useMemo(() => [...new Set(models.map((m) => m.provider))], [models])
+
+  // Models filtered by the currently selected provider.
+  const providerModels = useMemo(
+    () => models.filter((m) => m.provider === provider),
+    [models, provider],
+  )
+
+  const current = models.find((entry) => entry.provider === provider && entry.id === model)
+  const thinkingLevels = current?.thinkingLevels ?? []
+
+  const persist = async (nextProvider: string, nextModel: string, nextThinking: ThinkingLevel) => {
+    setSaving(true)
+    setError('')
+    try {
+      const response = await fetch(apiURL('/model-selection'), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: nextProvider, model: nextModel, thinkingLevel: nextThinking }),
+      })
+      if (!response.ok) {
+        let message = t('settings.defaultModelSaveFailed')
+        try {
+          const body = (await response.json()) as { error?: string }
+          if (body.error) message = body.error
+        } catch {
+          // fall back to the localized message for non-JSON responses
+        }
+        throw new Error(message)
+      }
+      const saved = (await response.json()) as { provider: string; model: string; thinkingLevel: ThinkingLevel }
+      setProvider(saved.provider)
+      setModel(saved.model)
+      setThinking(saved.thinkingLevel)
+      onChanged?.()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t('settings.defaultModelSaveFailed'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const chooseProvider = (nextProvider: string) => {
+    if (nextProvider === provider) return
+    const candidates = models.filter((m) => m.provider === nextProvider)
+    if (candidates.length === 0) return
+    // Try to keep the same model id; otherwise pick the first available.
+    const entry = candidates.find((c) => c.id === model) ?? candidates[0]
+    const nextThinking = entry.thinkingLevels.includes(thinking)
+      ? thinking
+      : (entry.thinkingLevels.find((level) => level === 'medium') ??
+        entry.thinkingLevels.find((level) => level !== 'off') ??
+        entry.thinkingLevels[0] ??
+        'off')
+    void persist(nextProvider, entry.id, nextThinking)
+  }
+
+  const chooseModel = (nextModel: string) => {
+    if (nextModel === model) return
+    const entry = providerModels.find((c) => c.id === nextModel)
+    if (!entry) return
+    const nextThinking = entry.thinkingLevels.includes(thinking)
+      ? thinking
+      : (entry.thinkingLevels.find((level) => level === 'medium') ??
+        entry.thinkingLevels.find((level) => level !== 'off') ??
+        entry.thinkingLevels[0] ??
+        'off')
+    void persist(provider, nextModel, nextThinking)
+  }
+
+  const chooseThinking = (level: string) => {
+    if (!provider || !model || level === thinking) return
+    void persist(provider, model, level as ThinkingLevel)
+  }
+
+  const modelLabel = current?.name ?? (model || t('settings.defaultModelNone'))
+
+  return (
+    <section className="mb-8">
+      <h2 className="mb-3 text-[0.875rem] leading-5 font-medium text-stone-800">
+        {t('settings.defaultModel')}
+      </h2>
+      <div className="overflow-hidden rounded-[18px] border border-stone-200/90 bg-white px-4 shadow-[0_10px_32px_-30px_rgba(28,25,23,0.45)]">
+        {loading ? (
+          <div className="flex items-center gap-2 py-6 text-[0.8125rem] text-stone-400">
+            <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+            {t('providers.loading')}
+          </div>
+        ) : models.length === 0 ? (
+          <div className="py-6 text-[0.8125rem] text-stone-400">{t('settings.defaultModelEmpty')}</div>
+        ) : (
+          <>
+            <SettingsRowLike label={t('settings.defaultModel')} description={t('settings.defaultModelDescription')}>
+              <div className="flex items-center gap-1.5">
+                {/* Provider */}
+                <DropdownMenu.Root>
+                  <DropdownMenu.Trigger asChild>
+                    <button
+                      type="button"
+                      aria-label={t('settings.defaultModelProvider')}
+                      className="inline-flex h-9 min-w-0 cursor-pointer items-center gap-1.5 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-left text-[0.8125rem] text-stone-800 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(237,237,237)] disabled:cursor-wait disabled:opacity-60"
+                      disabled={saving}
+                    >
+                      <ProviderIcon provider={provider} />
+                      <span className="max-w-[7rem] truncate">{providerName(provider)}</span>
+                      <ChevronDown className="size-3.5 shrink-0 text-stone-400" aria-hidden="true" />
+                    </button>
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Portal>
+                    <DropdownMenu.Content
+                      side="bottom"
+                      align="end"
+                      sideOffset={7}
+                      collisionPadding={10}
+                      className="z-[100] max-h-[min(24rem,60vh)] min-w-[14rem] overflow-y-auto animate-[fade-in_110ms_ease-out] rounded-[14px] border border-stone-200 bg-white p-1 text-[0.8125rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+                    >
+                      <DropdownMenu.RadioGroup value={provider} onValueChange={chooseProvider}>
+                        <div className="flex flex-col gap-0.5">
+                          {providers.map((p) => (
+                            <DropdownMenu.RadioItem
+                              key={p}
+                              value={p}
+                              className="relative flex h-9 cursor-pointer items-center gap-2 rounded-[9px] px-2.5 pr-8 outline-none select-none data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(237,237,237)]"
+                            >
+                              <ProviderIcon provider={p} />
+                              <span className="min-w-0 flex-1 truncate">{providerName(p)}</span>
+                              <DropdownMenu.ItemIndicator className="absolute right-2 grid size-4 place-items-center text-stone-700">
+                                <Check className="size-3.5" aria-hidden="true" />
+                              </DropdownMenu.ItemIndicator>
+                            </DropdownMenu.RadioItem>
+                          ))}
+                        </div>
+                      </DropdownMenu.RadioGroup>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Portal>
+                </DropdownMenu.Root>
+
+                {/* Model */}
+                <DropdownMenu.Root>
+                  <DropdownMenu.Trigger asChild>
+                    <button
+                      type="button"
+                      aria-label={t('settings.defaultModelModel')}
+                      className="inline-flex h-9 min-w-0 cursor-pointer items-center gap-1.5 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-left text-[0.8125rem] text-stone-800 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(237,237,237)] disabled:cursor-wait disabled:opacity-60"
+                      disabled={saving || providerModels.length === 0}
+                    >
+                      <span className="max-w-[9rem] truncate">{modelLabel}</span>
+                      <ChevronDown className="size-3.5 shrink-0 text-stone-400" aria-hidden="true" />
+                    </button>
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Portal>
+                    <DropdownMenu.Content
+                      side="bottom"
+                      align="end"
+                      sideOffset={7}
+                      collisionPadding={10}
+                      className="z-[100] max-h-[min(24rem,60vh)] min-w-[16rem] overflow-y-auto animate-[fade-in_110ms_ease-out] rounded-[14px] border border-stone-200 bg-white p-1 text-[0.8125rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+                    >
+                      <DropdownMenu.RadioGroup value={model} onValueChange={chooseModel}>
+                        <div className="flex flex-col gap-0.5">
+                          {providerModels.map((entry) => (
+                            <DropdownMenu.RadioItem
+                              key={entry.id}
+                              value={entry.id}
+                              className="relative flex h-9 cursor-pointer items-center rounded-[9px] px-2.5 pr-8 outline-none select-none data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(237,237,237)]"
+                            >
+                              <span className="min-w-0 flex-1 truncate">{entry.name}</span>
+                              <DropdownMenu.ItemIndicator className="absolute right-2 grid size-4 place-items-center text-stone-700">
+                                <Check className="size-3.5" aria-hidden="true" />
+                              </DropdownMenu.ItemIndicator>
+                            </DropdownMenu.RadioItem>
+                          ))}
+                        </div>
+                      </DropdownMenu.RadioGroup>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Portal>
+                </DropdownMenu.Root>
+
+                {/* Thinking effort */}
+                <DropdownMenu.Root>
+                  <DropdownMenu.Trigger asChild>
+                    <button
+                      type="button"
+                      aria-label={t('settings.defaultModelThinking')}
+                      className="inline-flex h-9 min-w-0 cursor-pointer items-center gap-1.5 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-left text-[0.8125rem] text-stone-800 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(237,237,237)] disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={saving || thinkingLevels.length === 0}
+                    >
+                      <span className="truncate">{t(`effort.${thinking}` as Parameters<typeof t>[0])}</span>
+                      <ChevronDown className="size-3.5 shrink-0 text-stone-400" aria-hidden="true" />
+                    </button>
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Portal>
+                    <DropdownMenu.Content
+                      side="bottom"
+                      align="end"
+                      sideOffset={7}
+                      collisionPadding={10}
+                      className="z-[100] min-w-[10rem] animate-[fade-in_110ms_ease-out] rounded-[14px] border border-stone-200 bg-white p-1 text-[0.8125rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+                    >
+                      <DropdownMenu.RadioGroup value={thinking} onValueChange={chooseThinking}>
+                        <div className="flex flex-col gap-0.5">
+                          {thinkingLevels.map((level) => (
+                            <DropdownMenu.RadioItem
+                              key={level}
+                              value={level}
+                              className="relative flex h-9 cursor-pointer items-center rounded-[9px] px-2.5 pr-8 outline-none select-none data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(237,237,237)]"
+                            >
+                              <span>{t(`effort.${level}` as Parameters<typeof t>[0])}</span>
+                              <DropdownMenu.ItemIndicator className="absolute right-2 grid size-4 place-items-center text-stone-700">
+                                <Check className="size-3.5" aria-hidden="true" />
+                              </DropdownMenu.ItemIndicator>
+                            </DropdownMenu.RadioItem>
+                          ))}
+                        </div>
+                      </DropdownMenu.RadioGroup>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Portal>
+                </DropdownMenu.Root>
+              </div>
+            </SettingsRowLike>
+          </>
+        )}
+      </div>
+      {error && <p className="mt-2 text-[0.8125rem] text-red-600">{error}</p>}
+    </section>
+  )
+}
+
+function SettingsRowLike({
+  label,
+  description,
+  children,
+}: {
+  label: string
+  description: string
+  children: ReactNode
+}) {
+  return (
+    <div className="flex min-h-[4.375rem] items-center gap-6 border-b border-stone-200/75 py-3 last:border-b-0 max-sm:items-start max-sm:gap-3">
+      <div className="min-w-0 flex-1">
+        <div className="text-[0.84375rem] leading-5 font-medium text-stone-900">{label}</div>
+        <p className="mt-0.5 max-w-[38.75rem] text-[0.78125rem] leading-[1.45] text-stone-500">{description}</p>
+      </div>
+      <div className="shrink-0 max-sm:pt-0.5">{children}</div>
     </div>
   )
 }
