@@ -352,6 +352,57 @@ func (s *Server) handleAbort(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// handleCompact performs the first explicit context-maintenance operation. It
+// blocks until the summary is durable so the caller gets a definitive result;
+// the session reservation prevents prompts and settings changes in parallel.
+func (s *Server) handleCompact(c *gin.Context) {
+	var body struct {
+		Instructions string `json:"instructions"`
+	}
+	if c.Request.ContentLength > 0 {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 64<<10)
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid compaction request"})
+			return
+		}
+	}
+
+	sessionID := c.Param("sessionID")
+	runtime, err := s.sessions.BeginCompact(sessionID)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+		return
+	case errors.Is(err, session.ErrSessionActive):
+		c.JSON(http.StatusConflict, gin.H{"error": "wait for the session to become idle before compacting"})
+		return
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer s.sessions.EndRun(sessionID)
+
+	result, err := runtime.Session().Compact(c.Request.Context(), strings.TrimSpace(body.Instructions))
+	switch {
+	case coding.IsNothingToCompact(err):
+		c.JSON(http.StatusConflict, gin.H{
+			"code":  "nothing_to_compact",
+			"error": "not enough history to compact yet",
+		})
+	case errors.Is(err, coding.ErrBusy):
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	default:
+		c.JSON(http.StatusOK, gin.H{
+			"summary":          result.Summary,
+			"firstKeptEntryId": result.FirstKeptEntryID,
+			"tokensBefore":     result.TokensBefore,
+			"tokensAfter":      result.TokensAfter,
+		})
+	}
+}
+
 // mountSessions serves conversations: discovery and creation, then everything
 // scoped to one session id.
 func (s *Server) mountSessions(r gin.IRouter) {
@@ -370,4 +421,5 @@ func (s *Server) mountSessions(r gin.IRouter) {
 	one.DELETE("/queue/:messageID", s.handleRemoveQueuedMessage)
 	one.POST("/confirm", s.handleConfirm)
 	one.POST("/abort", s.handleAbort)
+	one.POST("/compact", s.handleCompact)
 }

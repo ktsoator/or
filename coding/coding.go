@@ -13,11 +13,13 @@ import (
 	"sync"
 
 	"github.com/ktsoator/or/agent"
+	"github.com/ktsoator/or/coding/compaction"
 	"github.com/ktsoator/or/coding/policy"
 	"github.com/ktsoator/or/coding/prompt"
 	"github.com/ktsoator/or/coding/skill"
 	"github.com/ktsoator/or/coding/store"
 	"github.com/ktsoator/or/coding/tools"
+	"github.com/ktsoator/or/coding/transcript"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -49,6 +51,9 @@ type Options struct {
 	// Store persists the transcript and seeds it on construction. Nil disables
 	// persistence.
 	Store store.Store
+	// Compactor creates checkpoint summaries. Nil uses a native, tool-free LLM
+	// request configured from StreamFn, StreamOptions, and GetAPIKey.
+	Compactor compaction.Compactor
 	// DetailsStore persists tools' structured results (file changes and failures)
 	// out of band, keyed by tool-call ID, so a reloaded session restores the rich
 	// rendering it showed live. Nil replays history as plain text.
@@ -84,14 +89,24 @@ type Session struct {
 
 	maxRetries    int
 	contextWindow int64
+	compactor     compaction.Compactor
 
 	runMu        sync.Mutex
 	persistedLen int
 	runCtx       context.Context
 
+	transcriptMu sync.RWMutex
+	entries      []transcript.Entry
+	leafID       string
+	usageStart   int
+
 	detailsStore store.DetailsStore
 	detailsMu    sync.Mutex
 	details      map[string]any // tool-call ID -> decoded structured Details
+
+	eventMu        sync.Mutex
+	eventListeners map[int]func(Event)
+	nextEventID    int
 }
 
 // New builds a Session. When a Store is configured, its transcript is loaded and
@@ -123,13 +138,31 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		toolSet = append(toolSet, tools.Tool{AgentTool: reg.Tool(), ReadOnly: true})
 	}
 
-	var seed []agent.AgentMessage
+	var entries []transcript.Entry
 	if opts.Store != nil {
 		loaded, err := opts.Store.Load(ctx)
 		if err != nil {
 			return nil, err
 		}
-		seed = loaded
+		entries = loaded
+	}
+	leafID := ""
+	if len(entries) > 0 {
+		leafID = entries[len(entries)-1].ID
+	}
+	seed, err := transcript.BuildContext(entries, leafID)
+	if err != nil {
+		return nil, err
+	}
+	usageStart := 0
+	path, err := transcript.BuildPath(entries, leafID)
+	if err != nil {
+		return nil, err
+	}
+	for _, entry := range path {
+		if entry.Type == transcript.CompactionEntry {
+			usageStart = len(seed)
+		}
 	}
 
 	maxRetries := defaultMaxRetries
@@ -151,17 +184,28 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	}
 
 	s := &Session{
-		store:         opts.Store,
-		tools:         toolSet,
-		readOnly:      toolsByName(toolSet),
-		shells:        shells,
-		cwd:           cwd,
-		skills:        opts.Skills,
-		maxRetries:    maxRetries,
-		contextWindow: opts.Model.ContextWindow,
-		persistedLen:  len(seed),
-		detailsStore:  opts.DetailsStore,
-		details:       details,
+		store:          opts.Store,
+		tools:          toolSet,
+		readOnly:       toolsByName(toolSet),
+		shells:         shells,
+		cwd:            cwd,
+		skills:         opts.Skills,
+		maxRetries:     maxRetries,
+		contextWindow:  opts.Model.ContextWindow,
+		compactor:      opts.Compactor,
+		persistedLen:   len(seed),
+		entries:        append([]transcript.Entry(nil), entries...),
+		leafID:         leafID,
+		usageStart:     usageStart,
+		detailsStore:   opts.DetailsStore,
+		details:        details,
+		eventListeners: make(map[int]func(Event)),
+	}
+	if s.compactor == nil {
+		s.compactor = compaction.LLM{
+			StreamFn: opts.StreamFn, StreamOptions: opts.StreamOptions,
+			GetAPIKey: opts.GetAPIKey,
+		}
 	}
 
 	gate := opts.Policy
@@ -189,6 +233,11 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	}
 	s.agent = agent.New(agentOpts)
 	s.captureDetails()
+	s.agent.Subscribe(func(ev agent.AgentEvent) {
+		if projected, ok := projectAgentEvent(ev); ok {
+			s.dispatchEvent(projected)
+		}
+	})
 
 	return s, nil
 }
@@ -269,18 +318,31 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 // persistNew appends the messages added since the last persist to the Store. It
 // runs only while runMu is held, so persistedLen is not racing a run.
 func (s *Session) persistNew(ctx context.Context) error {
-	if s.store == nil {
-		return nil
-	}
 	all := s.agent.Snapshot().Messages
-	if s.persistedLen >= len(all) {
+	s.transcriptMu.RLock()
+	persistedLen := s.persistedLen
+	parentID := s.leafID
+	s.transcriptMu.RUnlock()
+	if persistedLen >= len(all) {
 		return nil
 	}
-	added := all[s.persistedLen:]
-	if err := s.store.Append(ctx, added...); err != nil {
-		return err
+	added := all[persistedLen:]
+	entries := make([]transcript.Entry, 0, len(added))
+	for _, message := range added {
+		entry := transcript.NewMessage(parentID, message)
+		entries = append(entries, entry)
+		parentID = entry.ID
 	}
+	if s.store != nil {
+		if err := s.store.Append(ctx, entries...); err != nil {
+			return err
+		}
+	}
+	s.transcriptMu.Lock()
+	s.entries = append(s.entries, entries...)
+	s.leafID = parentID
 	s.persistedLen = len(all)
+	s.transcriptMu.Unlock()
 	return nil
 }
 
@@ -326,18 +388,57 @@ func (s *Session) ClearQueuedMessages() { s.agent.ClearQueues() }
 // Subscribe registers a listener for UI-neutral coding events and returns a
 // function that removes it.
 func (s *Session) Subscribe(listener func(Event)) (unsubscribe func()) {
-	return s.agent.Subscribe(func(ev agent.AgentEvent) {
-		if projected, ok := projectAgentEvent(ev); ok {
-			listener(projected)
-		}
-	})
+	s.eventMu.Lock()
+	id := s.nextEventID
+	s.nextEventID++
+	s.eventListeners[id] = listener
+	s.eventMu.Unlock()
+	return func() {
+		s.eventMu.Lock()
+		delete(s.eventListeners, id)
+		s.eventMu.Unlock()
+	}
+}
+
+func (s *Session) dispatchEvent(event Event) {
+	s.eventMu.Lock()
+	listeners := make([]func(Event), 0, len(s.eventListeners))
+	for _, listener := range s.eventListeners {
+		listeners = append(listeners, listener)
+	}
+	s.eventMu.Unlock()
+	for _, listener := range listeners {
+		listener(event)
+	}
 }
 
 // Snapshot returns a read-only snapshot of the underlying agent state.
 func (s *Session) Snapshot() agent.State { return s.agent.Snapshot() }
 
-// Messages returns the current transcript.
-func (s *Session) Messages() []agent.AgentMessage { return s.agent.Snapshot().Messages }
+// Messages returns every original message on the current transcript path. A
+// compacted session therefore still exposes its complete history.
+func (s *Session) Messages() []agent.AgentMessage {
+	s.transcriptMu.RLock()
+	entries := append([]transcript.Entry(nil), s.entries...)
+	leafID := s.leafID
+	persistedLen := s.persistedLen
+	s.transcriptMu.RUnlock()
+	messages, err := transcript.Messages(entries, leafID)
+	if err != nil {
+		return nil
+	}
+	active := s.agent.Snapshot().Messages
+	if persistedLen < len(active) {
+		messages = append(messages, active[persistedLen:]...)
+	}
+	return messages
+}
+
+// Entries returns a detached snapshot of the durable session log.
+func (s *Session) Entries() []transcript.Entry {
+	entries, _ := s.snapshotTranscript()
+	return entries
+}
 
 // Cwd returns the workspace root.
 func (s *Session) Cwd() string { return s.cwd }
@@ -353,6 +454,12 @@ func (s *Session) SetModel(model llm.Model) {
 // only while the session is idle.
 func (s *Session) SetThinkingLevel(level llm.ModelThinkingLevel) {
 	s.agent.SetThinkingLevel(level)
+}
+
+func (s *Session) snapshotTranscript() ([]transcript.Entry, string) {
+	s.transcriptMu.RLock()
+	defer s.transcriptMu.RUnlock()
+	return append([]transcript.Entry(nil), s.entries...), s.leafID
 }
 
 // buildSystemPrompt assembles the coding system prompt from the active tools'

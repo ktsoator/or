@@ -52,7 +52,7 @@ type HistoryItem struct {
 // History returns a displayable snapshot of the conversation in transcript
 // order. The returned slice is detached from the agent's mutable state.
 func (s *Session) History() []HistoryItem {
-	return projectHistory(s.agent.Snapshot().Messages, s.snapshotDetails())
+	return projectHistory(s.Messages(), s.snapshotDetails())
 }
 
 func projectHistory(messages []agent.AgentMessage, details map[string]any) []HistoryItem {

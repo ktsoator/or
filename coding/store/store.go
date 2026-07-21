@@ -1,53 +1,36 @@
-// Package store persists a coding session's transcript so it resumes across
-// process restarts. A Store is message-shaped: it loads, appends, and (for
-// compaction) replaces a flat list of agent messages. Richer models — typed
-// entries, branching, checkpoints — are a later concern layered above this.
+// Package store persists a coding session's append-only transcript so it
+// resumes across process restarts.
 package store
 
 import (
 	"context"
 	"sync"
 
-	"github.com/ktsoator/or/agent"
+	"github.com/ktsoator/or/coding/transcript"
 )
 
-// Store persists a transcript. Load returns the prior transcript to seed a
-// session; Append records the messages a run added, in order; Replace overwrites
-// the whole transcript, used when compaction rewrites history. A nil Store means
-// no persistence.
+// Store persists typed transcript entries. Compaction is an appended entry; it
+// never replaces or removes original messages. A nil Store disables persistence.
 type Store interface {
-	Load(ctx context.Context) ([]agent.AgentMessage, error)
-	Append(ctx context.Context, messages ...agent.AgentMessage) error
-	Replace(ctx context.Context, messages []agent.AgentMessage) error
+	Load(ctx context.Context) ([]transcript.Entry, error)
+	Append(ctx context.Context, entries ...transcript.Entry) error
 }
 
-// Memory is an in-process Store backed by a slice. It persists only for the
-// lifetime of the value, which makes it a useful default for tests and ephemeral
-// sessions. It is safe for concurrent use.
+// Memory is an in-process Store useful for tests and ephemeral sessions.
 type Memory struct {
-	mu       sync.Mutex
-	messages []agent.AgentMessage
+	mu      sync.Mutex
+	entries []transcript.Entry
 }
 
-// Load returns a copy of the retained transcript.
-func (m *Memory) Load(context.Context) ([]agent.AgentMessage, error) {
+func (m *Memory) Load(context.Context) ([]transcript.Entry, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return append([]agent.AgentMessage(nil), m.messages...), nil
+	return append([]transcript.Entry(nil), m.entries...), nil
 }
 
-// Append retains a copy of the given messages.
-func (m *Memory) Append(_ context.Context, messages ...agent.AgentMessage) error {
+func (m *Memory) Append(_ context.Context, entries ...transcript.Entry) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.messages = append(m.messages, messages...)
-	return nil
-}
-
-// Replace overwrites the retained transcript.
-func (m *Memory) Replace(_ context.Context, messages []agent.AgentMessage) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.messages = append([]agent.AgentMessage(nil), messages...)
+	m.entries = append(m.entries, entries...)
 	return nil
 }

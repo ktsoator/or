@@ -6,3 +6,17 @@ export function apiURL(path: string): string {
   const normalized = path.startsWith('/') ? path : `/${path}`
   return `${apiOrigin}/api${normalized}`
 }
+
+export class APIError extends Error {
+  readonly code?: string
+
+  constructor(message: string, code?: string) {
+    super(message)
+    this.name = 'APIError'
+    this.code = code
+  }
+}
+
+export function isAPIError(error: unknown, code: string): error is APIError {
+  return error instanceof APIError && error.code === code
+}

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
-import { apiURL } from './api'
+import { APIError, apiURL } from './api'
 import type {
   ConfirmItem,
+  CompactionResult,
   ConnectionStatus,
   ContextUsage,
   DeliveryMode,
@@ -539,6 +540,7 @@ export type Session = {
   loading: boolean
   creating: boolean
   updatingSettings: boolean
+  compacting: boolean
   status: ConnectionStatus
   models: ModelOption[]
   refreshModels: () => Promise<void>
@@ -550,6 +552,7 @@ export type Session = {
   renameSession: (id: string, customTitle: string) => Promise<SessionSummary>
   selectSession: (id: string) => void
   updateSettings: (provider: string, model: string, thinkingLevel: ThinkingLevel) => Promise<void>
+  compactContext: () => Promise<CompactionResult>
   send: (text: string, images: MessageImage[], delivery?: DeliveryMode) => void
   removeQueuedMessage: (id: string) => Promise<void>
   stop: () => void
@@ -632,6 +635,7 @@ export function useSession(): Session {
   const [initializing, setInitializing] = useState(true)
   const [creating, setCreating] = useState(false)
   const [updatingSettings, setUpdatingSettings] = useState(false)
+  const [compactingSessionID, setCompactingSessionID] = useState<string>()
   const [models, setModels] = useState<ModelOption[]>([])
   const [modelDefaults, setModelDefaults] = useState<ModelDefaults>()
   const [serviceStatus, setServiceStatus] = useState<ConnectionStatus>('connecting')
@@ -1060,6 +1064,53 @@ export function useSession(): Session {
     }
   }
 
+  const compactContext = async () => {
+    if (!activeSessionID || compactingSessionID || activeSession?.running) {
+      throw new Error('session is not idle')
+    }
+    const sessionID = activeSessionID
+    setCompactingSessionID(sessionID)
+    try {
+      const response = await fetch(sessionURL(sessionID, '/compact'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      if (!response.ok) {
+        let message = `compact context failed (${response.status})`
+        let code: string | undefined
+        try {
+          const body = (await response.json()) as { code?: string; error?: string }
+          code = body.code
+          if (body.error) message = body.error
+        } catch {
+          // Keep the status-based fallback when the response has no JSON body.
+        }
+        throw new APIError(message, code)
+      }
+      const result = (await response.json()) as CompactionResult
+      const current = sessions.find((session) => session.id === sessionID)
+      if (current) {
+        const contextWindow =
+          models.find(
+            (model) =>
+              model.provider === current.modelProvider && model.id === current.modelId,
+          )?.contextWindow ?? 0
+        dispatch({
+          t: 'contextInvalidate',
+          sessionID,
+          provider: current.modelProvider,
+          model: current.modelId,
+          contextWindow,
+        })
+      }
+      void refreshSessions().catch(() => undefined)
+      return result
+    } finally {
+      setCompactingSessionID((current) => (current === sessionID ? undefined : current))
+    }
+  }
+
   const thread = activeSessionID ? threads[activeSessionID] : undefined
   const activeSessionRunning = activeSession?.running
 
@@ -1298,6 +1349,7 @@ export function useSession(): Session {
     loading: initializing || (Boolean(activeSessionID) && !thread?.loaded),
     creating,
     updatingSettings,
+    compacting: Boolean(activeSessionID && compactingSessionID === activeSessionID),
     status: thread?.status ?? serviceStatus,
     models,
     refreshModels: () => loadModels(),
@@ -1309,6 +1361,7 @@ export function useSession(): Session {
     renameSession,
     selectSession,
     updateSettings,
+    compactContext,
     send,
     removeQueuedMessage,
     stop,
