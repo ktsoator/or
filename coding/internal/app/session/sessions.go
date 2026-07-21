@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/ktsoator/or/coding"
-	"github.com/ktsoator/or/coding/internal/app/bootstrap"
 	"github.com/ktsoator/or/coding/internal/app/config"
 	"github.com/ktsoator/or/coding/internal/app/usage"
 	"github.com/ktsoator/or/coding/internal/app/workspace"
@@ -231,7 +230,7 @@ func (m *Manager) build(record record) (*Runtime, error) {
 	record.Provider = model.Provider
 	record.Model = model.ID
 	record.Thinking = string(thinking)
-	session, err := bootstrap.NewSession(m.ctx, cfg, bootstrap.Dependencies{Confirm: transport.Confirm})
+	session, err := newCodingSession(m.ctx, cfg, transport.Confirm)
 	if err != nil {
 		return nil, err
 	}
