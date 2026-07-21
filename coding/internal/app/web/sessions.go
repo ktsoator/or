@@ -529,6 +529,14 @@ func (m *SessionManager) Delete(id string) error {
 	for _, path := range staged {
 		_ = removeStagedPath(path.staged)
 	}
+	// Reclaim the generated workspace only once the index no longer references
+	// the session, so a failed index write above leaves the directory intact.
+	// Folder workspaces belong to the user and are never touched;
+	// removeScratchWorkspace re-proves the path is managed storage before it
+	// recurses.
+	if runtime.record.WorkspaceKind == workspaceKindScratch {
+		_ = m.removeScratchWorkspace(runtime.record.WorkspacePath)
+	}
 	return nil
 }
 
