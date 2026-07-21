@@ -10,16 +10,21 @@ import {
 } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
+  Archive,
+  BookOpenText,
   CircleAlert,
   Clock3,
   Ellipsis,
   Files,
   Folder,
   FolderOpen,
+  GitFork,
   LoaderCircle,
   PanelLeft,
   Pin,
+  PencilLine,
   Search,
+  Share2,
   ShieldAlert,
   SquarePen,
   Trash2,
@@ -39,6 +44,7 @@ import { groupItems } from './lib/steps'
 import { ProfileMenu } from './components/ProfileMenu'
 import { ResponseActions } from './components/ResponseActions'
 import { SettingsPage, type SettingsSection } from './components/SettingsPage'
+import { SkillsPage } from './components/SkillsPage'
 import { WorkspacePickerDialog } from './components/WorkspacePickerDialog'
 import { useI18n } from './i18n'
 import logoImage from './assets/logo.svg'
@@ -93,6 +99,7 @@ export default function App() {
     models,
     refreshModels,
     registerWorkspace,
+    removeWorkspace,
     startDraft,
     updateDraftWorkspace,
     deleteSession,
@@ -121,8 +128,15 @@ export default function App() {
   const [deleteTarget, setDeleteTarget] = useState<SessionSummary>()
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+  const [removeWorkspaceTarget, setRemoveWorkspaceTarget] = useState<{
+    path: string
+    name: string
+  }>()
+  const [removingWorkspace, setRemovingWorkspace] = useState(false)
+  const [removeWorkspaceError, setRemoveWorkspaceError] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
+  const [skillsOpen, setSkillsOpen] = useState(false)
   const [workspacePickerOpen, setWorkspacePickerOpen] = useState(false)
   const [selectedWorkspacePath, setSelectedWorkspacePath] = useState<string>()
   const [pinnedSessionIDs, setPinnedSessionIDs] = useState(readPinnedSessionIDs)
@@ -144,15 +158,7 @@ export default function App() {
       if (session.scope !== 'project') continue
       const path = session.workspacePath || ''
       const existing = groups.get(path)
-      if (existing) {
-        existing.sessions.push(session)
-      } else {
-        groups.set(path, {
-          path,
-          name: session.workspaceName || path.split('/').filter(Boolean).pop() || t('app.workspace'),
-          sessions: [session],
-        })
-      }
+      if (existing) existing.sessions.push(session)
     }
     return [...groups.values()].map((group) => ({
       ...group,
@@ -319,6 +325,11 @@ export default function App() {
     setDeleteTarget(session)
   }
 
+  const requestRemoveWorkspace = (path: string, name: string) => {
+    setRemoveWorkspaceError('')
+    setRemoveWorkspaceTarget({ path, name })
+  }
+
   const togglePinnedSession = (id: string) => {
     setPinnedSessionIDs((current) =>
       current.includes(id) ? current.filter((sessionID) => sessionID !== id) : [...current, id],
@@ -338,6 +349,31 @@ export default function App() {
       setDeleteError(error instanceof Error ? error.message : t('app.couldNotDelete'))
     } finally {
       setDeleting(false)
+    }
+  }
+
+  const confirmRemoveWorkspace = async () => {
+    if (!removeWorkspaceTarget) return
+    const target = removeWorkspaceTarget
+    setRemovingWorkspace(true)
+    setRemoveWorkspaceError('')
+    try {
+      await removeWorkspace(target.path)
+      if (
+        (draft?.projectScoped && draft.workspacePath === target.path) ||
+        (activeSession?.scope === 'project' && activeSession.workspacePath === target.path)
+      ) {
+        addSession(undefined, false)
+      }
+      if (selectedWorkspacePath === target.path) setSelectedWorkspacePath(undefined)
+      setRemoveWorkspaceTarget(undefined)
+      setMobileSessionsOpen(false)
+    } catch (error) {
+      setRemoveWorkspaceError(
+        error instanceof Error ? error.message : t('workspace.removeFailed'),
+      )
+    } finally {
+      setRemovingWorkspace(false)
     }
   }
 
@@ -497,6 +533,12 @@ export default function App() {
                 collapsed={sidebarCollapsed}
               />
               <SidebarNavItem
+                icon={BookOpenText}
+                label={t('app.skills')}
+                collapsed={sidebarCollapsed}
+                onClick={() => setSkillsOpen(true)}
+              />
+              <SidebarNavItem
                 icon={Clock3}
                 label={t('app.scheduled')}
                 collapsed={sidebarCollapsed}
@@ -581,6 +623,7 @@ export default function App() {
                   pinnedSessionIDs={pinnedSessionIDSet}
                   onTogglePinnedSession={togglePinnedSession}
                   onDeleteSession={requestDelete}
+                  onRemoveWorkspace={requestRemoveWorkspace}
                 />
               ))}
             </div>
@@ -626,6 +669,13 @@ export default function App() {
         )}
       </aside>
 
+      {skillsOpen ? (
+        <SkillsPage
+          onBack={() => setSkillsOpen(false)}
+          workspacePath={activeSession?.workspacePath}
+          workspaceName={activeSession?.workspaceName}
+        />
+      ) : (
       <div className="relative flex h-full min-w-0 flex-col">
         <header className="z-20 flex h-13 shrink-0 items-center justify-between gap-3 border-b border-stone-200/80 bg-white px-6 max-md:h-12 max-md:px-4">
           <div className="flex min-w-0 items-center gap-2.5">
@@ -726,6 +776,7 @@ export default function App() {
 
         {!loading && !emptySession && composer()}
       </div>
+      )}
 
       {deleteTarget && (
         <DeleteSessionDialog
@@ -736,6 +787,18 @@ export default function App() {
             if (!deleting) setDeleteTarget(undefined)
           }}
           onConfirm={() => void confirmDelete()}
+        />
+      )}
+
+      {removeWorkspaceTarget && (
+        <RemoveWorkspaceDialog
+          workspace={removeWorkspaceTarget}
+          removing={removingWorkspace}
+          error={removeWorkspaceError}
+          onCancel={() => {
+            if (!removingWorkspace) setRemoveWorkspaceTarget(undefined)
+          }}
+          onConfirm={() => void confirmRemoveWorkspace()}
         />
       )}
 
@@ -769,6 +832,7 @@ function WorkspaceSessions({
   pinnedSessionIDs,
   onTogglePinnedSession,
   onDeleteSession,
+  onRemoveWorkspace,
 }: {
   path: string
   name: string
@@ -780,14 +844,16 @@ function WorkspaceSessions({
   pinnedSessionIDs: Set<string>
   onTogglePinnedSession: (id: string) => void
   onDeleteSession: (session: SessionSummary) => void
+  onRemoveWorkspace: (path: string, name: string) => void
 }) {
   const { t } = useI18n()
   const [expanded, setExpanded] = useState(true)
+  const [menuOpen, setMenuOpen] = useState(false)
   return (
     <section aria-label={name}>
       <div className="group/workspace relative flex h-8 items-center">
         <button
-          className="flex h-8 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-[10px] px-2.5 text-left text-[0.875rem] font-normal text-stone-800 transition-colors hover:bg-[rgb(246,246,246)] hover:text-stone-950"
+          className="flex h-8 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-[10px] py-0 pr-[4.125rem] pl-2.5 text-left text-[0.875rem] font-normal text-stone-800 transition-colors hover:bg-[rgb(246,246,246)] hover:text-stone-950"
           type="button"
           title={path}
           aria-expanded={expanded}
@@ -811,15 +877,75 @@ function WorkspaceSessions({
           )}
           <span className="min-w-0 flex-1 truncate">{name}</span>
         </button>
-        <button
-          className="absolute right-1 grid size-7 cursor-pointer place-items-center rounded-md text-stone-400 opacity-0 transition-[opacity,color,background-color] group-hover/workspace:opacity-100 hover:bg-stone-200/70 hover:text-stone-900 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-stone-400 max-md:opacity-100"
-          type="button"
-          title={t('workspace.newSession', { name })}
-          aria-label={t('workspace.newSession', { name })}
-          onClick={() => onCreateSession(path)}
+        <div
+          className={cn(
+            'absolute top-0.5 right-0.5 flex items-center opacity-0 transition-opacity duration-100 group-hover/workspace:opacity-100 group-focus-within/workspace:opacity-100 max-md:opacity-100',
+            menuOpen && 'opacity-100',
+          )}
         >
-          <SquarePen className="size-3.5" aria-hidden="true" />
-        </button>
+          <button
+            className="grid size-7 cursor-pointer place-items-center rounded-[9px] text-stone-400 transition-colors hover:text-stone-950 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-stone-400"
+            type="button"
+            title={t('workspace.newSession', { name })}
+            aria-label={t('workspace.newSession', { name })}
+            onClick={() => onCreateSession(path)}
+          >
+            <SquarePen className="size-3.5" aria-hidden="true" />
+          </button>
+          <DropdownMenu.Root open={menuOpen} onOpenChange={setMenuOpen}>
+            <DropdownMenu.Trigger asChild>
+              <button
+                className="grid size-7 cursor-pointer place-items-center rounded-[9px] text-stone-400 transition-colors hover:text-stone-950 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-stone-400 data-[state=open]:text-stone-950"
+                type="button"
+                title={t('workspace.projectActions')}
+                aria-label={t('workspace.projectActionsNamed', { name })}
+              >
+                <Ellipsis className="size-4" aria-hidden="true" />
+              </button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content
+                side="right"
+                align="start"
+                sideOffset={6}
+                collisionPadding={10}
+                className="z-[120] min-w-[13.75rem] animate-[fade-in_100ms_ease-out] rounded-[14px] border border-stone-200 bg-white p-1 text-[0.84375rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+              >
+                <DropdownMenu.Item className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)]">
+                  <Pin className="size-4 text-stone-600" aria-hidden="true" />
+                  <span>{t('workspace.pinProject')}</span>
+                </DropdownMenu.Item>
+                <DropdownMenu.Item className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)]">
+                  <FolderOpen className="size-4 text-stone-600" aria-hidden="true" />
+                  <span>{t('workspace.revealInFinder')}</span>
+                </DropdownMenu.Item>
+                <DropdownMenu.Item className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)]">
+                  <GitFork className="size-4 text-stone-600" aria-hidden="true" />
+                  <span>{t('workspace.createWorktree')}</span>
+                </DropdownMenu.Item>
+                <DropdownMenu.Item className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)]">
+                  <PencilLine className="size-4 text-stone-600" aria-hidden="true" />
+                  <span>{t('workspace.renameProject')}</span>
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  disabled
+                  className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 text-stone-400 outline-none"
+                >
+                  <Archive className="size-4" aria-hidden="true" />
+                  <span>{t('workspace.archiveChats')}</span>
+                </DropdownMenu.Item>
+                <DropdownMenu.Separator className="mx-1 my-1 h-px bg-stone-100" />
+                <DropdownMenu.Item
+                  className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 text-red-700 outline-none data-[highlighted]:bg-red-50"
+                  onSelect={() => onRemoveWorkspace(path, name)}
+                >
+                  <X className="size-4" aria-hidden="true" />
+                  <span>{t('workspace.removeProject')}</span>
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
+        </div>
       </div>
       {expanded && (
         <div className="mt-1 space-y-1">
@@ -939,14 +1065,26 @@ function SessionRow({
               align="start"
               sideOffset={6}
               collisionPadding={10}
-              className="z-[120] min-w-[10.5rem] animate-[fade-in_100ms_ease-out] rounded-[14px] border border-stone-200 bg-white p-1 text-[0.84375rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+              className="z-[120] min-w-[11.75rem] animate-[fade-in_100ms_ease-out] rounded-[14px] border border-stone-200 bg-white p-1 text-[0.84375rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
             >
+              <DropdownMenu.Item className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)]">
+                <Share2 className="size-4 text-stone-600" aria-hidden="true" />
+                <span>{t('app.shareSession')}</span>
+              </DropdownMenu.Item>
+              <DropdownMenu.Item className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)]">
+                <PencilLine className="size-4 text-stone-600" aria-hidden="true" />
+                <span>{t('app.renameSession')}</span>
+              </DropdownMenu.Item>
               <DropdownMenu.Item
                 className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)]"
                 onSelect={onTogglePin}
               >
                 <Pin className="size-4 text-stone-600" aria-hidden="true" />
                 <span>{pinned ? t('app.unpinSession') : t('app.pinSession')}</span>
+              </DropdownMenu.Item>
+              <DropdownMenu.Item className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)]">
+                <Archive className="size-4 text-stone-600" aria-hidden="true" />
+                <span>{t('app.archiveSession')}</span>
               </DropdownMenu.Item>
               <DropdownMenu.Separator className="mx-1 my-1 h-px bg-stone-100" />
               <DropdownMenu.Item
@@ -968,10 +1106,12 @@ function SidebarNavItem({
   icon: Icon,
   label,
   collapsed = false,
+  onClick,
 }: {
   icon: LucideIcon
   label: string
   collapsed?: boolean
+  onClick?: () => void
 }) {
   return (
     <button
@@ -981,6 +1121,7 @@ function SidebarNavItem({
       )}
       type="button"
       title={label}
+      onClick={onClick}
     >
       <span className="relative shrink-0">
         <span
@@ -1112,6 +1253,109 @@ function DeleteSessionDialog({
           >
             {deleting && <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />}
             {deleting ? t('delete.deleting') : t('delete.confirm')}
+          </button>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function RemoveWorkspaceDialog({
+  workspace,
+  removing,
+  error,
+  onCancel,
+  onConfirm,
+}: {
+  workspace: { path: string; name: string }
+  removing: boolean
+  error: string
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const { t } = useI18n()
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !removing) onCancel()
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [onCancel, removing])
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] grid place-items-center bg-stone-950/25 px-4 py-8 backdrop-blur-[2px]"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !removing) onCancel()
+      }}
+    >
+      <section
+        className="relative w-full max-w-[28rem] animate-[fade-in_140ms_ease-out] rounded-[20px] border border-white/80 bg-white p-6 shadow-[0_28px_80px_-34px_rgba(28,25,23,0.58)] max-sm:rounded-[18px] max-sm:p-5"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="remove-workspace-title"
+        aria-describedby="remove-workspace-description"
+      >
+        <button
+          className="absolute top-4 right-4 grid size-8 cursor-pointer place-items-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700 disabled:cursor-wait disabled:opacity-40"
+          type="button"
+          aria-label={t('workspace.closeRemove')}
+          disabled={removing}
+          onClick={onCancel}
+        >
+          <X className="size-4" aria-hidden="true" />
+        </button>
+
+        <div className="pr-9">
+          <h2
+            id="remove-workspace-title"
+            className="text-[1.125rem] leading-6 font-semibold tracking-[-0.02em] text-stone-950"
+          >
+            {t('workspace.removeTitle')}
+          </h2>
+          <p
+            id="remove-workspace-description"
+            className="mt-1.5 text-[0.875rem] leading-[1.55] text-stone-500"
+          >
+            {t('workspace.removeDescription')}
+          </p>
+        </div>
+
+        <div className="mt-5 rounded-xl border border-stone-200/80 px-3.5 py-3">
+          <div className="truncate text-[0.90625rem] leading-5 font-medium text-stone-800">
+            {workspace.name}
+          </div>
+          <div className="mt-0.5 truncate font-mono text-[0.71875rem] leading-4 text-stone-400" title={workspace.path}>
+            {workspace.path}
+          </div>
+        </div>
+
+        {error && (
+          <div className="mt-4 flex gap-2.5 rounded-xl border border-red-200/70 bg-red-50/70 px-3.5 py-3 text-[0.8125rem] leading-5 text-red-800">
+            <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <div className="mt-6 flex justify-end gap-2.5">
+          <button
+            className="h-9 cursor-pointer rounded-[10px] border border-stone-300 bg-white px-4 text-[0.84375rem] font-medium text-stone-700 transition-colors hover:bg-stone-50 hover:text-stone-950 disabled:cursor-wait disabled:opacity-50"
+            type="button"
+            disabled={removing}
+            onClick={onCancel}
+          >
+            {t('workspace.cancel')}
+          </button>
+          <button
+            className="flex h-9 min-w-[7.5rem] cursor-pointer items-center justify-center gap-2 rounded-[10px] bg-[#b42318] px-4 text-[0.84375rem] font-medium text-white transition-colors hover:bg-[#991b1b] disabled:cursor-wait disabled:opacity-40"
+            type="button"
+            disabled={removing}
+            onClick={onConfirm}
+          >
+            {removing && <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />}
+            {removing ? t('workspace.removing') : t('workspace.removeConfirm')}
           </button>
         </div>
       </section>

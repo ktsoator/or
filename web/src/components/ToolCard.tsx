@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import {
+  BookOpenText,
   ChevronRight,
   CircleStop,
   CircleX,
@@ -61,10 +62,21 @@ function stripLeadingCd(command: string): string {
   return match ? match[1] : command
 }
 
-type ToolKind = 'read' | 'write' | 'edit' | 'patch' | 'inspect' | 'search' | 'run' | 'logs' | 'kill'
+type ToolKind =
+  | 'read'
+  | 'write'
+  | 'edit'
+  | 'patch'
+  | 'inspect'
+  | 'search'
+  | 'run'
+  | 'logs'
+  | 'kill'
+  | 'skill'
 
 function toolPresentation(name: string): { Icon: LucideIcon; kind: ToolKind } {
   const value = name.toLowerCase()
+  if (value === 'skill') return { Icon: BookOpenText, kind: 'skill' }
   if (value.includes('read') || value.includes('cat')) return { Icon: FileSearch, kind: 'read' }
   if (value.includes('write')) return { Icon: FilePlus2, kind: 'write' }
   if (value.includes('edit')) return { Icon: PencilLine, kind: 'edit' }
@@ -94,6 +106,15 @@ function argHint(args: unknown): string {
     record.cmd ??
     record.shell_id
   return typeof value === 'string' ? value : ''
+}
+
+// skillField reads a string field from the skill tool's arguments ({ name,
+// arguments }); the loaded instructions live in the tool result and are
+// intentionally not surfaced in the card.
+function skillField(args: unknown, key: 'name' | 'arguments'): string {
+  if (!args || typeof args !== 'object') return ''
+  const value = (args as Record<string, unknown>)[key]
+  return typeof value === 'string' ? value.trim() : ''
 }
 
 function explicitCommand(args: unknown): string {
@@ -410,14 +431,23 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
   const hint = relativize(rawHint, cwd)
   const command = relativize(rawCommand, cwd)
   const description = kind === 'run' ? commandDescription(item.args) : ''
-  const target = kind === 'run' ? stripLeadingCd(command) : hint || item.name
-  const targetTitle = kind === 'run' ? rawCommand : rawHint || item.name
+  const skillTitle = kind === 'skill' ? skillField(item.args, 'name') : ''
+  const skillArgs = kind === 'skill' ? skillField(item.args, 'arguments') : ''
+  const target =
+    kind === 'run'
+      ? stripLeadingCd(command)
+      : kind === 'skill'
+        ? skillTitle || item.name
+        : hint || item.name
+  const targetTitle = kind === 'run' ? rawCommand : kind === 'skill' ? skillTitle : rawHint || item.name
   const fileChange = item.change?.changeType === 'file' ? item.change : undefined
   const changedFilename = fileChange?.path.split('/').filter(Boolean).pop() || fileChange?.path
   const hasDetails =
     kind === 'read'
       ? item.status !== 'running'
-      : Boolean(args || item.change || item.result || item.status === 'error')
+      : kind === 'skill'
+        ? Boolean(skillArgs || item.status === 'error')
+        : Boolean(args || item.change || item.result || item.status === 'error')
   const shellOutput =
     item.result || (item.status === 'error' ? t('tool.failedNoMessage') : '')
   const readOutput =
@@ -487,7 +517,24 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
         />
       </CollapsibleTrigger>
       <CollapsibleContent>
-        {kind === 'read' ? (
+        {kind === 'skill' ? (
+          <div className="mt-1.5 ml-5 overflow-hidden rounded-lg border border-stone-200 bg-white max-md:ml-0">
+            {skillArgs && (
+              <DetailBlock title={t('tool.skillArguments')}>
+                <pre className="m-0 max-h-80 overflow-auto bg-white px-2.5 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-4.5 whitespace-pre-wrap text-stone-700">
+                  {skillArgs}
+                </pre>
+              </DetailBlock>
+            )}
+            {item.status === 'error' && (
+              <DetailBlock title={t('tool.errorOutput')}>
+                <pre className="m-0 max-h-80 overflow-auto bg-red-50/50 px-2.5 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-4.5 whitespace-pre-wrap text-red-700">
+                  {item.result || t('tool.failedNoMessage')}
+                </pre>
+              </DetailBlock>
+            )}
+          </div>
+        ) : kind === 'read' ? (
           <ReadPreview output={readOutput} path={target} failed={item.status === 'error'} />
         ) : kind === 'inspect' && !item.change ? (
           <InspectPreview output={item.result || ''} failed={item.status === 'error'} />

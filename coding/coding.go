@@ -15,6 +15,7 @@ import (
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/policy"
 	"github.com/ktsoator/or/coding/prompt"
+	"github.com/ktsoator/or/coding/skill"
 	"github.com/ktsoator/or/coding/store"
 	"github.com/ktsoator/or/coding/tools"
 	"github.com/ktsoator/or/llm"
@@ -37,6 +38,10 @@ type Options struct {
 	// Tools is the tool set. Nil uses tools.CodingTools rooted at Cwd, backed by
 	// tools.LocalOps.
 	Tools []tools.Tool
+	// Skills are file-backed skills advertised to the model and loadable on
+	// demand via the skill tool. Empty disables skills, and the tool is omitted.
+	// Load them with skill.Load and pass the result here.
+	Skills []skill.Skill
 	// Policy is the permission gate consulted before each tool call. The zero
 	// value asks for confirmation on any workspace-changing call; with no Confirm
 	// wired, such calls are denied. Set Policy.Confirm to approve them.
@@ -75,6 +80,7 @@ type Session struct {
 	readOnly map[string]tools.Tool // tool name -> tool, for per-call read-only checks
 	shells   *tools.BackgroundShells
 	cwd      string
+	skills   []skill.Skill
 
 	maxRetries    int
 	contextWindow int64
@@ -107,6 +113,14 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	var shells *tools.BackgroundShells
 	if toolSet == nil {
 		toolSet, shells = tools.CodingToolsWithShells(cwd, tools.LocalOps{})
+	}
+
+	// A skill tool is added only when skills are configured, so the model can load
+	// their instructions on demand. It is read-only: it injects text and touches
+	// no workspace state, so the permission gate lets it through.
+	if len(opts.Skills) > 0 {
+		reg := skill.NewRegistry(opts.Skills)
+		toolSet = append(toolSet, tools.Tool{AgentTool: reg.Tool(), ReadOnly: true})
 	}
 
 	var seed []agent.AgentMessage
@@ -142,6 +156,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		readOnly:      toolsByName(toolSet),
 		shells:        shells,
 		cwd:           cwd,
+		skills:        opts.Skills,
 		maxRetries:    maxRetries,
 		contextWindow: opts.Model.ContextWindow,
 		persistedLen:  len(seed),
@@ -356,7 +371,20 @@ func (s *Session) buildSystemPrompt(instructions string) string {
 		WorkspaceRoot: s.cwd,
 		Tools:         infos,
 		ContextFiles:  prompt.LoadContextFiles(s.cwd),
+		Skills:        skillInfos(s.skills),
 	})
+}
+
+// skillInfos projects loaded skills into the prompt's listing entries.
+func skillInfos(skills []skill.Skill) []prompt.SkillInfo {
+	if len(skills) == 0 {
+		return nil
+	}
+	infos := make([]prompt.SkillInfo, len(skills))
+	for i, sk := range skills {
+		infos[i] = prompt.SkillInfo{Name: sk.Name, Description: sk.Description}
+	}
+	return infos
 }
 
 // toolsByName indexes the tool set by advertised name, so the permission gate

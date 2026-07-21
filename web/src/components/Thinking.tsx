@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import type { ThinkingItem } from '@/types'
 import { cn } from '@/lib/utils'
@@ -11,13 +11,16 @@ import { useI18n } from '@/i18n'
 
 export function Thinking({ item }: { item: ThinkingItem }) {
   const { t } = useI18n()
-  const [open, setOpen] = useState(item.streaming)
-
-  useEffect(() => setOpen(item.streaming), [item.streaming])
+  const [open, setOpen] = useState(false)
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="my-1 animate-[fade-in_160ms_ease-out] text-stone-400">
-      <CollapsibleTrigger className="group flex cursor-pointer items-center gap-1.5 border-0 bg-transparent py-0.5 text-[0.8125rem] font-normal text-inherit hover:text-stone-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400">
+      <CollapsibleTrigger
+        className={cn(
+          'group flex cursor-pointer items-center gap-1.5 border-0 bg-transparent py-0.5 text-[0.8125rem] font-normal text-inherit hover:text-stone-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400',
+          item.streaming && 'streaming-sheen',
+        )}
+      >
         <span className={cn('size-1 rounded-full bg-stone-300', item.streaming && 'animate-pulse bg-indigo-500')} />
         <span>{item.streaming ? t('thinking.working') : t('thinking.process')}</span>
         <ChevronRight

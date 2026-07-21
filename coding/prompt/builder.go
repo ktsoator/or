@@ -28,6 +28,19 @@ type ContextFile struct {
 	Content string
 }
 
+// SkillInfo is a skill's entry in the model-visible listing. Only the name and
+// description appear up front; the full instructions are loaded on demand when
+// the model calls the skill tool.
+type SkillInfo struct {
+	Name        string
+	Description string
+}
+
+// maxSkillDescChars caps each skill description in the listing. The listing is
+// for discovery only — the skill tool loads full instructions on invoke, so a
+// verbose description only wastes context without improving match rate.
+const maxSkillDescChars = 240
+
 // Options are the inputs to Build.
 type Options struct {
 	// Instructions is the base preamble that opens the prompt.
@@ -40,6 +53,9 @@ type Options struct {
 	// ContextFiles are project context documents included after the tool
 	// sections.
 	ContextFiles []ContextFile
+	// Skills are the loaded skills advertised to the model. Each is listed by
+	// name and description; the model loads full instructions via the skill tool.
+	Skills []SkillInfo
 }
 
 // DefaultInstructions is the baseline preamble used when Options.Instructions is
@@ -86,6 +102,11 @@ func Build(opts Options) string {
 		}
 	}
 
+	if section := skillsSection(opts.Skills); section != "" {
+		b.WriteString("\n\n")
+		b.WriteString(section)
+	}
+
 	for _, file := range opts.ContextFiles {
 		if strings.TrimSpace(file.Content) == "" {
 			continue
@@ -94,6 +115,41 @@ func Build(opts Options) string {
 	}
 
 	return b.String()
+}
+
+// skillsSection renders the model-visible skill listing, or "" when there are
+// no skills. It instructs the model to load a matching skill through the skill
+// tool before acting.
+func skillsSection(skills []SkillInfo) string {
+	var listed []SkillInfo
+	for _, s := range skills {
+		if strings.TrimSpace(s.Name) == "" {
+			continue
+		}
+		listed = append(listed, s)
+	}
+	if len(listed) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString("## Available skills\n")
+	b.WriteString("Each skill below provides specialized instructions for a specific kind of task. ")
+	b.WriteString("When a task matches a skill, call the skill tool with its name to load the full ")
+	b.WriteString("instructions before acting. Only names listed here are valid.\n")
+	for _, s := range listed {
+		fmt.Fprintf(&b, "- %s: %s\n", s.Name, truncateChars(strings.TrimSpace(s.Description), maxSkillDescChars))
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// truncateChars shortens s to at most n runes, appending an ellipsis when cut.
+func truncateChars(s string, n int) string {
+	runes := []rune(s)
+	if len(runes) <= n {
+		return s
+	}
+	return string(runes[:n-1]) + "…"
 }
 
 // toolSnippets collects the non-empty snippets in order.

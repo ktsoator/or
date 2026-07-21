@@ -176,9 +176,6 @@ func NewSessionManager(ctx context.Context, cfg config.Config) (*SessionManager,
 		if err := m.usage.Backfill(record.ID, runtime.session.Messages()); err != nil {
 			return nil, fmt.Errorf("web: backfill usage for session %s: %w", record.ID, err)
 		}
-		if runtime.record.Scope == sessionScopeProject {
-			m.ensureWorkspaceLocked(runtime.record.WorkspacePath, runtime.record.CreatedAt)
-		}
 	}
 	if err := m.saveLocked(); err != nil {
 		return nil, err
@@ -410,6 +407,32 @@ func (m *SessionManager) RegisterWorkspace(path string) (WorkspaceSummary, error
 		return WorkspaceSummary{}, err
 	}
 	return record.summary(), nil
+}
+
+// RemoveWorkspace removes a project from the registered sidebar list. Session
+// transcripts and workspace files are intentionally retained; registering the
+// same directory again makes its existing sessions visible again.
+func (m *SessionManager) RemoveWorkspace(path string) error {
+	if strings.TrimSpace(path) == "" {
+		return fmt.Errorf("%w: path is required", ErrInvalidWorkspace)
+	}
+	cleaned, err := cleanWorkspacePath(path)
+	if err != nil {
+		return err
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	record, ok := m.workspaces[cleaned]
+	if !ok {
+		return nil
+	}
+	delete(m.workspaces, cleaned)
+	if err := m.saveWorkspacesLocked(); err != nil {
+		m.workspaces[cleaned] = record
+		return err
+	}
+	return nil
 }
 
 // ListWorkspaces returns registered projects newest-added first, including

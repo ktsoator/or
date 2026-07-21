@@ -114,8 +114,11 @@ func (s *Server) Handler() http.Handler {
 	api.GET("/usage", s.handleUsage)
 	api.GET("/usage/events", s.handleUsageEvents)
 	api.GET("/directories", s.handleDirectories)
+	api.GET("/skills", s.handleSkills)
+	api.GET("/skills/:name", s.handleSkillContent)
 	api.GET("/workspaces", s.handleWorkspaces)
 	api.POST("/workspaces", s.handleRegisterWorkspace)
+	api.DELETE("/workspaces", s.handleRemoveWorkspace)
 	api.GET("/sessions", s.handleSessions)
 	api.POST("/sessions", s.handleCreateSession)
 	session := api.Group("/sessions/:sessionID")
@@ -325,6 +328,22 @@ func (s *Server) handleRegisterWorkspace(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, workspace)
+}
+
+func (s *Server) handleRemoveWorkspace(c *gin.Context) {
+	path := strings.TrimSpace(c.Query("path"))
+	if path == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "workspace path is required"})
+		return
+	}
+	if err := s.sessions.RemoveWorkspace(path); errors.Is(err, ErrInvalidWorkspace) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	} else if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 func (s *Server) handleCreateSession(c *gin.Context) {

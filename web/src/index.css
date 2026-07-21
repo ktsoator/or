@@ -1,10 +1,11 @@
 @import "tailwindcss";
-@import "@fontsource-variable/geist";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/geist-mono";
 @plugin "@tailwindcss/typography";
 
 @theme inline {
-  --font-sans: "Geist Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --font-sans: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono Variable", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
 @layer base {
@@ -71,6 +72,42 @@
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(2px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* A quiet activity glint for collapsed streaming rows. It brightens only the
+   pixels it passes over, so the row stays visually flat and compact. */
+@keyframes streaming-sheen {
+  0%, 4% { transform: translateX(-88%); }
+  96%, 100% { transform: translateX(88%); }
+}
+
+.streaming-sheen {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 0.25rem;
+}
+
+.streaming-sheen::after {
+  position: absolute;
+  inset: -45% -35%;
+  z-index: 1;
+  content: "";
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 36%,
+    rgba(255, 255, 255, 0.58) 45%,
+    rgba(255, 255, 255, 1) 50%,
+    rgba(255, 255, 255, 0.58) 55%,
+    transparent 64%
+  );
+  mix-blend-mode: screen;
+  animation: streaming-sheen 2.8s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .streaming-sheen::after { display: none; }
 }
 
 /* Fenced code blocks in Markdown prose, framed like the tool-output cards with a

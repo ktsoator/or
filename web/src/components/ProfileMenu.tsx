@@ -1,11 +1,11 @@
 import {
+  BookOpenText,
   Check,
   ChevronRight,
   Gauge,
-  Ghost,
   Languages,
   LogOut,
-  Send,
+  Megaphone,
   Settings,
   type LucideIcon,
 } from 'lucide-react'
@@ -76,8 +76,8 @@ export function ProfileMenu({
                 trailing="chevron"
                 onSelect={onOpenUsage}
               />
-              <ProfileItem icon={Ghost} label={t('profile.showPet')} />
-              <ProfileItem icon={Send} label={t('profile.inviteFriend')} />
+              <ProfileItem icon={BookOpenText} label={t('profile.documentation')} />
+              <ProfileItem icon={Megaphone} label={t('profile.changelog')} />
               <ProfileItem
                 icon={Settings}
                 label={t('profile.settings')}

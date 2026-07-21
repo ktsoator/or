@@ -5,11 +5,14 @@ package bootstrap
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/ktsoator/or/coding"
 	"github.com/ktsoator/or/coding/internal/app/config"
 	"github.com/ktsoator/or/coding/policy"
+	"github.com/ktsoator/or/coding/skill"
 	"github.com/ktsoator/or/coding/store"
 )
 
@@ -33,7 +36,25 @@ func NewSession(ctx context.Context, cfg config.Config, deps Dependencies) (*cod
 		Store:         store.NewJSONL(cfg.SessionFile),
 		DetailsStore:  store.NewJSONLDetails(detailsFile(cfg.SessionFile)),
 		Policy:        policy.Gate{Confirm: deps.Confirm},
+		Skills:        loadSkills(cfg.Cwd),
 	})
+}
+
+// loadSkills discovers skills from the user root (~/.or/skills) and the
+// workspace root (<cwd>/.or/skills). A project skill overrides a user skill of
+// the same name. Diagnostics for malformed skills are ignored here so a bad
+// skill file never blocks session start; the rest still load.
+func loadSkills(cwd string) []skill.Skill {
+	var userDir string
+	if home, err := os.UserHomeDir(); err == nil {
+		userDir = filepath.Join(home, ".or", "skills")
+	}
+	var projectDir string
+	if strings.TrimSpace(cwd) != "" {
+		projectDir = filepath.Join(cwd, ".or", "skills")
+	}
+	reg, _ := skill.Load(skill.LoadOptions{UserDir: userDir, ProjectDir: projectDir})
+	return reg.List()
 }
 
 // detailsFile derives the tool-details side-car path from the transcript path,

@@ -543,6 +543,7 @@ export type Session = {
   models: ModelOption[]
   refreshModels: () => Promise<void>
   registerWorkspace: (path: string) => Promise<WorkspaceSummary>
+  removeWorkspace: (path: string) => Promise<void>
   startDraft: (workspacePath?: string, projectScoped?: boolean) => void
   updateDraftWorkspace: (workspacePath?: string, projectScoped?: boolean) => void
   deleteSession: (id: string) => Promise<void>
@@ -874,6 +875,24 @@ export function useSession(): Session {
       ...current.filter((candidate) => candidate.path !== workspace.path),
     ])
     return workspace
+  }
+
+  const removeWorkspace = async (path: string) => {
+    const response = await fetch(
+      `${apiURL('/workspaces')}?path=${encodeURIComponent(path)}`,
+      { method: 'DELETE' },
+    )
+    if (!response.ok) {
+      let message = `remove workspace failed (${response.status})`
+      try {
+        const body = (await response.json()) as { error?: string }
+        if (body.error) message = body.error
+      } catch {
+        // Keep the status-based fallback when the response has no JSON body.
+      }
+      throw new Error(message)
+    }
+    setWorkspaces((current) => current.filter((workspace) => workspace.path !== path))
   }
 
   const createSessionRecord = async (
@@ -1243,6 +1262,7 @@ export function useSession(): Session {
     models,
     refreshModels: () => loadModels(),
     registerWorkspace,
+    removeWorkspace,
     startDraft,
     updateDraftWorkspace,
     deleteSession,

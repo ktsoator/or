@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ChevronRight, Layers } from 'lucide-react'
 import type { Item } from '@/types'
+import { cn } from '@/lib/utils'
 import {
   Collapsible,
   CollapsibleContent,
@@ -41,9 +42,8 @@ function summarizeSteps(items: Item[], t: ReturnType<typeof useI18n>['t']): stri
   return joined.charAt(0).toUpperCase() + joined.slice(1)
 }
 
-// StepGroup renders a collapsed one-line summary of a batch of tool calls. It
-// stays open while any step is still running so progress is visible live, then
-// collapses to the summary once the batch is done.
+// StepGroup stays compact by default. Running-state updates must not override a
+// user's expand/collapse choice or make the conversation jump while streaming.
 export function StepGroup({ items, cwd }: { items: Item[]; cwd?: string }) {
   const { t } = useI18n()
   const active = items.some(
@@ -51,8 +51,7 @@ export function StepGroup({ items, cwd }: { items: Item[]; cwd?: string }) {
       (it.kind === 'tool' && it.status === 'running') ||
       (it.kind === 'thinking' && it.streaming),
   )
-  const [open, setOpen] = useState(active)
-  useEffect(() => setOpen(active), [active])
+  const [open, setOpen] = useState(false)
 
   return (
     <Collapsible
@@ -60,7 +59,12 @@ export function StepGroup({ items, cwd }: { items: Item[]; cwd?: string }) {
       onOpenChange={setOpen}
       className="my-1.5 animate-[fade-in_160ms_ease-out]"
     >
-      <CollapsibleTrigger className="group inline-flex max-w-full cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-left text-[var(--chat-font-size)] leading-6 text-stone-500 transition-colors hover:text-stone-900 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-400">
+      <CollapsibleTrigger
+        className={cn(
+          'group inline-flex max-w-full cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-left text-[var(--chat-font-size)] leading-6 text-stone-500 transition-colors hover:text-stone-900 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-400',
+          active && 'streaming-sheen',
+        )}
+      >
         <Layers className="size-4 shrink-0" aria-hidden="true" />
         <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
           {summarizeSteps(items, t)}
