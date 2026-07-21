@@ -586,10 +586,13 @@ function newSessionDraft(
   models: ModelOption[] = [],
   defaults?: ModelDefaults,
 ): SessionDraft {
-  const fallback =
-    models.find(
-      (model) => model.provider === defaults?.provider && model.id === defaults?.model,
-    ) ?? models[0]
+  // Only the configured default is used. Falling back to whichever model the
+  // catalog happens to list first would start a session on a model nobody
+  // chose, while the settings page still reports the default as unset — and the
+  // server deliberately leaves it unset until someone picks one.
+  const fallback = models.find(
+    (model) => model.provider === defaults?.provider && model.id === defaults?.model,
+  )
   const fallbackThinking =
     (fallback?.provider === defaults?.provider && fallback?.id === defaults?.model
       ? defaults?.thinkingLevel

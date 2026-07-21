@@ -235,6 +235,9 @@ function DefaultModelSection({ onChanged }: { onChanged?: () => void }) {
     void persist(provider, model, level as ThinkingLevel)
   }
 
+  // providerName returns an empty string for an unset provider, which rendered
+  // as a bare icon placeholder with no label beside it.
+  const providerLabel = provider ? providerName(provider) : t('settings.defaultModelNone')
   const modelLabel = current?.name ?? (model || t('settings.defaultModelNone'))
 
   return (
@@ -263,8 +266,8 @@ function DefaultModelSection({ onChanged }: { onChanged?: () => void }) {
                       className="inline-flex h-9 min-w-0 cursor-pointer items-center gap-1.5 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-left text-[0.8125rem] text-stone-800 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(237,237,237)] disabled:cursor-wait disabled:opacity-60"
                       disabled={saving}
                     >
-                      <ProviderIcon provider={provider} />
-                      <span className="max-w-[7rem] truncate">{providerName(provider)}</span>
+                      {provider && <ProviderIcon provider={provider} />}
+                      <span className="max-w-[7rem] truncate">{providerLabel}</span>
                       <ChevronDown className="size-3.5 shrink-0 text-stone-400" aria-hidden="true" />
                     </button>
                   </DropdownMenu.Trigger>
