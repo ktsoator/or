@@ -384,6 +384,10 @@ export default function App() {
   }
 
   const emptySession = !loading && items.length === 0 && !confirmation
+  // Nothing renders between sending a prompt and the first assistant event, so
+  // a slow model looks like a dead thread. The placeholder fills that gap and
+  // is replaced by the real item as soon as anything streams in.
+  const awaitingFirstOutput = running && items.at(-1)?.kind === 'user'
 
   const composer = (centered = false) => (
     <Composer
@@ -767,17 +771,20 @@ export default function App() {
                 {composer(true)}
               </div>
             ) : (
-              groupItems(items).map((unit) =>
-                unit.kind === 'steps' ? (
-                  <StepGroup key={unit.id} items={unit.items} cwd={activeSession?.workspacePath} />
-                ) : (
-                  <ThreadItem
-                    key={unit.item.id}
-                    item={unit.item}
-                    cwd={activeSession?.workspacePath}
-                  />
-                ),
-              )
+              <>
+                {groupItems(items).map((unit) =>
+                  unit.kind === 'steps' ? (
+                    <StepGroup key={unit.id} items={unit.items} cwd={activeSession?.workspacePath} />
+                  ) : (
+                    <ThreadItem
+                      key={unit.item.id}
+                      item={unit.item}
+                      cwd={activeSession?.workspacePath}
+                    />
+                  ),
+                )}
+                {awaitingFirstOutput && <AwaitingResponse />}
+              </>
             )}
           </div>
         </main>
@@ -1435,6 +1442,22 @@ function RemoveWorkspaceDialog({
           </button>
         </div>
       </section>
+    </div>
+  )
+}
+
+// AwaitingResponse holds the thread's place between a sent prompt and the first
+// assistant event. It mirrors the streaming Thinking header so the transition to
+// real output is not a visual jump.
+function AwaitingResponse() {
+  const { t } = useI18n()
+  return (
+    <div
+      className="my-1 flex animate-[fade-in_160ms_ease-out] items-center gap-1.5 py-0.5 text-[0.8125rem] text-stone-400"
+      role="status"
+    >
+      <span className="size-1 animate-pulse rounded-full bg-indigo-500" />
+      <span className="streaming-sheen">{t('thinking.working')}</span>
     </div>
   )
 }
