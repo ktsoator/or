@@ -25,7 +25,7 @@ type directoryEntry struct {
 func (s *Server) handleDirectories(c *gin.Context) {
 	path := strings.TrimSpace(c.Query("path"))
 	if path == "" {
-		path = s.sessions.cfg.Cwd
+		path = s.browseRoot
 	}
 	cleaned, err := workspace.Validate(path)
 	if err != nil {
@@ -64,4 +64,9 @@ func (s *Server) handleDirectories(c *gin.Context) {
 		"parent":      parent,
 		"directories": directories,
 	})
+}
+
+// mountDirectories serves the filesystem browser behind the workspace picker.
+func (s *Server) mountDirectories(r gin.IRouter) {
+	r.GET("/directories", s.handleDirectories)
 }

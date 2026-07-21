@@ -122,17 +122,17 @@ type SessionManager struct {
 	usage    *usage.Store
 }
 
-// NewSessionManager restores the global Web session and workspace indexes.
-func NewSessionManager(ctx context.Context, cfg config.Config) (*SessionManager, error) {
+// NewSessionManager restores the session index. The ledger and registry are
+// passed in rather than built here because the API layer serves them directly
+// too; routing those reads through the manager only made it a facade for
+// stores it does not own.
+func NewSessionManager(
+	ctx context.Context,
+	cfg config.Config,
+	ledger *usage.Store,
+	workspaces *workspace.Registry,
+) (*SessionManager, error) {
 	dir := filepath.Join(cfg.DataDir, "sessions")
-	ledger, err := usage.NewStore(filepath.Join(cfg.DataDir, "usage", "events.jsonl"))
-	if err != nil {
-		return nil, err
-	}
-	workspaces, err := workspace.NewRegistry(filepath.Join(dir, "workspaces.json"))
-	if err != nil {
-		return nil, err
-	}
 	m := &SessionManager{
 		ctx:        ctx,
 		cfg:        cfg,
@@ -351,33 +351,6 @@ func (m *SessionManager) Create(
 		return SessionSummary{}, err
 	}
 	return runtime.summary(), nil
-}
-
-// RegisterWorkspace persists a project root without creating a conversation.
-func (m *SessionManager) RegisterWorkspace(path string) (workspace.Summary, error) {
-	return m.workspaces.Register(path)
-}
-
-// RemoveWorkspace removes a project from the registered sidebar list. Session
-// transcripts and workspace files are intentionally retained; registering the
-// same directory again makes its existing sessions visible again.
-func (m *SessionManager) RemoveWorkspace(path string) error {
-	return m.workspaces.Remove(path)
-}
-
-// ListWorkspaces returns registered projects newest-added first.
-func (m *SessionManager) ListWorkspaces() []workspace.Summary {
-	return m.workspaces.List()
-}
-
-// UsageReport returns the durable aggregate across conversations since the cutoff.
-func (m *SessionManager) UsageReport(since time.Time) usage.Report {
-	return m.usage.Report(since)
-}
-
-// UsageEvents returns paginated per-request usage details.
-func (m *SessionManager) UsageEvents(provider, model string, since time.Time, offset, limit int) usage.EventPage {
-	return m.usage.Events(provider, model, since, offset, limit)
 }
 
 // Delete permanently removes one idle conversation and its persisted files.

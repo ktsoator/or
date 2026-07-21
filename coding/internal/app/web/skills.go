@@ -104,3 +104,9 @@ func (s *Server) handleSkillContent(c *gin.Context) {
 		Content: sk.Content,
 	})
 }
+
+// mountSkills serves the skills visible to a workspace.
+func (s *Server) mountSkills(r gin.IRouter) {
+	r.GET("/skills", s.handleSkills)
+	r.GET("/skills/:name", s.handleSkillContent)
+}

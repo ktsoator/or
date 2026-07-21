@@ -11,6 +11,16 @@ import (
 	"github.com/ktsoator/or/llm"
 )
 
+// mountProviders serves provider connections, credentials and model selection.
+func (s *Server) mountProviders(r gin.IRouter) {
+	r.GET("/providers", s.handleProviders)
+	r.PUT("/model-selection", s.handleActivateModel)
+	r.PUT("/providers/:providerID", s.handleSetProvider)
+	r.PATCH("/providers/:providerID/active-connection", s.handleActivateProviderConnection)
+	r.PATCH("/providers/:providerID/connections/:connectionID/active-key", s.handleActivateProviderKey)
+	r.DELETE("/providers/:providerID", s.handleClearProvider)
+}
+
 // providerInfo is the browser-facing projection of the provider runtime and
 // the coding product's saved connection profiles. Secrets are represented only
 // by masked previews.
