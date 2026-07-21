@@ -561,6 +561,7 @@ function ProviderConfigPanel({
   const { t } = useI18n()
   const [connections, setConnections] = useState<ConnectionDraft[]>(() => draftsFromInfo(info))
   const [activeConnectionId, setActiveConnectionId] = useState(info.activeConnectionId)
+  const [configured, setConfigured] = useState(info.configured)
   const [editingConnectionId, setEditingConnectionId] = useState(info.activeConnectionId)
   const [saving, setSaving] = useState(false)
   const [activating, setActivating] = useState('')
@@ -571,6 +572,7 @@ function ProviderConfigPanel({
   useEffect(() => {
     setConnections(draftsFromInfo(info))
     setActiveConnectionId(info.activeConnectionId)
+    setConfigured(info.configured)
     setEditingConnectionId((current) =>
       info.connections.some((connection) => connection.id === current) ? current : info.activeConnectionId,
     )
@@ -602,6 +604,17 @@ function ProviderConfigPanel({
     }))
   }
 
+  const applyProviderInfo = (updated: ProviderInfo) => {
+    setConnections(draftsFromInfo(updated))
+    setActiveConnectionId(updated.activeConnectionId)
+    setConfigured(updated.configured)
+    setEditingConnectionId((current) =>
+      updated.connections.some((connection) => connection.id === current)
+        ? current
+        : updated.activeConnectionId,
+    )
+  }
+
   const activateConnection = async (connectionID: string) => {
     setActivating(`connection:${connectionID}`)
     setRowError('')
@@ -615,7 +628,10 @@ function ProviderConfigPanel({
         const body = (await response.json().catch(() => ({}))) as { error?: string }
         throw new Error(body.error || `HTTP ${response.status}`)
       }
-      await onChanged()
+      const updated = (await response.json()) as ProviderInfo
+      setActivating('')
+      applyProviderInfo(updated)
+      void onChanged()
     } catch (cause) {
       setRowError(cause instanceof Error && cause.message ? cause.message : t('providers.activateFailed'))
     } finally {
@@ -636,7 +652,10 @@ function ProviderConfigPanel({
         const body = (await response.json().catch(() => ({}))) as { error?: string }
         throw new Error(body.error || `HTTP ${response.status}`)
       }
-      await onChanged()
+      const updated = (await response.json()) as ProviderInfo
+      setActivating('')
+      applyProviderInfo(updated)
+      void onChanged()
     } catch (cause) {
       setRowError(cause instanceof Error && cause.message ? cause.message : t('providers.activateFailed'))
     } finally {
@@ -674,20 +693,6 @@ function ProviderConfigPanel({
     }
   }
 
-  const clear = async () => {
-    setSaving(true)
-    setRowError('')
-    try {
-      const response = await fetch(apiURL(`/providers/${info.id}`), { method: 'DELETE' })
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      await onChanged()
-    } catch {
-      setRowError(t('providers.saveFailed'))
-    } finally {
-      setSaving(false)
-    }
-  }
-
   return (
     <>
       <div className="mb-5 flex items-center justify-between gap-3 max-sm:items-start">
@@ -701,7 +706,7 @@ function ProviderConfigPanel({
             connections={connections}
             officialBaseURL={info.officialBaseURL ?? ''}
             value={editingConnectionId}
-            activeValue={info.configured ? activeConnectionId : ''}
+            activeValue={configured ? activeConnectionId : ''}
             onChange={setEditingConnectionId}
           />
           <button
@@ -716,23 +721,13 @@ function ProviderConfigPanel({
         </div>
       </div>
 
-      <div className="mb-2 px-0.5">
-        <span className="text-[0.75rem] font-medium text-stone-500">{t('providers.management')}</span>
-      </div>
-
-      <div className="overflow-hidden rounded-xl border border-stone-200 bg-white">
-      <div className="flex items-center gap-3 border-b border-stone-100 px-4 py-3">
-        <ProviderIcon provider={info.id} />
-        <span className="min-w-0 flex-1 truncate text-[0.875rem] font-medium text-stone-900">{providerName(info.id)}</span>
-      </div>
-
-      <div>
+      <div className="overflow-hidden rounded-lg border border-stone-200 bg-white shadow-[0_12px_32px_-32px_rgba(28,25,23,0.45)]">
         {selectedConnection && (
           <ConnectionEditor
             key={selectedConnection.id}
             officialBaseURL={info.officialBaseURL ?? ''}
             connection={selectedConnection}
-            active={info.configured && selectedConnection.id === activeConnectionId}
+            active={configured && selectedConnection.id === activeConnectionId}
             activationBlocked={hasUnsavedChanges}
             activating={activating}
             onChange={(update) => updateConnection(selectedConnection.id, update)}
@@ -742,31 +737,27 @@ function ProviderConfigPanel({
             onActivateKey={(keyID) => void activateKey(selectedConnection.id, keyID)}
           />
         )}
-      </div>
 
-      <div className="flex items-center justify-end gap-2 border-t border-stone-100 px-4 py-3">
-          <button
-            type="button"
-            onClick={() => void clear()}
-            disabled={saving || Boolean(activating)}
-            className="inline-flex h-8 cursor-pointer items-center rounded-lg px-3 text-[0.8125rem] text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-900 disabled:opacity-45"
-          >
-            {t('providers.clear')}
-          </button>
+        {rowError && (
+          <p className="border-t border-red-100 bg-red-50/60 px-4 py-2 text-[0.75rem] text-red-600">
+            {rowError}
+          </p>
+        )}
+
+        <div className="flex items-center justify-end border-t border-stone-100 bg-stone-50/45 px-4 py-3">
           <button
             type="button"
             onClick={() => void save()}
             disabled={saving || Boolean(activating) || !hasUnsavedChanges}
             className={cn(
-              'inline-flex h-8 items-center gap-1.5 rounded-lg bg-stone-950 px-3.5 text-[0.8125rem] font-medium text-white transition-colors hover:bg-stone-800 disabled:opacity-45',
+              'inline-flex h-8 items-center gap-1.5 rounded-md bg-stone-950 px-3.5 text-[0.8125rem] font-medium text-white transition-colors hover:bg-stone-800 disabled:opacity-40',
               saving ? 'cursor-wait' : 'cursor-pointer disabled:cursor-default',
             )}
           >
             {saving && <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />}
             {saving ? t('providers.saving') : t('providers.save')}
           </button>
-      </div>
-      {rowError && <p className="border-t border-red-100 bg-red-50/60 px-4 py-2 text-[0.75rem] text-red-600">{rowError}</p>}
+        </div>
       </div>
     </>
   )
@@ -812,8 +803,15 @@ function ConnectionEditor({
     }))
   }
 
+  const connectionBusy = activating === `connection:${connection.id}`
+  const connectionActivationDisabled =
+    !connection.persisted ||
+    activationBlocked ||
+    Boolean(activating) ||
+    !connection.activeKeyId
+
   return (
-    <section className="px-4 py-3.5">
+    <section className="px-5 py-4 max-sm:px-4">
       <div className="flex items-center gap-2.5">
         {connection.official ? (
           <span className="min-w-0 flex-1 text-[0.84375rem] font-medium text-stone-900">
@@ -824,44 +822,47 @@ function ConnectionEditor({
             value={connection.name}
             onChange={(event) => onChange((current) => ({ ...current, name: event.target.value }))}
             placeholder={t('providers.connectionNamePlaceholder')}
-            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[0.84375rem] font-medium text-stone-900 outline-none placeholder:text-stone-400"
+            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[0.9375rem] font-medium text-stone-900 outline-none placeholder:text-stone-400"
           />
         )}
-        {!connection.official && (
-          <button
-            type="button"
-            onClick={onRemove}
-            className="grid size-7 cursor-pointer place-items-center rounded-md text-stone-400 transition-colors hover:bg-white hover:text-red-600"
-            aria-label={t('providers.removeConnection')}
-          >
-            <Trash2 className="size-3.5" aria-hidden="true" />
-          </button>
-        )}
-        {active ? (
-          <span className="inline-flex h-7 items-center gap-1.5 rounded-md bg-[rgb(237,237,237)] px-2.5 text-[0.71875rem] font-medium text-stone-700">
-            <span className="size-1.5 rounded-full bg-stone-800" />
-            {t('providers.active')}
-          </span>
-        ) : (
-          <button
-            type="button"
-            onClick={onActivateConnection}
-            disabled={
-              !connection.persisted ||
-              activationBlocked ||
-              Boolean(activating) ||
-              !connection.activeKeyId
-            }
-            title={
-              !connection.persisted || activationBlocked
+        <button
+          type="button"
+          onClick={onActivateConnection}
+          disabled={active || connectionActivationDisabled}
+          aria-busy={connectionBusy}
+          aria-label={connectionBusy ? t('providers.activating') : undefined}
+          title={
+            active
+              ? undefined
+              : !connection.persisted || activationBlocked
                 ? t('providers.saveBeforeActivate')
                 : !connection.activeKeyId
                   ? t('providers.selectKeyFirst')
                   : undefined
-            }
-            className="inline-flex h-7 cursor-pointer items-center rounded-md px-2.5 text-[0.71875rem] font-medium text-stone-500 transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-950 disabled:cursor-not-allowed disabled:text-stone-300 disabled:hover:bg-transparent"
+          }
+          className={cn(
+            'inline-flex h-7 min-w-[6.75rem] items-center justify-center gap-1.5 rounded-md px-2.5 text-[0.71875rem] font-medium transition-colors',
+            active
+              ? 'cursor-default text-stone-600'
+              : 'cursor-pointer text-stone-500 hover:bg-[rgb(241,241,241)] hover:text-stone-950 disabled:cursor-not-allowed disabled:text-stone-300 disabled:hover:bg-transparent',
+          )}
+        >
+          {connectionBusy ? (
+            <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
+          ) : active ? (
+            <Check className="size-3.5" aria-hidden="true" />
+          ) : null}
+          <span>{active ? t('providers.active') : t('providers.useConnection')}</span>
+        </button>
+        {!connection.official && (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="grid size-7 cursor-pointer place-items-center rounded-md text-stone-400 transition-colors hover:bg-stone-100 hover:text-red-600"
+            aria-label={t('providers.removeConnection')}
+            title={t('providers.removeConnection')}
           >
-            {activating === `connection:${connection.id}` ? t('providers.activating') : t('providers.useConnection')}
+            <Trash2 className="size-3.5" aria-hidden="true" />
           </button>
         )}
       </div>
@@ -870,7 +871,7 @@ function ConnectionEditor({
         <label className="block">
           <span className="mb-1 block text-[0.71875rem] text-stone-500">{t('providers.baseUrl')}</span>
           {connection.official ? (
-            <div className="truncate rounded-lg bg-white px-3 py-2 font-mono text-[0.78125rem] text-stone-600 ring-1 ring-stone-200" title={officialBaseURL}>
+            <div className="truncate rounded-md bg-stone-50 px-3 py-2 font-mono text-[0.78125rem] text-stone-600 ring-1 ring-stone-200" title={officialBaseURL}>
               {officialBaseURL || t('providers.notSet')}
             </div>
           ) : (
@@ -879,7 +880,7 @@ function ConnectionEditor({
               onChange={(event) => onChange((current) => ({ ...current, baseURL: event.target.value }))}
               placeholder="https://gateway.example.com/v1"
               spellCheck={false}
-              className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 font-mono text-[0.78125rem] text-stone-900 outline-none placeholder:text-stone-400 focus:border-stone-400"
+              className="w-full rounded-md border border-stone-200 bg-white px-3 py-2 font-mono text-[0.78125rem] text-stone-900 outline-none placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-100"
             />
           )}
         </label>
@@ -897,9 +898,12 @@ function ConnectionEditor({
         </div>
 
         {connection.keys.length > 0 && (
-          <div className="mt-1 divide-y divide-stone-100 overflow-hidden rounded-lg border border-stone-200 bg-white">
+          <div className="mt-1 divide-y divide-stone-100 border-y border-stone-100">
             {connection.keys.map((key) => (
-              <div key={key.id} className="grid grid-cols-[1rem_minmax(6rem,0.75fr)_minmax(8rem,1fr)_auto_1.75rem] items-center gap-2 px-2.5 py-2">
+              <div
+                key={key.id}
+                className="grid grid-cols-[1rem_minmax(6rem,0.75fr)_minmax(8rem,1fr)_auto_1.75rem] items-center gap-2 py-2.5 max-sm:grid-cols-[1rem_minmax(0,1fr)_auto_1.75rem]"
+              >
                 <SelectionDot selected={connection.activeKeyId === key.id} active={active && connection.activeKeyId === key.id} />
                 <input
                   value={key.name}
@@ -913,7 +917,7 @@ function ConnectionEditor({
                   onChange={(event) => updateKey(key.id, { apiKey: event.target.value })}
                   placeholder={key.preview || t('providers.apiKeyPlaceholder')}
                   autoComplete="off"
-                  className="min-w-0 border-0 bg-transparent p-0 font-mono text-[0.75rem] text-stone-700 outline-none placeholder:text-stone-400"
+                  className="min-w-0 border-0 bg-transparent p-0 font-mono text-[0.75rem] text-stone-700 outline-none placeholder:text-stone-400 max-sm:col-start-2 max-sm:col-end-5 max-sm:row-start-2"
                 />
                 <ActivationButton
                   configured={connection.activeKeyId === key.id}
@@ -953,30 +957,36 @@ function ActivationButton({
   onClick: () => void
 }) {
   const { t } = useI18n()
-  const inactive = configured || effective
+  const selected = configured || effective
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={disabled || inactive}
+      disabled={disabled || selected}
+      aria-busy={busy}
+      aria-label={busy ? t('providers.activating') : undefined}
       className={cn(
-        'inline-flex h-6 min-w-[3.5rem] cursor-pointer items-center justify-center gap-1 rounded-md px-2 text-[0.6875rem] font-medium transition-colors',
+        'inline-flex h-6 w-[4.5rem] items-center justify-center gap-1 rounded-md px-2 text-[0.6875rem] font-medium transition-colors',
         effective
-          ? 'bg-stone-900 text-white'
+          ? 'cursor-default bg-stone-900 text-white'
           : configured
-            ? 'bg-[rgb(237,237,237)] text-stone-600'
-            : 'text-stone-500 hover:bg-[rgb(241,241,241)] hover:text-stone-950',
-        disabled && 'cursor-not-allowed text-stone-300 hover:bg-transparent hover:text-stone-300',
+            ? 'cursor-default bg-[rgb(237,237,237)] text-stone-600'
+            : 'cursor-pointer text-stone-500 hover:bg-[rgb(241,241,241)] hover:text-stone-950',
+        disabled && !selected && 'cursor-not-allowed text-stone-300 hover:bg-transparent hover:text-stone-300',
       )}
     >
-      {busy && <LoaderCircle className="size-3 animate-spin" aria-hidden="true" />}
-      {busy
-        ? t('providers.activating')
-        : effective
+      {busy ? (
+        <LoaderCircle className="size-3 animate-spin" aria-hidden="true" />
+      ) : selected ? (
+        <Check className="size-3" aria-hidden="true" />
+      ) : null}
+      <span>
+        {effective
           ? t('providers.keyActive')
           : configured
             ? t('providers.keySelected')
             : t('providers.useKey')}
+      </span>
     </button>
   )
 }
