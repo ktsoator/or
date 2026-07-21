@@ -21,6 +21,7 @@ import (
 
 	"github.com/ktsoator/or/coding"
 	"github.com/ktsoator/or/coding/internal/app/providerconfig"
+	"github.com/ktsoator/or/coding/internal/app/workspace"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -349,8 +350,8 @@ func (s *Server) handleRegisterWorkspace(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON body"})
 		return
 	}
-	workspace, err := s.sessions.RegisterWorkspace(body.Path)
-	if errors.Is(err, ErrInvalidWorkspace) {
+	registered, err := s.sessions.RegisterWorkspace(body.Path)
+	if errors.Is(err, workspace.ErrInvalid) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -358,7 +359,7 @@ func (s *Server) handleRegisterWorkspace(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusCreated, workspace)
+	c.JSON(http.StatusCreated, registered)
 }
 
 func (s *Server) handleRemoveWorkspace(c *gin.Context) {
@@ -367,7 +368,7 @@ func (s *Server) handleRemoveWorkspace(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "workspace path is required"})
 		return
 	}
-	if err := s.sessions.RemoveWorkspace(path); errors.Is(err, ErrInvalidWorkspace) {
+	if err := s.sessions.RemoveWorkspace(path); errors.Is(err, workspace.ErrInvalid) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	} else if err != nil {
@@ -407,7 +408,7 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 		return
 	}
 	summary, err := s.sessions.Create(body.Title, body.WorkspacePath, body.Scope, model, thinking)
-	if errors.Is(err, ErrInvalidWorkspace) || errors.Is(err, ErrInvalidSessionScope) {
+	if errors.Is(err, workspace.ErrInvalid) || errors.Is(err, ErrInvalidSessionScope) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -430,7 +431,7 @@ func (s *Server) handleDirectories(c *gin.Context) {
 	if path == "" {
 		path = s.sessions.cfg.Cwd
 	}
-	cleaned, err := validateWorkspacePath(path)
+	cleaned, err := workspace.Validate(path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

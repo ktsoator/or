@@ -21,6 +21,7 @@ import (
 	"github.com/ktsoator/or/coding/internal/app/bootstrap"
 	"github.com/ktsoator/or/coding/internal/app/config"
 	"github.com/ktsoator/or/coding/internal/app/usage"
+	"github.com/ktsoator/or/coding/internal/app/workspace"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -40,9 +41,6 @@ var ErrSessionActive = errors.New("web: session is running or waiting for approv
 // ErrImagesUnsupported rejects image attachments before a run is reserved
 // when the session's selected model accepts text only.
 var ErrImagesUnsupported = errors.New("web: selected model does not support images")
-
-// ErrInvalidWorkspace reports a path that cannot be used as a workspace root.
-var ErrInvalidWorkspace = errors.New("web: invalid workspace")
 
 // ErrInvalidSessionScope reports a create request that is neither a standalone
 // chat nor a project-backed conversation.
@@ -136,6 +134,7 @@ type SessionManager struct {
 	cfg                config.Config
 	indexPath          string
 	workspaceIndexPath string
+	scratch            *workspace.Scratch
 
 	mu         sync.RWMutex
 	sessions   map[string]*sessionRuntime
@@ -155,6 +154,7 @@ func NewSessionManager(ctx context.Context, cfg config.Config) (*SessionManager,
 		cfg:                cfg,
 		indexPath:          filepath.Join(dir, "index.json"),
 		workspaceIndexPath: filepath.Join(dir, "workspaces.json"),
+		scratch:            workspace.NewScratch(cfg.DataDir),
 		sessions:           make(map[string]*sessionRuntime),
 		workspaces:         make(map[string]workspaceRecord),
 		usage:              ledger,
@@ -165,7 +165,7 @@ func NewSessionManager(ctx context.Context, cfg config.Config) (*SessionManager,
 		return nil, err
 	}
 	for _, record := range workspaceRecords {
-		path, cleanErr := cleanWorkspacePath(record.Path)
+		path, cleanErr := workspace.Clean(record.Path)
 		if cleanErr != nil {
 			continue
 		}
@@ -239,16 +239,16 @@ func (m *SessionManager) build(record sessionRecord) (*sessionRuntime, error) {
 	if record.Scope == sessionScopeProject && record.WorkspaceKind != workspaceKindFolder {
 		return nil, fmt.Errorf("web: project session requires a folder workspace")
 	}
-	workspacePath, err := cleanWorkspacePath(record.WorkspacePath)
+	workspacePath, err := workspace.Clean(record.WorkspacePath)
 	if err != nil {
 		return nil, err
 	}
 	if record.WorkspaceKind == workspaceKindScratch {
-		workspacePath, err = m.validateScratchWorkspacePath(workspacePath)
+		workspacePath, err = m.scratch.Validate(workspacePath)
 		if err != nil {
 			return nil, err
 		}
-		if err := ensureScratchWorkspaceDirectories(workspacePath); err != nil {
+		if err := workspace.EnsureDirectories(workspacePath); err != nil {
 			return nil, err
 		}
 	}
@@ -346,10 +346,10 @@ func (m *SessionManager) Create(
 	switch scope {
 	case sessionScopeChat:
 		if strings.TrimSpace(workspacePath) != "" {
-			return SessionSummary{}, fmt.Errorf("%w: chat workspace is managed by the server", ErrInvalidWorkspace)
+			return SessionSummary{}, fmt.Errorf("%w: chat workspace is managed by the server", workspace.ErrInvalid)
 		}
 		var err error
-		workspacePath, err = m.createScratchWorkspace(id, startedAt)
+		workspacePath, err = m.scratch.Create(id, startedAt)
 		if err != nil {
 			return SessionSummary{}, err
 		}
@@ -357,7 +357,7 @@ func (m *SessionManager) Create(
 		workspaceKind = workspaceKindScratch
 	case sessionScopeProject:
 		var err error
-		workspacePath, err = validateWorkspacePath(workspacePath)
+		workspacePath, err = workspace.Validate(workspacePath)
 		if err != nil {
 			return SessionSummary{}, err
 		}
@@ -384,7 +384,7 @@ func (m *SessionManager) Create(
 	runtime, err := m.build(record)
 	if err != nil {
 		if workspaceCreated {
-			_ = m.removeScratchWorkspace(workspacePath)
+			_ = m.scratch.Remove(workspacePath)
 		}
 		return SessionSummary{}, err
 	}
@@ -395,7 +395,7 @@ func (m *SessionManager) Create(
 			delete(m.workspaces, workspacePath)
 		}
 		if workspaceCreated {
-			_ = m.removeScratchWorkspace(workspacePath)
+			_ = m.scratch.Remove(workspacePath)
 		}
 		return SessionSummary{}, err
 	}
@@ -404,7 +404,7 @@ func (m *SessionManager) Create(
 
 // RegisterWorkspace persists a project root without creating a conversation.
 func (m *SessionManager) RegisterWorkspace(path string) (WorkspaceSummary, error) {
-	cleaned, err := validateWorkspacePath(path)
+	cleaned, err := workspace.Validate(path)
 	if err != nil {
 		return WorkspaceSummary{}, err
 	}
@@ -428,9 +428,9 @@ func (m *SessionManager) RegisterWorkspace(path string) (WorkspaceSummary, error
 // same directory again makes its existing sessions visible again.
 func (m *SessionManager) RemoveWorkspace(path string) error {
 	if strings.TrimSpace(path) == "" {
-		return fmt.Errorf("%w: path is required", ErrInvalidWorkspace)
+		return fmt.Errorf("%w: path is required", workspace.ErrInvalid)
 	}
-	cleaned, err := cleanWorkspacePath(path)
+	cleaned, err := workspace.Clean(path)
 	if err != nil {
 		return err
 	}
@@ -830,94 +830,6 @@ func (w workspaceRecord) summary() WorkspaceSummary {
 		Name:    filepath.Base(w.Path),
 		AddedAt: w.AddedAt,
 	}
-}
-
-func cleanWorkspacePath(path string) (string, error) {
-	abs, err := filepath.Abs(strings.TrimSpace(path))
-	if err != nil {
-		return "", fmt.Errorf("%w: %v", ErrInvalidWorkspace, err)
-	}
-	if resolved, resolveErr := filepath.EvalSymlinks(abs); resolveErr == nil {
-		abs = resolved
-	}
-	return filepath.Clean(abs), nil
-}
-
-func validateWorkspacePath(path string) (string, error) {
-	if strings.TrimSpace(path) == "" {
-		return "", fmt.Errorf("%w: path is required", ErrInvalidWorkspace)
-	}
-	cleaned, err := cleanWorkspacePath(path)
-	if err != nil {
-		return "", err
-	}
-	info, err := os.Stat(cleaned)
-	if err != nil {
-		return "", fmt.Errorf("%w: %v", ErrInvalidWorkspace, err)
-	}
-	if !info.IsDir() {
-		return "", fmt.Errorf("%w: %s is not a directory", ErrInvalidWorkspace, cleaned)
-	}
-	return cleaned, nil
-}
-
-func (m *SessionManager) scratchWorkspaceRoot() string {
-	return filepath.Join(m.cfg.DataDir, "workspaces")
-}
-
-// validateScratchWorkspacePath proves that path is one generated session
-// directory exactly two levels below the managed workspace root. This guard is
-// required before any recursive cleanup, so an external project can never be
-// removed through forged session metadata.
-func (m *SessionManager) validateScratchWorkspacePath(path string) (string, error) {
-	root, err := cleanWorkspacePath(m.scratchWorkspaceRoot())
-	if err != nil {
-		return "", err
-	}
-	cleaned, err := cleanWorkspacePath(path)
-	if err != nil {
-		return "", err
-	}
-	relative, err := filepath.Rel(root, cleaned)
-	if err != nil || filepath.IsAbs(relative) {
-		return "", fmt.Errorf("%w: scratch workspace is outside managed storage", ErrInvalidWorkspace)
-	}
-	parts := strings.Split(relative, string(filepath.Separator))
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" || parts[0] == ".." {
-		return "", fmt.Errorf("%w: invalid scratch workspace path", ErrInvalidWorkspace)
-	}
-	return cleaned, nil
-}
-
-func (m *SessionManager) createScratchWorkspace(id string, startedAt time.Time) (string, error) {
-	path := filepath.Join(m.scratchWorkspaceRoot(), startedAt.Format("2006-01-02"), id)
-	if err := ensureScratchWorkspaceDirectories(path); err != nil {
-		_ = os.RemoveAll(path)
-		return "", err
-	}
-	cleaned, err := m.validateScratchWorkspacePath(path)
-	if err != nil {
-		_ = os.RemoveAll(path)
-		return "", err
-	}
-	return cleaned, nil
-}
-
-func ensureScratchWorkspaceDirectories(path string) error {
-	for _, directory := range []string{path, filepath.Join(path, "work"), filepath.Join(path, "outputs")} {
-		if err := os.MkdirAll(directory, 0o700); err != nil {
-			return fmt.Errorf("web: create scratch workspace: %w", err)
-		}
-	}
-	return nil
-}
-
-func (m *SessionManager) removeScratchWorkspace(path string) error {
-	cleaned, err := m.validateScratchWorkspacePath(path)
-	if err != nil {
-		return err
-	}
-	return os.RemoveAll(cleaned)
 }
 
 func (s *sessionRuntime) queuePending(message queuedMessage) bool {
