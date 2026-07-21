@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ktsoator/or/coding/internal/app/config"
-	"github.com/ktsoator/or/coding/internal/app/web"
+	"github.com/ktsoator/or/coding/internal/api"
+	"github.com/ktsoator/or/coding/internal/config"
 
 	_ "github.com/ktsoator/or/llm/all" // register the built-in protocol adapters
 )
@@ -23,7 +23,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := web.Run(context.Background(), cfg); err != nil {
+	if err := api.Run(context.Background(), cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "coding: %v\n", err)
 		os.Exit(1)
 	}

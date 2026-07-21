@@ -1,4 +1,4 @@
-package web
+package api
 
 import (
 	"net/http"
@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ktsoator/or/coding/internal/app/workspace"
+	"github.com/ktsoator/or/coding/internal/workspace"
 )
 
 // The workspace picker browses the machine's filesystem, which is unrelated to

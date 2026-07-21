@@ -1,10 +1,10 @@
-package web
+package api
 
 import (
 	"encoding/json"
 
 	"github.com/ktsoator/or/coding"
-	"github.com/ktsoator/or/coding/internal/app/session"
+	"github.com/ktsoator/or/coding/internal/session"
 	"github.com/ktsoator/or/coding/policy"
 )
 

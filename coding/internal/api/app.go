@@ -1,4 +1,4 @@
-package web
+package api
 
 import (
 	"context"
@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"path/filepath"
 
-	"github.com/ktsoator/or/coding/internal/app/config"
-	"github.com/ktsoator/or/coding/internal/app/providerconfig"
-	"github.com/ktsoator/or/coding/internal/app/session"
-	"github.com/ktsoator/or/coding/internal/app/usage"
-	"github.com/ktsoator/or/coding/internal/app/workspace"
+	"github.com/ktsoator/or/coding/internal/config"
+	"github.com/ktsoator/or/coding/internal/provider"
+	"github.com/ktsoator/or/coding/internal/session"
+	"github.com/ktsoator/or/coding/internal/usage"
+	"github.com/ktsoator/or/coding/internal/workspace"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -37,7 +37,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 	}
 
 	registry := llm.DefaultProviderRegistry()
-	providers, err := providerconfig.NewStore(cfg.DataDir, registry)
+	providers, err := provider.NewStore(cfg.DataDir, registry)
 	if err != nil {
 		return err
 	}

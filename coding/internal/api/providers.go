@@ -1,4 +1,4 @@
-package web
+package api
 
 import (
 	"net/http"
@@ -7,7 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/ktsoator/or/coding/internal/app/providerconfig"
+	"github.com/ktsoator/or/coding/internal/provider"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -70,15 +70,15 @@ type providerKeyRequest struct {
 }
 
 type providerListResponse struct {
-	Providers   []providerInfo                 `json:"providers"`
-	ActiveModel *providerconfig.ModelSelection `json:"activeModel,omitempty"`
+	Providers   []providerInfo           `json:"providers"`
+	ActiveModel *provider.ModelSelection `json:"activeModel,omitempty"`
 }
 
 func (s *Server) handleProviders(c *gin.Context) {
 	snapshot := s.providers.Snapshot()
 	out := make([]providerInfo, 0)
-	for _, provider := range s.registry.Providers() {
-		if info, ok := s.projectProviderInfo(provider.ID(), snapshot[provider.ID()]); ok {
+	for _, registered := range s.registry.Providers() {
+		if info, ok := s.projectProviderInfo(registered.ID(), snapshot[registered.ID()]); ok {
 			out = append(out, info)
 		}
 	}
@@ -96,15 +96,15 @@ func (s *Server) handleProviders(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-func (s *Server) projectProviderInfo(id string, profile providerconfig.Profile) (providerInfo, bool) {
-	provider, ok := s.registry.Get(id)
+func (s *Server) projectProviderInfo(id string, profile provider.Profile) (providerInfo, bool) {
+	registered, ok := s.registry.Get(id)
 	if !ok {
 		return providerInfo{}, false
 	}
 	status, _ := s.registry.AuthStatus(id, nil)
-	models := runnableProviderModels(provider)
+	models := runnableProviderModels(registered)
 	if len(models) == 0 {
-		models = provider.Models()
+		models = registered.Models()
 	}
 	officialBaseURL := ""
 	effectiveBaseURL := ""
@@ -117,7 +117,7 @@ func (s *Server) projectProviderInfo(id string, profile providerconfig.Profile) 
 	connections := make([]providerConnectionInfo, 0, len(profile.Connections))
 	for _, connection := range profile.Connections {
 		baseURL := connection.BaseURL
-		official := connection.ID == providerconfig.OfficialConnectionID
+		official := connection.ID == provider.OfficialConnectionID
 		if official {
 			baseURL = officialBaseURL
 		}
@@ -151,7 +151,7 @@ func (s *Server) projectProviderInfo(id string, profile providerconfig.Profile) 
 }
 
 func (s *Server) handleActivateModel(c *gin.Context) {
-	var body providerconfig.ModelSelection
+	var body provider.ModelSelection
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid model selection"})
 		return
@@ -164,8 +164,8 @@ func (s *Server) handleActivateModel(c *gin.Context) {
 	c.JSON(http.StatusOK, selection)
 }
 
-func runnableProviderModels(provider *llm.Provider) []llm.Model {
-	models := provider.Models()
+func runnableProviderModels(registered *llm.Provider) []llm.Model {
+	models := registered.Models()
 	runnable := make([]llm.Model, 0, len(models))
 	for _, model := range models {
 		if llm.SupportsProtocol(model.Protocol) {
@@ -244,17 +244,17 @@ func (s *Server) handleActivateProviderKey(c *gin.Context) {
 	c.JSON(http.StatusOK, info)
 }
 
-func (request providerProfileRequest) update() providerconfig.Update {
-	update := providerconfig.Update{ActiveConnectionID: request.ActiveConnectionID}
+func (request providerProfileRequest) update() provider.Update {
+	update := provider.Update{ActiveConnectionID: request.ActiveConnectionID}
 	for _, connection := range request.Connections {
-		connectionUpdate := providerconfig.ConnectionUpdate{
+		connectionUpdate := provider.ConnectionUpdate{
 			ID:          connection.ID,
 			Name:        connection.Name,
 			BaseURL:     connection.BaseURL,
 			ActiveKeyID: connection.ActiveKeyID,
 		}
 		for _, key := range connection.Keys {
-			connectionUpdate.Keys = append(connectionUpdate.Keys, providerconfig.KeyUpdate{
+			connectionUpdate.Keys = append(connectionUpdate.Keys, provider.KeyUpdate{
 				ID:     key.ID,
 				Name:   key.Name,
 				APIKey: key.APIKey,

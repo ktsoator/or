@@ -1,4 +1,4 @@
-package web
+package api
 
 import (
 	"context"
@@ -6,10 +6,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/ktsoator/or/coding/internal/app/providerconfig"
-	"github.com/ktsoator/or/coding/internal/app/session"
-	"github.com/ktsoator/or/coding/internal/app/usage"
-	"github.com/ktsoator/or/coding/internal/app/workspace"
+	"github.com/ktsoator/or/coding/internal/provider"
+	"github.com/ktsoator/or/coding/internal/session"
+	"github.com/ktsoator/or/coding/internal/usage"
+	"github.com/ktsoator/or/coding/internal/workspace"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -29,7 +29,7 @@ type Server struct {
 	ledger         *usage.Store
 	workspaces     *workspace.Registry
 	registry       *llm.ProviderRegistry
-	providers      *providerconfig.Store
+	providers      *provider.Store
 	browseRoot     string
 	frontendOrigin string
 }

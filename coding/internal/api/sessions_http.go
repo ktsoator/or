@@ -1,4 +1,4 @@
-package web
+package api
 
 import (
 	"context"
@@ -14,8 +14,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ktsoator/or/coding"
-	"github.com/ktsoator/or/coding/internal/app/session"
-	"github.com/ktsoator/or/coding/internal/app/workspace"
+	"github.com/ktsoator/or/coding/internal/session"
+	"github.com/ktsoator/or/coding/internal/workspace"
 	"github.com/ktsoator/or/llm"
 )
 

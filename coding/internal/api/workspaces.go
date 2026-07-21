@@ -1,4 +1,4 @@
-package web
+package api
 
 import (
 	"errors"
@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ktsoator/or/coding/internal/app/workspace"
+	"github.com/ktsoator/or/coding/internal/workspace"
 )
 
 func (s *Server) handleWorkspaces(c *gin.Context) {

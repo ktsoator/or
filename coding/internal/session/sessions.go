@@ -17,9 +17,9 @@ import (
 	"time"
 
 	"github.com/ktsoator/or/coding"
-	"github.com/ktsoator/or/coding/internal/app/config"
-	"github.com/ktsoator/or/coding/internal/app/usage"
-	"github.com/ktsoator/or/coding/internal/app/workspace"
+	"github.com/ktsoator/or/coding/internal/config"
+	"github.com/ktsoator/or/coding/internal/usage"
+	"github.com/ktsoator/or/coding/internal/workspace"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -103,8 +103,8 @@ const (
 	DeliveryFollowUp Delivery = "followup"
 )
 
-// Manager owns web sessions across registered workspaces. Metadata is
-// kept in indexes while every transcript and details sidecar remains separate.
+// Manager owns every conversation across the registered workspaces. Metadata
+// is kept in indexes while each transcript and details sidecar stays separate.
 // Lock ordering: mu is always taken before the workspace registry's own lock.
 // The registry never calls back into this package, so that ordering holds
 // simply by never taking mu inside a registry call.

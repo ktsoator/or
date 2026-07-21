@@ -1,4 +1,4 @@
-package web
+package api
 
 import (
 	"net/http"
@@ -20,11 +20,11 @@ type modelOption struct {
 func (s *Server) handleModels(c *gin.Context) {
 	includeCatalog := c.Query("scope") == "catalog"
 	models := make([]modelOption, 0)
-	for _, provider := range llm.GetProviders() {
-		if !includeCatalog && !s.providerAvailable(provider) {
+	for _, providerID := range llm.GetProviders() {
+		if !includeCatalog && !s.providerAvailable(providerID) {
 			continue
 		}
-		for _, model := range llm.GetRunnableModels(provider) {
+		for _, model := range llm.GetRunnableModels(providerID) {
 			name := model.Name
 			if name == "" {
 				name = model.ID
@@ -58,8 +58,8 @@ func (s *Server) handleModels(c *gin.Context) {
 	})
 }
 
-func (s *Server) providerAvailable(provider string) bool {
-	status, ok := s.registry.AuthStatus(provider, nil)
+func (s *Server) providerAvailable(providerID string) bool {
+	status, ok := s.registry.AuthStatus(providerID, nil)
 	return ok && status.Configured
 }
 

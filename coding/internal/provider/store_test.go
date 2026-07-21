@@ -1,4 +1,4 @@
-package providerconfig
+package provider
 
 import (
 	"os"

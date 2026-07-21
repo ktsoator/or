@@ -1,7 +1,7 @@
-// Package providerconfig manages the coding product's persisted provider
-// connection profiles. The llm package remains the only provider runtime;
-// this package selects one profile and projects it into llm.ProviderOverride.
-package providerconfig
+// Package provider manages the coding product's persisted provider connection
+// profiles. The llm package remains the only provider runtime; this package
+// selects one profile and projects it into llm.ProviderOverride.
+package provider
 
 import (
 	"crypto/rand"

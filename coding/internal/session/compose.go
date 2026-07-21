@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/ktsoator/or/coding"
-	"github.com/ktsoator/or/coding/internal/app/config"
+	"github.com/ktsoator/or/coding/internal/config"
 	"github.com/ktsoator/or/coding/policy"
 	"github.com/ktsoator/or/coding/skill"
 	"github.com/ktsoator/or/coding/store"

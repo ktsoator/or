@@ -1,8 +1,11 @@
-// Package web exposes the HTTP API for coding sessions. It streams run events
-// over Server-Sent Events and accepts prompts and permission answers over POST
-// requests. The coding core and the independently deployed React application do
-// not depend on one another.
-package web
+// Package api is the product's HTTP delivery layer. It streams run events over
+// Server-Sent Events and accepts prompts and permission answers over POST
+// requests.
+//
+// Nothing else may import this package. Everything it serves lives in a package
+// below it, so a different front-end — a desktop shell, a test harness — can
+// drive the same sessions without an HTTP server in the way.
+package api
 
 import (
 	"encoding/json"
