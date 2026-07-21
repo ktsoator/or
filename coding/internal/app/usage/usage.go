@@ -1,4 +1,8 @@
-package web
+// Package usage is the coding product's token and cost ledger. It is kept
+// separate from any delivery mechanism: the ledger is written from the session
+// event stream and read by whatever front-end asks for a report, so nothing
+// here depends on HTTP.
+package usage
 
 import (
 	"bufio"
@@ -19,9 +23,9 @@ import (
 	"github.com/ktsoator/or/llm"
 )
 
-// UsageEvent is one billable provider response. It is stored independently
+// Event is one billable provider response. It is stored independently
 // from conversations so deleting a session does not rewrite usage history.
-type UsageEvent struct {
+type Event struct {
 	ID            string    `json:"id"`
 	SessionID     string    `json:"sessionId"`
 	Provider      string    `json:"provider"`
@@ -32,8 +36,8 @@ type UsageEvent struct {
 	Usage         llm.Usage `json:"usage"`
 }
 
-// UsageTotals is an aggregate returned by the usage API.
-type UsageTotals struct {
+// Totals is an aggregate returned by the usage API.
+type Totals struct {
 	Requests    int64         `json:"requests"`
 	Input       int64         `json:"input"`
 	Output      int64         `json:"output"`
@@ -43,47 +47,47 @@ type UsageTotals struct {
 	Cost        llm.UsageCost `json:"cost"`
 }
 
-// ModelUsageSummary groups usage by the requested provider and model.
-type ModelUsageSummary struct {
+// ModelSummary groups usage by the requested provider and model.
+type ModelSummary struct {
 	Provider      string    `json:"provider"`
 	Model         string    `json:"model"`
 	Name          string    `json:"name"`
 	ResponseModel string    `json:"responseModel,omitempty"`
 	LastUsedAt    time.Time `json:"lastUsedAt"`
-	UsageTotals
+	Totals
 }
 
-// UsageReport is an aggregate over a requested time range.
-type UsageReport struct {
-	Total       UsageTotals         `json:"total"`
-	Models      []ModelUsageSummary `json:"models"`
-	GeneratedAt time.Time           `json:"generatedAt"`
+// Report is an aggregate over a requested time range.
+type Report struct {
+	Total       Totals         `json:"total"`
+	Models      []ModelSummary `json:"models"`
+	GeneratedAt time.Time      `json:"generatedAt"`
 }
 
-// UsageEventPage is a newest-first slice of individual provider requests.
-type UsageEventPage struct {
-	Events []UsageEvent `json:"events"`
-	Total  int          `json:"total"`
-	Limit  int          `json:"limit"`
-	Offset int          `json:"offset"`
+// EventPage is a newest-first slice of individual provider requests.
+type EventPage struct {
+	Events []Event `json:"events"`
+	Total  int     `json:"total"`
+	Limit  int     `json:"limit"`
+	Offset int     `json:"offset"`
 }
 
-// UsageStore is an append-only, deduplicated usage ledger.
-type UsageStore struct {
+// Store is an append-only, deduplicated usage ledger.
+type Store struct {
 	path string
 
 	mu     sync.Mutex
-	events map[string]UsageEvent
+	events map[string]Event
 }
 
-func NewUsageStore(path string) (*UsageStore, error) {
-	store := &UsageStore{path: path, events: make(map[string]UsageEvent)}
+func NewStore(path string) (*Store, error) {
+	store := &Store{path: path, events: make(map[string]Event)}
 	file, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return store, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("web: open usage ledger: %w", err)
+		return nil, fmt.Errorf("usage: open ledger: %w", err)
 	}
 	defer file.Close()
 
@@ -93,59 +97,59 @@ func NewUsageStore(path string) (*UsageStore, error) {
 		if strings.TrimSpace(scanner.Text()) == "" {
 			continue
 		}
-		var event UsageEvent
+		var event Event
 		if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
-			return nil, fmt.Errorf("web: decode usage ledger: %w", err)
+			return nil, fmt.Errorf("usage: decode ledger: %w", err)
 		}
 		if event.ID != "" {
 			store.events[event.ID] = event
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("web: read usage ledger: %w", err)
+		return nil, fmt.Errorf("usage: read ledger: %w", err)
 	}
 	return store, nil
 }
 
 // RecordEvent persists one live MessageCompleted event. Empty usage records
 // are ignored because some providers emit terminal metadata without billing.
-func (s *UsageStore) RecordEvent(sessionID string, event coding.Event) error {
-	if event.Type != coding.MessageCompleted || !usagePresent(event.Usage) {
+func (s *Store) RecordEvent(sessionID string, event coding.Event) error {
+	if event.Type != coding.MessageCompleted || !present(event.Usage) {
 		return nil
 	}
-	return s.append(UsageEvent{
-		ID:            usageEventID(sessionID, event.Provider, event.Model, event.ResponseID, event.Timestamp, event.Usage),
+	return s.append(Event{
+		ID:            eventID(sessionID, event.Provider, event.Model, event.ResponseID, event.Timestamp, event.Usage),
 		SessionID:     sessionID,
 		Provider:      event.Provider,
 		Model:         event.Model,
 		ResponseModel: event.ResponseModel,
 		ResponseID:    event.ResponseID,
-		Timestamp:     normalizedUsageTime(event.Timestamp),
+		Timestamp:     normalizedTime(event.Timestamp),
 		Usage:         event.Usage,
 	})
 }
 
 // Backfill adds provider responses already present in a restored transcript.
 // Stable event IDs make the operation safe to run on every startup.
-func (s *UsageStore) Backfill(sessionID string, messages []agent.AgentMessage) error {
+func (s *Store) Backfill(sessionID string, messages []agent.AgentMessage) error {
 	for _, message := range messages {
 		llmMessage, ok := agent.ToLLM(message)
 		if !ok {
 			continue
 		}
 		assistant, ok := llmMessage.(*llm.AssistantMessage)
-		if !ok || assistant == nil || !usagePresent(assistant.Usage) {
+		if !ok || assistant == nil || !present(assistant.Usage) {
 			continue
 		}
 		timestamp := time.UnixMilli(assistant.Timestamp).UTC()
-		if err := s.append(UsageEvent{
-			ID:            usageEventID(sessionID, assistant.Provider, assistant.Model, assistant.ResponseID, timestamp, assistant.Usage),
+		if err := s.append(Event{
+			ID:            eventID(sessionID, assistant.Provider, assistant.Model, assistant.ResponseID, timestamp, assistant.Usage),
 			SessionID:     sessionID,
 			Provider:      assistant.Provider,
 			Model:         assistant.Model,
 			ResponseModel: assistant.ResponseModel,
 			ResponseID:    assistant.ResponseID,
-			Timestamp:     normalizedUsageTime(timestamp),
+			Timestamp:     normalizedTime(timestamp),
 			Usage:         assistant.Usage,
 		}); err != nil {
 			return err
@@ -154,18 +158,18 @@ func (s *UsageStore) Backfill(sessionID string, messages []agent.AgentMessage) e
 	return nil
 }
 
-func (s *UsageStore) append(event UsageEvent) error {
+func (s *Store) append(event Event) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, exists := s.events[event.ID]; exists {
 		return nil
 	}
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
-		return fmt.Errorf("web: create usage directory: %w", err)
+		return fmt.Errorf("usage: create ledger directory: %w", err)
 	}
 	file, err := os.OpenFile(s.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
-		return fmt.Errorf("web: open usage ledger for append: %w", err)
+		return fmt.Errorf("usage: open ledger for append: %w", err)
 	}
 	data, err := json.Marshal(event)
 	if err == nil {
@@ -174,10 +178,10 @@ func (s *UsageStore) append(event UsageEvent) error {
 	}
 	closeErr := file.Close()
 	if err != nil {
-		return fmt.Errorf("web: append usage ledger: %w", err)
+		return fmt.Errorf("usage: append ledger: %w", err)
 	}
 	if closeErr != nil {
-		return fmt.Errorf("web: close usage ledger: %w", closeErr)
+		return fmt.Errorf("usage: close ledger: %w", closeErr)
 	}
 	s.events[event.ID] = event
 	return nil
@@ -185,21 +189,21 @@ func (s *UsageStore) append(event UsageEvent) error {
 
 // Report aggregates a stable snapshot without holding the lock while sorting.
 // A zero since value includes the complete ledger.
-func (s *UsageStore) Report(since time.Time) UsageReport {
+func (s *Store) Report(since time.Time) Report {
 	s.mu.Lock()
-	events := make([]UsageEvent, 0, len(s.events))
+	events := make([]Event, 0, len(s.events))
 	for _, event := range s.events {
 		events = append(events, event)
 	}
 	s.mu.Unlock()
 
-	groups := make(map[string]*ModelUsageSummary)
-	report := UsageReport{GeneratedAt: time.Now().UTC()}
+	groups := make(map[string]*ModelSummary)
+	report := Report{GeneratedAt: time.Now().UTC()}
 	for _, event := range events {
 		if !since.IsZero() && event.Timestamp.Before(since) {
 			continue
 		}
-		addUsageTotals(&report.Total, event.Usage)
+		addTotals(&report.Total, event.Usage)
 		key := event.Provider + "\x00" + event.Model
 		group := groups[key]
 		if group == nil {
@@ -207,14 +211,14 @@ func (s *UsageStore) Report(since time.Time) UsageReport {
 			if model, ok := llm.LookupModel(event.Provider, event.Model); ok && model.Name != "" {
 				name = model.Name
 			}
-			group = &ModelUsageSummary{
+			group = &ModelSummary{
 				Provider: event.Provider,
 				Model:    event.Model,
 				Name:     name,
 			}
 			groups[key] = group
 		}
-		addUsageTotals(&group.UsageTotals, event.Usage)
+		addTotals(&group.Totals, event.Usage)
 		if event.Timestamp.After(group.LastUsedAt) {
 			group.LastUsedAt = event.Timestamp
 			group.ResponseModel = event.ResponseModel
@@ -235,7 +239,7 @@ func (s *UsageStore) Report(since time.Time) UsageReport {
 // Events returns individual requests filtered by provider and model. Results
 // are newest first and paginated so the usage page stays fast as the ledger
 // grows.
-func (s *UsageStore) Events(provider, model string, since time.Time, offset, limit int) UsageEventPage {
+func (s *Store) Events(provider, model string, since time.Time, offset, limit int) EventPage {
 	if offset < 0 {
 		offset = 0
 	}
@@ -246,7 +250,7 @@ func (s *UsageStore) Events(provider, model string, since time.Time, offset, lim
 		limit = 500
 	}
 	s.mu.Lock()
-	events := make([]UsageEvent, 0, len(s.events))
+	events := make([]Event, 0, len(s.events))
 	for _, event := range s.events {
 		if !since.IsZero() && event.Timestamp.Before(since) {
 			continue
@@ -268,10 +272,10 @@ func (s *UsageStore) Events(provider, model string, since time.Time, offset, lim
 	})
 	total := len(events)
 	if offset >= total {
-		return UsageEventPage{Events: []UsageEvent{}, Total: total, Limit: limit, Offset: offset}
+		return EventPage{Events: []Event{}, Total: total, Limit: limit, Offset: offset}
 	}
 	end := min(offset+limit, total)
-	return UsageEventPage{
+	return EventPage{
 		Events: events[offset:end],
 		Total:  total,
 		Limit:  limit,
@@ -279,7 +283,7 @@ func (s *UsageStore) Events(provider, model string, since time.Time, offset, lim
 	}
 }
 
-func addUsageTotals(total *UsageTotals, usage llm.Usage) {
+func addTotals(total *Totals, usage llm.Usage) {
 	total.Requests++
 	total.Input += usage.Input
 	total.Output += usage.Output
@@ -297,12 +301,12 @@ func addUsageTotals(total *UsageTotals, usage llm.Usage) {
 	total.Cost.Total += usage.Cost.Total
 }
 
-func usagePresent(usage llm.Usage) bool {
+func present(usage llm.Usage) bool {
 	return usage.Input != 0 || usage.Output != 0 || usage.CacheRead != 0 ||
 		usage.CacheWrite != 0 || usage.TotalTokens != 0 || usage.Cost.Total != 0
 }
 
-func usageEventID(sessionID, provider, model, responseID string, timestamp time.Time, usage llm.Usage) string {
+func eventID(sessionID, provider, model, responseID string, timestamp time.Time, usage llm.Usage) string {
 	if responseID != "" {
 		return provider + ":" + responseID
 	}
@@ -313,7 +317,7 @@ func usageEventID(sessionID, provider, model, responseID string, timestamp time.
 	return "local:" + hex.EncodeToString(sum[:])
 }
 
-func normalizedUsageTime(timestamp time.Time) time.Time {
+func normalizedTime(timestamp time.Time) time.Time {
 	if timestamp.IsZero() || timestamp.UnixMilli() <= 0 {
 		return time.Now().UTC()
 	}

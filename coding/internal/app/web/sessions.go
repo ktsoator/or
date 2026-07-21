@@ -20,6 +20,7 @@ import (
 	"github.com/ktsoator/or/coding"
 	"github.com/ktsoator/or/coding/internal/app/bootstrap"
 	"github.com/ktsoator/or/coding/internal/app/config"
+	"github.com/ktsoator/or/coding/internal/app/usage"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -139,13 +140,13 @@ type SessionManager struct {
 	mu         sync.RWMutex
 	sessions   map[string]*sessionRuntime
 	workspaces map[string]workspaceRecord
-	usage      *UsageStore
+	usage      *usage.Store
 }
 
 // NewSessionManager restores the global Web session and workspace indexes.
 func NewSessionManager(ctx context.Context, cfg config.Config) (*SessionManager, error) {
 	dir := filepath.Join(cfg.DataDir, "sessions")
-	usage, err := NewUsageStore(filepath.Join(cfg.DataDir, "usage", "events.jsonl"))
+	ledger, err := usage.NewStore(filepath.Join(cfg.DataDir, "usage", "events.jsonl"))
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +157,7 @@ func NewSessionManager(ctx context.Context, cfg config.Config) (*SessionManager,
 		workspaceIndexPath: filepath.Join(dir, "workspaces.json"),
 		sessions:           make(map[string]*sessionRuntime),
 		workspaces:         make(map[string]workspaceRecord),
-		usage:              usage,
+		usage:              ledger,
 	}
 
 	workspaceRecords, err := m.loadWorkspaceRecords()
@@ -467,12 +468,12 @@ func (m *SessionManager) ListWorkspaces() []WorkspaceSummary {
 }
 
 // UsageReport returns the durable aggregate across conversations since the cutoff.
-func (m *SessionManager) UsageReport(since time.Time) UsageReport {
+func (m *SessionManager) UsageReport(since time.Time) usage.Report {
 	return m.usage.Report(since)
 }
 
 // UsageEvents returns paginated per-request usage details.
-func (m *SessionManager) UsageEvents(provider, model string, since time.Time, offset, limit int) UsageEventPage {
+func (m *SessionManager) UsageEvents(provider, model string, since time.Time, offset, limit int) usage.EventPage {
 	return m.usage.Events(provider, model, since, offset, limit)
 }
 
