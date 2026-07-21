@@ -76,10 +76,6 @@ export function ProvidersSettings({ onChanged }: { onChanged?: () => void }) {
     <div>
       <DefaultModelSection onChanged={afterChange} />
 
-      <p className="mb-6 max-w-2xl text-[0.875rem] leading-6 text-stone-500">
-        {t('providers.intro')}
-      </p>
-
       {loading ? (
         <div className="flex items-center gap-2 py-6 text-[0.8125rem] text-stone-400">
           <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
@@ -696,10 +692,7 @@ function ProviderConfigPanel({
   return (
     <>
       <div className="mb-5 flex items-center justify-between gap-3 max-sm:items-start">
-        <div>
-          <div className="text-[0.875rem] font-medium text-stone-800">{t('providers.routing')}</div>
-          <div className="mt-0.5 text-[0.71875rem] text-stone-400">{t('providers.routingHint')}</div>
-        </div>
+        <div className="text-[0.875rem] font-medium text-stone-800">{t('providers.routing')}</div>
         <div className="flex shrink-0 items-center gap-1.5 max-sm:grid max-sm:w-full max-sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2.25rem]">
           <ProviderPicker providers={providers} value={selectedProviderId} onChange={onSelectProvider} />
           <ConnectionPicker
