@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 
 	"github.com/ktsoator/or/coding/internal/config"
@@ -53,10 +54,12 @@ func Run(ctx context.Context, cfg config.Config) error {
 		browseRoot:     cfg.Cwd,
 		frontendOrigin: cfg.FrontendOrigin,
 	}
-	fmt.Println("coding API")
-	fmt.Printf("listening on http://%s/api/\n", cfg.Addr)
+	// Startup notes go to stderr, where this command's errors already go, so a
+	// caller redirecting stdout is not handed a banner it did not ask for.
+	fmt.Fprintf(os.Stderr, "coding API listening on http://%s/api/\n", cfg.Addr)
+	fmt.Fprintf(os.Stderr, "sessions and transcripts in %s\n", cfg.DataDir)
 	if cfg.FrontendOrigin != "" {
-		fmt.Printf("allowing front-end origin %s\n", cfg.FrontendOrigin)
+		fmt.Fprintf(os.Stderr, "allowing front-end origin %s\n", cfg.FrontendOrigin)
 	}
 	return http.ListenAndServe(cfg.Addr, server.Handler())
 }
