@@ -547,6 +547,7 @@ export type Session = {
   startDraft: (workspacePath?: string, projectScoped?: boolean) => void
   updateDraftWorkspace: (workspacePath?: string, projectScoped?: boolean) => void
   deleteSession: (id: string) => Promise<void>
+  renameSession: (id: string, customTitle: string) => Promise<SessionSummary>
   selectSession: (id: string) => void
   updateSettings: (provider: string, model: string, thinkingLevel: ThinkingLevel) => Promise<void>
   send: (text: string, images: MessageImage[], delivery?: DeliveryMode) => void
@@ -774,6 +775,19 @@ export function useSession(): Session {
                 session.id === activeSessionID ? { ...session, running: false } : session,
               ),
             )
+          } else if (wire.type === 'title_update') {
+            setSessions((current) =>
+              current.map((session) =>
+                session.id === activeSessionID
+                  ? {
+                      ...session,
+                      title: wire.title ?? session.title,
+                      aiTitle: wire.aiTitle,
+                      customTitle: wire.customTitle,
+                    }
+                  : session,
+              ),
+            )
           }
         } catch {
           dispatch({
@@ -951,6 +965,29 @@ export function useSession(): Session {
     setSessions((current) => current.filter((session) => session.id !== id))
     setActiveSessionID((current) => (current === id ? undefined : current))
     await refreshSessions()
+  }
+
+  const renameSession = async (id: string, customTitle: string) => {
+    const response = await fetch(sessionURL(id, '/title'), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customTitle }),
+    })
+    if (!response.ok) {
+      let message = `rename session failed (${response.status})`
+      try {
+        const body = (await response.json()) as { error?: string }
+        if (body.error) message = body.error
+      } catch {
+        // Keep the status-based fallback when the response has no JSON body.
+      }
+      throw new Error(message)
+    }
+    const updated = (await response.json()) as SessionSummary
+    setSessions((current) =>
+      current.map((session) => (session.id === updated.id ? updated : session)),
+    )
+    return updated
   }
 
   const patchSessionSettings = async (
@@ -1266,6 +1303,7 @@ export function useSession(): Session {
     startDraft,
     updateDraftWorkspace,
     deleteSession,
+    renameSession,
     selectSession,
     updateSettings,
     send,

@@ -40,6 +40,7 @@ export type WireEvent = {
     | 'queue_removed'
     | 'error'
     | 'done'
+    | 'title_update'
   kind?: 'text' | 'thinking'
   delta?: string
   tool?: string
@@ -58,6 +59,9 @@ export type WireEvent = {
   modelName?: string
   id?: string
   summary?: string
+  title?: string
+  aiTitle?: string
+  customTitle?: string
 }
 
 // Thread items are the declarative model the UI renders, derived from the wire
@@ -239,6 +243,8 @@ export type ModelCatalogResponse = {
 export type SessionSummary = {
   id: string
   title: string
+  aiTitle?: string
+  customTitle?: string
   workspacePath: string
   workspaceName: string
   scope: 'chat' | 'project'

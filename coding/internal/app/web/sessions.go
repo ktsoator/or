@@ -25,6 +25,7 @@ import (
 
 const (
 	defaultSessionTitle  = "New session"
+	maxTitleRunes        = 120
 	sessionScopeChat     = "chat"
 	sessionScopeProject  = "project"
 	workspaceKindScratch = "scratch"
@@ -51,6 +52,8 @@ var ErrInvalidSessionScope = errors.New("web: invalid session scope")
 type SessionSummary struct {
 	ID            string                 `json:"id"`
 	Title         string                 `json:"title"`
+	AITitle       string                 `json:"aiTitle,omitempty"`
+	CustomTitle   string                 `json:"customTitle,omitempty"`
 	WorkspacePath string                 `json:"workspacePath"`
 	WorkspaceName string                 `json:"workspaceName"`
 	Scope         string                 `json:"scope"`
@@ -81,6 +84,8 @@ type workspaceRecord struct {
 type sessionRecord struct {
 	ID            string    `json:"id"`
 	Title         string    `json:"title"`
+	AITitle       string    `json:"aiTitle,omitempty"`
+	CustomTitle   string    `json:"customTitle,omitempty"`
 	WorkspacePath string    `json:"workspacePath,omitempty"`
 	Scope         string    `json:"scope,omitempty"`
 	WorkspaceKind string    `json:"workspaceKind,omitempty"`
@@ -102,6 +107,10 @@ type sessionRuntime struct {
 
 	pendingMu sync.Mutex
 	pending   []queuedMessage
+
+	// titleGenerating is held only while an attempt is in flight, so a failed
+	// attempt is retried on the next completed response.
+	titleGenerating atomic.Bool
 }
 
 type queuedDelivery string
@@ -274,6 +283,10 @@ func (m *SessionManager) build(record sessionRecord) (*sessionRuntime, error) {
 			// transcript remains available for idempotent startup backfill if an
 			// append fails transiently.
 			_ = m.usage.RecordEvent(record.ID, ev)
+			// After the first final response, generate an AI title in the background.
+			if ev.FinalResponse {
+				m.maybeGenerateTitle(runtime)
+			}
 		}
 		if ev.Type == coding.UserMessageCompleted {
 			if queued, found := runtime.consumePending(ev.Text, ev.Images); found {
@@ -594,6 +607,28 @@ func (m *SessionManager) UpdateSettings(
 	return runtime.summary(), nil
 }
 
+// Rename sets a user-defined custom title on the session. An empty title clears
+// the custom title so the display falls back to the AI or prompt-derived title.
+func (m *SessionManager) Rename(id, customTitle string) (SessionSummary, error) {
+	customTitle = clampTitle(customTitle)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	runtime, ok := m.sessions[id]
+	if !ok {
+		return SessionSummary{}, os.ErrNotExist
+	}
+
+	previousCustomTitle := runtime.record.CustomTitle
+	runtime.record.CustomTitle = customTitle
+	runtime.record.UpdatedAt = time.Now().UTC()
+	if err := m.saveLocked(); err != nil {
+		runtime.record.CustomTitle = previousCustomTitle
+		return SessionSummary{}, err
+	}
+	runtime.broadcastTitle()
+	return runtime.summary(), nil
+}
+
 // BeginPrompt reserves a session run and updates its durable title/activity.
 func (m *SessionManager) BeginPrompt(id, prompt string, hasImages bool) (*sessionRuntime, error) {
 	m.mu.Lock()
@@ -626,6 +661,8 @@ func (m *SessionManager) BeginPrompt(id, prompt string, hasImages bool) (*sessio
 		runtime.running.Store(false)
 		return nil, err
 	}
+	// Broadcast title change so the frontend updates immediately.
+	runtime.broadcastTitle()
 	return runtime, nil
 }
 
@@ -768,7 +805,9 @@ func (s *sessionRuntime) summary() SessionSummary {
 	}
 	return SessionSummary{
 		ID:            s.record.ID,
-		Title:         s.record.Title,
+		Title:         s.displayTitle(),
+		AITitle:       s.record.AITitle,
+		CustomTitle:   s.record.CustomTitle,
 		WorkspacePath: s.record.WorkspacePath,
 		WorkspaceName: filepath.Base(s.record.WorkspacePath),
 		Scope:         s.record.Scope,
@@ -991,4 +1030,149 @@ func titleFromPrompt(prompt string) string {
 	}
 	runes := []rune(title)
 	return strings.TrimSpace(string(runes[:maxRunes])) + "…"
+}
+
+// clampTitle trims a title and caps it at maxTitleRunes so a long model or
+// client-supplied string cannot bloat the session store.
+func clampTitle(title string) string {
+	title = strings.TrimSpace(title)
+	if utf8.RuneCountInString(title) <= maxTitleRunes {
+		return title
+	}
+	runes := []rune(title)
+	return strings.TrimSpace(string(runes[:maxTitleRunes]))
+}
+
+// displayTitle returns the best available title for this session. Callers must
+// hold SessionManager.mu.
+func (s *sessionRuntime) displayTitle() string {
+	if s.record.CustomTitle != "" {
+		return s.record.CustomTitle
+	}
+	if s.record.AITitle != "" {
+		return s.record.AITitle
+	}
+	return s.record.Title
+}
+
+// broadcastTitle sends the current title to connected clients. Callers must hold
+// SessionManager.mu; Hub.Broadcast never blocks, so holding it is cheap.
+func (s *sessionRuntime) broadcastTitle() {
+	data, _ := json.Marshal(wireEvent{
+		Type:        "title_update",
+		Title:       s.displayTitle(),
+		AITitle:     s.record.AITitle,
+		CustomTitle: s.record.CustomTitle,
+	})
+	s.hub.Broadcast(data)
+}
+
+// maybeGenerateTitle starts background AI title generation after a session
+// finishes a response, unless the user has already named it or a title was
+// generated earlier. The flag only guards against two generations running at
+// once: a failed attempt clears it so the next completed response retries,
+// because a model error or an unparseable reply should not cost the session its
+// title for the lifetime of the process. Runs on the session's event goroutine,
+// so it must not block on the model call.
+func (m *SessionManager) maybeGenerateTitle(runtime *sessionRuntime) {
+	m.mu.Lock()
+	needsTitle := runtime.record.CustomTitle == "" && runtime.record.AITitle == ""
+	provider, model := runtime.record.Provider, runtime.record.Model
+	m.mu.Unlock()
+
+	if !needsTitle || !runtime.titleGenerating.CompareAndSwap(false, true) {
+		return
+	}
+	go func() {
+		defer runtime.titleGenerating.Store(false)
+		m.generateSessionTitle(m.ctx, runtime, provider, model)
+	}()
+}
+
+// generateSessionTitle asks the model for a concise session title derived from
+// the first user message and stores it as the session's AI title. Failures are
+// silent: the session keeps its prompt-derived title.
+func (m *SessionManager) generateSessionTitle(ctx context.Context, runtime *sessionRuntime, provider, modelID string) {
+	// Find the first user message with text content.
+	history := runtime.session.History()
+	var firstPrompt string
+	for _, item := range history {
+		if item.Type == coding.HistoryUser && strings.TrimSpace(item.Text) != "" {
+			firstPrompt = strings.TrimSpace(item.Text)
+			break
+		}
+	}
+	if firstPrompt == "" {
+		return
+	}
+
+	model, ok := llm.LookupModel(provider, modelID)
+	if !ok {
+		return
+	}
+
+	systemPrompt := `Generate a concise, sentence-case title (3-7 words) that captures the main topic of the user's first message. Use sentence case: capitalize only the first word and proper nouns. Return JSON with a single "title" field.
+
+Good examples:
+{"title": "Fix login button on mobile"}
+{"title": "Add OAuth authentication"}
+{"title": "Debug failing CI tests"}
+
+Bad (too vague): {"title": "Code changes"}
+Bad (too long): {"title": "Investigate and fix the issue with the login flow"}`
+
+	titleCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	// Thinking is off: a title needs none, and reasoning tokens would consume
+	// the output budget before any JSON is emitted.
+	result, err := llm.Complete(titleCtx, model, llm.PromptWithSystem(systemPrompt, firstPrompt), llm.StreamOptions{
+		MaxTokens: 128,
+		Reasoning: llm.ModelThinkingOff,
+	})
+	if err != nil {
+		return
+	}
+
+	title := clampTitle(parseTitleJSON(result.Text()))
+	if title == "" {
+		return
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	// Re-check under the lock: the user may have renamed while we generated.
+	if runtime.record.CustomTitle != "" {
+		return
+	}
+	runtime.record.AITitle = title
+	if err := m.saveLocked(); err != nil {
+		runtime.record.AITitle = ""
+		return
+	}
+	runtime.broadcastTitle()
+}
+
+// parseTitleJSON pulls the title out of a model response. It accepts the JSON
+// object the prompt asks for, the same object wrapped in prose or a code fence,
+// and — because smaller models often ignore the format — a bare one-line title.
+func parseTitleJSON(text string) string {
+	var parsed struct {
+		Title string `json:"title"`
+	}
+	if json.Unmarshal([]byte(text), &parsed) == nil {
+		return parsed.Title
+	}
+	if start, end := strings.Index(text, "{"), strings.LastIndex(text, "}"); start >= 0 && end > start {
+		if json.Unmarshal([]byte(text[start:end+1]), &parsed) == nil {
+			return parsed.Title
+		}
+	}
+	// Bare title: a single short line with no JSON in sight. Anything longer or
+	// multi-line is prose, not a title, so it is discarded.
+	line := strings.TrimSpace(text)
+	if strings.ContainsAny(line, "{}\n\r") || utf8.RuneCountInString(line) > maxTitleRunes {
+		return ""
+	}
+	return strings.Trim(line, `"'`)
 }

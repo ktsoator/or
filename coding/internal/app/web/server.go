@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 
@@ -126,6 +127,7 @@ func (s *Server) Handler() http.Handler {
 	session.GET("/events", s.handleEvents)
 	session.DELETE("", s.handleDeleteSession)
 	session.PATCH("/settings", s.handleSessionSettings)
+	session.PATCH("/title", s.handleRenameSession)
 	session.POST("/prompt", s.handlePrompt)
 	session.POST("/steer", s.handleSteer)
 	session.POST("/follow-up", s.handleFollowUp)
@@ -279,6 +281,35 @@ func (s *Server) handleSessionSettings(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
 	case errors.Is(err, ErrSessionActive):
 		c.JSON(http.StatusConflict, gin.H{"error": "wait for the session to become idle before changing settings"})
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	default:
+		c.JSON(http.StatusOK, summary)
+	}
+}
+
+func (s *Server) handleRenameSession(c *gin.Context) {
+	var body struct {
+		CustomTitle string `json:"customTitle"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+	// An empty title is meaningful: it clears the custom title so the session
+	// falls back to its AI or prompt-derived name.
+	title := strings.TrimSpace(body.CustomTitle)
+	if utf8.RuneCountInString(title) > maxTitleRunes {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf("title must be %d characters or fewer", maxTitleRunes),
+		})
+		return
+	}
+
+	summary, err := s.sessions.Rename(c.Param("sessionID"), title)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
 	case err != nil:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 	default:

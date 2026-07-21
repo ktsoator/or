@@ -555,11 +555,7 @@ func validateStoredProfile(profile Profile) (Profile, error) {
 			if strings.TrimSpace(key.ID) == "" {
 				return Profile{}, errors.New("key id is required")
 			}
-			requested.Keys = append(requested.Keys, KeyUpdate{
-				ID:     key.ID,
-				Name:   key.Name,
-				APIKey: key.APIKey,
-			})
+			requested.Keys = append(requested.Keys, KeyUpdate(key))
 		}
 		update.Connections = append(update.Connections, requested)
 	}
