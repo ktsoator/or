@@ -53,15 +53,13 @@ func (s *sessionRuntime) displayTitle() string {
 }
 
 // broadcastTitle sends the current title to connected clients. Callers must hold
-// SessionManager.mu; Hub.Broadcast never blocks, so holding it is cheap.
+// SessionManager.mu; emit never blocks, so holding it is cheap.
 func (s *sessionRuntime) broadcastTitle() {
-	data, _ := json.Marshal(wireEvent{
-		Type:        "title_update",
+	s.emit(titleChanged{
 		Title:       s.displayTitle(),
 		AITitle:     s.record.AITitle,
 		CustomTitle: s.record.CustomTitle,
 	})
-	s.hub.Broadcast(data)
 }
 
 // maybeGenerateTitle starts background AI title generation after a session

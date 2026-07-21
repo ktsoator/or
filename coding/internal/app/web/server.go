@@ -396,7 +396,7 @@ func (s *Server) handleHistory(c *gin.Context) {
 	events = append(events, runtime.broker.PendingEvents()...)
 	c.JSON(http.StatusOK, gin.H{
 		"events":  events,
-		"queue":   runtime.pendingEvents(),
+		"queue":   projectQueue(runtime.pendingEvents()),
 		"context": projectContextUsage(runtime.session.ContextUsage()),
 		"running": runtime.running.Load(),
 	})

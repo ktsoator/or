@@ -246,20 +246,16 @@ func (m *SessionManager) build(record sessionRecord) (*sessionRuntime, error) {
 		}
 		if ev.Type == coding.UserMessageCompleted {
 			if queued, found := runtime.consumePending(ev.Text, ev.Images); found {
-				data, _ := json.Marshal(wireEvent{
-					Type:     "user_message",
+				runtime.emit(messageAccepted{
 					ID:       queued.ID,
 					Text:     ev.Text,
-					Images:   projectImages(ev.Images),
-					Delivery: string(queued.Delivery),
+					Images:   ev.Images,
+					Delivery: queued.Delivery,
 				})
-				hub.Broadcast(data)
 				return
 			}
 		}
-		if data, ok := ProjectEvent(ev); ok {
-			hub.Broadcast(data)
-		}
+		runtime.forward(ev)
 	})
 	if record.AutoTitle {
 		for _, item := range session.History() {
@@ -587,8 +583,7 @@ func (m *SessionManager) EndRun(id string) {
 	cancelled := runtime.cancelPending()
 	runtime.session.ClearQueuedMessages()
 	for _, message := range cancelled {
-		data, _ := json.Marshal(wireEvent{Type: "queue_cancelled", ID: message.ID})
-		runtime.hub.Broadcast(data)
+		runtime.emit(messageCancelled{ID: message.ID})
 	}
 }
 

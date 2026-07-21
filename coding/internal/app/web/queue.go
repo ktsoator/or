@@ -1,8 +1,6 @@
 package web
 
 import (
-	"encoding/json"
-
 	"github.com/ktsoator/or/coding"
 	"github.com/ktsoator/or/llm"
 )
@@ -31,15 +29,13 @@ func (s *sessionRuntime) queuePending(message queuedMessage) bool {
 		message.Handle = s.session.FollowUp(message.Text, message.Images...)
 	}
 	s.pending = append(s.pending, message)
-	data, _ := json.Marshal(wireEvent{
-		Type:     "user_message",
+	s.emit(messageAccepted{
 		ID:       message.ID,
 		Text:     message.Text,
-		Images:   projectImages(message.Images),
-		Delivery: string(message.Delivery),
+		Images:   message.Images,
+		Delivery: message.Delivery,
 		Queued:   true,
 	})
-	s.hub.Broadcast(data)
 	return true
 }
 
@@ -54,8 +50,7 @@ func (s *sessionRuntime) removePending(id string) (found, removed bool) {
 			return true, false
 		}
 		s.pending = append(s.pending[:index], s.pending[index+1:]...)
-		data, _ := json.Marshal(wireEvent{Type: "queue_removed", ID: id})
-		s.hub.Broadcast(data)
+		s.emit(messageDequeued{ID: id})
 		return true, true
 	}
 	return false, false
@@ -74,17 +69,17 @@ func (s *sessionRuntime) consumePending(text string, images []llm.ImageContent) 
 	return queuedMessage{}, false
 }
 
-func (s *sessionRuntime) pendingEvents() []wireEvent {
+// pendingEvents replays the queue for a client that just connected.
+func (s *sessionRuntime) pendingEvents() []sessionEvent {
 	s.pendingMu.Lock()
 	defer s.pendingMu.Unlock()
-	events := make([]wireEvent, 0, len(s.pending))
+	events := make([]sessionEvent, 0, len(s.pending))
 	for _, message := range s.pending {
-		events = append(events, wireEvent{
-			Type:     "user_message",
+		events = append(events, messageAccepted{
 			ID:       message.ID,
 			Text:     message.Text,
-			Images:   projectImages(message.Images),
-			Delivery: string(message.Delivery),
+			Images:   message.Images,
+			Delivery: message.Delivery,
 			Queued:   true,
 		})
 	}
