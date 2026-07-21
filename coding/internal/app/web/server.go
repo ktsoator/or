@@ -2,18 +2,14 @@ package web
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -28,46 +24,6 @@ import (
 func init() {
 	// Keep gin quiet and production-shaped; this is an app server, not a demo.
 	gin.SetMode(gin.ReleaseMode)
-}
-
-// Hub fans one session's events out to every connected browser over SSE. Each
-// client has a buffered channel; a slow client drops events rather than
-// blocking the run.
-type Hub struct {
-	mu      sync.Mutex
-	clients map[chan []byte]struct{}
-}
-
-// NewHub returns an empty Hub.
-func NewHub() *Hub {
-	return &Hub{clients: make(map[chan []byte]struct{})}
-}
-
-// Broadcast sends data to every connected client, skipping any whose buffer is
-// full.
-func (h *Hub) Broadcast(data []byte) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	for ch := range h.clients {
-		select {
-		case ch <- data:
-		default: // slow client; drop rather than block the run
-		}
-	}
-}
-
-func (h *Hub) add() chan []byte {
-	ch := make(chan []byte, 64)
-	h.mu.Lock()
-	h.clients[ch] = struct{}{}
-	h.mu.Unlock()
-	return ch
-}
-
-func (h *Hub) remove(ch chan []byte) {
-	h.mu.Lock()
-	delete(h.clients, ch)
-	h.mu.Unlock()
 }
 
 // Server wires the multi-session API: session discovery plus scoped history,
@@ -419,57 +375,6 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 	c.JSON(http.StatusCreated, summary)
 }
 
-type directoryEntry struct {
-	Name string `json:"name"`
-	Path string `json:"path"`
-}
-
-// handleDirectories provides a local directory browser for the React workspace
-// picker. The API is intentionally directory-only; files are never returned.
-func (s *Server) handleDirectories(c *gin.Context) {
-	path := strings.TrimSpace(c.Query("path"))
-	if path == "" {
-		path = s.sessions.cfg.Cwd
-	}
-	cleaned, err := workspace.Validate(path)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	entries, err := os.ReadDir(cleaned)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	directories := make([]directoryEntry, 0)
-	for _, entry := range entries {
-		// Match the native folder-picker convention: internal dot-directories
-		// stay out of the primary workspace browsing flow.
-		if strings.HasPrefix(entry.Name(), ".") {
-			continue
-		}
-		candidate := filepath.Join(cleaned, entry.Name())
-		info, infoErr := os.Stat(candidate)
-		if infoErr != nil || !info.IsDir() {
-			continue
-		}
-		directories = append(directories, directoryEntry{Name: entry.Name(), Path: candidate})
-	}
-	sort.Slice(directories, func(i, j int) bool {
-		return strings.ToLower(directories[i].Name) < strings.ToLower(directories[j].Name)
-	})
-	parent := filepath.Dir(cleaned)
-	if parent == cleaned {
-		parent = ""
-	}
-	c.Header("Cache-Control", "no-store")
-	c.JSON(http.StatusOK, gin.H{
-		"path":        cleaned,
-		"parent":      parent,
-		"directories": directories,
-	})
-}
-
 func (s *Server) runtime(c *gin.Context) (*sessionRuntime, bool) {
 	runtime, ok := s.sessions.Get(c.Param("sessionID"))
 	if !ok {
@@ -644,66 +549,6 @@ const (
 	maxPromptImagesBytes  = 20 << 20
 	maxPromptRequestBytes = 28 << 20
 )
-
-type promptImage struct {
-	Data     string `json:"data"`
-	MIMEType string `json:"mimeType"`
-}
-
-type messageRequest struct {
-	ID     string        `json:"id"`
-	Text   string        `json:"text"`
-	Images []promptImage `json:"images"`
-}
-
-func bindMessageRequest(c *gin.Context) (messageRequest, []llm.ImageContent, bool) {
-	var body messageRequest
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxPromptRequestBytes)
-	if err := c.ShouldBindJSON(&body); err != nil || (strings.TrimSpace(body.Text) == "" && len(body.Images) == 0) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "message must include text or an image"})
-		return messageRequest{}, nil, false
-	}
-	body.Text = strings.TrimSpace(body.Text)
-	images, err := decodePromptImages(body.Images)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return messageRequest{}, nil, false
-	}
-	return body, images, true
-}
-
-func decodePromptImages(input []promptImage) ([]llm.ImageContent, error) {
-	if len(input) > maxPromptImages {
-		return nil, fmt.Errorf("a prompt can include at most %d images", maxPromptImages)
-	}
-	allowed := map[string]bool{
-		"image/gif":  true,
-		"image/jpeg": true,
-		"image/png":  true,
-		"image/webp": true,
-	}
-	images := make([]llm.ImageContent, 0, len(input))
-	total := 0
-	for _, image := range input {
-		mimeType := strings.ToLower(strings.TrimSpace(image.MIMEType))
-		if !allowed[mimeType] {
-			return nil, fmt.Errorf("unsupported image type %q", image.MIMEType)
-		}
-		decoded, err := base64.StdEncoding.DecodeString(image.Data)
-		if err != nil || len(decoded) == 0 {
-			return nil, errors.New("image data is not valid base64")
-		}
-		if len(decoded) > maxPromptImageBytes {
-			return nil, fmt.Errorf("each image must be %d MB or smaller", maxPromptImageBytes>>20)
-		}
-		total += len(decoded)
-		if total > maxPromptImagesBytes {
-			return nil, fmt.Errorf("images must total %d MB or less", maxPromptImagesBytes>>20)
-		}
-		images = append(images, llm.ImageContent{Data: image.Data, MIMEType: mimeType})
-	}
-	return images, nil
-}
 
 // handleConfirm resolves a pending permission request.
 func (s *Server) handleConfirm(c *gin.Context) {
