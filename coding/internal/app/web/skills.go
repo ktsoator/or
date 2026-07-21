@@ -2,9 +2,6 @@ package web
 
 import (
 	"net/http"
-	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -34,26 +31,12 @@ type skillDetailDTO struct {
 	Content string `json:"content"`
 }
 
-// skillRoots resolves the two discovery roots for a request: the user root
-// (~/.or/skills) always, and the project root (<workspace>/.or/skills) when a
-// workspace is given.
-func skillRoots(workspace string) (userDir, projectDir string) {
-	if home, err := os.UserHomeDir(); err == nil {
-		userDir = filepath.Join(home, ".or", "skills")
-	}
-	if ws := strings.TrimSpace(workspace); ws != "" {
-		projectDir = filepath.Join(ws, ".or", "skills")
-	}
-	return userDir, projectDir
-}
-
 // handleSkills lists the skills visible to a workspace: system-level skills from
 // ~/.or/skills always, and project-level skills from <workspace>/.or/skills when
 // a workspace query parameter is supplied. A project skill overrides a
 // system skill of the same name, so it appears once, under its effective source.
 func (s *Server) handleSkills(c *gin.Context) {
-	userDir, projectDir := skillRoots(c.Query("workspace"))
-	reg, diags := skill.Load(skill.LoadOptions{UserDir: userDir, ProjectDir: projectDir})
+	reg, diags := skill.LoadFor(c.Query("workspace"))
 
 	user := make([]skillDTO, 0)
 	project := make([]skillDTO, 0)
@@ -84,8 +67,7 @@ func (s *Server) handleSkills(c *gin.Context) {
 // skill (a project skill overrides a system skill of the same name).
 func (s *Server) handleSkillContent(c *gin.Context) {
 	name := c.Param("name")
-	userDir, projectDir := skillRoots(c.Query("workspace"))
-	reg, _ := skill.Load(skill.LoadOptions{UserDir: userDir, ProjectDir: projectDir})
+	reg, _ := skill.LoadFor(c.Query("workspace"))
 
 	sk, ok := reg.Lookup(name)
 	if !ok {

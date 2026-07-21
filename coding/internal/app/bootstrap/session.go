@@ -5,8 +5,6 @@ package bootstrap
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/ktsoator/or/coding"
@@ -44,15 +42,7 @@ func NewSession(ctx context.Context, cfg config.Config, deps Dependencies) (*cod
 // the same name. Diagnostics for malformed skills are ignored here so a bad
 // skill file never blocks session start; the rest still load.
 func loadSkills(cwd string) []skill.Skill {
-	var userDir string
-	if home, err := os.UserHomeDir(); err == nil {
-		userDir = filepath.Join(home, ".or", "skills")
-	}
-	var projectDir string
-	if strings.TrimSpace(cwd) != "" {
-		projectDir = filepath.Join(cwd, ".or", "skills")
-	}
-	reg, _ := skill.Load(skill.LoadOptions{UserDir: userDir, ProjectDir: projectDir})
+	reg, _ := skill.LoadFor(cwd)
 	return reg.List()
 }
 

@@ -10,6 +10,36 @@ import (
 // skillFile is the required filename inside each skill directory.
 const skillFile = "SKILL.md"
 
+// skillsDir is the conventional location of a skills root, relative to the
+// user's home directory and to a workspace.
+var skillsDir = []string{".or", "skills"}
+
+// Roots returns the two roots skills are discovered from: the user-level root
+// that applies everywhere, and the workspace root that overrides it. Either is
+// empty when it does not apply — no home directory, or no workspace given —
+// which Load treats as "skip that root".
+//
+// The convention lives here, with the loader that consumes it, so an agent
+// assembling its skills and a UI listing them can never disagree about where
+// skills come from.
+func Roots(workspace string) (userDir, projectDir string) {
+	if home, err := os.UserHomeDir(); err == nil {
+		userDir = filepath.Join(append([]string{home}, skillsDir...)...)
+	}
+	if ws := strings.TrimSpace(workspace); ws != "" {
+		projectDir = filepath.Join(append([]string{ws}, skillsDir...)...)
+	}
+	return userDir, projectDir
+}
+
+// LoadFor discovers the skills visible to one workspace, using Roots.
+// Diagnostics are returned for a caller that surfaces them; an agent that only
+// needs the usable skills can ignore them.
+func LoadFor(workspace string) (*Registry, []Diagnostic) {
+	userDir, projectDir := Roots(workspace)
+	return Load(LoadOptions{UserDir: userDir, ProjectDir: projectDir})
+}
+
 // LoadOptions names the two roots skills are discovered from. Either may be
 // empty to skip that root. Both should be absolute paths to a skills directory,
 // e.g. ~/.or/skills and <workspace>/.or/skills.
