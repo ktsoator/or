@@ -1,6 +1,6 @@
-// Package bootstrap is the composition root shared by the coding product
-// adapters. It constructs one consistently configured coding.Session while the
-// CLI and Web packages provide only their transport-specific dependencies.
+// Package bootstrap is the composition root for the coding product. It holds
+// the one place a coding.Session is assembled, so the session manager passes
+// only its transport-specific dependencies and never repeats the wiring.
 package bootstrap
 
 import (
@@ -16,13 +16,12 @@ import (
 	"github.com/ktsoator/or/coding/store"
 )
 
-// Dependencies are adapter-specific inputs needed to assemble a session.
+// Dependencies are the caller-supplied inputs needed to assemble a session.
 type Dependencies struct {
 	Confirm policy.Confirm
 }
 
-// NewSession builds the product's standard coding session. Keeping this wiring
-// in one place prevents CLI and Web behavior from drifting apart.
+// NewSession builds the product's standard coding session.
 func NewSession(ctx context.Context, cfg config.Config, deps Dependencies) (*coding.Session, error) {
 	model, err := cfg.ResolveModel()
 	if err != nil {

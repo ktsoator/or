@@ -1,8 +1,7 @@
-// Package web exposes an HTTP API for a coding session. It consumes the same
-// coding.Session the terminal shell uses, streams run events over Server-Sent
-// Events, and accepts prompts and permission answers over POST requests. The
-// coding core and independently deployed React application do not depend on one
-// another.
+// Package web exposes the HTTP API for coding sessions. It streams run events
+// over Server-Sent Events and accepts prompts and permission answers over POST
+// requests. The coding core and the independently deployed React application do
+// not depend on one another.
 package web
 
 import (

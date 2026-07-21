@@ -10,9 +10,8 @@ import (
 	"github.com/ktsoator/or/coding/policy"
 )
 
-// ConfirmBroker implements policy.Confirm for the HTTP API. Where the terminal
-// reads a y/N synchronously, this pushes a confirm_request to the browser over
-// SSE and blocks the calling (tool-preparation) goroutine on a channel until a
+// ConfirmBroker implements policy.Confirm for the HTTP API. It pushes a
+// confirm_request to the browser over SSE and blocks the calling (tool-preparation) goroutine on a channel until a
 // matching POST /api/confirm arrives.
 type ConfirmBroker struct {
 	hub    *Hub

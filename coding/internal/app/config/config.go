@@ -13,14 +13,6 @@ import (
 	"github.com/ktsoator/or/llm"
 )
 
-// Mode selects the product adapter used for one process.
-type Mode string
-
-const (
-	ModeCLI Mode = "cli"
-	ModeWeb Mode = "web"
-)
-
 // Config is the resolved settings for one coding product process.
 type Config struct {
 	// Provider, Model, and ThinkingLevel are populated from persisted application
@@ -28,18 +20,16 @@ type Config struct {
 	Provider      string
 	Model         string
 	ThinkingLevel string
-	// Cwd is the default workspace root. In Web mode it is only the initial
-	// directory-browser location. Every created session carries an explicit
-	// project folder or manager-owned scratch workspace.
+	// Cwd is only the initial directory-browser location. Every created session
+	// carries an explicit project folder or manager-owned scratch workspace.
 	Cwd string
-	// DataDir stores Web session indexes and transcripts independently from any
+	// DataDir stores session indexes and transcripts independently from any
 	// project workspace.
 	DataDir string
-	// SessionFile is where the transcript is persisted.
+	// SessionFile is where one session's transcript is persisted. It is not a
+	// process-wide setting: the session manager assigns it per conversation.
 	SessionFile string
-	// Mode selects the terminal or HTTP API product adapter.
-	Mode Mode
-	// Addr is the Web listen address when Mode is ModeWeb.
+	// Addr is the API listen address.
 	Addr string
 	// FrontendOrigin is the optional browser origin allowed to call the API
 	// directly when the React application is deployed separately.
@@ -58,8 +48,6 @@ func Defaults() Config {
 		ThinkingLevel:  "medium",
 		Cwd:            envOr("OR_CWD", ""),
 		DataDir:        envOr("OR_DATA_DIR", ""),
-		SessionFile:    "",
-		Mode:           ModeCLI,
 		Addr:           "localhost:8787",
 		FrontendOrigin: envOr("OR_WEB_ORIGIN", ""),
 	}
@@ -71,18 +59,13 @@ func Parse(args []string) (Config, error) {
 	cfg := Defaults()
 	flags := flag.NewFlagSet("coding", flag.ContinueOnError)
 
-	flags.StringVar(&cfg.Cwd, "cwd", cfg.Cwd, "default workspace (optional in Web mode)")
-	flags.StringVar(&cfg.DataDir, "data-dir", cfg.DataDir, "coding data directory (Web default: ~/.or/coding)")
-	flags.StringVar(&cfg.SessionFile, "session", cfg.SessionFile, "session transcript file (CLI default: <data-dir>/session.jsonl)")
-	flags.StringVar(&cfg.Addr, "addr", cfg.Addr, "web API listen address (with -web)")
+	flags.StringVar(&cfg.Cwd, "cwd", cfg.Cwd, "initial directory-browser location")
+	flags.StringVar(&cfg.DataDir, "data-dir", cfg.DataDir, "coding data directory (default: ~/.or/coding)")
+	flags.StringVar(&cfg.Addr, "addr", cfg.Addr, "API listen address")
 	flags.StringVar(&cfg.FrontendOrigin, "web-origin", cfg.FrontendOrigin, "allowed front-end origin for cross-origin API access")
-	webUI := flags.Bool("web", false, "serve the HTTP API instead of the terminal REPL")
 
 	if err := flags.Parse(args); err != nil {
 		return Config{}, err
-	}
-	if *webUI {
-		cfg.Mode = ModeWeb
 	}
 	if err := cfg.Resolve(); err != nil {
 		return Config{}, err
@@ -93,24 +76,19 @@ func Parse(args []string) (Config, error) {
 // IsHelp reports whether Parse stopped after printing flag help.
 func IsHelp(err error) bool { return errors.Is(err, flag.ErrHelp) }
 
-// Resolve finalizes derived fields. CLI mode keeps its current-directory
-// workspace and local .coding data. Web mode instead starts directory browsing
-// from the user's home directory and stores state under ~/.or/coding, so the
-// server is not bound to whichever project launched it.
+// Resolve finalizes derived fields. Directory browsing starts from the user's
+// home directory and state lives under ~/.or/coding, so the server is not bound
+// to whichever project launched it.
 func (c *Config) Resolve() error {
 	if !validThinkingLevel(c.ThinkingLevel) {
 		return fmt.Errorf("invalid thinking level %q", c.ThinkingLevel)
 	}
 	if strings.TrimSpace(c.Cwd) == "" {
-		var err error
-		if c.Mode == ModeWeb {
-			c.Cwd, err = os.UserHomeDir()
-		} else {
-			c.Cwd, err = os.Getwd()
-		}
+		home, err := os.UserHomeDir()
 		if err != nil {
 			return fmt.Errorf("resolve default workspace: %w", err)
 		}
+		c.Cwd = home
 	}
 	abs, err := filepath.Abs(c.Cwd)
 	if err != nil {
@@ -118,35 +96,18 @@ func (c *Config) Resolve() error {
 	}
 	c.Cwd = abs
 
-	if c.SessionFile != "" {
-		sessionFile, err := filepath.Abs(c.SessionFile)
-		if err != nil {
-			return err
-		}
-		c.SessionFile = sessionFile
-	}
 	if strings.TrimSpace(c.DataDir) == "" {
-		switch {
-		case c.SessionFile != "":
-			c.DataDir = filepath.Dir(c.SessionFile)
-		case c.Mode == ModeWeb:
-			homeDir, err := os.UserHomeDir()
-			if err != nil {
-				return fmt.Errorf("resolve Web data directory: %w", err)
-			}
-			c.DataDir = filepath.Join(homeDir, ".or", "coding")
-		default:
-			c.DataDir = filepath.Join(c.Cwd, ".coding")
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("resolve data directory: %w", err)
 		}
+		c.DataDir = filepath.Join(home, ".or", "coding")
 	}
 	dataDir, err := filepath.Abs(c.DataDir)
 	if err != nil {
 		return err
 	}
 	c.DataDir = dataDir
-	if c.SessionFile == "" {
-		c.SessionFile = filepath.Join(c.DataDir, "session.jsonl")
-	}
 	return nil
 }
 
