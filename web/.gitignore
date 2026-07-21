@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# bun.lock is the lockfile of record; keep a stray npm or pnpm install from
+# committing a second, divergent one.
+package-lock.json
+pnpm-lock.yaml
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
