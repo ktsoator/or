@@ -45,6 +45,10 @@ type wireEvent struct {
 	// confirm_request
 	ID      string `json:"id,omitempty"`
 	Summary string `json:"summary,omitempty"`
+	// title_update
+	Title       string `json:"title,omitempty"`
+	AITitle     string `json:"aiTitle,omitempty"`
+	CustomTitle string `json:"customTitle,omitempty"`
 }
 
 type wireImage struct {

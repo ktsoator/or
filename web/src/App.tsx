@@ -103,6 +103,7 @@ export default function App() {
     startDraft,
     updateDraftWorkspace,
     deleteSession,
+    renameSession,
     selectSession,
     updateSettings,
     send,
@@ -334,6 +335,11 @@ export default function App() {
     setPinnedSessionIDs((current) =>
       current.includes(id) ? current.filter((sessionID) => sessionID !== id) : [...current, id],
     )
+  }
+
+  // Rejections propagate so the inline editor stays open with the typed text.
+  const handleRename = async (id: string, customTitle: string) => {
+    await renameSession(id, customTitle)
   }
 
   const confirmDelete = async () => {
@@ -587,6 +593,7 @@ export default function App() {
                     onSelect={() => chooseSession(session.id)}
                     onTogglePin={() => togglePinnedSession(session.id)}
                     onDelete={() => requestDelete(session)}
+                    onRename={(title) => handleRename(session.id, title)}
                   />
                 ))
               )}
@@ -623,6 +630,7 @@ export default function App() {
                   pinnedSessionIDs={pinnedSessionIDSet}
                   onTogglePinnedSession={togglePinnedSession}
                   onDeleteSession={requestDelete}
+                  onRenameSession={handleRename}
                   onRemoveWorkspace={requestRemoveWorkspace}
                 />
               ))}
@@ -832,6 +840,7 @@ function WorkspaceSessions({
   pinnedSessionIDs,
   onTogglePinnedSession,
   onDeleteSession,
+  onRenameSession,
   onRemoveWorkspace,
 }: {
   path: string
@@ -844,6 +853,7 @@ function WorkspaceSessions({
   pinnedSessionIDs: Set<string>
   onTogglePinnedSession: (id: string) => void
   onDeleteSession: (session: SessionSummary) => void
+  onRenameSession: (id: string, customTitle: string) => Promise<void>
   onRemoveWorkspace: (path: string, name: string) => void
 }) {
   const { t } = useI18n()
@@ -963,6 +973,7 @@ function WorkspaceSessions({
                 onSelect={() => onSelectSession(session.id)}
                 onTogglePin={() => onTogglePinnedSession(session.id)}
                 onDelete={() => onDeleteSession(session)}
+                onRename={(title) => onRenameSession(session.id, title)}
                 indented
               />
             ))
@@ -980,6 +991,7 @@ function SessionRow({
   onSelect,
   onTogglePin,
   onDelete,
+  onRename,
   indented = false,
 }: {
   session: SessionSummary
@@ -988,11 +1000,64 @@ function SessionRow({
   onSelect: () => void
   onTogglePin: () => void
   onDelete: () => void
+  onRename: (customTitle: string) => Promise<void>
   indented?: boolean
 }) {
   const { t } = useI18n()
   const title = session.title === 'New session' ? t('app.newSession') : session.title
   const [menuOpen, setMenuOpen] = useState(false)
+  const [draftTitle, setDraftTitle] = useState<string | undefined>(undefined)
+  const editing = draftTitle !== undefined
+  // Enter commits and then blurs the input; the guard keeps that from sending a
+  // second PATCH for the same edit.
+  const committing = useRef(false)
+  // Rename swaps this row for the editor, so the menu must not restore focus to
+  // its (now unmounted) trigger and pull it back off the input.
+  const openingEditor = useRef(false)
+
+  const commitRename = async () => {
+    if (committing.current) return
+    committing.current = true
+    try {
+      const next = (draftTitle ?? '').trim()
+      if (next !== '' && next !== title) await onRename(next)
+      setDraftTitle(undefined)
+    } catch {
+      // Keep the editor open with the typed text so the rename can be retried.
+    } finally {
+      committing.current = false
+    }
+  }
+
+  if (editing) {
+    return (
+      <div className="group/session relative">
+        <input
+          className={cn(
+            'h-8 w-full rounded-[10px] bg-white pr-2.5 text-[0.875rem] font-normal leading-5 text-stone-950 outline-2 outline-stone-400',
+            indented ? 'pl-[2.375rem]' : 'pl-2.5',
+          )}
+          ref={(node) => node?.select()}
+          type="text"
+          maxLength={120}
+          aria-label={t('app.renameNamedSession', { title })}
+          value={draftTitle}
+          onChange={(event) => setDraftTitle(event.target.value)}
+          onBlur={() => void commitRename()}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              void commitRename()
+            } else if (event.key === 'Escape') {
+              event.preventDefault()
+              setDraftTitle(undefined)
+            }
+          }}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="group/session relative">
       <button
@@ -1066,12 +1131,23 @@ function SessionRow({
               sideOffset={6}
               collisionPadding={10}
               className="z-[120] min-w-[11.75rem] animate-[fade-in_100ms_ease-out] rounded-[14px] border border-stone-200 bg-white p-1 text-[0.84375rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+              onCloseAutoFocus={(event) => {
+                if (!openingEditor.current) return
+                openingEditor.current = false
+                event.preventDefault()
+              }}
             >
               <DropdownMenu.Item className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)]">
                 <Share2 className="size-4 text-stone-600" aria-hidden="true" />
                 <span>{t('app.shareSession')}</span>
               </DropdownMenu.Item>
-              <DropdownMenu.Item className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)]">
+              <DropdownMenu.Item
+                className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)]"
+                onSelect={() => {
+                  openingEditor.current = true
+                  setDraftTitle(title)
+                }}
+              >
                 <PencilLine className="size-4 text-stone-600" aria-hidden="true" />
                 <span>{t('app.renameSession')}</span>
               </DropdownMenu.Item>
