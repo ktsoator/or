@@ -90,57 +90,6 @@ func projectContextUsage(usage coding.ContextUsage) wireContextUsage {
 	}
 }
 
-// projectSessionEvent maps a session state change to the HTTP wire protocol.
-// It is the counterpart to ProjectEvent: that one projects events coming up
-// from the agent, this one projects events the session layer raises itself.
-func projectSessionEvent(event sessionEvent) ([]byte, bool) {
-	var out wireEvent
-	switch e := event.(type) {
-	case messageAccepted:
-		out = wireEvent{
-			Type:     "user_message",
-			ID:       e.ID,
-			Text:     e.Text,
-			Images:   projectImages(e.Images),
-			Delivery: string(e.Delivery),
-			Queued:   e.Queued,
-		}
-	case messageDequeued:
-		out = wireEvent{Type: "queue_removed", ID: e.ID}
-	case messageCancelled:
-		out = wireEvent{Type: "queue_cancelled", ID: e.ID}
-	case titleChanged:
-		out = wireEvent{
-			Type:        "title_update",
-			Title:       e.Title,
-			AITitle:     e.AITitle,
-			CustomTitle: e.CustomTitle,
-		}
-	default:
-		return nil, false
-	}
-	data, err := json.Marshal(out)
-	return data, err == nil
-}
-
-// projectQueue maps the queue snapshot the history endpoint returns.
-func projectQueue(events []sessionEvent) []wireEvent {
-	out := make([]wireEvent, 0, len(events))
-	for _, event := range events {
-		if accepted, ok := event.(messageAccepted); ok {
-			out = append(out, wireEvent{
-				Type:     "user_message",
-				ID:       accepted.ID,
-				Text:     accepted.Text,
-				Images:   projectImages(accepted.Images),
-				Delivery: string(accepted.Delivery),
-				Queued:   accepted.Queued,
-			})
-		}
-	}
-	return out
-}
-
 // ProjectEvent maps a UI-neutral coding event to the HTTP wire protocol.
 func ProjectEvent(ev coding.Event) ([]byte, bool) {
 	var out wireEvent

@@ -1,4 +1,4 @@
-package web
+package session
 
 import (
 	"context"
@@ -25,29 +25,29 @@ import (
 )
 
 const (
-	defaultSessionTitle  = "New session"
-	maxTitleRunes        = 120
-	sessionScopeChat     = "chat"
-	sessionScopeProject  = "project"
-	workspaceKindScratch = "scratch"
-	workspaceKindFolder  = "folder"
+	defaultTitle  = "New session"
+	MaxTitleRunes = 120
+	ScopeChat     = "chat"
+	ScopeProject  = "project"
+	KindScratch   = "scratch"
+	KindFolder    = "folder"
 )
 
 // ErrSessionActive prevents deleting a conversation while its run or approval
 // gate still owns live resources.
-var ErrSessionActive = errors.New("web: session is running or waiting for approval")
+var ErrSessionActive = errors.New("session: session is running or waiting for approval")
 
 // ErrImagesUnsupported rejects image attachments before a run is reserved
 // when the session's selected model accepts text only.
-var ErrImagesUnsupported = errors.New("web: selected model does not support images")
+var ErrImagesUnsupported = errors.New("session: selected model does not support images")
 
 // ErrInvalidSessionScope reports a create request that is neither a standalone
 // chat nor a project-backed conversation.
-var ErrInvalidSessionScope = errors.New("web: invalid session scope")
+var ErrInvalidSessionScope = errors.New("session: invalid session scope")
 
-// SessionSummary is the browser-facing metadata for one independent coding
+// Summary is the browser-facing metadata for one independent coding
 // conversation. Runtime-only state is sampled when the list is requested.
-type SessionSummary struct {
+type Summary struct {
 	ID            string                 `json:"id"`
 	Title         string                 `json:"title"`
 	AITitle       string                 `json:"aiTitle,omitempty"`
@@ -66,7 +66,7 @@ type SessionSummary struct {
 	ThinkingLevel llm.ModelThinkingLevel `json:"thinkingLevel"`
 }
 
-type sessionRecord struct {
+type record struct {
 	ID            string    `json:"id"`
 	Title         string    `json:"title"`
 	AITitle       string    `json:"aiTitle,omitempty"`
@@ -83,64 +83,68 @@ type sessionRecord struct {
 	Thinking      string    `json:"thinkingLevel,omitempty"`
 }
 
-type sessionRuntime struct {
-	record  sessionRecord
-	session *coding.Session
-	hub     *Hub
-	broker  *ConfirmBroker
-	running atomic.Bool
+type Runtime struct {
+	record    record
+	session   *coding.Session
+	transport Transport
+	running   atomic.Bool
 
 	pendingMu sync.Mutex
-	pending   []queuedMessage
+	pending   []QueuedMessage
 
 	// titleGenerating is held only while an attempt is in flight, so a failed
 	// attempt is retried on the next completed response.
 	titleGenerating atomic.Bool
 }
 
-type queuedDelivery string
+type Delivery string
 
 const (
-	deliverySteer    queuedDelivery = "steer"
-	deliveryFollowUp queuedDelivery = "followup"
+	DeliverySteer    Delivery = "steer"
+	DeliveryFollowUp Delivery = "followup"
 )
 
-// SessionManager owns web sessions across registered workspaces. Metadata is
+// Manager owns web sessions across registered workspaces. Metadata is
 // kept in indexes while every transcript and details sidecar remains separate.
 // Lock ordering: mu is always taken before the workspace registry's own lock.
 // The registry never calls back into this package, so that ordering holds
 // simply by never taking mu inside a registry call.
-type SessionManager struct {
+type Manager struct {
 	ctx        context.Context
 	cfg        config.Config
 	indexPath  string
 	scratch    *workspace.Scratch
 	workspaces *workspace.Registry
+	// newTransport builds each session's link to its viewers. The delivery
+	// layer supplies it, so this package never names a transport type.
+	newTransport NewTransport
 
 	mu       sync.RWMutex
-	sessions map[string]*sessionRuntime
+	sessions map[string]*Runtime
 	usage    *usage.Store
 }
 
-// NewSessionManager restores the session index. The ledger and registry are
+// NewManager restores the session index. The ledger and registry are
 // passed in rather than built here because the API layer serves them directly
 // too; routing those reads through the manager only made it a facade for
 // stores it does not own.
-func NewSessionManager(
+func NewManager(
 	ctx context.Context,
 	cfg config.Config,
 	ledger *usage.Store,
 	workspaces *workspace.Registry,
-) (*SessionManager, error) {
+	newTransport NewTransport,
+) (*Manager, error) {
 	dir := filepath.Join(cfg.DataDir, "sessions")
-	m := &SessionManager{
-		ctx:        ctx,
-		cfg:        cfg,
-		indexPath:  filepath.Join(dir, "index.json"),
-		scratch:    workspace.NewScratch(cfg.DataDir),
-		workspaces: workspaces,
-		sessions:   make(map[string]*sessionRuntime),
-		usage:      ledger,
+	m := &Manager{
+		ctx:          ctx,
+		cfg:          cfg,
+		indexPath:    filepath.Join(dir, "index.json"),
+		scratch:      workspace.NewScratch(cfg.DataDir),
+		workspaces:   workspaces,
+		newTransport: newTransport,
+		sessions:     make(map[string]*Runtime),
+		usage:        ledger,
 	}
 
 	records, err := m.loadRecords()
@@ -150,11 +154,11 @@ func NewSessionManager(
 	for _, record := range records {
 		runtime, err := m.build(record)
 		if err != nil {
-			return nil, fmt.Errorf("web: restore session %s: %w", record.ID, err)
+			return nil, fmt.Errorf("session: restore session %s: %w", record.ID, err)
 		}
 		m.sessions[record.ID] = runtime
 		if err := m.usage.Backfill(record.ID, runtime.session.Messages()); err != nil {
-			return nil, fmt.Errorf("web: backfill usage for session %s: %w", record.ID, err)
+			return nil, fmt.Errorf("session: backfill usage for session %s: %w", record.ID, err)
 		}
 	}
 	if err := m.saveLocked(); err != nil {
@@ -163,42 +167,41 @@ func NewSessionManager(
 	return m, nil
 }
 
-func (m *SessionManager) loadRecords() ([]sessionRecord, error) {
+func (m *Manager) loadRecords() ([]record, error) {
 	data, err := os.ReadFile(m.indexPath)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("web: read session index: %w", err)
+		return nil, fmt.Errorf("session: read session index: %w", err)
 	}
-	var records []sessionRecord
+	var records []record
 	if err := json.Unmarshal(data, &records); err != nil {
-		return nil, fmt.Errorf("web: decode session index: %w", err)
+		return nil, fmt.Errorf("session: decode session index: %w", err)
 	}
 	return records, nil
 }
 
-func (m *SessionManager) build(record sessionRecord) (*sessionRuntime, error) {
-	hub := NewHub()
-	broker := NewConfirmBroker(hub)
+func (m *Manager) build(record record) (*Runtime, error) {
+	transport := m.newTransport(record.ID)
 	cfg := m.cfg
-	if record.Scope != sessionScopeChat && record.Scope != sessionScopeProject {
-		return nil, fmt.Errorf("web: invalid session scope %q", record.Scope)
+	if record.Scope != ScopeChat && record.Scope != ScopeProject {
+		return nil, fmt.Errorf("session: invalid session scope %q", record.Scope)
 	}
-	if record.WorkspaceKind != workspaceKindScratch && record.WorkspaceKind != workspaceKindFolder {
-		return nil, fmt.Errorf("web: invalid workspace kind %q", record.WorkspaceKind)
+	if record.WorkspaceKind != KindScratch && record.WorkspaceKind != KindFolder {
+		return nil, fmt.Errorf("session: invalid workspace kind %q", record.WorkspaceKind)
 	}
-	if record.Scope == sessionScopeChat && record.WorkspaceKind != workspaceKindScratch {
-		return nil, fmt.Errorf("web: chat session requires a scratch workspace")
+	if record.Scope == ScopeChat && record.WorkspaceKind != KindScratch {
+		return nil, fmt.Errorf("session: chat session requires a scratch workspace")
 	}
-	if record.Scope == sessionScopeProject && record.WorkspaceKind != workspaceKindFolder {
-		return nil, fmt.Errorf("web: project session requires a folder workspace")
+	if record.Scope == ScopeProject && record.WorkspaceKind != KindFolder {
+		return nil, fmt.Errorf("session: project session requires a folder workspace")
 	}
 	workspacePath, err := workspace.Clean(record.WorkspacePath)
 	if err != nil {
 		return nil, err
 	}
-	if record.WorkspaceKind == workspaceKindScratch {
+	if record.WorkspaceKind == KindScratch {
 		workspacePath, err = m.scratch.Validate(workspacePath)
 		if err != nil {
 			return nil, err
@@ -228,11 +231,11 @@ func (m *SessionManager) build(record sessionRecord) (*sessionRuntime, error) {
 	record.Provider = model.Provider
 	record.Model = model.ID
 	record.Thinking = string(thinking)
-	session, err := bootstrap.NewSession(m.ctx, cfg, bootstrap.Dependencies{Confirm: broker.Confirm})
+	session, err := bootstrap.NewSession(m.ctx, cfg, bootstrap.Dependencies{Confirm: transport.Confirm})
 	if err != nil {
 		return nil, err
 	}
-	runtime := &sessionRuntime{record: record, session: session, hub: hub, broker: broker}
+	runtime := &Runtime{record: record, session: session, transport: transport}
 	session.Subscribe(func(ev coding.Event) {
 		if ev.Type == coding.MessageCompleted {
 			// Usage accounting must not interrupt a successful model run. The
@@ -246,7 +249,7 @@ func (m *SessionManager) build(record sessionRecord) (*sessionRuntime, error) {
 		}
 		if ev.Type == coding.UserMessageCompleted {
 			if queued, found := runtime.consumePending(ev.Text, ev.Images); found {
-				runtime.emit(messageAccepted{
+				runtime.emit(MessageAccepted{
 					ID:       queued.ID,
 					Text:     ev.Text,
 					Images:   ev.Images,
@@ -272,53 +275,53 @@ func (m *SessionManager) build(record sessionRecord) (*sessionRuntime, error) {
 // Create adds an empty, independently persisted conversation. Chat sessions
 // receive an isolated, manager-owned workspace; project sessions use the
 // caller-selected folder and never fall back to the process working directory.
-func (m *SessionManager) Create(
+func (m *Manager) Create(
 	title, workspacePath, scope string,
 	model llm.Model,
 	thinking llm.ModelThinkingLevel,
-) (SessionSummary, error) {
+) (Summary, error) {
 	startedAt := time.Now()
 	now := startedAt.UTC()
 	title = strings.TrimSpace(title)
 	autoTitle := title == ""
 	if autoTitle {
-		title = defaultSessionTitle
+		title = defaultTitle
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	id := newSessionID()
+	id := NewID()
 	for m.sessions[id] != nil {
-		id = newSessionID()
+		id = NewID()
 	}
 
 	workspaceAdded := false
 	workspaceCreated := false
 	workspaceKind := ""
 	switch scope {
-	case sessionScopeChat:
+	case ScopeChat:
 		if strings.TrimSpace(workspacePath) != "" {
-			return SessionSummary{}, fmt.Errorf("%w: chat workspace is managed by the server", workspace.ErrInvalid)
+			return Summary{}, fmt.Errorf("%w: chat workspace is managed by the server", workspace.ErrInvalid)
 		}
 		var err error
 		workspacePath, err = m.scratch.Create(id, startedAt)
 		if err != nil {
-			return SessionSummary{}, err
+			return Summary{}, err
 		}
 		workspaceCreated = true
-		workspaceKind = workspaceKindScratch
-	case sessionScopeProject:
+		workspaceKind = KindScratch
+	case ScopeProject:
 		var err error
 		workspacePath, err = workspace.Validate(workspacePath)
 		if err != nil {
-			return SessionSummary{}, err
+			return Summary{}, err
 		}
 		_, workspaceAdded = m.workspaces.Ensure(workspacePath, now)
-		workspaceKind = workspaceKindFolder
+		workspaceKind = KindFolder
 	default:
-		return SessionSummary{}, fmt.Errorf("%w: %q", ErrInvalidSessionScope, scope)
+		return Summary{}, fmt.Errorf("%w: %q", ErrInvalidSessionScope, scope)
 	}
 
-	record := sessionRecord{
+	record := record{
 		ID:            id,
 		Title:         title,
 		WorkspacePath: workspacePath,
@@ -337,7 +340,7 @@ func (m *SessionManager) Create(
 		if workspaceCreated {
 			_ = m.scratch.Remove(workspacePath)
 		}
-		return SessionSummary{}, err
+		return Summary{}, err
 	}
 	m.sessions[id] = runtime
 	if err := m.saveLocked(); err != nil {
@@ -348,7 +351,7 @@ func (m *SessionManager) Create(
 		if workspaceCreated {
 			_ = m.scratch.Remove(workspacePath)
 		}
-		return SessionSummary{}, err
+		return Summary{}, err
 	}
 	return runtime.summary(), nil
 }
@@ -356,14 +359,14 @@ func (m *SessionManager) Create(
 // Delete permanently removes one idle conversation and its persisted files.
 // Files are staged under temporary names before the index is changed, so an
 // index write failure can restore the conversation without data loss.
-func (m *SessionManager) Delete(id string) error {
+func (m *Manager) Delete(id string) error {
 	m.mu.Lock()
 	runtime, ok := m.sessions[id]
 	if !ok {
 		m.mu.Unlock()
 		return os.ErrNotExist
 	}
-	if runtime.running.Load() || runtime.broker.HasPending() {
+	if runtime.running.Load() || runtime.transport.HasPendingApproval() {
 		m.mu.Unlock()
 		return ErrSessionActive
 	}
@@ -398,13 +401,13 @@ func (m *SessionManager) Delete(id string) error {
 	// the session, so a failed index write above leaves the directory intact.
 	// Folder workspaces belong to the user and are never touched; Scratch.Remove
 	// re-proves the path is managed storage before it recurses.
-	if runtime.record.WorkspaceKind == workspaceKindScratch {
+	if runtime.record.WorkspaceKind == KindScratch {
 		_ = m.scratch.Remove(runtime.record.WorkspacePath)
 	}
 	return nil
 }
 
-func (m *SessionManager) Get(id string) (*sessionRuntime, bool) {
+func (m *Manager) Get(id string) (*Runtime, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	runtime, ok := m.sessions[id]
@@ -415,7 +418,7 @@ func (m *SessionManager) Get(id string) (*sessionRuntime, bool) {
 // provider. Keeping the active provider visible lets an installation manage
 // its existing sessions even when credentials are supplied outside the
 // process environment (for example by an upstream proxy).
-func (m *SessionManager) UsesProvider(provider string) bool {
+func (m *Manager) UsesProvider(provider string) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	for _, runtime := range m.sessions {
@@ -427,10 +430,10 @@ func (m *SessionManager) UsesProvider(provider string) bool {
 }
 
 // List returns newest-active first and samples each session's live state.
-func (m *SessionManager) List() []SessionSummary {
+func (m *Manager) List() []Summary {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	out := make([]SessionSummary, 0, len(m.sessions))
+	out := make([]Summary, 0, len(m.sessions))
 	for _, runtime := range m.sessions {
 		out = append(out, runtime.summary())
 	}
@@ -445,19 +448,19 @@ func (m *SessionManager) List() []SessionSummary {
 
 // UpdateSettings changes the model and reasoning effort used by the session's
 // next prompt and persists the choice with that conversation.
-func (m *SessionManager) UpdateSettings(
+func (m *Manager) UpdateSettings(
 	id string,
 	model llm.Model,
 	thinking llm.ModelThinkingLevel,
-) (SessionSummary, error) {
+) (Summary, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	runtime, ok := m.sessions[id]
 	if !ok {
-		return SessionSummary{}, os.ErrNotExist
+		return Summary{}, os.ErrNotExist
 	}
-	if runtime.running.Load() || runtime.broker.HasPending() {
-		return SessionSummary{}, ErrSessionActive
+	if runtime.running.Load() || runtime.transport.HasPendingApproval() {
+		return Summary{}, ErrSessionActive
 	}
 
 	previousRecord := runtime.record
@@ -474,20 +477,20 @@ func (m *SessionManager) UpdateSettings(
 		runtime.record = previousRecord
 		runtime.session.SetModel(previousModel)
 		runtime.session.SetThinkingLevel(previousThinking)
-		return SessionSummary{}, err
+		return Summary{}, err
 	}
 	return runtime.summary(), nil
 }
 
 // Rename sets a user-defined custom title on the session. An empty title clears
 // the custom title so the display falls back to the AI or prompt-derived title.
-func (m *SessionManager) Rename(id, customTitle string) (SessionSummary, error) {
+func (m *Manager) Rename(id, customTitle string) (Summary, error) {
 	customTitle = clampTitle(customTitle)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	runtime, ok := m.sessions[id]
 	if !ok {
-		return SessionSummary{}, os.ErrNotExist
+		return Summary{}, os.ErrNotExist
 	}
 
 	previousCustomTitle := runtime.record.CustomTitle
@@ -495,14 +498,14 @@ func (m *SessionManager) Rename(id, customTitle string) (SessionSummary, error) 
 	runtime.record.UpdatedAt = time.Now().UTC()
 	if err := m.saveLocked(); err != nil {
 		runtime.record.CustomTitle = previousCustomTitle
-		return SessionSummary{}, err
+		return Summary{}, err
 	}
 	runtime.broadcastTitle()
 	return runtime.summary(), nil
 }
 
 // BeginPrompt reserves a session run and updates its durable title/activity.
-func (m *SessionManager) BeginPrompt(id, prompt string, hasImages bool) (*sessionRuntime, error) {
+func (m *Manager) BeginPrompt(id, prompt string, hasImages bool) (*Runtime, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	runtime, ok := m.sessions[id]
@@ -541,7 +544,7 @@ func (m *SessionManager) BeginPrompt(id, prompt string, hasImages bool) (*sessio
 // EndRun clears live activity and records when the session last finished. The
 // timestamp lets clients reject an older in-flight list response after an
 // optimistic prompt update.
-func (m *SessionManager) EndRun(id string) {
+func (m *Manager) EndRun(id string) {
 	m.mu.Lock()
 	runtime, ok := m.sessions[id]
 	if !ok {
@@ -556,44 +559,44 @@ func (m *SessionManager) EndRun(id string) {
 	cancelled := runtime.cancelPending()
 	runtime.session.ClearQueuedMessages()
 	for _, message := range cancelled {
-		runtime.emit(messageCancelled{ID: message.ID})
+		runtime.emit(MessageCancelled{ID: message.ID})
 	}
 }
 
-func (m *SessionManager) saveLocked() error {
+func (m *Manager) saveLocked() error {
 	// Both indexes move together: a session that registered a new workspace must
 	// not be persisted while that workspace is missing from the sidebar.
 	if err := m.workspaces.Save(); err != nil {
 		return err
 	}
-	records := make([]sessionRecord, 0, len(m.sessions))
+	records := make([]record, 0, len(m.sessions))
 	for _, runtime := range m.sessions {
 		records = append(records, runtime.record)
 	}
 	sort.Slice(records, func(i, j int) bool { return records[i].CreatedAt.Before(records[j].CreatedAt) })
 	data, err := json.MarshalIndent(records, "", "  ")
 	if err != nil {
-		return fmt.Errorf("web: encode session index: %w", err)
+		return fmt.Errorf("session: encode session index: %w", err)
 	}
 	if err := os.MkdirAll(filepath.Dir(m.indexPath), 0o755); err != nil {
-		return fmt.Errorf("web: create session directory: %w", err)
+		return fmt.Errorf("session: create session directory: %w", err)
 	}
 	tmp := m.indexPath + ".tmp"
 	if err := os.WriteFile(tmp, append(data, '\n'), 0o644); err != nil {
-		return fmt.Errorf("web: write session index: %w", err)
+		return fmt.Errorf("session: write session index: %w", err)
 	}
 	if err := os.Rename(tmp, m.indexPath); err != nil {
-		return fmt.Errorf("web: replace session index: %w", err)
+		return fmt.Errorf("session: replace session index: %w", err)
 	}
 	return nil
 }
 
-func (s *sessionRuntime) summary() SessionSummary {
+func (s *Runtime) summary() Summary {
 	modelName := s.record.Model
 	if model, ok := llm.LookupModel(s.record.Provider, s.record.Model); ok && model.Name != "" {
 		modelName = model.Name
 	}
-	return SessionSummary{
+	return Summary{
 		ID:            s.record.ID,
 		Title:         s.displayTitle(),
 		AITitle:       s.record.AITitle,
@@ -605,7 +608,7 @@ func (s *sessionRuntime) summary() SessionSummary {
 		CreatedAt:     s.record.CreatedAt,
 		UpdatedAt:     s.record.UpdatedAt,
 		Running:       s.running.Load(),
-		HasApproval:   s.broker.HasPending(),
+		HasApproval:   s.transport.HasPendingApproval(),
 		ModelProvider: s.record.Provider,
 		ModelID:       s.record.Model,
 		ModelName:     modelName,
@@ -613,10 +616,21 @@ func (s *sessionRuntime) summary() SessionSummary {
 	}
 }
 
-func newSessionID() string {
+// NewID returns an identifier for a session or a queued message.
+func NewID() string {
 	var raw [8]byte
 	if _, err := rand.Read(raw[:]); err == nil {
 		return hex.EncodeToString(raw[:])
 	}
 	return fmt.Sprintf("%x", time.Now().UnixNano())
 }
+
+// Session exposes the underlying conversation for callers that drive a turn or
+// read its transcript. The Runtime owns its lifecycle; callers only use it.
+func (s *Runtime) Session() *coding.Session { return s.session }
+
+// Running reports whether a turn is in flight.
+func (s *Runtime) Running() bool { return s.running.Load() }
+
+// HasPendingApproval reports a permission gate still waiting on an answer.
+func (s *Runtime) HasPendingApproval() bool { return s.transport.HasPendingApproval() }

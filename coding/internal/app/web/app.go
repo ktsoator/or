@@ -8,6 +8,7 @@ import (
 
 	"github.com/ktsoator/or/coding/internal/app/config"
 	"github.com/ktsoator/or/coding/internal/app/providerconfig"
+	"github.com/ktsoator/or/coding/internal/app/session"
 	"github.com/ktsoator/or/coding/internal/app/usage"
 	"github.com/ktsoator/or/coding/internal/app/workspace"
 	"github.com/ktsoator/or/llm"
@@ -28,7 +29,9 @@ func Run(ctx context.Context, cfg config.Config) error {
 	if err != nil {
 		return err
 	}
-	manager, err := NewSessionManager(ctx, cfg, ledger, workspaces)
+	manager, err := session.NewManager(ctx, cfg, ledger, workspaces, func(string) session.Transport {
+		return newSessionTransport()
+	})
 	if err != nil {
 		return err
 	}

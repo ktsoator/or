@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/ktsoator/or/coding/internal/app/providerconfig"
+	"github.com/ktsoator/or/coding/internal/app/session"
 	"github.com/ktsoator/or/coding/internal/app/usage"
 	"github.com/ktsoator/or/coding/internal/app/workspace"
 	"github.com/ktsoator/or/llm"
@@ -24,7 +25,7 @@ func init() {
 // for the store they need and never through another component to find it.
 type Server struct {
 	ctx            context.Context
-	sessions       *SessionManager
+	sessions       *session.Manager
 	ledger         *usage.Store
 	workspaces     *workspace.Registry
 	registry       *llm.ProviderRegistry

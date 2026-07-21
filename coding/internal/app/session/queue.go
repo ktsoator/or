@@ -1,4 +1,4 @@
-package web
+package session
 
 import (
 	"github.com/ktsoator/or/coding"
@@ -6,30 +6,30 @@ import (
 )
 
 // Messages a user sends while a run is already in flight are queued rather than
-// dropped. The queue is guarded by sessionRuntime.pendingMu and is independent
-// of the manager lock, so nothing here may reach for SessionManager.mu.
+// dropped. The queue is guarded by Runtime.pendingMu and is independent
+// of the manager lock, so nothing here may reach for Manager.mu.
 
-type queuedMessage struct {
+type QueuedMessage struct {
 	ID       string
-	Delivery queuedDelivery
+	Delivery Delivery
 	Text     string
 	Images   []llm.ImageContent
 	Handle   coding.QueueHandle
 }
 
-func (s *sessionRuntime) queuePending(message queuedMessage) bool {
+func (s *Runtime) Queue(message QueuedMessage) bool {
 	s.pendingMu.Lock()
 	defer s.pendingMu.Unlock()
 	if !s.running.Load() {
 		return false
 	}
-	if message.Delivery == deliverySteer {
+	if message.Delivery == DeliverySteer {
 		message.Handle = s.session.Steer(message.Text, message.Images...)
 	} else {
 		message.Handle = s.session.FollowUp(message.Text, message.Images...)
 	}
 	s.pending = append(s.pending, message)
-	s.emit(messageAccepted{
+	s.emit(MessageAccepted{
 		ID:       message.ID,
 		Text:     message.Text,
 		Images:   message.Images,
@@ -39,7 +39,7 @@ func (s *sessionRuntime) queuePending(message queuedMessage) bool {
 	return true
 }
 
-func (s *sessionRuntime) removePending(id string) (found, removed bool) {
+func (s *Runtime) Dequeue(id string) (found, removed bool) {
 	s.pendingMu.Lock()
 	defer s.pendingMu.Unlock()
 	for index, message := range s.pending {
@@ -50,13 +50,13 @@ func (s *sessionRuntime) removePending(id string) (found, removed bool) {
 			return true, false
 		}
 		s.pending = append(s.pending[:index], s.pending[index+1:]...)
-		s.emit(messageDequeued{ID: id})
+		s.emit(MessageDequeued{ID: id})
 		return true, true
 	}
 	return false, false
 }
 
-func (s *sessionRuntime) consumePending(text string, images []llm.ImageContent) (queuedMessage, bool) {
+func (s *Runtime) consumePending(text string, images []llm.ImageContent) (QueuedMessage, bool) {
 	s.pendingMu.Lock()
 	defer s.pendingMu.Unlock()
 	for index, message := range s.pending {
@@ -66,16 +66,16 @@ func (s *sessionRuntime) consumePending(text string, images []llm.ImageContent) 
 		s.pending = append(s.pending[:index], s.pending[index+1:]...)
 		return message, true
 	}
-	return queuedMessage{}, false
+	return QueuedMessage{}, false
 }
 
 // pendingEvents replays the queue for a client that just connected.
-func (s *sessionRuntime) pendingEvents() []sessionEvent {
+func (s *Runtime) PendingEvents() []Event {
 	s.pendingMu.Lock()
 	defer s.pendingMu.Unlock()
-	events := make([]sessionEvent, 0, len(s.pending))
+	events := make([]Event, 0, len(s.pending))
 	for _, message := range s.pending {
-		events = append(events, messageAccepted{
+		events = append(events, MessageAccepted{
 			ID:       message.ID,
 			Text:     message.Text,
 			Images:   message.Images,
@@ -86,10 +86,10 @@ func (s *sessionRuntime) pendingEvents() []sessionEvent {
 	return events
 }
 
-func (s *sessionRuntime) cancelPending() []queuedMessage {
+func (s *Runtime) cancelPending() []QueuedMessage {
 	s.pendingMu.Lock()
 	defer s.pendingMu.Unlock()
-	cancelled := append([]queuedMessage(nil), s.pending...)
+	cancelled := append([]QueuedMessage(nil), s.pending...)
 	s.pending = nil
 	return cancelled
 }

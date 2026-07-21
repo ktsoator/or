@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ktsoator/or/coding"
+	"github.com/ktsoator/or/coding/internal/app/session"
 	"github.com/ktsoator/or/coding/internal/app/workspace"
 	"github.com/ktsoator/or/llm"
 )
@@ -54,7 +55,7 @@ func (s *Server) handleSessionSettings(c *gin.Context) {
 	switch {
 	case errors.Is(err, os.ErrNotExist):
 		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
-	case errors.Is(err, ErrSessionActive):
+	case errors.Is(err, session.ErrSessionActive):
 		c.JSON(http.StatusConflict, gin.H{"error": "wait for the session to become idle before changing settings"})
 	case err != nil:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -74,9 +75,9 @@ func (s *Server) handleRenameSession(c *gin.Context) {
 	// An empty title is meaningful: it clears the custom title so the session
 	// falls back to its AI or prompt-derived name.
 	title := strings.TrimSpace(body.CustomTitle)
-	if utf8.RuneCountInString(title) > maxTitleRunes {
+	if utf8.RuneCountInString(title) > session.MaxTitleRunes {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": fmt.Sprintf("title must be %d characters or fewer", maxTitleRunes),
+			"error": fmt.Sprintf("title must be %d characters or fewer", session.MaxTitleRunes),
 		})
 		return
 	}
@@ -97,7 +98,7 @@ func (s *Server) handleDeleteSession(c *gin.Context) {
 	switch {
 	case errors.Is(err, os.ErrNotExist):
 		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
-	case errors.Is(err, ErrSessionActive):
+	case errors.Is(err, session.ErrSessionActive):
 		c.JSON(http.StatusConflict, gin.H{"error": "stop or resolve the session before deleting it"})
 	case err != nil:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -141,7 +142,7 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 		return
 	}
 	summary, err := s.sessions.Create(body.Title, body.WorkspacePath, body.Scope, model, thinking)
-	if errors.Is(err, workspace.ErrInvalid) || errors.Is(err, ErrInvalidSessionScope) {
+	if errors.Is(err, workspace.ErrInvalid) || errors.Is(err, session.ErrInvalidSessionScope) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -152,7 +153,7 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 	c.JSON(http.StatusCreated, summary)
 }
 
-func (s *Server) runtime(c *gin.Context) (*sessionRuntime, bool) {
+func (s *Server) runtime(c *gin.Context) (*session.Runtime, bool) {
 	runtime, ok := s.sessions.Get(c.Param("sessionID"))
 	if !ok {
 		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
@@ -169,13 +170,13 @@ func (s *Server) handleHistory(c *gin.Context) {
 		return
 	}
 	c.Header("Cache-Control", "no-store")
-	events := ProjectHistory(runtime.session.History())
-	events = append(events, runtime.broker.PendingEvents()...)
+	events := ProjectHistory(runtime.Session().History())
+	events = append(events, transportOf(runtime).broker.PendingEvents()...)
 	c.JSON(http.StatusOK, gin.H{
 		"events":  events,
-		"queue":   projectQueue(runtime.pendingEvents()),
-		"context": projectContextUsage(runtime.session.ContextUsage()),
-		"running": runtime.running.Load(),
+		"queue":   projectQueue(runtime.PendingEvents()),
+		"context": projectContextUsage(runtime.Session().ContextUsage()),
+		"running": runtime.Running(),
 	})
 }
 
@@ -191,8 +192,8 @@ func (s *Server) handleEvents(c *gin.Context) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	ch := runtime.hub.add()
-	defer runtime.hub.remove(ch)
+	ch := transportOf(runtime).hub.add()
+	defer transportOf(runtime).hub.remove(ch)
 
 	// Send a comment immediately so development and production proxies forward
 	// the response headers instead of buffering an otherwise empty stream.
@@ -233,7 +234,7 @@ func (s *Server) handlePrompt(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		return
 	}
-	if errors.Is(err, ErrImagesUnsupported) {
+	if errors.Is(err, session.ErrImagesUnsupported) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -244,23 +245,23 @@ func (s *Server) handlePrompt(c *gin.Context) {
 	runtime = reserved
 	go func() {
 		defer s.sessions.EndRun(sessionID)
-		if err := runtime.session.Prompt(s.ctx, body.Text, images...); err != nil && !errors.Is(err, context.Canceled) {
+		if err := runtime.Session().Prompt(s.ctx, body.Text, images...); err != nil && !errors.Is(err, context.Canceled) {
 			payload, _ := json.Marshal(wireEvent{Type: "error", Text: err.Error()})
-			runtime.hub.Broadcast(payload)
+			transportOf(runtime).send(payload)
 		}
 	}()
 	c.Status(http.StatusAccepted)
 }
 
 func (s *Server) handleSteer(c *gin.Context) {
-	s.handleQueuedMessage(c, deliverySteer)
+	s.handleQueuedMessage(c, session.DeliverySteer)
 }
 
 func (s *Server) handleFollowUp(c *gin.Context) {
-	s.handleQueuedMessage(c, deliveryFollowUp)
+	s.handleQueuedMessage(c, session.DeliveryFollowUp)
 }
 
-func (s *Server) handleQueuedMessage(c *gin.Context, delivery queuedDelivery) {
+func (s *Server) handleQueuedMessage(c *gin.Context, delivery session.Delivery) {
 	runtime, ok := s.runtime(c)
 	if !ok {
 		return
@@ -269,29 +270,29 @@ func (s *Server) handleQueuedMessage(c *gin.Context, delivery queuedDelivery) {
 	if !ok {
 		return
 	}
-	if runtime.broker.HasPending() {
+	if runtime.HasPendingApproval() {
 		c.JSON(http.StatusConflict, gin.H{"error": "resolve the pending approval before queuing a message"})
 		return
 	}
-	if len(images) > 0 && !slices.Contains(runtime.session.Snapshot().Model.Input, llm.Image) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": ErrImagesUnsupported.Error()})
+	if len(images) > 0 && !slices.Contains(runtime.Session().Snapshot().Model.Input, llm.Image) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": session.ErrImagesUnsupported.Error()})
 		return
 	}
 	id := strings.TrimSpace(body.ID)
 	if id == "" {
-		id = newSessionID()
+		id = session.NewID()
 	}
 	if len(id) > 128 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "message id is too long"})
 		return
 	}
-	message := queuedMessage{
+	message := session.QueuedMessage{
 		ID:       id,
 		Delivery: delivery,
 		Text:     body.Text,
 		Images:   images,
 	}
-	if !runtime.queuePending(message) {
+	if !runtime.Queue(message) {
 		c.JSON(http.StatusConflict, gin.H{"error": "the session is no longer running"})
 		return
 	}
@@ -308,7 +309,7 @@ func (s *Server) handleRemoveQueuedMessage(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "message id is required"})
 		return
 	}
-	found, removed := runtime.removePending(id)
+	found, removed := runtime.Dequeue(id)
 	if !found {
 		c.JSON(http.StatusNotFound, gin.H{"error": "queued message not found"})
 		return
@@ -334,7 +335,7 @@ func (s *Server) handleConfirm(c *gin.Context) {
 		c.Status(http.StatusBadRequest)
 		return
 	}
-	if !runtime.broker.Resolve(body.ID, body.Allow) {
+	if !transportOf(runtime).broker.Resolve(body.ID, body.Allow) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "approval request not found"})
 		return
 	}
@@ -347,7 +348,7 @@ func (s *Server) handleAbort(c *gin.Context) {
 	if !ok {
 		return
 	}
-	runtime.session.Abort()
+	runtime.Session().Abort()
 	c.Status(http.StatusNoContent)
 }
 

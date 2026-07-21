@@ -1,4 +1,4 @@
-package web
+package session
 
 import (
 	"errors"
@@ -17,7 +17,7 @@ type stagedFile struct {
 	staged   string
 }
 
-func (m *SessionManager) sessionFiles(record sessionRecord) ([]string, error) {
+func (m *Manager) sessionFiles(record record) ([]string, error) {
 	transcript, err := filepath.Abs(record.Transcript)
 	if err != nil {
 		return nil, err
@@ -27,7 +27,7 @@ func (m *SessionManager) sessionFiles(record sessionRecord) ([]string, error) {
 		return nil, err
 	}
 	if filepath.Dir(transcript) != sessionDir {
-		return nil, fmt.Errorf("web: refusing to delete transcript outside session storage: %s", transcript)
+		return nil, fmt.Errorf("session: refusing to delete transcript outside session storage: %s", transcript)
 	}
 	details := strings.TrimSuffix(transcript, ".jsonl") + ".details.jsonl"
 	return []string{transcript, details}, nil
@@ -42,7 +42,7 @@ func stageFiles(paths []string) ([]stagedFile, error) {
 			restoreFiles(staged)
 			return nil, err
 		}
-		tombstone := path + ".deleted-" + newSessionID()
+		tombstone := path + ".deleted-" + NewID()
 		if err := os.Rename(path, tombstone); err != nil {
 			restoreFiles(staged)
 			return nil, err

@@ -1,4 +1,4 @@
-package web
+package session
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 func titleFromPrompt(prompt string) string {
 	title := strings.Join(strings.Fields(prompt), " ")
 	if title == "" {
-		return defaultSessionTitle
+		return defaultTitle
 	}
 	const maxRunes = 42
 	if utf8.RuneCountInString(title) <= maxRunes {
@@ -29,20 +29,20 @@ func titleFromPrompt(prompt string) string {
 	return strings.TrimSpace(string(runes[:maxRunes])) + "…"
 }
 
-// clampTitle trims a title and caps it at maxTitleRunes so a long model or
+// clampTitle trims a title and caps it at MaxTitleRunes so a long model or
 // client-supplied string cannot bloat the session store.
 func clampTitle(title string) string {
 	title = strings.TrimSpace(title)
-	if utf8.RuneCountInString(title) <= maxTitleRunes {
+	if utf8.RuneCountInString(title) <= MaxTitleRunes {
 		return title
 	}
 	runes := []rune(title)
-	return strings.TrimSpace(string(runes[:maxTitleRunes]))
+	return strings.TrimSpace(string(runes[:MaxTitleRunes]))
 }
 
 // displayTitle returns the best available title for this session. Callers must
-// hold SessionManager.mu.
-func (s *sessionRuntime) displayTitle() string {
+// hold Manager.mu.
+func (s *Runtime) displayTitle() string {
 	if s.record.CustomTitle != "" {
 		return s.record.CustomTitle
 	}
@@ -53,9 +53,9 @@ func (s *sessionRuntime) displayTitle() string {
 }
 
 // broadcastTitle sends the current title to connected clients. Callers must hold
-// SessionManager.mu; emit never blocks, so holding it is cheap.
-func (s *sessionRuntime) broadcastTitle() {
-	s.emit(titleChanged{
+// Manager.mu; emit never blocks, so holding it is cheap.
+func (s *Runtime) broadcastTitle() {
+	s.emit(TitleChanged{
 		Title:       s.displayTitle(),
 		AITitle:     s.record.AITitle,
 		CustomTitle: s.record.CustomTitle,
@@ -69,7 +69,7 @@ func (s *sessionRuntime) broadcastTitle() {
 // because a model error or an unparseable reply should not cost the session its
 // title for the lifetime of the process. Runs on the session's event goroutine,
 // so it must not block on the model call.
-func (m *SessionManager) maybeGenerateTitle(runtime *sessionRuntime) {
+func (m *Manager) maybeGenerateTitle(runtime *Runtime) {
 	m.mu.Lock()
 	needsTitle := runtime.record.CustomTitle == "" && runtime.record.AITitle == ""
 	provider, model := runtime.record.Provider, runtime.record.Model
@@ -87,7 +87,7 @@ func (m *SessionManager) maybeGenerateTitle(runtime *sessionRuntime) {
 // generateSessionTitle asks the model for a concise session title derived from
 // the first user message and stores it as the session's AI title. Failures are
 // silent: the session keeps its prompt-derived title.
-func (m *SessionManager) generateSessionTitle(ctx context.Context, runtime *sessionRuntime, provider, modelID string) {
+func (m *Manager) generateSessionTitle(ctx context.Context, runtime *Runtime, provider, modelID string) {
 	// Find the first user message with text content.
 	history := runtime.session.History()
 	var firstPrompt string
@@ -166,7 +166,7 @@ func parseTitleJSON(text string) string {
 	// Bare title: a single short line with no JSON in sight. Anything longer or
 	// multi-line is prose, not a title, so it is discarded.
 	line := strings.TrimSpace(text)
-	if strings.ContainsAny(line, "{}\n\r") || utf8.RuneCountInString(line) > maxTitleRunes {
+	if strings.ContainsAny(line, "{}\n\r") || utf8.RuneCountInString(line) > MaxTitleRunes {
 		return ""
 	}
 	return strings.Trim(line, `"'`)
