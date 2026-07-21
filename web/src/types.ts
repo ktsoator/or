@@ -284,6 +284,13 @@ export type ContextUsage = {
   measured: boolean
 }
 
+export type CompactionResult = {
+  summary: string
+  firstKeptEntryId: string
+  tokensBefore: number
+  tokensAfter: number
+}
+
 export type HistoryResponse = {
   events: WireEvent[]
   queue?: WireEvent[]

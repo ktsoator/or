@@ -22,13 +22,16 @@ type ContextUsage struct {
 // model currently selected by the Session.
 func (s *Session) ContextUsage() ContextUsage {
 	state := s.agent.Snapshot()
+	s.transcriptMu.RLock()
+	usageStart := s.usageStart
+	s.transcriptMu.RUnlock()
 	result := ContextUsage{
 		Provider:      state.Model.Provider,
 		Model:         state.Model.ID,
 		ContextWindow: state.Model.ContextWindow,
 	}
 
-	for index := len(state.Messages) - 1; index >= 0; index-- {
+	for index := len(state.Messages) - 1; index >= usageStart; index-- {
 		message, ok := agent.ToLLM(state.Messages[index])
 		if !ok {
 			continue

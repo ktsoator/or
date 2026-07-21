@@ -20,6 +20,7 @@ const (
 	ToolStarted          EventType = "tool_started"
 	ToolFinished         EventType = "tool_finished"
 	MessageCompleted     EventType = "message_completed"
+	CompactionCompleted  EventType = "compaction_completed"
 	RunCompleted         EventType = "run_completed"
 )
 

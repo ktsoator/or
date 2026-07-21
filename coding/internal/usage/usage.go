@@ -20,6 +20,7 @@ import (
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding"
+	"github.com/ktsoator/or/coding/transcript"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -114,7 +115,7 @@ func NewStore(path string) (*Store, error) {
 // RecordEvent persists one live MessageCompleted event. Empty usage records
 // are ignored because some providers emit terminal metadata without billing.
 func (s *Store) RecordEvent(sessionID string, event coding.Event) error {
-	if event.Type != coding.MessageCompleted || !present(event.Usage) {
+	if (event.Type != coding.MessageCompleted && event.Type != coding.CompactionCompleted) || !present(event.Usage) {
 		return nil
 	}
 	return s.append(Event{
@@ -129,6 +130,45 @@ func (s *Store) RecordEvent(sessionID string, event coding.Event) error {
 	})
 }
 
+// BackfillEntries restores usage for both ordinary assistant responses and the
+// direct model requests used to create compaction checkpoints.
+func (s *Store) BackfillEntries(sessionID string, entries []transcript.Entry) error {
+	for _, entry := range entries {
+		switch entry.Type {
+		case transcript.MessageEntry:
+			message, ok := agent.ToLLM(entry.Message)
+			if !ok {
+				continue
+			}
+			assistant, ok := message.(*llm.AssistantMessage)
+			if !ok || assistant == nil || !present(assistant.Usage) {
+				continue
+			}
+			if err := s.appendAssistant(sessionID, assistant); err != nil {
+				return err
+			}
+		case transcript.CompactionEntry:
+			compact := entry.Compaction
+			if compact == nil || !present(compact.Usage) {
+				continue
+			}
+			timestamp := compact.ResponseTimestamp
+			if timestamp.IsZero() {
+				timestamp = entry.Timestamp
+			}
+			if err := s.append(Event{
+				ID:        eventID(sessionID, compact.Provider, compact.Model, compact.ResponseID, timestamp, compact.Usage),
+				SessionID: sessionID, Provider: compact.Provider, Model: compact.Model,
+				ResponseModel: compact.ResponseModel, ResponseID: compact.ResponseID,
+				Timestamp: normalizedTime(timestamp), Usage: compact.Usage,
+			}); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // Backfill adds provider responses already present in a restored transcript.
 // Stable event IDs make the operation safe to run on every startup.
 func (s *Store) Backfill(sessionID string, messages []agent.AgentMessage) error {
@@ -141,21 +181,25 @@ func (s *Store) Backfill(sessionID string, messages []agent.AgentMessage) error 
 		if !ok || assistant == nil || !present(assistant.Usage) {
 			continue
 		}
-		timestamp := time.UnixMilli(assistant.Timestamp).UTC()
-		if err := s.append(Event{
-			ID:            eventID(sessionID, assistant.Provider, assistant.Model, assistant.ResponseID, timestamp, assistant.Usage),
-			SessionID:     sessionID,
-			Provider:      assistant.Provider,
-			Model:         assistant.Model,
-			ResponseModel: assistant.ResponseModel,
-			ResponseID:    assistant.ResponseID,
-			Timestamp:     normalizedTime(timestamp),
-			Usage:         assistant.Usage,
-		}); err != nil {
+		if err := s.appendAssistant(sessionID, assistant); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (s *Store) appendAssistant(sessionID string, assistant *llm.AssistantMessage) error {
+	timestamp := time.UnixMilli(assistant.Timestamp).UTC()
+	return s.append(Event{
+		ID:            eventID(sessionID, assistant.Provider, assistant.Model, assistant.ResponseID, timestamp, assistant.Usage),
+		SessionID:     sessionID,
+		Provider:      assistant.Provider,
+		Model:         assistant.Model,
+		ResponseModel: assistant.ResponseModel,
+		ResponseID:    assistant.ResponseID,
+		Timestamp:     normalizedTime(timestamp),
+		Usage:         assistant.Usage,
+	})
 }
 
 func (s *Store) append(event Event) error {

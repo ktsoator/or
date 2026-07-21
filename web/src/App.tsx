@@ -95,6 +95,7 @@ export default function App() {
     loading,
     creating,
     updatingSettings,
+    compacting,
     status,
     models,
     refreshModels,
@@ -106,6 +107,7 @@ export default function App() {
     renameSession,
     selectSession,
     updateSettings,
+    compactContext,
     send,
     removeQueuedMessage,
     stop,
@@ -406,6 +408,7 @@ export default function App() {
       modelID={draft?.modelID ?? activeSession?.modelId}
       thinkingLevel={draft?.thinkingLevel ?? activeSession?.thinkingLevel}
       updatingSettings={updatingSettings}
+      compacting={compacting}
       onSend={send}
       onRemoveQueued={removeQueuedMessage}
       onStop={stop}
@@ -422,6 +425,7 @@ export default function App() {
         setSettingsOpen(true)
       }}
       onSettingsChange={updateSettings}
+      onCompact={draft ? undefined : compactContext}
     />
   )
 

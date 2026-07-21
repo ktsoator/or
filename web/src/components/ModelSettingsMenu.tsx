@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Check, ChevronDown, ChevronRight } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, LoaderCircle, Minimize2 } from 'lucide-react'
 import { DropdownMenu } from 'radix-ui'
 import type { ContextUsage, ModelOption, ThinkingLevel } from '@/types'
 import { cn } from '@/lib/utils'
@@ -14,7 +14,9 @@ export function ModelSettingsMenu({
   thinkingLevel,
   contextUsage,
   disabled,
+  compacting,
   onChange,
+  onCompact,
 }: {
   models: ModelOption[]
   modelProvider?: string
@@ -22,11 +24,13 @@ export function ModelSettingsMenu({
   thinkingLevel?: ThinkingLevel
   contextUsage?: ContextUsage
   disabled: boolean
+  compacting: boolean
   onChange: (
     provider: string,
     model: string,
     thinkingLevel: ThinkingLevel,
   ) => Promise<void>
+  onCompact?: () => void
 }) {
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
@@ -238,6 +242,23 @@ export function ModelSettingsMenu({
 
           <DropdownMenu.Separator className="mx-2 my-1 h-px bg-stone-100" />
           <ContextMeter usage={currentContextUsage} contextWindow={contextWindow} />
+          {onCompact && (
+            <>
+              <DropdownMenu.Separator className="mx-2 my-1 h-px bg-stone-100" />
+              <DropdownMenu.Item
+                className="flex h-9 cursor-default select-none items-center gap-2.5 rounded-[10px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)] data-[disabled]:opacity-40"
+                disabled={compacting}
+                onSelect={onCompact}
+              >
+                {compacting ? (
+                  <LoaderCircle className="size-4 animate-spin text-stone-500" aria-hidden="true" />
+                ) : (
+                  <Minimize2 className="size-4 text-stone-600" aria-hidden="true" />
+                )}
+                <span>{compacting ? t('model.compacting') : t('model.compact')}</span>
+              </DropdownMenu.Item>
+            </>
+          )}
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>

@@ -156,7 +156,7 @@ func NewManager(
 			return nil, fmt.Errorf("session: restore session %s: %w", record.ID, err)
 		}
 		m.sessions[record.ID] = runtime
-		if err := m.usage.Backfill(record.ID, runtime.session.Messages()); err != nil {
+		if err := m.usage.BackfillEntries(record.ID, runtime.session.Entries()); err != nil {
 			return nil, fmt.Errorf("session: backfill usage for session %s: %w", record.ID, err)
 		}
 	}
@@ -236,11 +236,13 @@ func (m *Manager) build(record record) (*Runtime, error) {
 	}
 	runtime := &Runtime{record: record, session: session, transport: transport}
 	session.Subscribe(func(ev coding.Event) {
-		if ev.Type == coding.MessageCompleted {
+		if ev.Type == coding.MessageCompleted || ev.Type == coding.CompactionCompleted {
 			// Usage accounting must not interrupt a successful model run. The
 			// transcript remains available for idempotent startup backfill if an
 			// append fails transiently.
 			_ = m.usage.RecordEvent(record.ID, ev)
+		}
+		if ev.Type == coding.MessageCompleted {
 			// After the first final response, generate an AI title in the background.
 			if ev.FinalResponse {
 				m.maybeGenerateTitle(runtime)
@@ -537,6 +539,29 @@ func (m *Manager) BeginPrompt(id, prompt string, hasImages bool) (*Runtime, erro
 	}
 	// Broadcast title change so the frontend updates immediately.
 	runtime.broadcastTitle()
+	return runtime, nil
+}
+
+// BeginCompact reserves an idle session for a manual context compaction. It
+// does not alter the visible title or transcript; the coding Session commits
+// the compaction boundary only after summary generation succeeds.
+func (m *Manager) BeginCompact(id string) (*Runtime, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	runtime, ok := m.sessions[id]
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+	if runtime.transport.HasPendingApproval() || !runtime.running.CompareAndSwap(false, true) {
+		return nil, ErrSessionActive
+	}
+	previous := runtime.record.UpdatedAt
+	runtime.record.UpdatedAt = time.Now().UTC()
+	if err := m.saveLocked(); err != nil {
+		runtime.record.UpdatedAt = previous
+		runtime.running.Store(false)
+		return nil, err
+	}
 	return runtime, nil
 }
 

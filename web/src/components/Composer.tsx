@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUp, Check, ChevronDown, LoaderCircle, Plus, Square, X } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, Info, LoaderCircle, Plus, Square, X } from 'lucide-react'
 import { DropdownMenu } from 'radix-ui'
+import { isAPIError } from '@/api'
 import type {
   ConfirmItem,
   ContextUsage,
@@ -33,6 +34,7 @@ export function Composer({
   modelID,
   thinkingLevel,
   updatingSettings,
+  compacting,
   onSend,
   onRemoveQueued,
   onStop,
@@ -41,6 +43,7 @@ export function Composer({
   onBrowseProjects,
   onConfigureModel,
   onSettingsChange,
+  onCompact,
 }: {
   connected: boolean
   running: boolean
@@ -56,6 +59,7 @@ export function Composer({
   modelID?: string
   thinkingLevel?: ThinkingLevel
   updatingSettings: boolean
+  compacting: boolean
   onSend: (text: string, images: MessageImage[], delivery?: DeliveryMode) => void
   onRemoveQueued: (id: string) => Promise<void>
   onStop: () => void
@@ -68,19 +72,23 @@ export function Composer({
     model: string,
     thinkingLevel: ThinkingLevel,
   ) => Promise<void>
+  onCompact?: () => Promise<unknown>
 }) {
   const { t } = useI18n()
   const ref = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const composingRef = useRef(false)
+  const compactFeedbackTimerRef = useRef<number | undefined>(undefined)
   const [settingsError, setSettingsError] = useState('')
   const [attachmentError, setAttachmentError] = useState('')
   const [queueError, setQueueError] = useState('')
+  const [compactFeedback, setCompactFeedback] = useState<CompactFeedback>()
   const [images, setImages] = useState<PendingImage[]>([])
   const [delivery, setDelivery] = useState<DeliveryMode>('steer')
   const awaitingApproval = Boolean(confirmation)
   const modelConfigured = Boolean(modelProvider && modelID && thinkingLevel)
-  const inputDisabled = awaitingApproval || !connected || updatingSettings || !modelConfigured
+  const inputDisabled =
+    awaitingApproval || !connected || updatingSettings || compacting || !modelConfigured
   const settingsDisabled = running || inputDisabled
   const supportsImages = Boolean(
     models.find((model) => model.provider === modelProvider && model.id === modelID)
@@ -108,6 +116,15 @@ export function Composer({
   useEffect(() => {
     if (supportsImages) setAttachmentError('')
   }, [supportsImages])
+
+  useEffect(
+    () => () => {
+      if (compactFeedbackTimerRef.current !== undefined) {
+        window.clearTimeout(compactFeedbackTimerRef.current)
+      }
+    },
+    [],
+  )
 
   const submit = () => {
     const el = ref.current
@@ -183,6 +200,38 @@ export function Composer({
     }
   }
 
+  const compactContext = async () => {
+    if (!onCompact) return
+    dismissCompactFeedback()
+    try {
+      await onCompact()
+    } catch (error) {
+      showCompactFeedback({
+        kind: isAPIError(error, 'nothing_to_compact') ? 'notice' : 'error',
+        message: isAPIError(error, 'nothing_to_compact')
+          ? t('model.nothingToCompact')
+          : t('model.compactFailed'),
+      })
+    }
+  }
+
+  const dismissCompactFeedback = () => {
+    if (compactFeedbackTimerRef.current !== undefined) {
+      window.clearTimeout(compactFeedbackTimerRef.current)
+      compactFeedbackTimerRef.current = undefined
+    }
+    setCompactFeedback(undefined)
+  }
+
+  const showCompactFeedback = (feedback: CompactFeedback) => {
+    dismissCompactFeedback()
+    setCompactFeedback(feedback)
+    compactFeedbackTimerRef.current = window.setTimeout(() => {
+      compactFeedbackTimerRef.current = undefined
+      setCompactFeedback(undefined)
+    }, 4000)
+  }
+
   return (
     <footer
       className={cn(
@@ -192,7 +241,7 @@ export function Composer({
           : 'shrink-0 bg-white px-3 pt-3 pb-4 md:px-8 max-md:pt-2',
       )}
     >
-      <div className="mx-auto flex w-full max-w-[56rem] flex-col gap-2">
+      <div className="relative mx-auto flex w-full max-w-[56rem] flex-col gap-2">
         {confirmation && <Approval key={confirmation.id} item={confirmation} onResolve={onResolve} />}
         {queuedMessages.length > 0 && (
           <PendingQueue messages={queuedMessages} onRemove={(id) => void removeQueued(id)} />
@@ -283,8 +332,10 @@ export function Composer({
                 placeholder={
                   awaitingApproval
                     ? t('composer.resolveApprovalPlaceholder')
-                    : updatingSettings
-                      ? t('composer.updatingSettings')
+                    : compacting
+                      ? t('composer.compactingContext')
+                      : updatingSettings
+                        ? t('composer.updatingSettings')
                     : !modelConfigured
                       ? t('composer.configureModelPlaceholder')
                     : connected
@@ -329,6 +380,8 @@ export function Composer({
                   contextUsage={contextUsage}
                   disabled={settingsDisabled}
                   onChange={changeSettings}
+                  compacting={compacting}
+                  onCompact={onCompact ? compactContext : undefined}
                 />
               ) : (
                 <button
@@ -399,6 +452,35 @@ export function Composer({
             </div>
           </div>
         </div>
+        {compactFeedback && (
+          <div
+            className={cn(
+              'absolute right-2 bottom-[calc(100%+0.625rem)] z-50 flex max-w-[calc(100vw-2rem)] animate-[fade-in_140ms_ease-out] items-center gap-2 border px-2.5 py-2 text-[0.8125rem] leading-5 shadow-[0_12px_32px_-18px_rgba(28,25,23,0.45)]',
+              compactFeedback.kind === 'notice'
+                ? 'rounded-lg border-stone-200 bg-white text-stone-700'
+                : 'rounded-lg border-red-200 bg-red-50 text-red-800',
+            )}
+            role={compactFeedback.kind === 'error' ? 'alert' : 'status'}
+          >
+            <Info
+              className={cn(
+                'size-4 shrink-0',
+                compactFeedback.kind === 'notice' ? 'text-stone-500' : 'text-red-600',
+              )}
+              aria-hidden="true"
+            />
+            <span>{compactFeedback.message}</span>
+            <button
+              type="button"
+              className="grid size-6 shrink-0 cursor-pointer place-items-center rounded-md text-current opacity-55 outline-none transition-[background-color,opacity] hover:bg-black/5 hover:opacity-100 focus-visible:bg-black/5 focus-visible:opacity-100"
+              aria-label={t('model.dismissCompactFeedback')}
+              title={t('model.dismissCompactFeedback')}
+              onClick={dismissCompactFeedback}
+            >
+              <X className="size-3.5" aria-hidden="true" />
+            </button>
+          </div>
+        )}
         {(settingsError || attachmentError || queueError) && (
           <p className="px-4 text-[0.75rem] leading-5 text-red-700" role="alert">
             {settingsError || attachmentError || queueError}
@@ -407,6 +489,11 @@ export function Composer({
       </div>
     </footer>
   )
+}
+
+type CompactFeedback = {
+  kind: 'notice' | 'error'
+  message: string
 }
 
 function PendingQueue({
