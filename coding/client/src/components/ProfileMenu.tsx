@@ -26,7 +26,7 @@ export function ProfileMenu({
   const { locale, setLocale, t } = useI18n()
 
   return (
-    <div className="w-full shrink-0 border-t border-stone-200/70 p-3 max-md:w-[17.5rem]">
+    <div className="w-full shrink-0 border-t border-stone-200/70 px-3 py-2 max-md:w-[17.5rem]">
       <div className="flex items-center gap-2">
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>

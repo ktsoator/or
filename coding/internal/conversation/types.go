@@ -39,6 +39,9 @@ var ErrInvalidSessionScope = errors.New("session: invalid session scope")
 // session permission presets.
 var ErrInvalidPermissionMode = errors.New("session: invalid permission mode")
 
+// ErrManagerClosed rejects new work after product shutdown has started.
+var ErrManagerClosed = errors.New("session: conversation manager is closed")
+
 // Summary is the browser-facing metadata for one independent coding
 // conversation. Runtime-only state is sampled when the list is requested.
 type Summary struct {

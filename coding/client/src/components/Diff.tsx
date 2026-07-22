@@ -10,7 +10,7 @@ export function FileChange({ change }: { change: Change }) {
   const [copied, setCopied] = useState(false)
   if (change.changeType === 'failure') {
     return (
-      <div className="mt-2 ml-5 border-l-2 border-red-300 py-1 pl-3 font-mono text-[0.8125rem] leading-5.5 text-red-700 max-md:ml-0">
+      <div className="mt-1 ml-5 border-l-2 border-red-300 py-1 pl-3 font-mono text-[0.8125rem] leading-5.5 text-red-700 max-md:ml-0">
         {(change.path ? `${change.path}: ` : '') + (change.detail || t('diff.writeFailed'))}
       </div>
     )
@@ -37,8 +37,8 @@ export function FileChange({ change }: { change: Change }) {
   }
 
   return (
-    <div className="mt-1.5 ml-5 overflow-hidden rounded-lg border border-stone-300/80 bg-white max-md:ml-0">
-      <div className="flex h-8 min-w-0 items-center gap-1.5 border-b border-stone-300/70 bg-stone-50/60 px-2.5">
+    <div className="mt-1 ml-5 overflow-hidden rounded-lg border border-stone-300/80 bg-white max-md:ml-0">
+      <div className="flex h-7 min-w-0 items-center gap-1.5 border-b border-stone-300/70 bg-stone-50/60 px-2.5">
         <span
           className="min-w-0 overflow-hidden text-[0.8125rem] font-normal text-stone-700 underline decoration-stone-400/70 underline-offset-2 text-ellipsis whitespace-nowrap"
           title={change.path}

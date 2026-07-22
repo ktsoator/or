@@ -14,6 +14,9 @@ import (
 func (m *Manager) BeginPrompt(id, prompt string, hasImages bool) (*Runtime, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.closed {
+		return nil, ErrManagerClosed
+	}
 	runtime, ok := m.sessions[id]
 	if !ok {
 		return nil, os.ErrNotExist
@@ -44,6 +47,7 @@ func (m *Manager) BeginPrompt(id, prompt string, hasImages bool) (*Runtime, erro
 		runtime.live.Store(false)
 		return nil, err
 	}
+	m.tasks.Add(1)
 	// Broadcast title change so the client updates immediately.
 	runtime.broadcastTitle()
 	return runtime, nil
@@ -55,6 +59,9 @@ func (m *Manager) BeginPrompt(id, prompt string, hasImages bool) (*Runtime, erro
 func (m *Manager) BeginCompact(id string) (*Runtime, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.closed {
+		return nil, ErrManagerClosed
+	}
 	runtime, ok := m.sessions[id]
 	if !ok {
 		return nil, os.ErrNotExist
@@ -71,6 +78,7 @@ func (m *Manager) BeginCompact(id string) (*Runtime, error) {
 		runtime.live.Store(false)
 		return nil, err
 	}
+	m.tasks.Add(1)
 	return runtime, nil
 }
 
@@ -95,4 +103,5 @@ func (m *Manager) EndRun(id string) {
 	for _, message := range cancelled {
 		runtime.emit(MessageCancelled{ID: message.ID})
 	}
+	m.tasks.Done()
 }

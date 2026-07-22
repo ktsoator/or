@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, LoaderCircle, X } from 'lucide-react'
+import { ArrowLeft, LoaderCircle, PanelLeft, X } from 'lucide-react'
 import { apiURL } from '@/api'
 import { useI18n } from '@/i18n'
 import { Markdown } from './Markdown'
@@ -31,10 +31,14 @@ function relativizeHome(path: string): string {
 
 export function SkillsPage({
   onBack,
+  sidebarCollapsed,
+  onExpandSidebar,
   workspacePath,
   workspaceName,
 }: {
   onBack: () => void
+  sidebarCollapsed?: boolean
+  onExpandSidebar?: () => void
   workspacePath?: string
   workspaceName?: string
 }) {
@@ -67,7 +71,20 @@ export function SkillsPage({
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-white">
-      <header className="z-20 flex h-13 shrink-0 items-center border-b border-stone-200/80 bg-white px-4 max-md:h-12">
+      <header
+        className={`skills-header window-drag-region z-20 flex h-[45px] shrink-0 items-center gap-1 border-b border-stone-200/80 bg-white px-4 max-md:h-12 ${sidebarCollapsed ? 'sidebar-is-collapsed' : ''}`}
+      >
+        {sidebarCollapsed && onExpandSidebar && (
+          <button
+            className="desktop-sidebar-toggle hidden size-8 shrink-0 cursor-pointer place-items-center rounded-lg text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-950 md:grid"
+            type="button"
+            title={t('app.expandSidebar')}
+            aria-label={t('app.expandSidebar')}
+            onClick={onExpandSidebar}
+          >
+            <PanelLeft className="size-4" aria-hidden="true" />
+          </button>
+        )}
         <button
           className="flex h-9 cursor-pointer items-center gap-2 rounded-[10px] px-2.5 text-[0.84375rem] font-normal text-stone-500 outline-none transition-colors hover:bg-stone-200/65 hover:text-stone-900 focus-visible:ring-2 focus-visible:ring-stone-300"
           type="button"

@@ -48,7 +48,7 @@ export function ResponseActions({
   }
 
   return (
-    <div className="mt-1 flex h-7 animate-[fade-in_160ms_ease-out] items-center gap-0.5">
+    <div className="mt-0.5 flex h-7 animate-[fade-in_160ms_ease-out] items-center gap-0.5">
       <Tooltip.Provider delayDuration={80} skipDelayDuration={100}>
         <ActionButton
           icon={copied ? Check : Copy}

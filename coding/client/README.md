@@ -1,7 +1,8 @@
 # Coding client
 
-The React application is independent from the Go coding API. Vite proxies
-`/api/*` to `http://localhost:8787` during development.
+The React application consumes the Coding product through relative `/api`
+HTTP and SSE routes. Vite proxies them to `http://localhost:8787` for standalone
+browser development; the Wails shell mounts the same routes in-process.
 
 ## Development
 
@@ -27,6 +28,12 @@ bun run dev
 Open `http://localhost:5173`.
 
 Set `CODING_API_PROXY` when the local API uses a different address.
+
+Run the desktop-shell UI regression tests with a locally installed Chrome:
+
+```sh
+bun run test:ui
+```
 
 ## Production build
 

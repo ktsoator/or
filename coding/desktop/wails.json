@@ -1,0 +1,15 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "Coding",
+  "outputfilename": "coding-desktop",
+  "frontend:dir": "../client",
+  "assetdir": "../client/dist",
+  "frontend:install": "bun install --frozen-lockfile",
+  "frontend:build": "bun run build",
+  "frontend:dev:watcher": "bun run build -- --watch",
+  "wailsjsdir": "./generated",
+  "author": {
+    "name": "Kt",
+    "email": "ktsoator@gmail.com"
+  }
+}

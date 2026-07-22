@@ -1,0 +1,6 @@
+build/bin/
+generated/
+frontend/*
+!frontend/dist/
+frontend/dist/*
+!frontend/dist/.gitkeep

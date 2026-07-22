@@ -71,14 +71,16 @@ func (s *Runtime) broadcastTitle() {
 // so it must not block on the model call.
 func (m *Manager) maybeGenerateTitle(runtime *Runtime) {
 	m.mu.Lock()
-	needsTitle := runtime.record.CustomTitle == "" && runtime.record.AITitle == ""
+	needsTitle := !m.closed && runtime.record.CustomTitle == "" && runtime.record.AITitle == ""
 	provider, model := runtime.record.Provider, runtime.record.Model
-	m.mu.Unlock()
-
 	if !needsTitle || !runtime.titleGenerating.CompareAndSwap(false, true) {
+		m.mu.Unlock()
 		return
 	}
+	m.tasks.Add(1)
+	m.mu.Unlock()
 	go func() {
+		defer m.tasks.Done()
 		defer runtime.titleGenerating.Store(false)
 		m.generateSessionTitle(m.ctx, runtime, provider, model)
 	}()
@@ -136,6 +138,9 @@ Bad (too long): {"title": "Investigate and fix the issue with the login flow"}`
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.closed {
+		return
+	}
 	// Re-check under the lock: the user may have renamed while we generated.
 	if runtime.record.CustomTitle != "" {
 		return

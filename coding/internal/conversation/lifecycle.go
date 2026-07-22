@@ -33,6 +33,9 @@ func (m *Manager) Create(
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.closed {
+		return Summary{}, ErrManagerClosed
+	}
 	id := NewID()
 	for m.sessions[id] != nil {
 		id = NewID()

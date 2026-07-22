@@ -726,7 +726,7 @@ export type Session = {
   updateSettings: (provider: string, model: string, thinkingLevel: ThinkingLevel) => Promise<void>
   updatePermissionMode: (mode: PermissionMode) => Promise<void>
   compactContext: () => Promise<CompactionResult>
-  send: (text: string, images: MessageImage[], delivery?: DeliveryMode) => void
+  send: (text: string, images: MessageImage[], delivery?: DeliveryMode) => Promise<boolean>
   removeQueuedMessage: (id: string) => Promise<void>
   stop: () => void
   resolveApproval: (id: string, choice: ApprovalChoice) => Promise<void>
@@ -1158,7 +1158,16 @@ export function useSession(): Session {
         permissionMode,
       }),
     })
-    if (!response.ok) throw new Error(`create session failed (${response.status})`)
+    if (!response.ok) {
+      let message = `create session failed (${response.status})`
+      try {
+        const body = (await response.json()) as { error?: string }
+        if (body.error) message = body.error
+      } catch {
+        // Keep the status-based fallback when the response has no JSON body.
+      }
+      throw new Error(message)
+    }
     const created = (await response.json()) as SessionSummary
     setSessions((current) => [created, ...current.filter((session) => session.id !== created.id)])
     if (created.scope === 'project') {
@@ -1440,49 +1449,49 @@ export function useSession(): Session {
       })
   }, [activeSessionID, pendingDraftSend, refreshSessions, thread?.loaded, thread?.status])
 
-  const send = (text: string, images: MessageImage[], delivery?: DeliveryMode) => {
+  const send = async (
+    text: string,
+    images: MessageImage[],
+    delivery?: DeliveryMode,
+  ): Promise<boolean> => {
     const trimmed = text.trim()
-    if ((!trimmed && images.length === 0)) return
+    if ((!trimmed && images.length === 0)) return false
     if (effectiveDraft) {
-      if (delivery || creating || serviceStatus !== 'ready') return
+      if (delivery || creating || serviceStatus !== 'ready') return false
       const requestedDraft = effectiveDraft
       if (
         !requestedDraft.modelProvider ||
         !requestedDraft.modelID ||
         !requestedDraft.thinkingLevel
-      ) return
+      ) return false
       const provider = requestedDraft.modelProvider
       const model = requestedDraft.modelID
       const thinkingLevel = requestedDraft.thinkingLevel
       const permissionMode = requestedDraft.permissionMode
       setCreating(true)
-      void (async () => {
-        try {
-          const created = await createSessionRecord(
-            requestedDraft.workspacePath,
-            requestedDraft.projectScoped,
-            provider,
-            model,
-            thinkingLevel,
-            permissionMode,
-          )
-          draftRef.current = undefined
-          setDraft(undefined)
-          setPendingDraftSend({ sessionID: created.id, text: trimmed, images })
-        } catch {
-          // Keep the unsaved draft active so the user can retry the first send.
-        } finally {
-          setCreating(false)
-        }
-      })()
-      return
+      try {
+        const created = await createSessionRecord(
+          requestedDraft.workspacePath,
+          requestedDraft.projectScoped,
+          provider,
+          model,
+          thinkingLevel,
+          permissionMode,
+        )
+        draftRef.current = undefined
+        setDraft(undefined)
+        setPendingDraftSend({ sessionID: created.id, text: trimmed, images })
+        return true
+      } finally {
+        setCreating(false)
+      }
     }
-    if (!activeSessionID || !thread) return
-    if ((!trimmed && images.length === 0) || thread.status !== 'ready') return
+    if (!activeSessionID || !thread) return false
+    if ((!trimmed && images.length === 0) || thread.status !== 'ready') return false
     const sessionID = activeSessionID
     const queued = thread.running
-    if (queued && !delivery) return
-    if (!queued && delivery) return
+    if (queued && !delivery) return false
+    if (!queued && delivery) return false
     const id = `local-${sessionID}-${crypto.randomUUID()}`
     dispatch({
       t: 'sendUser',
@@ -1516,7 +1525,7 @@ export function useSession(): Session {
           dispatch({ t: 'queueFailed', sessionID, id })
           void refreshSessions().catch(() => undefined)
         })
-      return
+      return true
     }
 
     setSessions((current) =>
@@ -1549,6 +1558,7 @@ export function useSession(): Session {
         })
         void refreshSessions().catch(() => undefined)
       })
+    return true
   }
 
   const stop = () => {

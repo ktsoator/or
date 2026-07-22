@@ -135,21 +135,29 @@ func (s *Server) handleSessions(c *gin.Context) {
 	c.JSON(http.StatusOK, s.conversations.List())
 }
 
-func (s *Server) handleCreateSession(c *gin.Context) {
-	var body struct {
-		Title          string          `json:"title"`
-		WorkspacePath  string          `json:"workspacePath"`
-		Scope          string          `json:"scope"`
-		Provider       string          `json:"provider"`
-		Model          string          `json:"model"`
-		ThinkingLevel  string          `json:"thinkingLevel"`
-		PermissionMode permission.Mode `json:"permissionMode"`
+type createSessionRequest struct {
+	Title          string          `json:"title"`
+	WorkspacePath  string          `json:"workspacePath"`
+	Scope          string          `json:"scope"`
+	Provider       string          `json:"provider"`
+	Model          string          `json:"model"`
+	ThinkingLevel  string          `json:"thinkingLevel"`
+	PermissionMode permission.Mode `json:"permissionMode"`
+}
+
+func bindCreateSessionRequest(c *gin.Context) (createSessionRequest, bool) {
+	var body createSessionRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid session settings"})
+		return createSessionRequest{}, false
 	}
-	if c.Request.ContentLength > 0 {
-		if err := c.ShouldBindJSON(&body); err != nil {
-			c.Status(http.StatusBadRequest)
-			return
-		}
+	return body, true
+}
+
+func (s *Server) handleCreateSession(c *gin.Context) {
+	body, ok := bindCreateSessionRequest(c)
+	if !ok {
+		return
 	}
 	model, ok := llm.LookupModel(body.Provider, body.Model)
 	if !ok || !llm.SupportsProtocol(model.Protocol) {

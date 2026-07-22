@@ -205,6 +205,26 @@ func TestManagerPermissionModeRollsBackWhenIndexWriteFails(t *testing.T) {
 	}
 }
 
+func TestManagerCloseIsIdempotentAndRejectsNewWork(t *testing.T) {
+	dataDir := t.TempDir()
+	model, thinking := testCatalogModel(t)
+	manager := newTestManager(t, dataDir)
+	created, err := manager.Create("", t.TempDir(), ScopeProject, model, thinking, permission.ModeAsk)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	manager.Close()
+	manager.Close()
+
+	if _, err := manager.BeginPrompt(created.ID, "after shutdown", false); !errors.Is(err, ErrManagerClosed) {
+		t.Fatalf("BeginPrompt error = %v, want ErrManagerClosed", err)
+	}
+	if _, err := manager.Create("", t.TempDir(), ScopeProject, model, thinking, permission.ModeAsk); !errors.Is(err, ErrManagerClosed) {
+		t.Fatalf("Create error = %v, want ErrManagerClosed", err)
+	}
+}
+
 func newTestManager(t *testing.T, dataDir string) *Manager {
 	t.Helper()
 	home := filepath.Join(dataDir, "home")
@@ -230,15 +250,7 @@ func newTestManager(t *testing.T, dataDir string) *Manager {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		manager.mu.RLock()
-		runtimes := make([]*Runtime, 0, len(manager.sessions))
-		for _, runtime := range manager.sessions {
-			runtimes = append(runtimes, runtime)
-		}
-		manager.mu.RUnlock()
-		for _, runtime := range runtimes {
-			runtime.session.Close()
-		}
+		manager.Close()
 	})
 	return manager
 }
