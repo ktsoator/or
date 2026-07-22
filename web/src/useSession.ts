@@ -25,6 +25,7 @@ type ThreadState = {
   responseUsage: Usage
   contextUsage?: ContextUsage
   running: boolean
+  autoCompacting: boolean
   status: ConnectionStatus
   seq: number
   loaded: boolean
@@ -74,6 +75,7 @@ const emptyThread = (): ThreadState => ({
   responseUsage: emptyUsage(),
   contextUsage: undefined,
   running: false,
+  autoCompacting: false,
   status: 'connecting',
   seq: 0,
   loaded: false,
@@ -126,6 +128,7 @@ function threadsReducer(state: ThreadsState, action: Action): ThreadsState {
       next = {
         ...current,
         running: action.running,
+        autoCompacting: action.running ? current.autoCompacting : false,
         items: action.running ? current.items : completeOpenRun(current.items),
       }
       break
@@ -227,6 +230,7 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
   let responseUsage = state.responseUsage
   let contextUsage = state.contextUsage
   let running = state.running
+  let autoCompacting = state.autoCompacting
   let seq = state.seq
   const nextId = () => `i-${seq++}`
 
@@ -531,10 +535,44 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
       if (ev.id) items = items.filter((item) => !(item.kind === 'confirm' && item.id === ev.id))
       break
 
+    case 'turn_discard': {
+      const assistantIndex = lastIndex(items, (item) => item.kind === 'assistant')
+      const boundaryIndex = lastIndex(
+        items,
+        (item) => item.kind === 'user' || item.kind === 'run' || item.kind === 'tool',
+      )
+      if (assistantIndex > boundaryIndex) {
+        const assistant = items[assistantIndex]
+        if (assistant.kind === 'assistant' && assistant.usage) {
+          responseUsage = mergeUsage(responseUsage, assistant.usage)
+        }
+        let start = assistantIndex
+        while (start > 0 && items[start - 1].kind === 'thinking') start--
+        items = [...items.slice(0, start), ...items.slice(assistantIndex + 1)]
+      } else {
+        let end = items.length
+        while (end > boundaryIndex + 1 && items[end - 1].kind === 'thinking') end--
+        if (end < items.length) items = items.slice(0, end)
+      }
+      break
+    }
+
+    case 'compaction_start':
+      autoCompacting = true
+      break
+
+    case 'compaction_end':
+      autoCompacting = false
+      if (!ev.isError && contextUsage) {
+        contextUsage = { ...contextUsage, usedTokens: 0, measured: false }
+      }
+      break
+
     case 'error':
       completeRun(ev.durationMs, ev.startedAt)
       items = [...items, { kind: 'error', id: nextId(), text: ev.text ?? '' }]
       running = false
+      autoCompacting = false
       closeAssistant()
       completeThinking()
       responseUsage = emptyUsage()
@@ -543,13 +581,14 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
     case 'done':
       completeRun(ev.durationMs, ev.startedAt)
       running = false
+      autoCompacting = false
       closeAssistant()
       completeThinking()
       responseUsage = emptyUsage()
       break
   }
 
-  return { ...state, items, queue, responseUsage, contextUsage, running, seq }
+  return { ...state, items, queue, responseUsage, contextUsage, running, autoCompacting, seq }
 }
 
 function elapsedSince(startedAt: string): number {
@@ -646,6 +685,7 @@ export type Session = {
   contextUsage?: ContextUsage
   confirmation?: ConfirmItem
   running: boolean
+  autoCompacting: boolean
   loading: boolean
   creating: boolean
   updatingSettings: boolean
@@ -1510,6 +1550,7 @@ export function useSession(): Session {
     contextUsage: thread?.contextUsage,
     confirmation,
     running: thread?.running ?? activeSession?.running ?? false,
+    autoCompacting: thread?.autoCompacting ?? false,
     loading: initializing || (Boolean(activeSessionID) && !thread?.loaded),
     creating,
     updatingSettings,

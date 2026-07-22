@@ -27,9 +27,7 @@ type CompactionResult struct {
 }
 
 // Compact summarizes old complete turns and appends a durable compaction
-// boundary. The original entries remain in the session log. It is deliberately
-// manual in v1; automatic threshold and overflow retry policies can call this
-// same operation later.
+// boundary. The original entries remain in the session log.
 func (s *Session) Compact(ctx context.Context, instructions string) (CompactionResult, error) {
 	if !s.runMu.TryLock() {
 		return CompactionResult{}, ErrBusy
@@ -38,11 +36,21 @@ func (s *Session) Compact(ctx context.Context, instructions string) (CompactionR
 	if ctx == nil {
 		ctx = context.Background()
 	}
-
 	state := s.agent.Snapshot()
 	if state.IsStreaming {
 		return CompactionResult{}, ErrBusy
 	}
+	return s.compactLocked(ctx, instructions, false)
+}
+
+// compactLocked is the transaction shared by explicit maintenance and the
+// automatic policy running between model turns. The caller holds runMu.
+func (s *Session) compactLocked(
+	ctx context.Context,
+	instructions string,
+	automatic bool,
+) (result CompactionResult, err error) {
+	state := s.agent.Snapshot()
 	// A prior run may have reached the model but failed while persisting its
 	// messages. Compact must not project from an older durable prefix and thereby
 	// discard those in-memory messages.
@@ -60,6 +68,16 @@ func (s *Session) Compact(ctx context.Context, instructions string) (CompactionR
 	prepared, err := compaction.Prepare(entries, leafID, keepRecent)
 	if err != nil {
 		return CompactionResult{}, err
+	}
+	if automatic {
+		s.dispatchEvent(Event{Type: CompactionStarted, Automatic: true})
+		defer func() {
+			if err != nil {
+				s.dispatchEvent(Event{
+					Type: CompactionFailed, Automatic: true, Error: err.Error(),
+				})
+			}
+		}()
 	}
 	response, err := s.compactor.Compact(ctx, compaction.Request{
 		Model:           state.Model,
@@ -115,7 +133,7 @@ func (s *Session) Compact(ctx context.Context, instructions string) (CompactionR
 		Type: CompactionCompleted, Usage: response.Usage,
 		Provider: response.Provider, Model: response.Model,
 		ResponseModel: response.ResponseModel, ResponseID: response.ResponseID,
-		Timestamp: response.Timestamp,
+		Timestamp: response.Timestamp, Automatic: automatic,
 	})
 
 	return CompactionResult{

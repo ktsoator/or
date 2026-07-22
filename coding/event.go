@@ -20,7 +20,10 @@ const (
 	ToolStarted          EventType = "tool_started"
 	ToolFinished         EventType = "tool_finished"
 	MessageCompleted     EventType = "message_completed"
+	TurnDiscarded        EventType = "turn_discarded"
+	CompactionStarted    EventType = "compaction_started"
 	CompactionCompleted  EventType = "compaction_completed"
+	CompactionFailed     EventType = "compaction_failed"
 	RunCompleted         EventType = "run_completed"
 )
 
@@ -63,6 +66,10 @@ type Event struct {
 	ResponseModel string
 	ResponseID    string
 	Timestamp     time.Time
+	// Automatic distinguishes context maintenance performed inside an active run
+	// from an explicit Compact call. Error is populated on CompactionFailed.
+	Automatic bool
+	Error     string
 
 	// Run timing is populated on RunStarted and RunCompleted. It measures the
 	// full invocation, including model calls, tools, approvals, retries, and any
@@ -120,9 +127,11 @@ func projectAgentEvent(ev agent.AgentEvent) (Event, bool) {
 			return Event{}, false
 		}
 		return Event{
-			Type:          MessageCompleted,
-			Text:          displayAssistantText(assistant),
-			FinalResponse: assistant.StopReason != llm.StopReasonToolUse,
+			Type: MessageCompleted,
+			Text: displayAssistantText(assistant),
+			FinalResponse: assistant.StopReason != llm.StopReasonToolUse &&
+				assistant.StopReason != llm.StopReasonError &&
+				assistant.StopReason != llm.StopReasonAborted,
 			Usage:         assistant.Usage,
 			Provider:      assistant.Provider,
 			Model:         assistant.Model,
@@ -151,22 +160,6 @@ func eventUserMessage(message agent.AgentMessage) (string, []llm.ImageContent, b
 	}
 	text, images := userMessageContent(user)
 	return text, images, true
-}
-
-func aggregateMessageUsage(messages []agent.AgentMessage) llm.Usage {
-	var total llm.Usage
-	for _, message := range messages {
-		llmMessage, ok := agent.ToLLM(message)
-		if !ok {
-			continue
-		}
-		assistant, ok := llmMessage.(*llm.AssistantMessage)
-		if !ok || assistant == nil {
-			continue
-		}
-		addUsage(&total, assistant.Usage)
-	}
-	return total
 }
 
 func addUsage(total *llm.Usage, usage llm.Usage) {

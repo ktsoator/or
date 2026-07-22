@@ -92,11 +92,13 @@ type Session struct {
 	contextWindow int64
 	compactor     compaction.Compactor
 
-	runMu        sync.Mutex
-	persistedLen int
-	runCtx       context.Context
-	runStateMu   sync.RWMutex
-	runStartedAt time.Time
+	runMu                sync.Mutex
+	persistedLen         int
+	runStateMu           sync.RWMutex
+	runCtx               context.Context
+	runStartedAt         time.Time
+	runParentID          string
+	autoCompactAttempted bool
 
 	transcriptMu sync.RWMutex
 	entries      []transcript.Entry
@@ -233,6 +235,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 				ReadOnly: readOnly,
 			})
 		},
+		PrepareNextTurn: s.prepareNextTurn,
 	}
 	s.agent = agent.New(agentOpts)
 	s.captureDetails()
@@ -310,56 +313,79 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	// Flush any messages left in memory by an earlier store failure before this
+	// run captures its durable parent. Otherwise their later persistence could be
+	// mistaken for messages produced by the new run.
+	if err := s.persistNew(ctx); err != nil {
+		return err
+	}
 	startedAt := time.Now().UTC()
-	messageStart := len(s.agent.Snapshot().Messages)
-	s.setRunStartedAt(startedAt)
+	_, runParentID := s.snapshotTranscript()
+	s.setRunState(ctx, startedAt, runParentID)
+	defer s.clearRunState()
 	s.dispatchEvent(Event{Type: RunStarted, StartedAt: startedAt})
 
-	s.runCtx = ctx
+	if s.shouldAutoCompact(s.ContextUsage().UsedTokens) {
+		_, _ = s.autoCompact(ctx)
+	}
+
+	var runUsage llm.Usage
+	unsubscribe := s.agent.Subscribe(func(event agent.AgentEvent) {
+		if event.Type != agent.MessageEnd {
+			return
+		}
+		if assistant, ok := eventAssistantMessage(event.Message); ok {
+			addUsage(&runUsage, assistant.Usage)
+		}
+	})
+	defer unsubscribe()
+
 	runErr := fn(ctx)
-	if runErr != nil && s.maxRetries > 0 {
+	if runErr != nil && !s.trailingContextOverflow() && s.maxRetries > 0 {
 		runErr = s.withRetry(ctx, runErr)
 	}
-	completedAt := time.Now().UTC()
-	messages := s.agent.Snapshot().Messages
-	var runMessages []agent.AgentMessage
-	if messageStart < len(messages) {
-		runMessages = messages[messageStart:]
+	if s.trailingContextOverflow() {
+		recovered, err := s.recoverContextOverflow(ctx, runErr)
+		runErr = err
+		if recovered && runErr != nil && s.maxRetries > 0 {
+			runErr = s.withRetry(ctx, runErr)
+		}
 	}
-	persistErr := s.persistNewRun(ctx, messageStart, startedAt, completedAt)
+	completedAt := time.Now().UTC()
+	persistErr := s.persistNewRun(ctx, runParentID, startedAt, completedAt)
 	s.dispatchEvent(Event{
 		Type:        RunCompleted,
-		Usage:       aggregateMessageUsage(runMessages),
+		Usage:       runUsage,
 		StartedAt:   startedAt,
 		CompletedAt: completedAt,
 	})
-	s.setRunStartedAt(time.Time{})
 	return errors.Join(runErr, persistErr)
 }
 
 // persistNew appends the messages added since the last persist to the Store. It
 // runs only while runMu is held, so persistedLen is not racing a run.
 func (s *Session) persistNew(ctx context.Context) error {
-	return s.persistNewMessages(ctx, -1, time.Time{}, time.Time{})
+	return s.persistNewMessages(ctx, "", time.Time{}, time.Time{})
 }
 
 func (s *Session) persistNewRun(
 	ctx context.Context,
-	messageStart int,
+	runParentID string,
 	startedAt, completedAt time.Time,
 ) error {
-	return s.persistNewMessages(ctx, messageStart, startedAt, completedAt)
+	return s.persistNewMessages(ctx, runParentID, startedAt, completedAt)
 }
 
 func (s *Session) persistNewMessages(
 	ctx context.Context,
-	messageStart int,
+	runParentID string,
 	startedAt, completedAt time.Time,
 ) error {
 	all := s.agent.Snapshot().Messages
 	s.transcriptMu.RLock()
 	persistedLen := s.persistedLen
 	parentID := s.leafID
+	existing := append([]transcript.Entry(nil), s.entries...)
 	s.transcriptMu.RUnlock()
 	var added []agent.AgentMessage
 	if persistedLen < len(all) {
@@ -372,10 +398,10 @@ func (s *Session) persistNewMessages(
 		parentID = entry.ID
 	}
 	if !startedAt.IsZero() && !completedAt.IsZero() {
-		firstEntryID := ""
-		firstRunEntry := messageStart - persistedLen
-		if firstRunEntry >= 0 && firstRunEntry < len(entries) {
-			firstEntryID = entries[firstRunEntry].ID
+		candidate := append(existing, entries...)
+		firstEntryID, err := firstMessageAfter(candidate, parentID, runParentID)
+		if err != nil {
+			return err
 		}
 		runEntry := transcript.NewRun(parentID, firstEntryID, startedAt, completedAt)
 		entries = append(entries, runEntry)
@@ -397,16 +423,57 @@ func (s *Session) persistNewMessages(
 	return nil
 }
 
-func (s *Session) setRunStartedAt(startedAt time.Time) {
+func firstMessageAfter(
+	entries []transcript.Entry,
+	leafID string,
+	ancestorID string,
+) (string, error) {
+	path, err := transcript.BuildPath(entries, leafID)
+	if err != nil {
+		return "", err
+	}
+	afterAncestor := ancestorID == ""
+	foundAncestor := afterAncestor
+	for _, entry := range path {
+		if !afterAncestor {
+			if entry.ID == ancestorID {
+				afterAncestor = true
+				foundAncestor = true
+			}
+			continue
+		}
+		if entry.Type == transcript.MessageEntry {
+			return entry.ID, nil
+		}
+	}
+	if !foundAncestor {
+		return "", errors.New("coding: run parent is not on the active transcript path")
+	}
+	return "", nil
+}
+
+func (s *Session) setRunState(ctx context.Context, startedAt time.Time, parentID string) {
 	s.runStateMu.Lock()
+	s.runCtx = ctx
 	s.runStartedAt = startedAt
+	s.runParentID = parentID
+	s.autoCompactAttempted = false
 	s.runStateMu.Unlock()
 }
 
-func (s *Session) activeRunStartedAt() time.Time {
+func (s *Session) clearRunState() {
+	s.runStateMu.Lock()
+	s.runCtx = nil
+	s.runStartedAt = time.Time{}
+	s.runParentID = ""
+	s.autoCompactAttempted = false
+	s.runStateMu.Unlock()
+}
+
+func (s *Session) activeRunState() (context.Context, time.Time, string) {
 	s.runStateMu.RLock()
 	defer s.runStateMu.RUnlock()
-	return s.runStartedAt
+	return s.runCtx, s.runStartedAt, s.runParentID
 }
 
 // QueueHandle identifies one message while it remains queued in this Session.

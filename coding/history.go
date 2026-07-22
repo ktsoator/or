@@ -60,14 +60,13 @@ type HistoryItem struct {
 // History returns a displayable snapshot of the conversation in transcript
 // order. The returned slice is detached from the agent's mutable state.
 func (s *Session) History() []HistoryItem {
-	activeStartedAt := s.activeRunStartedAt()
+	_, activeStartedAt, activeParentID := s.activeRunState()
 	entries, leafID, persistedLen := s.snapshotTranscriptState()
 	details := s.snapshotDetails()
 	path, err := transcript.BuildPath(entries, leafID)
 	if err != nil {
 		return projectHistory(s.Messages(), details)
 	}
-	items := projectEntryHistory(path, details)
 
 	active := s.agent.Snapshot().Messages
 	var messages []agent.AgentMessage
@@ -75,17 +74,21 @@ func (s *Session) History() []HistoryItem {
 		messages = active[persistedLen:]
 	}
 	if !activeStartedAt.IsZero() {
-		persistedRun := false
-		for _, item := range items {
-			if item.Type == HistoryRun && item.StartedAt.Equal(activeStartedAt) {
-				persistedRun = true
-				break
-			}
+		firstEntryID, firstErr := firstMessageAfter(entries, leafID, activeParentID)
+		if firstErr == nil && firstEntryID != "" {
+			path = append(path, transcript.Entry{
+				Type: transcript.RunEntry,
+				Run:  &transcript.Run{FirstEntryID: firstEntryID, StartedAt: activeStartedAt},
+			})
+			items := projectEntryHistory(path, details)
+			return append(items, projectHistory(messages, details)...)
 		}
-		if !persistedRun {
-			items = append(items, projectRunHistory(messages, details, activeStartedAt, time.Time{})...)
-		}
-	} else if len(messages) > 0 {
+		items := projectEntryHistory(path, details)
+		return append(items, projectRunHistory(messages, details, activeStartedAt, time.Time{})...)
+	}
+
+	items := projectEntryHistory(path, details)
+	if len(messages) > 0 {
 		items = append(items, projectHistory(messages, details)...)
 	}
 	return items

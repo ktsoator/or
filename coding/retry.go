@@ -77,6 +77,7 @@ func (s *Session) dropTrailingErrorTurn() {
 		return
 	}
 	if a := asAssistant(msgs[n-1]); a != nil && a.StopReason == llm.StopReasonError {
+		s.dispatchEvent(Event{Type: TurnDiscarded})
 		s.agent.SetMessages(msgs[:n-1])
 	}
 }

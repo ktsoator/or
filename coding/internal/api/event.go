@@ -130,6 +130,27 @@ func ProjectEvent(ev coding.Event) ([]byte, bool) {
 			ModelName: displayModelName(ev.Provider, ev.Model),
 		}
 
+	case coding.TurnDiscarded:
+		out = wireEvent{Type: "turn_discard"}
+
+	case coding.CompactionStarted:
+		if !ev.Automatic {
+			return nil, false
+		}
+		out = wireEvent{Type: "compaction_start"}
+
+	case coding.CompactionCompleted:
+		if !ev.Automatic {
+			return nil, false
+		}
+		out = wireEvent{Type: "compaction_end"}
+
+	case coding.CompactionFailed:
+		if !ev.Automatic {
+			return nil, false
+		}
+		out = wireEvent{Type: "compaction_end", IsError: true, Text: ev.Error}
+
 	case coding.RunCompleted:
 		out = wireEvent{
 			Type:       "done",

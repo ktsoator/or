@@ -92,6 +92,7 @@ export default function App() {
     contextUsage,
     confirmation,
     running,
+    autoCompacting,
     loading,
     creating,
     updatingSettings,
@@ -787,7 +788,7 @@ export default function App() {
                     />
                   ),
                 )}
-                {awaitingFirstOutput && <AwaitingResponse />}
+                {autoCompacting ? <AutoCompactionStatus /> : awaitingFirstOutput && <AwaitingResponse />}
               </>
             )}
           </div>
@@ -1462,6 +1463,27 @@ function AwaitingResponse() {
     >
       <span className="size-1 animate-pulse rounded-full bg-indigo-500" />
       <span className="streaming-sheen">{t('thinking.working')}</span>
+    </div>
+  )
+}
+
+function AutoCompactionStatus() {
+  const { t } = useI18n()
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setVisible(true), 350)
+    return () => window.clearTimeout(timer)
+  }, [])
+
+  if (!visible) return null
+  return (
+    <div
+      className="my-1 flex animate-[fade-in_160ms_ease-out] items-center gap-1.5 py-0.5 text-[0.8125rem] text-stone-400"
+      role="status"
+    >
+      <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
+      <span>{t('compaction.automatic')}</span>
     </div>
   )
 }
