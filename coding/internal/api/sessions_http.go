@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -170,13 +171,24 @@ func (s *Server) handleHistory(c *gin.Context) {
 		return
 	}
 	c.Header("Cache-Control", "no-store")
-	events := ProjectHistory(runtime.Session().History())
-	events = append(events, transportOf(runtime).broker.PendingEvents()...)
+	transport := transportOf(runtime)
+	var events []wireEvent
+	var queue []wireEvent
+	var contextUsage wireContextUsage
+	var running bool
+	eventSeq := transport.hub.snapshot(func() {
+		events = ProjectHistory(runtime.Session().History())
+		events = append(events, transport.broker.PendingEvents()...)
+		queue = projectQueue(runtime.PendingEvents())
+		contextUsage = projectContextUsage(runtime.Session().ContextUsage())
+		running = runtime.Running()
+	})
 	c.JSON(http.StatusOK, gin.H{
-		"events":  events,
-		"queue":   projectQueue(runtime.PendingEvents()),
-		"context": projectContextUsage(runtime.Session().ContextUsage()),
-		"running": runtime.Running(),
+		"events":   events,
+		"queue":    queue,
+		"context":  contextUsage,
+		"running":  running,
+		"eventSeq": eventSeq,
 	})
 }
 
@@ -192,7 +204,17 @@ func (s *Server) handleEvents(c *gin.Context) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	ch := transportOf(runtime).hub.add()
+	after, _ := strconv.ParseUint(strings.TrimSpace(c.Query("after")), 10, 64)
+	if lastEventID, err := strconv.ParseUint(strings.TrimSpace(c.GetHeader("Last-Event-ID")), 10, 64); err == nil && lastEventID > after {
+		after = lastEventID
+	}
+	ch, syncRequired := transportOf(runtime).hub.add(after)
+	if syncRequired {
+		data, _ := json.Marshal(wireEvent{Type: "sync_required"})
+		_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
+		w.Flush()
+		return
+	}
 	defer transportOf(runtime).hub.remove(ch)
 
 	// Send a comment immediately so development and production proxies forward
@@ -206,8 +228,11 @@ func (s *Server) handleEvents(c *gin.Context) {
 		select {
 		case <-c.Request.Context().Done():
 			return
-		case data := <-ch:
-			_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
+		case frame, ok := <-ch:
+			if !ok {
+				return
+			}
+			_, _ = fmt.Fprintf(w, "id: %d\ndata: %s\n\n", frame.sequence, frame.data)
 			w.Flush()
 		case <-heartbeat.C:
 			_, _ = fmt.Fprint(w, ": keep-alive\n\n")

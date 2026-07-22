@@ -242,12 +242,13 @@ export function Composer({
       )}
     >
       <div className="relative mx-auto flex w-full max-w-[56rem] flex-col gap-2">
-        {confirmation && <Approval key={confirmation.id} item={confirmation} onResolve={onResolve} />}
         {queuedMessages.length > 0 && (
           <PendingQueue messages={queuedMessages} onRemove={(id) => void removeQueued(id)} />
         )}
+        {confirmation && <Approval key={confirmation.id} item={confirmation} onResolve={onResolve} />}
 
         <div
+          hidden={awaitingApproval}
           className={cn(
             'rounded-[28px] border border-stone-200 bg-white',
             !centered &&

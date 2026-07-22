@@ -31,15 +31,18 @@ export type Change = FileChangePayload | FailureChangePayload
 export type WireEvent = {
   type:
     | 'user_message'
+    | 'run_start'
     | 'delta'
     | 'tool_start'
     | 'tool_end'
     | 'message_end'
     | 'confirm_request'
+    | 'confirm_resolved'
     | 'queue_cancelled'
     | 'queue_removed'
     | 'error'
     | 'done'
+    | 'sync_required'
     | 'title_update'
   kind?: 'text' | 'thinking'
   delta?: string
@@ -62,6 +65,8 @@ export type WireEvent = {
   title?: string
   aiTitle?: string
   customTitle?: string
+  startedAt?: string
+  durationMs?: number
 }
 
 // Thread items are the declarative model the UI renders, derived from the wire
@@ -158,6 +163,12 @@ export type AssistantItem = {
   model?: string
   modelName?: string
 }
+export type RunItem = {
+  kind: 'run'
+  id: string
+  startedAt: string
+  durationMs?: number
+}
 export type ThinkingItem = { kind: 'thinking'; id: string; text: string; streaming: boolean }
 export type ToolItem = {
   kind: 'tool'
@@ -177,6 +188,7 @@ export type ErrorItem = { kind: 'error'; id: string; text: string }
 
 export type Item =
   | UserItem
+  | RunItem
   | AssistantItem
   | ThinkingItem
   | ToolItem
@@ -296,4 +308,5 @@ export type HistoryResponse = {
   queue?: WireEvent[]
   context?: ContextUsage
   running: boolean
+  eventSeq?: number
 }

@@ -10,6 +10,7 @@ package api
 import (
 	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/ktsoator/or/coding"
 	"github.com/ktsoator/or/coding/tools"
@@ -51,6 +52,9 @@ type wireEvent struct {
 	Title       string `json:"title,omitempty"`
 	AITitle     string `json:"aiTitle,omitempty"`
 	CustomTitle string `json:"customTitle,omitempty"`
+	// run timing
+	StartedAt  string `json:"startedAt,omitempty"`
+	DurationMS *int64 `json:"durationMs,omitempty"`
 }
 
 type wireImage struct {
@@ -97,6 +101,9 @@ func projectContextUsage(usage coding.ContextUsage) wireContextUsage {
 func ProjectEvent(ev coding.Event) ([]byte, bool) {
 	var out wireEvent
 	switch ev.Type {
+	case coding.RunStarted:
+		out = wireEvent{Type: "run_start", StartedAt: formatEventTime(ev.StartedAt)}
+
 	case coding.UserMessageCompleted:
 		out = wireEvent{Type: "user_message", Text: ev.Text, Images: projectImages(ev.Images)}
 
@@ -124,7 +131,12 @@ func ProjectEvent(ev coding.Event) ([]byte, bool) {
 		}
 
 	case coding.RunCompleted:
-		out = wireEvent{Type: "done", Usage: projectUsage(ev.Usage)}
+		out = wireEvent{
+			Type:       "done",
+			Usage:      projectUsage(ev.Usage),
+			StartedAt:  formatEventTime(ev.StartedAt),
+			DurationMS: elapsedMilliseconds(ev.StartedAt, ev.CompletedAt),
+		}
 
 	default:
 		return nil, false
@@ -143,6 +155,13 @@ func ProjectHistory(items []coding.HistoryItem) []wireEvent {
 	out := make([]wireEvent, 0, len(items))
 	for _, item := range items {
 		switch item.Type {
+		case coding.HistoryRun:
+			out = append(out, wireEvent{
+				Type:       "run_start",
+				StartedAt:  formatEventTime(item.StartedAt),
+				DurationMS: elapsedMilliseconds(item.StartedAt, item.CompletedAt),
+			})
+
 		case coding.HistoryUser:
 			out = append(out, wireEvent{Type: "user_message", Text: item.Text, Images: projectImages(item.Images)})
 
@@ -190,6 +209,21 @@ func ProjectHistory(items []coding.HistoryItem) []wireEvent {
 		}
 	}
 	return out
+}
+
+func formatEventTime(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339Nano)
+}
+
+func elapsedMilliseconds(startedAt, completedAt time.Time) *int64 {
+	if startedAt.IsZero() || completedAt.IsZero() || completedAt.Before(startedAt) {
+		return nil
+	}
+	duration := completedAt.Sub(startedAt).Milliseconds()
+	return &duration
 }
 
 func displayModelName(provider, modelID string) string {

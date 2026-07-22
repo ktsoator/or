@@ -43,6 +43,7 @@ type Action =
       id: string
       text: string
       images: MessageImage[]
+      startedAt: string
       delivery?: DeliveryMode
     }
   | { t: 'queueFailed'; sessionID: string; id: string }
@@ -111,7 +112,8 @@ function threadsReducer(state: ThreadsState, action: Action): ThreadsState {
       next = {
         ...next,
         contextUsage: action.history.context,
-        running: action.history.running || next.running,
+        running: action.history.running,
+        items: action.history.running ? next.items : completeOpenRun(next.items),
       }
       break
     }
@@ -121,7 +123,11 @@ function threadsReducer(state: ThreadsState, action: Action): ThreadsState {
       break
     case 'running':
       if (current.running === action.running) return state
-      next = { ...current, running: action.running }
+      next = {
+        ...current,
+        running: action.running,
+        items: action.running ? current.items : completeOpenRun(current.items),
+      }
       break
     case 'sendUser':
       next = action.delivery
@@ -151,6 +157,11 @@ function threadsReducer(state: ThreadsState, action: Action): ThreadsState {
                 text: action.text,
                 images: action.images,
                 deliveryStatus: 'sending',
+              },
+              {
+                kind: 'run',
+                id: `run-${action.id}`,
+                startedAt: action.startedAt,
               },
             ],
           }
@@ -227,8 +238,55 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
       it.kind === 'thinking' && it.streaming ? { ...it, streaming: false } : it,
     )
   }
+  const completeRun = (durationMs?: number, startedAt?: string) => {
+    let idx = startedAt
+      ? lastIndex(items, (item) => item.kind === 'run' && item.startedAt === startedAt)
+      : -1
+    if (idx < 0) {
+      idx = lastIndex(items, (item) => item.kind === 'run' && item.durationMs === undefined)
+    }
+    if (idx < 0) return
+    const run = items[idx] as Extract<Item, { kind: 'run' }>
+    if (durationMs === undefined && run.durationMs !== undefined) return
+    items = replaceAt(items, idx, {
+      ...run,
+      durationMs:
+        durationMs === undefined
+          ? elapsedSince(run.startedAt)
+          : Math.max(durationMs, elapsedSince(run.startedAt)),
+    })
+  }
 
   switch (ev.type) {
+    case 'run_start': {
+      const exactIndex = ev.startedAt
+        ? lastIndex(items, (it) => it.kind === 'run' && it.startedAt === ev.startedAt)
+        : -1
+      const idx =
+        exactIndex >= 0
+          ? exactIndex
+          : lastIndex(items, (it) => it.kind === 'run' && it.durationMs === undefined)
+      if (idx >= 0) {
+        const run = items[idx] as Extract<Item, { kind: 'run' }>
+        items = replaceAt(items, idx, {
+          ...run,
+          startedAt: ev.startedAt ?? run.startedAt,
+          durationMs: ev.durationMs ?? run.durationMs,
+        })
+      } else {
+        const run = {
+          kind: 'run' as const,
+          id: ev.id ?? nextId(),
+          startedAt: ev.startedAt ?? new Date().toISOString(),
+          durationMs: ev.durationMs,
+        }
+        items = [...items, run]
+      }
+      const projectedRun = items[idx >= 0 ? idx : items.length - 1]
+      if (projectedRun.kind === 'run' && projectedRun.durationMs === undefined) running = true
+      break
+    }
+
     case 'user_message':
       {
         const text = ev.text ?? ''
@@ -273,13 +331,34 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
               sameUserMessage(item.text, item.images, text, images),
           )
         }
+        if (idx < 0) {
+          const runIndex = lastIndex(items, (item) => item.kind === 'run')
+          const candidate = items[runIndex - 1]
+          if (
+            candidate?.kind === 'user' &&
+            sameUserMessage(candidate.text, candidate.images, text, images)
+          ) {
+            idx = runIndex - 1
+          }
+        }
         const user = {
           kind: 'user' as const,
           id: ev.id ?? (idx >= 0 ? items[idx].id : nextId()),
           text,
           images,
         }
-        items = idx >= 0 ? replaceAt(items, idx, user) : [...items, user]
+        if (idx >= 0) {
+          items = replaceAt(items, idx, user)
+        } else {
+          const openRunIndex = lastIndex(
+            items,
+            (item) => item.kind === 'run' && item.durationMs === undefined,
+          )
+          items =
+            openRunIndex >= 0 && !ev.delivery
+              ? [...items.slice(0, openRunIndex), user, ...items.slice(openRunIndex)]
+              : [...items, user]
+        }
       }
       break
 
@@ -334,16 +413,18 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
     case 'tool_start':
       closeAssistant()
       completeThinking()
-      items = [
-        ...items,
-        {
-          kind: 'tool',
-          id: ev.id ?? nextId(),
-          name: ev.tool ?? 'tool',
-          args: ev.args,
-          status: 'running',
-        },
-      ]
+      if (!ev.id || !items.some((item) => item.kind === 'tool' && item.id === ev.id)) {
+        items = [
+          ...items,
+          {
+            kind: 'tool',
+            id: ev.id ?? nextId(),
+            name: ev.tool ?? 'tool',
+            args: ev.args,
+            status: 'running',
+          },
+        ]
+      }
       break
 
     case 'tool_end': {
@@ -388,6 +469,16 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
       }
       {
         let idx = lastIndex(items, (it) => it.kind === 'assistant' && it.open)
+        if (idx < 0 && ev.text) {
+          const runIndex = lastIndex(items, (item) => item.kind === 'run')
+          const matchingAssistant = lastIndex(
+            items,
+            (item) => item.kind === 'assistant' && item.markdown === ev.text,
+          )
+          if (matchingAssistant > runIndex && matchingAssistant === items.length - 1) {
+            idx = matchingAssistant
+          }
+        }
         if (ev.text) {
           if (idx >= 0) {
             const cur = items[idx] as Extract<Item, { kind: 'assistant' }>
@@ -436,7 +527,12 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
       break
     }
 
+    case 'confirm_resolved':
+      if (ev.id) items = items.filter((item) => !(item.kind === 'confirm' && item.id === ev.id))
+      break
+
     case 'error':
+      completeRun(ev.durationMs, ev.startedAt)
       items = [...items, { kind: 'error', id: nextId(), text: ev.text ?? '' }]
       running = false
       closeAssistant()
@@ -445,6 +541,7 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
       break
 
     case 'done':
+      completeRun(ev.durationMs, ev.startedAt)
       running = false
       closeAssistant()
       completeThinking()
@@ -453,6 +550,18 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
   }
 
   return { ...state, items, queue, responseUsage, contextUsage, running, seq }
+}
+
+function elapsedSince(startedAt: string): number {
+  const start = new Date(startedAt).getTime()
+  return Number.isFinite(start) ? Math.max(0, Date.now() - start) : 0
+}
+
+function completeOpenRun(items: Item[]): Item[] {
+  const index = lastIndex(items, (item) => item.kind === 'run' && item.durationMs === undefined)
+  if (index < 0) return items
+  const run = items[index] as Extract<Item, { kind: 'run' }>
+  return replaceAt(items, index, { ...run, durationMs: elapsedSince(run.startedAt) })
 }
 
 function replaceQueueAt(
@@ -747,94 +856,140 @@ export function useSession(): Session {
 
   useEffect(() => {
     if (!activeSessionID) return
-    localStorage.setItem(selectedSessionKey, activeSessionID)
+    const sessionID = activeSessionID
+    localStorage.setItem(selectedSessionKey, sessionID)
     let active = true
     let es: EventSource | null = null
+    let syncing = false
     const controller = new AbortController()
-    dispatch({ t: 'status', sessionID: activeSessionID, status: 'connecting' })
+    dispatch({ t: 'status', sessionID, status: 'connecting' })
 
-    const connect = () => {
+    const applyWire = (wire: WireEvent) => {
+      dispatch({ t: 'wire', sessionID, ev: wire })
+      if (wire.type === 'confirm_request') {
+        setSessions((current) =>
+          current.map((session) =>
+            session.id === sessionID
+              ? { ...session, running: true, hasApproval: true }
+              : session,
+          ),
+        )
+      } else if (wire.type === 'confirm_resolved') {
+        setSessions((current) =>
+          current.map((session) =>
+            session.id === sessionID ? { ...session, hasApproval: false } : session,
+          ),
+        )
+      } else if (wire.type === 'done' || wire.type === 'error') {
+        setSessions((current) =>
+          current.map((session) =>
+            session.id === sessionID ? { ...session, running: false } : session,
+          ),
+        )
+      } else if (wire.type === 'title_update') {
+        setSessions((current) =>
+          current.map((session) =>
+            session.id === sessionID
+              ? {
+                  ...session,
+                  title: wire.title ?? session.title,
+                  aiTitle: wire.aiTitle,
+                  customTitle: wire.customTitle,
+                }
+              : session,
+          ),
+        )
+      }
+    }
+
+    const closeEvents = () => {
+      es?.close()
+      es = null
+    }
+
+    function connect(after: number) {
       if (!active) return
-      es = new EventSource(sessionURL(activeSessionID, '/events'))
-      es.onopen = () => {
-        dispatch({ t: 'status', sessionID: activeSessionID, status: 'ready' })
+      closeEvents()
+      const eventsPath = after > 0 ? `/events?after=${encodeURIComponent(after)}` : '/events'
+      const source = new EventSource(sessionURL(sessionID, eventsPath))
+      es = source
+      source.onopen = () => {
+        if (es !== source) return
+        dispatch({ t: 'status', sessionID, status: 'ready' })
         setServiceStatus('ready')
       }
-      es.onerror = () => {
-        dispatch({ t: 'status', sessionID: activeSessionID, status: 'disconnected' })
+      source.onerror = () => {
+        if (es !== source) return
+        dispatch({ t: 'status', sessionID, status: 'disconnected' })
         setServiceStatus('disconnected')
       }
-      es.onmessage = (event) => {
+      source.onmessage = (event) => {
+        if (es !== source) return
         try {
           const wire = JSON.parse(event.data) as WireEvent
-          dispatch({ t: 'wire', sessionID: activeSessionID, ev: wire })
-          if (wire.type === 'confirm_request') {
-            setSessions((current) =>
-              current.map((session) =>
-                session.id === activeSessionID
-                  ? { ...session, running: true, hasApproval: true }
-                  : session,
-              ),
-            )
-          } else if (wire.type === 'done' || wire.type === 'error') {
-            setSessions((current) =>
-              current.map((session) =>
-                session.id === activeSessionID ? { ...session, running: false } : session,
-              ),
-            )
-          } else if (wire.type === 'title_update') {
-            setSessions((current) =>
-              current.map((session) =>
-                session.id === activeSessionID
-                  ? {
-                      ...session,
-                      title: wire.title ?? session.title,
-                      aiTitle: wire.aiTitle,
-                      customTitle: wire.customTitle,
-                    }
-                  : session,
-              ),
-            )
+          if (wire.type === 'sync_required') {
+            void restoreHistory(false)
+            return
           }
+          applyWire(wire)
         } catch {
-          dispatch({
-            t: 'wire',
-            sessionID: activeSessionID,
-            ev: { type: 'error', text: 'Received an invalid server event.' },
+          applyWire({
+            type: 'error',
+            text: 'Received an invalid server event.',
           })
         }
       }
     }
 
-    fetch(sessionURL(activeSessionID, '/history'), {
-      cache: 'no-store',
-      signal: controller.signal,
-    })
-      .then((response) =>
-        response.ok
-          ? response.json()
-          : Promise.reject(new Error(`history request failed (${response.status})`)),
-      )
-      .then((history: HistoryResponse) => {
-        if (active) dispatch({ t: 'reset', sessionID: activeSessionID, history })
-      })
-      .catch((error: unknown) => {
-        if (!active || (error instanceof DOMException && error.name === 'AbortError')) return
-        dispatch({
-          t: 'reset',
-          sessionID: activeSessionID,
-          history: {
-            running: false,
-            events: [{ type: 'error', text: 'History could not be restored.' }],
-          },
+    async function restoreHistory(initial: boolean) {
+      if (!active || syncing) return
+      syncing = true
+      closeEvents()
+      dispatch({ t: 'status', sessionID, status: 'connecting' })
+      try {
+        const response = await fetch(sessionURL(sessionID, '/history'), {
+          cache: 'no-store',
+          signal: controller.signal,
         })
-      })
-      .finally(connect)
+        if (!response.ok) throw new Error(`history request failed (${response.status})`)
+        const history = (await response.json()) as HistoryResponse
+        if (!active) return
+        dispatch({ t: 'reset', sessionID, history })
+        const hasApproval = history.events.some((event) => event.type === 'confirm_request')
+        setSessions((current) =>
+          current.map((session) =>
+            session.id === sessionID
+              ? { ...session, running: history.running, hasApproval }
+              : session,
+          ),
+        )
+        connect(history.eventSeq ?? 0)
+      } catch (error: unknown) {
+        if (!active || (error instanceof DOMException && error.name === 'AbortError')) return
+        dispatch({ t: 'status', sessionID, status: 'disconnected' })
+        setServiceStatus('disconnected')
+        if (initial) {
+          dispatch({
+            t: 'reset',
+            sessionID,
+            history: {
+              running: false,
+              events: [{ type: 'error', text: 'History could not be restored.' }],
+            },
+          })
+          connect(0)
+        }
+      } finally {
+        syncing = false
+      }
+    }
+
+    void restoreHistory(true)
 
     return () => {
       active = false
       controller.abort()
-      es?.close()
+      closeEvents()
     }
   }, [activeSessionID])
 
@@ -1141,6 +1296,7 @@ export function useSession(): Session {
       id,
       text: submission.text,
       images: submission.images,
+      startedAt: new Date().toISOString(),
     })
     setSessions((current) =>
       current.map((session) =>
@@ -1221,7 +1377,15 @@ export function useSession(): Session {
     if (queued && !delivery) return
     if (!queued && delivery) return
     const id = `local-${sessionID}-${crypto.randomUUID()}`
-    dispatch({ t: 'sendUser', sessionID, id, text: trimmed, images, delivery })
+    dispatch({
+      t: 'sendUser',
+      sessionID,
+      id,
+      text: trimmed,
+      images,
+      startedAt: new Date().toISOString(),
+      delivery,
+    })
 
     if (queued) {
       const endpoint = delivery === 'followup' ? '/follow-up' : '/steer'

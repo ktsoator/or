@@ -13,7 +13,7 @@
   html, body, #root { height: 100%; }
   html {
     --ui-root-font-size: 15px;
-    --chat-font-size: 1.03125rem;
+    --chat-font-size: 1rem;
     --code-font-size: 0.875rem;
     --tool-font-size: 0.75rem;
     --tool-detail-font-size: 0.8125rem;

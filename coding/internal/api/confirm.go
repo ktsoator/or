@@ -81,6 +81,8 @@ func (b *ConfirmBroker) Resolve(id string, allow bool) bool {
 	delete(b.pending, id)
 	b.mu.Unlock()
 	if ok {
+		payload, _ := json.Marshal(wireEvent{Type: "confirm_resolved", ID: id})
+		b.hub.Broadcast(payload)
 		pending.response <- allow
 	}
 	return ok

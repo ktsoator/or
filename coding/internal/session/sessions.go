@@ -86,7 +86,8 @@ type Runtime struct {
 	record    record
 	session   *coding.Session
 	transport Transport
-	running   atomic.Bool
+	running   atomic.Bool // reserves the session until EndRun completes
+	live      atomic.Bool // state exposed to clients; clears before done is published
 
 	pendingMu sync.Mutex
 	pending   []QueuedMessage
@@ -258,6 +259,9 @@ func (m *Manager) build(record record) (*Runtime, error) {
 				})
 				return
 			}
+		}
+		if ev.Type == coding.RunCompleted {
+			runtime.live.Store(false)
 		}
 		runtime.forward(ev)
 	})
@@ -522,6 +526,7 @@ func (m *Manager) BeginPrompt(id, prompt string, hasImages bool) (*Runtime, erro
 	if !runtime.running.CompareAndSwap(false, true) {
 		return nil, coding.ErrBusy
 	}
+	runtime.live.Store(true)
 	previous := runtime.record
 	runtime.record.UpdatedAt = time.Now().UTC()
 	if runtime.record.AutoTitle {
@@ -535,6 +540,7 @@ func (m *Manager) BeginPrompt(id, prompt string, hasImages bool) (*Runtime, erro
 	if err := m.saveLocked(); err != nil {
 		runtime.record = previous
 		runtime.running.Store(false)
+		runtime.live.Store(false)
 		return nil, err
 	}
 	// Broadcast title change so the frontend updates immediately.
@@ -555,11 +561,13 @@ func (m *Manager) BeginCompact(id string) (*Runtime, error) {
 	if runtime.transport.HasPendingApproval() || !runtime.running.CompareAndSwap(false, true) {
 		return nil, ErrSessionActive
 	}
+	runtime.live.Store(true)
 	previous := runtime.record.UpdatedAt
 	runtime.record.UpdatedAt = time.Now().UTC()
 	if err := m.saveLocked(); err != nil {
 		runtime.record.UpdatedAt = previous
 		runtime.running.Store(false)
+		runtime.live.Store(false)
 		return nil, err
 	}
 	return runtime, nil
@@ -576,6 +584,7 @@ func (m *Manager) EndRun(id string) {
 		return
 	}
 	runtime.running.Store(false)
+	runtime.live.Store(false)
 	runtime.record.UpdatedAt = time.Now().UTC()
 	_ = m.saveLocked()
 	m.mu.Unlock()
@@ -631,7 +640,7 @@ func (s *Runtime) summary() Summary {
 		WorkspaceKind: s.record.WorkspaceKind,
 		CreatedAt:     s.record.CreatedAt,
 		UpdatedAt:     s.record.UpdatedAt,
-		Running:       s.running.Load(),
+		Running:       s.live.Load(),
 		HasApproval:   s.transport.HasPendingApproval(),
 		ModelProvider: s.record.Provider,
 		ModelID:       s.record.Model,
@@ -653,8 +662,10 @@ func NewID() string {
 // read its transcript. The Runtime owns its lifecycle; callers only use it.
 func (s *Runtime) Session() *coding.Session { return s.session }
 
-// Running reports whether a turn is in flight.
-func (s *Runtime) Running() bool { return s.running.Load() }
+// Running reports the live state exposed to clients. It clears before the
+// terminal event is published, while the internal reservation remains held
+// until EndRun finishes its cleanup.
+func (s *Runtime) Running() bool { return s.live.Load() }
 
 // HasPendingApproval reports a permission gate still waiting on an answer.
 func (s *Runtime) HasPendingApproval() bool { return s.transport.HasPendingApproval() }

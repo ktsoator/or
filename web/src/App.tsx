@@ -1511,6 +1511,8 @@ function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
           )}
         </section>
       )
+    case 'run':
+      return <RunDuration item={item} />
     case 'thinking':
       return <Thinking item={item} />
     case 'tool':
@@ -1531,4 +1533,47 @@ function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
         </div>
       )
   }
+}
+
+function RunDuration({ item }: { item: Extract<Item, { kind: 'run' }> }) {
+  const { locale, t } = useI18n()
+  const [now, setNow] = useState(() => Date.now())
+  const running = item.durationMs === undefined
+
+  useEffect(() => {
+    if (!running) return
+    setNow(Date.now())
+    const interval = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(interval)
+  }, [item.startedAt, running])
+
+  const startedAt = new Date(item.startedAt).getTime()
+  const durationMs =
+    item.durationMs ?? (Number.isFinite(startedAt) ? Math.max(0, now - startedAt) : 0)
+  const duration = formatRunDuration(durationMs, locale)
+
+  return (
+    <div className="mt-7 mb-4 animate-[fade-in_160ms_ease-out]">
+      <div className="text-[0.8125rem] leading-5 text-stone-400 tabular-nums">
+        {t(running ? 'run.working' : 'run.completed', { duration })}
+      </div>
+      <div className="mt-2.5 h-px bg-stone-200/80" aria-hidden="true" />
+    </div>
+  )
+}
+
+function formatRunDuration(durationMs: number, locale: 'en' | 'zh-CN'): string {
+  const totalSeconds = Math.max(0, Math.floor(durationMs / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+
+  if (locale === 'zh-CN') {
+    if (hours > 0) return `${hours} 小时 ${minutes} 分 ${seconds} 秒`
+    if (minutes > 0) return `${minutes} 分 ${seconds} 秒`
+    return `${seconds} 秒`
+  }
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`
+  if (minutes > 0) return `${minutes}m ${seconds}s`
+  return `${seconds}s`
 }
