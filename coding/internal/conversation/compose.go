@@ -16,6 +16,7 @@ type engineSessionConfig struct {
 	TranscriptPath string
 	Model          llm.Model
 	ThinkingLevel  llm.ModelThinkingLevel
+	PermissionMode permission.Mode
 }
 
 // This is the one place an engine.Session is assembled. Every conversation the
@@ -37,6 +38,7 @@ func newEngineSession(
 		Cwd:           cfg.WorkspacePath,
 		Store:         transcript.NewJSONL(cfg.TranscriptPath),
 		DetailsStore:  transcript.NewJSONLDetails(detailsFile(cfg.TranscriptPath)),
+		Policy:        permission.PolicyForMode(cfg.PermissionMode),
 		Approver:      approver,
 		Skills:        loadSkills(cfg.WorkspacePath),
 	})

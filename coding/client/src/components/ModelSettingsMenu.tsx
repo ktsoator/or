@@ -246,7 +246,7 @@ export function ModelSettingsMenu({
             <>
               <DropdownMenu.Separator className="mx-2 my-1 h-px bg-stone-100" />
               <DropdownMenu.Item
-                className="flex h-9 cursor-default select-none items-center gap-2.5 rounded-[10px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)] data-[disabled]:opacity-40"
+                className="flex h-[30px] cursor-default select-none items-center gap-2.5 rounded-[10px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)] data-[disabled]:opacity-40"
                 disabled={compacting}
                 onSelect={onCompact}
               >
@@ -324,13 +324,13 @@ function formatTokenDecimal(value: number, formatNumber: NumberFormatter): strin
 }
 
 const subTriggerClass = cn(
-  'mb-0.5 flex h-9 cursor-default select-none items-center rounded-[10px] px-2.5 outline-none last:mb-0',
+  'mb-0.5 flex h-[30px] cursor-default select-none items-center rounded-[10px] px-2.5 outline-none last:mb-0',
   'data-[highlighted]:bg-[rgb(241,241,241)] data-[state=open]:bg-[rgb(237,237,237)]',
   'data-[disabled]:opacity-40',
 )
 
 const radioItemClass = cn(
-  'relative flex h-9 cursor-default select-none items-center gap-2 rounded-[10px] px-2.5 pr-9 text-[0.875rem] outline-none',
+  'relative flex h-[30px] cursor-default select-none items-center gap-2 rounded-[10px] px-2.5 pr-9 text-[0.875rem] outline-none',
   'data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(237,237,237)] data-[state=checked]:font-medium',
 )
 

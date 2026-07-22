@@ -53,8 +53,9 @@ type wireEvent struct {
 	AITitle     string `json:"aiTitle,omitempty"`
 	CustomTitle string `json:"customTitle,omitempty"`
 	// run timing
-	StartedAt  string `json:"startedAt,omitempty"`
-	DurationMS *int64 `json:"durationMs,omitempty"`
+	StartedAt   string `json:"startedAt,omitempty"`
+	CompletedAt string `json:"completedAt,omitempty"`
+	DurationMS  *int64 `json:"durationMs,omitempty"`
 }
 
 type wireImage struct {
@@ -121,13 +122,14 @@ func ProjectEvent(ev engine.Event) ([]byte, bool) {
 
 	case engine.MessageCompleted:
 		out = wireEvent{
-			Type:      "message_end",
-			Text:      ev.Text,
-			Usage:     projectUsage(ev.Usage),
-			Final:     ev.FinalResponse,
-			Provider:  ev.Provider,
-			Model:     ev.Model,
-			ModelName: displayModelName(ev.Provider, ev.Model),
+			Type:        "message_end",
+			Text:        ev.Text,
+			Usage:       projectUsage(ev.Usage),
+			Final:       ev.FinalResponse,
+			Provider:    ev.Provider,
+			Model:       ev.Model,
+			ModelName:   displayModelName(ev.Provider, ev.Model),
+			CompletedAt: formatEventTime(ev.CompletedAt),
 		}
 
 	case engine.TurnDiscarded:
@@ -188,12 +190,13 @@ func ProjectHistory(items []engine.HistoryItem) []wireEvent {
 
 		case engine.HistoryAssistant:
 			out = append(out, wireEvent{
-				Type:      "message_end",
-				Text:      item.Text,
-				Final:     item.FinalResponse,
-				Provider:  item.Provider,
-				Model:     item.Model,
-				ModelName: displayModelName(item.Provider, item.Model),
+				Type:        "message_end",
+				Text:        item.Text,
+				Final:       item.FinalResponse,
+				Provider:    item.Provider,
+				Model:       item.Model,
+				ModelName:   displayModelName(item.Provider, item.Model),
+				CompletedAt: formatEventTime(item.CompletedAt),
 			})
 
 		case engine.HistoryThinking:

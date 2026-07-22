@@ -91,3 +91,56 @@ func TestServiceCancelsApproval(t *testing.T) {
 		t.Fatalf("Authorize() = %+v, %v, want cancelled Deny", decision, err)
 	}
 }
+
+func TestPolicyModes(t *testing.T) {
+	tests := []struct {
+		name   string
+		mode   Mode
+		access Access
+		want   Behavior
+	}{
+		{name: "ask allows workspace reads", mode: ModeAsk, access: Access{Action: Read, Location: Workspace}, want: Allow},
+		{name: "ask prompts for workspace writes", mode: ModeAsk, access: Access{Action: Write, Location: Workspace}, want: Ask},
+		{name: "auto edit allows workspace writes", mode: ModeAutoEdit, access: Access{Action: Write, Location: Workspace}, want: Allow},
+		{name: "auto edit prompts for external writes", mode: ModeAutoEdit, access: Access{Action: Write, Location: OutsideWorkspace}, want: Ask},
+		{name: "auto edit prompts for shell commands", mode: ModeAutoEdit, access: Access{Action: Execute}, want: Ask},
+		{name: "read only blocks writes", mode: ModeReadOnly, access: Access{Action: Write, Location: Workspace}, want: Deny},
+		{name: "read only blocks shell commands", mode: ModeReadOnly, access: Access{Action: Execute}, want: Deny},
+		{name: "read only still prompts for external reads", mode: ModeReadOnly, access: Access{Action: Read, Location: OutsideWorkspace}, want: Ask},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := PolicyForMode(test.mode)(Request{Accesses: []Access{test.access}})
+			if got.Behavior != test.want {
+				t.Fatalf("PolicyForMode(%q) = %+v, want %q", test.mode, got, test.want)
+			}
+		})
+	}
+}
+
+func TestServiceCanChangePolicy(t *testing.T) {
+	service, err := NewService(t.TempDir(), PolicyForMode(ModeAsk), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := Request{Tool: "write", Accesses: []Access{{Action: Write, Path: "file.txt"}}}
+	before, err := service.Authorize(context.Background(), request)
+	if err != nil || before.Behavior != Deny {
+		t.Fatalf("Authorize() before mode change = %+v, %v, want denied without approver", before, err)
+	}
+	service.SetPolicy(PolicyForMode(ModeAutoEdit))
+	after, err := service.Authorize(context.Background(), request)
+	if err != nil || after.Behavior != Allow {
+		t.Fatalf("Authorize() after mode change = %+v, %v, want Allow", after, err)
+	}
+}
+
+func TestReadOnlyDenyTakesPriorityOverApproval(t *testing.T) {
+	decision := PolicyForMode(ModeReadOnly)(Request{Accesses: []Access{
+		{Action: Read, Location: OutsideWorkspace},
+		{Action: Write, Location: Workspace},
+	}})
+	if decision.Behavior != Deny {
+		t.Fatalf("read-only mixed access decision = %+v, want Deny", decision)
+	}
+}

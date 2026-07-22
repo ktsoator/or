@@ -11,6 +11,7 @@ import type {
   Item,
   ModelCatalogResponse,
   ModelOption,
+  PermissionMode,
   MessageImage,
   QueuedMessage,
   SessionSummary,
@@ -160,6 +161,7 @@ function threadsReducer(state: ThreadsState, action: Action): ThreadsState {
                 id: action.id,
                 text: action.text,
                 images: action.images,
+                sentAt: action.startedAt,
                 deliveryStatus: 'sending',
               },
               {
@@ -287,7 +289,15 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
         }
         items = [...items, run]
       }
-      const projectedRun = items[idx >= 0 ? idx : items.length - 1]
+      const projectedRunIndex = idx >= 0 ? idx : items.length - 1
+      const projectedRun = items[projectedRunIndex]
+      const precedingItem = items[projectedRunIndex - 1]
+      if (projectedRun.kind === 'run' && precedingItem?.kind === 'user' && !precedingItem.sentAt) {
+        items = replaceAt(items, projectedRunIndex - 1, {
+          ...precedingItem,
+          sentAt: projectedRun.startedAt,
+        })
+      }
       if (projectedRun.kind === 'run' && projectedRun.durationMs === undefined) running = true
       break
     }
@@ -346,19 +356,24 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
             idx = runIndex - 1
           }
         }
+        const openRunIndex = lastIndex(
+          items,
+          (item) => item.kind === 'run' && item.durationMs === undefined,
+        )
+        const existingItem = idx >= 0 ? items[idx] : undefined
+        const existingUser = existingItem?.kind === 'user' ? existingItem : undefined
+        const openRun = openRunIndex >= 0 ? items[openRunIndex] : undefined
         const user = {
           kind: 'user' as const,
           id: ev.id ?? (idx >= 0 ? items[idx].id : nextId()),
           text,
           images,
+          sentAt:
+            existingUser?.sentAt ?? (openRun?.kind === 'run' ? openRun.startedAt : undefined),
         }
         if (idx >= 0) {
           items = replaceAt(items, idx, user)
         } else {
-          const openRunIndex = lastIndex(
-            items,
-            (item) => item.kind === 'run' && item.durationMs === undefined,
-          )
           items =
             openRunIndex >= 0 && !ev.delivery
               ? [...items.slice(0, openRunIndex), user, ...items.slice(openRunIndex)]
@@ -516,6 +531,7 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
             provider: ev.provider,
             model: ev.model,
             modelName: ev.modelName,
+            completedAt: ev.completedAt,
           })
           responseUsage = emptyUsage()
         }
@@ -708,6 +724,7 @@ export type Session = {
   renameSession: (id: string, customTitle: string) => Promise<SessionSummary>
   selectSession: (id: string) => void
   updateSettings: (provider: string, model: string, thinkingLevel: ThinkingLevel) => Promise<void>
+  updatePermissionMode: (mode: PermissionMode) => Promise<void>
   compactContext: () => Promise<CompactionResult>
   send: (text: string, images: MessageImage[], delivery?: DeliveryMode) => void
   removeQueuedMessage: (id: string) => Promise<void>
@@ -722,6 +739,7 @@ export type SessionDraft = {
   modelProvider?: string
   modelID?: string
   thinkingLevel?: ThinkingLevel
+  permissionMode: PermissionMode
 }
 
 type DraftSubmission = {
@@ -766,6 +784,7 @@ function newSessionDraft(
     modelProvider: base?.modelProvider ?? fallback?.provider,
     modelID: base?.modelId ?? fallback?.id,
     thinkingLevel: base?.thinkingLevel ?? fallbackThinking,
+    permissionMode: base?.permissionMode ?? 'ask',
   }
 }
 
@@ -778,6 +797,7 @@ function resolveSessionDraft(
   return {
     ...newSessionDraft(draft.workspacePath, draft.projectScoped, undefined, models, defaults),
     id: draft.id,
+    permissionMode: draft.permissionMode,
   }
 }
 
@@ -1124,6 +1144,7 @@ export function useSession(): Session {
     provider: string,
     model: string,
     thinkingLevel: ThinkingLevel,
+    permissionMode: PermissionMode,
   ) => {
     const response = await fetch(apiURL('/sessions'), {
       method: 'POST',
@@ -1134,6 +1155,7 @@ export function useSession(): Session {
         provider,
         model,
         thinkingLevel,
+        permissionMode,
       }),
     })
     if (!response.ok) throw new Error(`create session failed (${response.status})`)
@@ -1261,6 +1283,42 @@ export function useSession(): Session {
           contextWindow,
         })
       }
+    } finally {
+      setUpdatingSettings(false)
+    }
+  }
+
+  const updatePermissionMode = async (mode: PermissionMode) => {
+    if (draftRef.current) {
+      const next = { ...draftRef.current, permissionMode: mode }
+      draftRef.current = next
+      setDraft(next)
+      return
+    }
+    if (!activeSessionID || updatingSettings) return
+    const sessionID = activeSessionID
+    setUpdatingSettings(true)
+    try {
+      const response = await fetch(sessionURL(sessionID, '/permission-mode'), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode }),
+      })
+      if (!response.ok) {
+        let message = `update permission mode failed (${response.status})`
+        try {
+          const body = (await response.json()) as { error?: string }
+          if (body.error) message = body.error
+        } catch {
+          // Keep the status-based fallback when the response has no JSON body.
+        }
+        throw new Error(message)
+      }
+      const updated = (await response.json()) as SessionSummary
+      setSessions((current) => [
+        updated,
+        ...current.filter((session) => session.id !== updated.id),
+      ])
     } finally {
       setUpdatingSettings(false)
     }
@@ -1396,6 +1454,7 @@ export function useSession(): Session {
       const provider = requestedDraft.modelProvider
       const model = requestedDraft.modelID
       const thinkingLevel = requestedDraft.thinkingLevel
+      const permissionMode = requestedDraft.permissionMode
       setCreating(true)
       void (async () => {
         try {
@@ -1405,6 +1464,7 @@ export function useSession(): Session {
             provider,
             model,
             thinkingLevel,
+            permissionMode,
           )
           draftRef.current = undefined
           setDraft(undefined)
@@ -1573,6 +1633,7 @@ export function useSession(): Session {
     renameSession,
     selectSession,
     updateSettings,
+    updatePermissionMode,
     compactContext,
     send,
     removeQueuedMessage,

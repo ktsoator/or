@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/coding/internal/workspace"
 	"github.com/ktsoator/or/llm"
 )
@@ -18,7 +19,11 @@ func (m *Manager) Create(
 	title, workspacePath, scope string,
 	model llm.Model,
 	thinking llm.ModelThinkingLevel,
+	permissionMode permission.Mode,
 ) (Summary, error) {
+	if !permissionMode.Valid() {
+		return Summary{}, fmt.Errorf("%w: %q", ErrInvalidPermissionMode, permissionMode)
+	}
 	startedAt := time.Now()
 	now := startedAt.UTC()
 	title = strings.TrimSpace(title)
@@ -61,18 +66,19 @@ func (m *Manager) Create(
 	}
 
 	record := record{
-		ID:            id,
-		Title:         title,
-		WorkspacePath: workspacePath,
-		Scope:         scope,
-		WorkspaceKind: workspaceKind,
-		CreatedAt:     now,
-		UpdatedAt:     now,
-		Transcript:    filepath.Join(filepath.Dir(m.indexPath), id+".jsonl"),
-		AutoTitle:     autoTitle,
-		Provider:      model.Provider,
-		Model:         model.ID,
-		Thinking:      string(llm.ClampThinkingLevel(model, thinking)),
+		ID:             id,
+		Title:          title,
+		WorkspacePath:  workspacePath,
+		Scope:          scope,
+		WorkspaceKind:  workspaceKind,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+		Transcript:     filepath.Join(filepath.Dir(m.indexPath), id+".jsonl"),
+		AutoTitle:      autoTitle,
+		Provider:       model.Provider,
+		Model:          model.ID,
+		Thinking:       string(llm.ClampThinkingLevel(model, thinking)),
+		PermissionMode: string(permissionMode),
 	}
 	runtime, err := m.build(record)
 	if err != nil {
@@ -174,6 +180,35 @@ func (m *Manager) UpdateSettings(
 		runtime.record = previousRecord
 		runtime.session.SetModel(previousModel)
 		runtime.session.SetThinkingLevel(previousThinking)
+		return Summary{}, err
+	}
+	return runtime.summary(), nil
+}
+
+// UpdatePermissionMode changes the baseline tool policy used by subsequent
+// calls and persists it with the conversation.
+func (m *Manager) UpdatePermissionMode(id string, mode permission.Mode) (Summary, error) {
+	if !mode.Valid() {
+		return Summary{}, fmt.Errorf("%w: %q", ErrInvalidPermissionMode, mode)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	runtime, ok := m.sessions[id]
+	if !ok {
+		return Summary{}, os.ErrNotExist
+	}
+	if runtime.running.Load() || runtime.transport.HasPendingApproval() {
+		return Summary{}, ErrSessionActive
+	}
+
+	previousRecord := runtime.record
+	previousMode := permission.NormalizeMode(permission.Mode(previousRecord.PermissionMode))
+	runtime.session.SetPermissionPolicy(permission.PolicyForMode(mode))
+	runtime.record.PermissionMode = string(mode)
+	runtime.record.UpdatedAt = time.Now().UTC()
+	if err := m.saveLocked(); err != nil {
+		runtime.record = previousRecord
+		runtime.session.SetPermissionPolicy(permission.PolicyForMode(previousMode))
 		return Summary{}, err
 	}
 	return runtime.summary(), nil

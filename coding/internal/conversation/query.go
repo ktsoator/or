@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/ktsoator/or/coding/internal/engine"
+	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -51,22 +52,23 @@ func (s *Runtime) summary() Summary {
 		modelName = model.Name
 	}
 	return Summary{
-		ID:            s.record.ID,
-		Title:         s.displayTitle(),
-		AITitle:       s.record.AITitle,
-		CustomTitle:   s.record.CustomTitle,
-		WorkspacePath: s.record.WorkspacePath,
-		WorkspaceName: filepath.Base(s.record.WorkspacePath),
-		Scope:         s.record.Scope,
-		WorkspaceKind: s.record.WorkspaceKind,
-		CreatedAt:     s.record.CreatedAt,
-		UpdatedAt:     s.record.UpdatedAt,
-		Running:       s.live.Load(),
-		HasApproval:   s.transport.HasPendingApproval(),
-		ModelProvider: s.record.Provider,
-		ModelID:       s.record.Model,
-		ModelName:     modelName,
-		ThinkingLevel: llm.ModelThinkingLevel(s.record.Thinking),
+		ID:             s.record.ID,
+		Title:          s.displayTitle(),
+		AITitle:        s.record.AITitle,
+		CustomTitle:    s.record.CustomTitle,
+		WorkspacePath:  s.record.WorkspacePath,
+		WorkspaceName:  filepath.Base(s.record.WorkspacePath),
+		Scope:          s.record.Scope,
+		WorkspaceKind:  s.record.WorkspaceKind,
+		CreatedAt:      s.record.CreatedAt,
+		UpdatedAt:      s.record.UpdatedAt,
+		Running:        s.live.Load(),
+		HasApproval:    s.transport.HasPendingApproval(),
+		ModelProvider:  s.record.Provider,
+		ModelID:        s.record.Model,
+		ModelName:      modelName,
+		ThinkingLevel:  llm.ModelThinkingLevel(s.record.Thinking),
+		PermissionMode: permission.NormalizeMode(permission.Mode(s.record.PermissionMode)),
 	}
 }
 

@@ -57,6 +57,9 @@ func TestSessionPersistsAndReplaysRunTiming(t *testing.T) {
 	if history[1].StartedAt.IsZero() || history[1].CompletedAt.Before(history[1].StartedAt) {
 		t.Fatalf("invalid replay timing: %#v", history[1])
 	}
+	if !history[2].CompletedAt.Equal(history[1].CompletedAt) {
+		t.Fatalf("response completion = %v, want run completion %v", history[2].CompletedAt, history[1].CompletedAt)
+	}
 
 	restored, err := New(ctx, Options{
 		Model:    llm.Model{Provider: "test", ID: "model"},
@@ -70,6 +73,9 @@ func TestSessionPersistsAndReplaysRunTiming(t *testing.T) {
 	replayed := restored.History()
 	if len(replayed) != len(history) || replayed[1].Type != HistoryRun {
 		t.Fatalf("restored history = %#v", replayed)
+	}
+	if !replayed[2].CompletedAt.Equal(replayed[1].CompletedAt) {
+		t.Fatalf("restored response completion = %v, want run completion %v", replayed[2].CompletedAt, replayed[1].CompletedAt)
 	}
 }
 

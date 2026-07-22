@@ -66,6 +66,27 @@ func (s *Server) handleSessionSettings(c *gin.Context) {
 	}
 }
 
+func (s *Server) handlePermissionMode(c *gin.Context) {
+	var body struct {
+		Mode permission.Mode `json:"mode"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || !body.Mode.Valid() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid permission mode"})
+		return
+	}
+	summary, err := s.conversations.UpdatePermissionMode(c.Param("sessionID"), body.Mode)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+	case errors.Is(err, conversation.ErrSessionActive):
+		c.JSON(http.StatusConflict, gin.H{"error": "wait for the session to become idle before changing permissions"})
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	default:
+		c.JSON(http.StatusOK, summary)
+	}
+}
+
 func (s *Server) handleRenameSession(c *gin.Context) {
 	var body struct {
 		CustomTitle string `json:"customTitle"`
@@ -116,12 +137,13 @@ func (s *Server) handleSessions(c *gin.Context) {
 
 func (s *Server) handleCreateSession(c *gin.Context) {
 	var body struct {
-		Title         string `json:"title"`
-		WorkspacePath string `json:"workspacePath"`
-		Scope         string `json:"scope"`
-		Provider      string `json:"provider"`
-		Model         string `json:"model"`
-		ThinkingLevel string `json:"thinkingLevel"`
+		Title          string          `json:"title"`
+		WorkspacePath  string          `json:"workspacePath"`
+		Scope          string          `json:"scope"`
+		Provider       string          `json:"provider"`
+		Model          string          `json:"model"`
+		ThinkingLevel  string          `json:"thinkingLevel"`
+		PermissionMode permission.Mode `json:"permissionMode"`
 	}
 	if c.Request.ContentLength > 0 {
 		if err := c.ShouldBindJSON(&body); err != nil {
@@ -143,7 +165,15 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "thinking level is not supported by this model"})
 		return
 	}
-	summary, err := s.conversations.Create(body.Title, body.WorkspacePath, body.Scope, model, thinking)
+	mode := body.PermissionMode
+	if mode == "" {
+		mode = permission.ModeAsk
+	}
+	if !mode.Valid() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid permission mode"})
+		return
+	}
+	summary, err := s.conversations.Create(body.Title, body.WorkspacePath, body.Scope, model, thinking, mode)
 	if errors.Is(err, workspace.ErrInvalid) || errors.Is(err, conversation.ErrInvalidSessionScope) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -441,6 +471,7 @@ func (s *Server) mountSessions(r gin.IRouter) {
 	one.GET("/events", s.handleEvents)
 	one.DELETE("", s.handleDeleteSession)
 	one.PATCH("/settings", s.handleSessionSettings)
+	one.PATCH("/permission-mode", s.handlePermissionMode)
 	one.PATCH("/title", s.handleRenameSession)
 	one.POST("/prompt", s.handlePrompt)
 	one.POST("/steer", s.handleSteer)

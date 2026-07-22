@@ -10,6 +10,7 @@ import type {
   MessageImage,
   ModelOption,
   PendingImage,
+  PermissionMode,
   QueuedMessage,
   ThinkingLevel,
   WorkspaceSummary,
@@ -17,6 +18,7 @@ import type {
 import { cn } from '@/lib/utils'
 import { Approval } from './Approval'
 import { ModelSettingsMenu } from './ModelSettingsMenu'
+import { PermissionModeMenu } from './PermissionModeMenu'
 import { ProjectPicker } from './ProjectPicker'
 import { useI18n } from '@/i18n'
 
@@ -34,6 +36,7 @@ export function Composer({
   modelProvider,
   modelID,
   thinkingLevel,
+  permissionMode,
   updatingSettings,
   compacting,
   onSend,
@@ -44,6 +47,7 @@ export function Composer({
   onBrowseProjects,
   onConfigureModel,
   onSettingsChange,
+  onPermissionModeChange,
   onCompact,
 }: {
   connected: boolean
@@ -59,6 +63,7 @@ export function Composer({
   modelProvider?: string
   modelID?: string
   thinkingLevel?: ThinkingLevel
+  permissionMode: PermissionMode
   updatingSettings: boolean
   compacting: boolean
   onSend: (text: string, images: MessageImage[], delivery?: DeliveryMode) => void
@@ -73,6 +78,7 @@ export function Composer({
     model: string,
     thinkingLevel: ThinkingLevel,
   ) => Promise<void>
+  onPermissionModeChange: (mode: PermissionMode) => Promise<void>
   onCompact?: () => Promise<unknown>
 }) {
   const { t } = useI18n()
@@ -112,7 +118,7 @@ export function Composer({
     if (!running) setDelivery('steer')
   }, [running])
 
-  useEffect(() => setSettingsError(''), [modelProvider, modelID, thinkingLevel])
+  useEffect(() => setSettingsError(''), [modelProvider, modelID, thinkingLevel, permissionMode])
 
   useEffect(() => {
     if (supportsImages) setAttachmentError('')
@@ -192,6 +198,15 @@ export function Composer({
     }
   }
 
+  const changePermissionMode = async (mode: PermissionMode) => {
+    setSettingsError('')
+    try {
+      await onPermissionModeChange(mode)
+    } catch (error) {
+      setSettingsError(error instanceof Error ? error.message : t('permission.couldNotUpdate'))
+    }
+  }
+
   const removeQueued = async (id: string) => {
     setQueueError('')
     try {
@@ -242,7 +257,7 @@ export function Composer({
           : 'shrink-0 bg-white px-3 pt-3 pb-4 md:px-8 max-md:pt-2',
       )}
     >
-      <div className="relative mx-auto flex w-full max-w-[56rem] flex-col gap-2">
+      <div className="relative mx-auto flex w-full max-w-[750px] flex-col gap-2">
         {queuedMessages.length > 0 && (
           <PendingQueue messages={queuedMessages} onRemove={(id) => void removeQueued(id)} />
         )}
@@ -285,8 +300,13 @@ export function Composer({
                 event.target.value = ''
               }}
             />
-            {projectPickerVisible && (
-              <div className="col-start-2 row-start-2 flex min-w-0 items-center">
+            <div className="col-start-2 row-start-2 flex min-w-0 items-center gap-1">
+              <PermissionModeMenu
+                value={permissionMode}
+                disabled={settingsDisabled}
+                onChange={changePermissionMode}
+              />
+              {projectPickerVisible && (
                 <ProjectPicker
                   workspaces={workspaces}
                   selectedPath={workspacePath}
@@ -294,8 +314,8 @@ export function Composer({
                   onSelect={onSelectProject}
                   onBrowse={onBrowseProjects}
                 />
-              </div>
-            )}
+              )}
+            </div>
             <div className="col-span-3 col-start-1 row-start-1 flex min-w-0 flex-col gap-2">
               {images.length > 0 && (
                 <div className="flex flex-wrap gap-2 px-1 pt-1">

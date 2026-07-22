@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Check, Copy, ThumbsDown, ThumbsUp, type LucideIcon } from 'lucide-react'
 import { Tooltip } from 'radix-ui'
 import type { Usage } from '@/types'
+import { formatMessageTime } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 
@@ -9,12 +10,14 @@ export function ResponseActions({
   usage,
   modelName,
   responseText,
+  completedAt,
 }: {
   usage?: Usage
   modelName?: string
   responseText: string
+  completedAt?: string
 }) {
-  const { t, formatNumber } = useI18n()
+  const { locale, t, formatNumber } = useI18n()
   const [copied, setCopied] = useState(false)
   const [feedback, setFeedback] = useState<'up' | 'down'>()
   const resetCopyRef = useRef<number>(undefined)
@@ -23,6 +26,7 @@ export function ResponseActions({
     : 0
   const promptTokens = usage ? usage.input + usage.cacheRead : 0
   const cacheHitRate = usage && promptTokens > 0 ? usage.cacheRead / promptTokens : 0
+  const completedTime = completedAt ? formatMessageTime(completedAt, locale) : ''
 
   useEffect(
     () => () => {
@@ -64,6 +68,15 @@ export function ResponseActions({
           pressed={feedback === 'down'}
           onClick={() => setFeedback((current) => (current === 'down' ? undefined : 'down'))}
         />
+
+        {completedTime && (
+          <time
+            className="ml-1.5 shrink-0 text-[0.75rem] leading-5 text-stone-400 tabular-nums"
+            dateTime={completedAt}
+          >
+            {completedTime}
+          </time>
+        )}
 
         {usage && hasUsage(usage) && (
           <>

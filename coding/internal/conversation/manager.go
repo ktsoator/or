@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/ktsoator/or/coding/internal/engine"
+	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/coding/internal/usage"
 	"github.com/ktsoator/or/coding/internal/workspace"
 	"github.com/ktsoator/or/llm"
@@ -110,11 +111,14 @@ func (m *Manager) build(record record) (*Runtime, error) {
 	record.Provider = model.Provider
 	record.Model = model.ID
 	record.Thinking = string(thinking)
+	permissionMode := permission.NormalizeMode(permission.Mode(record.PermissionMode))
+	record.PermissionMode = string(permissionMode)
 	session, err := newEngineSession(m.ctx, engineSessionConfig{
 		WorkspacePath:  workspacePath,
 		TranscriptPath: record.Transcript,
 		Model:          model,
 		ThinkingLevel:  thinking,
+		PermissionMode: permissionMode,
 	}, transport)
 	if err != nil {
 		return nil, err

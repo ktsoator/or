@@ -590,6 +590,12 @@ func (s *Session) SetThinkingLevel(level llm.ModelThinkingLevel) {
 	s.agent.SetThinkingLevel(level)
 }
 
+// SetPermissionPolicy replaces the authorization policy used by subsequent
+// tool calls. Call it only while the session is idle.
+func (s *Session) SetPermissionPolicy(policy permission.Policy) {
+	s.authorizer.SetPolicy(policy)
+}
+
 func (s *Session) snapshotTranscript() ([]transcript.Entry, string) {
 	entries, leafID, _ := s.snapshotTranscriptState()
 	return entries, leafID

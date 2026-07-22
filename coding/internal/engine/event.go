@@ -138,6 +138,7 @@ func projectAgentEvent(ev agent.AgentEvent) (Event, bool) {
 			ResponseModel: assistant.ResponseModel,
 			ResponseID:    assistant.ResponseID,
 			Timestamp:     time.UnixMilli(assistant.Timestamp).UTC(),
+			CompletedAt:   time.Now().UTC(),
 		}, true
 
 	case agent.AgentEnd:

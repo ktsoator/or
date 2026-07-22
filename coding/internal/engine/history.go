@@ -51,8 +51,8 @@ type HistoryItem struct {
 	// request that contributed to the preceding final response.
 	Usage llm.Usage
 
-	// Run timing is populated for HistoryRun. CompletedAt stays zero while a
-	// history snapshot is taken during the active run.
+	// Run timing is populated for HistoryRun. CompletedAt is also populated for
+	// the final assistant response associated with a completed run.
 	StartedAt   time.Time
 	CompletedAt time.Time
 }
@@ -143,6 +143,14 @@ func projectRunHistory(
 	completedAt time.Time,
 ) []HistoryItem {
 	projected := projectHistory(messages, details)
+	if !completedAt.IsZero() {
+		for index := len(projected) - 1; index >= 0; index-- {
+			if projected[index].Type == HistoryAssistant && projected[index].FinalResponse {
+				projected[index].CompletedAt = completedAt
+				break
+			}
+		}
+	}
 	run := HistoryItem{Type: HistoryRun, StartedAt: startedAt, CompletedAt: completedAt}
 	if len(projected) > 0 && projected[0].Type == HistoryUser {
 		items := make([]HistoryItem, 0, len(projected)+1)

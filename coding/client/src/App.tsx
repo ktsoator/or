@@ -43,6 +43,7 @@ import { StepGroup } from './components/StepGroup'
 import { groupItems } from './lib/steps'
 import { ProfileMenu } from './components/ProfileMenu'
 import { ResponseActions } from './components/ResponseActions'
+import { formatMessageTime } from './lib/time'
 import { SettingsPage, type SettingsSection } from './components/SettingsPage'
 import { SkillsPage } from './components/SkillsPage'
 import { WorkspacePickerDialog } from './components/WorkspacePickerDialog'
@@ -108,6 +109,7 @@ export default function App() {
     renameSession,
     selectSession,
     updateSettings,
+    updatePermissionMode,
     compactContext,
     send,
     removeQueuedMessage,
@@ -408,6 +410,7 @@ export default function App() {
       modelProvider={draft?.modelProvider ?? activeSession?.modelProvider}
       modelID={draft?.modelID ?? activeSession?.modelId}
       thinkingLevel={draft?.thinkingLevel ?? activeSession?.thinkingLevel}
+      permissionMode={draft?.permissionMode ?? activeSession?.permissionMode ?? 'ask'}
       updatingSettings={updatingSettings}
       compacting={compacting}
       onSend={send}
@@ -426,6 +429,7 @@ export default function App() {
         setSettingsOpen(true)
       }}
       onSettingsChange={updateSettings}
+      onPermissionModeChange={updatePermissionMode}
       onCompact={draft ? undefined : compactContext}
     />
   )
@@ -694,7 +698,7 @@ export default function App() {
         />
       ) : (
       <div className="relative flex h-full min-w-0 flex-col">
-        <header className="z-20 flex h-13 shrink-0 items-center justify-between gap-3 border-b border-stone-200/80 bg-white px-6 max-md:h-12 max-md:px-4">
+        <header className="z-20 flex h-13 shrink-0 items-center gap-3 border-b border-stone-200/80 bg-white px-6 max-md:h-12 max-md:px-4">
           <div className="flex min-w-0 items-center gap-2.5">
             <button
               className="-ml-1 grid size-7 shrink-0 place-items-center rounded-md text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-900 md:hidden"
@@ -732,19 +736,6 @@ export default function App() {
               </span>
             </div>
           </div>
-          {activeSession?.modelName && (
-            <div className="flex shrink-0 items-center gap-1.5 text-[0.8125rem] text-stone-400 max-sm:hidden">
-              <span className="font-medium text-stone-500">{activeSession.modelName}</span>
-              {activeSession.thinkingLevel && activeSession.thinkingLevel !== 'off' && (
-                <>
-                  <span className="text-stone-300" aria-hidden="true">
-                    ·
-                  </span>
-                  <span>{t(`effort.${activeSession.thinkingLevel}` as Parameters<typeof t>[0])}</span>
-                </>
-              )}
-            </div>
-          )}
         </header>
 
         <main
@@ -754,7 +745,7 @@ export default function App() {
         >
           <div
             className={cn(
-              'mx-auto min-h-full w-full max-w-[56rem] py-8 pb-12 max-md:py-6',
+              'mx-auto min-h-full w-full max-w-[750px] py-8 pb-12 max-md:py-6',
               (loading || emptySession) && 'grid place-items-center',
             )}
           >
@@ -1489,7 +1480,7 @@ function AutoCompactionStatus() {
 }
 
 function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
-  const { t } = useI18n()
+  const { locale, t } = useI18n()
   switch (item.kind) {
     case 'user':
       return (
@@ -1508,14 +1499,21 @@ function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
               </div>
             )}
             {item.text && (
-              <div className="rounded-xl bg-stone-100 px-3.5 py-2.5 text-[var(--chat-font-size)] leading-[1.58] whitespace-pre-wrap">
+              <div className="rounded-xl bg-stone-100 px-3.5 py-2.5 text-[14px] leading-[22px] whitespace-pre-wrap">
                 {item.text}
               </div>
             )}
-            {item.deliveryStatus === 'failed' && (
-              <span className="-mt-1 inline-flex items-center gap-1.5 px-1 text-[0.71875rem] leading-4 text-red-600">
-                {t('app.notSent')}
-              </span>
+            {(item.sentAt || item.deliveryStatus === 'failed') && (
+              <div className="-mt-1 flex items-center justify-end gap-2 px-1 text-[0.75rem] leading-4 tabular-nums">
+                {item.deliveryStatus === 'failed' && (
+                  <span className="text-red-600">{t('app.notSent')}</span>
+                )}
+                {item.sentAt && (
+                  <time className="text-stone-400" dateTime={item.sentAt}>
+                    {formatMessageTime(item.sentAt, locale)}
+                  </time>
+                )}
+              </div>
             )}
           </div>
         </section>
@@ -1529,6 +1527,7 @@ function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
               usage={item.usage}
               modelName={item.modelName || item.model}
               responseText={item.markdown}
+              completedAt={item.completedAt}
             />
           )}
         </section>

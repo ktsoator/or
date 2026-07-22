@@ -5,6 +5,34 @@ package permission
 
 import "context"
 
+// Mode is the session-wide baseline applied before any one-off approval.
+type Mode string
+
+const (
+	ModeAsk      Mode = "ask"
+	ModeAutoEdit Mode = "auto_edit"
+	ModeReadOnly Mode = "read_only"
+)
+
+// Valid reports whether mode is accepted from a client or persisted record.
+func (mode Mode) Valid() bool {
+	switch mode {
+	case ModeAsk, ModeAutoEdit, ModeReadOnly:
+		return true
+	default:
+		return false
+	}
+}
+
+// NormalizeMode keeps missing or unknown persisted values on the conservative
+// default. API handlers still reject invalid values supplied by clients.
+func NormalizeMode(mode Mode) Mode {
+	if mode.Valid() {
+		return mode
+	}
+	return ModeAsk
+}
+
 // Action describes the kind of access a tool call performs.
 type Action string
 

@@ -71,6 +71,7 @@ export type WireEvent = {
   aiTitle?: string
   customTitle?: string
   startedAt?: string
+  completedAt?: string
   durationMs?: number
 }
 
@@ -155,6 +156,7 @@ export type UserItem = {
   id: string
   text: string
   images: MessageImage[]
+  sentAt?: string
   deliveryStatus?: 'sending' | 'failed'
 }
 export type AssistantItem = {
@@ -167,6 +169,7 @@ export type AssistantItem = {
   provider?: string
   model?: string
   modelName?: string
+  completedAt?: string
 }
 export type RunItem = {
   kind: 'run'
@@ -205,6 +208,7 @@ export type Item =
 export type ConnectionStatus = 'connecting' | 'ready' | 'disconnected'
 
 export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+export type PermissionMode = 'ask' | 'auto_edit' | 'read_only'
 
 export type ModelOption = {
   provider: string
@@ -276,6 +280,7 @@ export type SessionSummary = {
   modelId: string
   modelName: string
   thinkingLevel: ThinkingLevel
+  permissionMode: PermissionMode
 }
 
 export type WorkspaceSummary = {
