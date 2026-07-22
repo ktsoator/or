@@ -5,10 +5,11 @@ import (
 	"testing"
 )
 
-func TestDefaultsDoNotSelectModel(t *testing.T) {
+func TestDefaultsReadClientOrigin(t *testing.T) {
+	t.Setenv("OR_CLIENT_ORIGIN", "https://app.example.com")
 	cfg := Defaults()
-	if cfg.Provider != "" || cfg.Model != "" {
-		t.Fatalf("model should be unconfigured on first launch: provider=%q model=%q", cfg.Provider, cfg.Model)
+	if cfg.ClientOrigin != "https://app.example.com" {
+		t.Fatalf("client origin = %q", cfg.ClientOrigin)
 	}
 }
 

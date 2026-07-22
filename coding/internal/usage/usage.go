@@ -1,6 +1,6 @@
 // Package usage is the coding product's token and cost ledger. It is kept
 // separate from any delivery mechanism: the ledger is written from the session
-// event stream and read by whatever front-end asks for a report, so nothing
+// event stream and read by whichever client asks for a report, so nothing
 // here depends on HTTP.
 package usage
 
@@ -19,8 +19,8 @@ import (
 	"time"
 
 	"github.com/ktsoator/or/agent"
-	"github.com/ktsoator/or/coding"
-	"github.com/ktsoator/or/coding/transcript"
+	"github.com/ktsoator/or/coding/internal/engine"
+	"github.com/ktsoator/or/coding/internal/transcript"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -114,8 +114,8 @@ func NewStore(path string) (*Store, error) {
 
 // RecordEvent persists one live MessageCompleted event. Empty usage records
 // are ignored because some providers emit terminal metadata without billing.
-func (s *Store) RecordEvent(sessionID string, event coding.Event) error {
-	if (event.Type != coding.MessageCompleted && event.Type != coding.CompactionCompleted) || !present(event.Usage) {
+func (s *Store) RecordEvent(sessionID string, event engine.Event) error {
+	if (event.Type != engine.MessageCompleted && event.Type != engine.CompactionCompleted) || !present(event.Usage) {
 		return nil
 	}
 	return s.append(Event{
