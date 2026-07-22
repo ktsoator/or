@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/compaction"
@@ -94,6 +95,8 @@ type Session struct {
 	runMu        sync.Mutex
 	persistedLen int
 	runCtx       context.Context
+	runStateMu   sync.RWMutex
+	runStartedAt time.Time
 
 	transcriptMu sync.RWMutex
 	entries      []transcript.Entry
@@ -307,31 +310,79 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	startedAt := time.Now().UTC()
+	messageStart := len(s.agent.Snapshot().Messages)
+	s.setRunStartedAt(startedAt)
+	s.dispatchEvent(Event{Type: RunStarted, StartedAt: startedAt})
+
 	s.runCtx = ctx
 	runErr := fn(ctx)
 	if runErr != nil && s.maxRetries > 0 {
 		runErr = s.withRetry(ctx, runErr)
 	}
-	return errors.Join(runErr, s.persistNew(ctx))
+	completedAt := time.Now().UTC()
+	messages := s.agent.Snapshot().Messages
+	var runMessages []agent.AgentMessage
+	if messageStart < len(messages) {
+		runMessages = messages[messageStart:]
+	}
+	persistErr := s.persistNewRun(ctx, messageStart, startedAt, completedAt)
+	s.dispatchEvent(Event{
+		Type:        RunCompleted,
+		Usage:       aggregateMessageUsage(runMessages),
+		StartedAt:   startedAt,
+		CompletedAt: completedAt,
+	})
+	s.setRunStartedAt(time.Time{})
+	return errors.Join(runErr, persistErr)
 }
 
 // persistNew appends the messages added since the last persist to the Store. It
 // runs only while runMu is held, so persistedLen is not racing a run.
 func (s *Session) persistNew(ctx context.Context) error {
+	return s.persistNewMessages(ctx, -1, time.Time{}, time.Time{})
+}
+
+func (s *Session) persistNewRun(
+	ctx context.Context,
+	messageStart int,
+	startedAt, completedAt time.Time,
+) error {
+	return s.persistNewMessages(ctx, messageStart, startedAt, completedAt)
+}
+
+func (s *Session) persistNewMessages(
+	ctx context.Context,
+	messageStart int,
+	startedAt, completedAt time.Time,
+) error {
 	all := s.agent.Snapshot().Messages
 	s.transcriptMu.RLock()
 	persistedLen := s.persistedLen
 	parentID := s.leafID
 	s.transcriptMu.RUnlock()
-	if persistedLen >= len(all) {
-		return nil
+	var added []agent.AgentMessage
+	if persistedLen < len(all) {
+		added = all[persistedLen:]
 	}
-	added := all[persistedLen:]
-	entries := make([]transcript.Entry, 0, len(added))
+	entries := make([]transcript.Entry, 0, len(added)+1)
 	for _, message := range added {
 		entry := transcript.NewMessage(parentID, message)
 		entries = append(entries, entry)
 		parentID = entry.ID
+	}
+	if !startedAt.IsZero() && !completedAt.IsZero() {
+		firstEntryID := ""
+		firstRunEntry := messageStart - persistedLen
+		if firstRunEntry >= 0 && firstRunEntry < len(entries) {
+			firstEntryID = entries[firstRunEntry].ID
+		}
+		runEntry := transcript.NewRun(parentID, firstEntryID, startedAt, completedAt)
+		entries = append(entries, runEntry)
+		parentID = runEntry.ID
+	}
+	if len(entries) == 0 {
+		return nil
 	}
 	if s.store != nil {
 		if err := s.store.Append(ctx, entries...); err != nil {
@@ -344,6 +395,18 @@ func (s *Session) persistNew(ctx context.Context) error {
 	s.persistedLen = len(all)
 	s.transcriptMu.Unlock()
 	return nil
+}
+
+func (s *Session) setRunStartedAt(startedAt time.Time) {
+	s.runStateMu.Lock()
+	s.runStartedAt = startedAt
+	s.runStateMu.Unlock()
+}
+
+func (s *Session) activeRunStartedAt() time.Time {
+	s.runStateMu.RLock()
+	defer s.runStateMu.RUnlock()
+	return s.runStartedAt
 }
 
 // QueueHandle identifies one message while it remains queued in this Session.
@@ -457,9 +520,14 @@ func (s *Session) SetThinkingLevel(level llm.ModelThinkingLevel) {
 }
 
 func (s *Session) snapshotTranscript() ([]transcript.Entry, string) {
+	entries, leafID, _ := s.snapshotTranscriptState()
+	return entries, leafID
+}
+
+func (s *Session) snapshotTranscriptState() ([]transcript.Entry, string, int) {
 	s.transcriptMu.RLock()
 	defer s.transcriptMu.RUnlock()
-	return append([]transcript.Entry(nil), s.entries...), s.leafID
+	return append([]transcript.Entry(nil), s.entries...), s.leafID, s.persistedLen
 }
 
 // buildSystemPrompt assembles the coding system prompt from the active tools'

@@ -19,8 +19,8 @@ type QueuedMessage struct {
 
 func (s *Runtime) Queue(message QueuedMessage) bool {
 	s.pendingMu.Lock()
-	defer s.pendingMu.Unlock()
 	if !s.running.Load() {
+		s.pendingMu.Unlock()
 		return false
 	}
 	if message.Delivery == DeliverySteer {
@@ -29,6 +29,7 @@ func (s *Runtime) Queue(message QueuedMessage) bool {
 		message.Handle = s.session.FollowUp(message.Text, message.Images...)
 	}
 	s.pending = append(s.pending, message)
+	s.pendingMu.Unlock()
 	s.emit(MessageAccepted{
 		ID:       message.ID,
 		Text:     message.Text,
@@ -41,18 +42,20 @@ func (s *Runtime) Queue(message QueuedMessage) bool {
 
 func (s *Runtime) Dequeue(id string) (found, removed bool) {
 	s.pendingMu.Lock()
-	defer s.pendingMu.Unlock()
 	for index, message := range s.pending {
 		if message.ID != id {
 			continue
 		}
 		if !s.session.CancelQueuedMessage(message.Handle) {
+			s.pendingMu.Unlock()
 			return true, false
 		}
 		s.pending = append(s.pending[:index], s.pending[index+1:]...)
+		s.pendingMu.Unlock()
 		s.emit(MessageDequeued{ID: id})
 		return true, true
 	}
+	s.pendingMu.Unlock()
 	return false, false
 }
 

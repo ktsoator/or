@@ -63,6 +63,12 @@ type Event struct {
 	ResponseModel string
 	ResponseID    string
 	Timestamp     time.Time
+
+	// Run timing is populated on RunStarted and RunCompleted. It measures the
+	// full invocation, including model calls, tools, approvals, retries, and any
+	// steering or follow-up work consumed before the run ends.
+	StartedAt   time.Time
+	CompletedAt time.Time
 }
 
 // projectAgentEvent maps a low-level agent event into the stable coding event
@@ -70,7 +76,9 @@ type Event struct {
 func projectAgentEvent(ev agent.AgentEvent) (Event, bool) {
 	switch ev.Type {
 	case agent.AgentStart:
-		return Event{Type: RunStarted}, true
+		// Session.run emits one outer RunStarted event. AgentStart can occur again
+		// during an application-level retry and must not reset the visible timer.
+		return Event{}, false
 
 	case agent.MessageUpdate:
 		if ev.LLMEvent == nil {
@@ -124,7 +132,8 @@ func projectAgentEvent(ev agent.AgentEvent) (Event, bool) {
 		}, true
 
 	case agent.AgentEnd:
-		return Event{Type: RunCompleted, Usage: aggregateMessageUsage(ev.Messages)}, true
+		// Session.run emits RunCompleted after retries and persistence have finished.
+		return Event{}, false
 
 	default:
 		return Event{}, false

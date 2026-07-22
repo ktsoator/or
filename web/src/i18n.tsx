@@ -297,6 +297,8 @@ const en = {
 
   'thinking.working': 'Working',
   'thinking.process': 'Thought process',
+  'run.working': 'Working for {duration}',
+  'run.completed': 'Worked for {duration}',
   'diff.created': 'Created',
   'diff.edited': 'Edited',
   'diff.updated': 'Updated',
@@ -707,6 +709,8 @@ const zh: Record<TranslationKey, string> = {
 
   'thinking.working': '正在处理',
   'thinking.process': '思考过程',
+  'run.working': '正在处理 {duration}',
+  'run.completed': '本轮用时 {duration}',
   'diff.created': '已创建',
   'diff.edited': '已编辑',
   'diff.updated': '已更新',

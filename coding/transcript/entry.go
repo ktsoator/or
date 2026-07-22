@@ -21,6 +21,7 @@ type EntryType string
 const (
 	MessageEntry    EntryType = "message"
 	CompactionEntry EntryType = "compaction"
+	RunEntry        EntryType = "run"
 )
 
 // Header is the first line of a v2 session log.
@@ -40,6 +41,16 @@ type Entry struct {
 	Type       EntryType
 	Message    agent.AgentMessage
 	Compaction *Compaction
+	Run        *Run
+}
+
+// Run records the wall-clock interval for one agent invocation. FirstEntryID
+// associates the timing with the messages appended by that run without adding
+// product-only metadata to the model messages themselves.
+type Run struct {
+	FirstEntryID string    `json:"firstEntryId,omitempty"`
+	StartedAt    time.Time `json:"startedAt"`
+	CompletedAt  time.Time `json:"completedAt"`
 }
 
 // Compaction records a summary boundary without deleting the entries it
@@ -80,6 +91,20 @@ func NewCompaction(parentID string, compact Compaction) Entry {
 	}
 }
 
+func NewRun(parentID, firstEntryID string, startedAt, completedAt time.Time) Entry {
+	return Entry{
+		ID:        NewID(),
+		ParentID:  parentID,
+		Timestamp: completedAt.UTC(),
+		Type:      RunEntry,
+		Run: &Run{
+			FirstEntryID: firstEntryID,
+			StartedAt:    startedAt.UTC(),
+			CompletedAt:  completedAt.UTC(),
+		},
+	}
+}
+
 func NewID() string {
 	var raw [12]byte
 	if _, err := rand.Read(raw[:]); err == nil {
@@ -97,18 +122,28 @@ func (e Entry) Validate() error {
 	}
 	switch e.Type {
 	case MessageEntry:
-		if e.Message == nil || e.Compaction != nil {
+		if e.Message == nil || e.Compaction != nil || e.Run != nil {
 			return fmt.Errorf("transcript: message entry %s has invalid payload", e.ID)
 		}
 		if _, ok := agent.ToLLM(e.Message); !ok {
 			return fmt.Errorf("transcript: cannot persist custom message %T", e.Message)
 		}
 	case CompactionEntry:
-		if e.Message != nil || e.Compaction == nil {
+		if e.Message != nil || e.Compaction == nil || e.Run != nil {
 			return fmt.Errorf("transcript: compaction entry %s has invalid payload", e.ID)
 		}
 		if e.Compaction.Summary == "" || e.Compaction.FirstKeptEntryID == "" {
 			return fmt.Errorf("transcript: compaction entry %s is incomplete", e.ID)
+		}
+	case RunEntry:
+		if e.Message != nil || e.Compaction != nil || e.Run == nil {
+			return fmt.Errorf("transcript: run entry %s has invalid payload", e.ID)
+		}
+		if e.Run.StartedAt.IsZero() || e.Run.CompletedAt.IsZero() {
+			return fmt.Errorf("transcript: run entry %s is incomplete", e.ID)
+		}
+		if e.Run.CompletedAt.Before(e.Run.StartedAt) {
+			return fmt.Errorf("transcript: run entry %s completes before it starts", e.ID)
 		}
 	default:
 		return fmt.Errorf("transcript: entry %s has unknown type %q", e.ID, e.Type)
@@ -127,9 +162,10 @@ func (e Entry) MarshalJSON() ([]byte, error) {
 		Type       EntryType       `json:"type"`
 		Message    json.RawMessage `json:"message,omitempty"`
 		Compaction *Compaction     `json:"compaction,omitempty"`
+		Run        *Run            `json:"run,omitempty"`
 	}{
 		ID: e.ID, ParentID: e.ParentID, Timestamp: e.Timestamp, Type: e.Type,
-		Compaction: e.Compaction,
+		Compaction: e.Compaction, Run: e.Run,
 	}
 	if e.Message != nil {
 		message, _ := agent.ToLLM(e.Message)
@@ -153,13 +189,14 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 		Type       EntryType       `json:"type"`
 		Message    json.RawMessage `json:"message"`
 		Compaction *Compaction     `json:"compaction"`
+		Run        *Run            `json:"run"`
 	}{}
 	if err := json.Unmarshal(data, &wire); err != nil {
 		return err
 	}
 	decoded := Entry{
 		ID: wire.ID, ParentID: wire.ParentID, Timestamp: wire.Timestamp,
-		Type: wire.Type, Compaction: wire.Compaction,
+		Type: wire.Type, Compaction: wire.Compaction, Run: wire.Run,
 	}
 	if len(wire.Message) > 0 && string(wire.Message) != "null" {
 		message, err := llm.UnmarshalMessage(wire.Message)
