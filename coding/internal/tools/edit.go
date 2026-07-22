@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/ktsoator/or/agent"
+	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -94,6 +95,7 @@ func Edit(root string, ops FileOps, files *FileStateStore) Tool {
 				return resultWith(formatEditResult(in.Path, count, change), change), nil
 			},
 		},
+		AccessFor:     pathAccess(permission.Write),
 		PromptSnippet: editText.snippet,
 		Guidelines:    editText.guidelines,
 	}

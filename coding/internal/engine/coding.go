@@ -42,10 +42,10 @@ type Options struct {
 	// demand via the skill tool. Empty disables skills, and the tool is omitted.
 	// Load them with skills.Load and pass the result here.
 	Skills []skills.Skill
-	// Policy is the permission gate consulted before each tool call. The zero
-	// value asks for confirmation on any workspace-changing call; with no Confirm
-	// wired, such calls are denied. Set Policy.Confirm to approve them.
-	Policy permission.Gate
+	// Policy classifies resolved tool access. Nil uses permission.DefaultPolicy.
+	Policy permission.Policy
+	// Approver obtains decisions for calls classified as Ask. Nil denies them.
+	Approver permission.Approver
 	// Store persists the transcript and seeds it on construction. Nil disables
 	// persistence.
 	Store transcript.Store
@@ -77,13 +77,14 @@ type Options struct {
 // run completes and are mutually exclusive; a concurrent call returns ErrBusy.
 // Steer, FollowUp, Abort, Subscribe, and Snapshot are safe during a run.
 type Session struct {
-	agent    *agent.Agent
-	store    transcript.Store
-	tools    []tools.Tool
-	readOnly map[string]tools.Tool // tool name -> tool, for per-call read-only checks
-	shells   *tools.BackgroundShells
-	cwd      string
-	skills   []skills.Skill
+	agent      *agent.Agent
+	store      transcript.Store
+	tools      []tools.Tool
+	toolByName map[string]tools.Tool
+	authorizer *permission.Service
+	shells     *tools.BackgroundShells
+	cwd        string
+	skills     []skills.Skill
 
 	maxRetries    int
 	contextWindow int64
@@ -132,12 +133,16 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		toolSet, shells = tools.CodingToolsWithShells(cwd, tools.LocalOps{})
 	}
 
-	// A skill tool is added only when skills are configured, so the model can load
-	// their instructions on demand. It is read-only: it injects text and touches
-	// no workspace state, so the permission gate lets it through.
+	// A skill tool is added only when skills are configured. Loading already
+	// discovered skill text is internal session access and needs no approval.
 	if len(opts.Skills) > 0 {
 		reg := skills.NewRegistry(opts.Skills)
-		toolSet = append(toolSet, tools.Tool{AgentTool: reg.Tool(), ReadOnly: true})
+		toolSet = append(toolSet, tools.Tool{AgentTool: reg.Tool(), AccessFor: tools.InternalAccess})
+	}
+
+	authorizer, err := permission.NewService(cwd, opts.Policy, opts.Approver)
+	if err != nil {
+		return nil, err
 	}
 
 	var entries []transcript.Entry
@@ -188,7 +193,8 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	s := &Session{
 		store:          opts.Store,
 		tools:          toolSet,
-		readOnly:       toolsByName(toolSet),
+		toolByName:     toolsByName(toolSet),
+		authorizer:     authorizer,
 		shells:         shells,
 		cwd:            cwd,
 		skills:         opts.Skills,
@@ -210,7 +216,6 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		}
 	}
 
-	gate := opts.Policy
 	agentOpts := agent.Options{
 		SystemPrompt:  s.buildSystemPrompt(opts.Instructions),
 		Model:         opts.Model,
@@ -222,15 +227,17 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		GetAPIKey:     opts.GetAPIKey,
 		BeforeToolCall: func(bc agent.BeforeToolCallCtx) (bool, string) {
 			args, _ := bc.Args.(map[string]any)
-			readOnly := false
-			if t, ok := s.readOnly[bc.ToolCall.Name]; ok {
-				readOnly = t.IsReadOnly(args)
+			var accesses []permission.Access
+			if t, ok := s.toolByName[bc.ToolCall.Name]; ok {
+				accesses = t.Accesses(args)
 			}
-			return gate.Check(permission.Request{
-				Tool:     bc.ToolCall.Name,
-				Args:     args,
-				ReadOnly: readOnly,
+			decision, _ := s.authorizer.Authorize(bc.RunContext, permission.Request{
+				ToolCallID: bc.ToolCall.ID,
+				Tool:       bc.ToolCall.Name,
+				Args:       args,
+				Accesses:   accesses,
 			})
+			return decision.Behavior != permission.Allow, decision.Reason
 		},
 		PrepareNextTurn: s.prepareNextTurn,
 	}
@@ -626,8 +633,7 @@ func skillInfos(skills []skills.Skill) []prompt.SkillInfo {
 	return infos
 }
 
-// toolsByName indexes the tool set by advertised name, so the permission gate
-// can consult each tool's per-call read-only classifier.
+// toolsByName indexes the tool set by advertised name for access description.
 func toolsByName(toolSet []tools.Tool) map[string]tools.Tool {
 	m := make(map[string]tools.Tool, len(toolSet))
 	for _, t := range toolSet {

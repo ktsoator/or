@@ -11,7 +11,6 @@ import {
   Keyboard,
   Search,
   Settings2,
-  ShieldCheck,
   Sun,
   UserRound,
   Wrench,
@@ -35,7 +34,6 @@ export type SettingsSection =
   | 'profile'
   | 'appearance'
   | 'models'
-  | 'permissions'
   | 'keyboard'
   | 'tools'
   | 'connections'
@@ -64,9 +62,6 @@ export function SettingsPage({
   const { t } = useI18n()
   const [active, setActive] = useState<SettingsSection>(initialSection)
   const [query, setQuery] = useState('')
-  const [fileChanges, setFileChanges] = useState(true)
-  const [commands, setCommands] = useState(true)
-  const [readAccess, setReadAccess] = useState(true)
   const [responseUsage, setResponseUsage] = useState(true)
   const [backgroundRuns, setBackgroundRuns] = useState(true)
   const [fileOpener, setFileOpener] = useState('vscode')
@@ -83,7 +78,6 @@ export function SettingsPage({
           { id: 'usage', label: t('settings.usage'), icon: Gauge },
           { id: 'appearance', label: t('settings.appearance'), icon: Sun },
           { id: 'models', label: t('settings.models'), icon: Cpu },
-          { id: 'permissions', label: t('settings.permissions'), icon: ShieldCheck },
           { id: 'keyboard', label: t('settings.keyboard'), icon: Keyboard },
         ],
       },
@@ -115,14 +109,6 @@ export function SettingsPage({
         .filter((group) => group.items.length > 0)
     : groups
   const activeItem = groups.flatMap((group) => group.items).find((item) => item.id === active)
-  const permissionState = {
-    fileChanges,
-    commands,
-    readAccess,
-    setFileChanges,
-    setCommands,
-    setReadAccess,
-  }
   const updateAppearance = (next: AppearancePreferences) => {
     setAppearance(next)
     saveAppearancePreferences(next)
@@ -191,7 +177,6 @@ export function SettingsPage({
           <div className={active === 'usage' ? 'mt-8 max-md:mt-6' : 'mt-11 max-md:mt-7'}>
             {active === 'general' ? (
               <GeneralSettings
-                permissionState={permissionState}
                 fileOpener={fileOpener}
                 toolResults={toolResults}
                 responseUsage={responseUsage}
@@ -201,8 +186,6 @@ export function SettingsPage({
                 onResponseUsageChange={setResponseUsage}
                 onBackgroundRunsChange={setBackgroundRuns}
               />
-            ) : active === 'permissions' ? (
-              <PermissionsCard {...permissionState} />
             ) : active === 'usage' ? (
               <UsageSettings />
             ) : active === 'models' ? (
@@ -315,7 +298,6 @@ function AppearanceSettings({
 }
 
 function GeneralSettings({
-  permissionState,
   fileOpener,
   toolResults,
   responseUsage,
@@ -325,7 +307,6 @@ function GeneralSettings({
   onResponseUsageChange,
   onBackgroundRunsChange,
 }: {
-  permissionState: PermissionState
   fileOpener: string
   toolResults: string
   responseUsage: boolean
@@ -337,11 +318,7 @@ function GeneralSettings({
 }) {
   const { locale, setLocale, t } = useI18n()
   return (
-    <div className="space-y-11">
-      <SettingsSection title={t('settings.permissionsTitle')}>
-        <PermissionsCard {...permissionState} embedded />
-      </SettingsSection>
-
+    <div>
       <SettingsSection title={t('settings.generalTitle')}>
         <SettingsCard>
           <SettingsRow
@@ -416,66 +393,6 @@ function GeneralSettings({
       </SettingsSection>
     </div>
   )
-}
-
-type PermissionState = {
-  fileChanges: boolean
-  commands: boolean
-  readAccess: boolean
-  setFileChanges: (value: boolean) => void
-  setCommands: (value: boolean) => void
-  setReadAccess: (value: boolean) => void
-}
-
-function PermissionsCard({
-  fileChanges,
-  commands,
-  readAccess,
-  setFileChanges,
-  setCommands,
-  setReadAccess,
-  embedded = false,
-}: PermissionState & { embedded?: boolean }) {
-  const { t } = useI18n()
-  const card = (
-    <SettingsCard>
-      <SettingsRow
-        label={t('settings.fileChanges')}
-        description={t('settings.fileChangesDescription')}
-        control={
-          <Toggle
-            checked={fileChanges}
-            label={t('settings.fileChanges')}
-            onCheckedChange={setFileChanges}
-          />
-        }
-      />
-      <SettingsRow
-        label={t('settings.commands')}
-        description={t('settings.commandsDescription')}
-        control={
-          <Toggle
-            checked={commands}
-            label={t('settings.commands')}
-            onCheckedChange={setCommands}
-          />
-        }
-      />
-      <SettingsRow
-        label={t('settings.readAccess')}
-        description={t('settings.readAccessDescription')}
-        control={
-          <Toggle
-            checked={readAccess}
-            label={t('settings.readAccess')}
-            onCheckedChange={setReadAccess}
-          />
-        }
-      />
-    </SettingsCard>
-  )
-  if (embedded) return card
-  return <SettingsSection title={t('settings.permissionsTitle')}>{card}</SettingsSection>
 }
 
 function SettingsSection({ title, children }: { title: string; children: ReactNode }) {

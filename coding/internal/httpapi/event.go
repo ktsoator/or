@@ -44,9 +44,10 @@ type wireEvent struct {
 	// queued-message metadata
 	Delivery string `json:"delivery,omitempty"`
 	Queued   bool   `json:"queued,omitempty"`
-	// confirm_request
+	// approval_request
 	ID      string `json:"id,omitempty"`
 	Summary string `json:"summary,omitempty"`
+	Reason  string `json:"reason,omitempty"`
 	// title_update
 	Title       string `json:"title,omitempty"`
 	AITitle     string `json:"aiTitle,omitempty"`

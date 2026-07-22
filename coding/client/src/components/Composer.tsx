@@ -3,7 +3,8 @@ import { ArrowUp, Check, ChevronDown, Info, LoaderCircle, Plus, Square, X } from
 import { DropdownMenu } from 'radix-ui'
 import { isAPIError } from '@/api'
 import type {
-  ConfirmItem,
+  ApprovalChoice,
+  ApprovalItem,
   ContextUsage,
   DeliveryMode,
   MessageImage,
@@ -22,7 +23,7 @@ import { useI18n } from '@/i18n'
 export function Composer({
   connected,
   running,
-  confirmation,
+  approval,
   queuedMessages,
   contextUsage,
   centered = false,
@@ -47,7 +48,7 @@ export function Composer({
 }: {
   connected: boolean
   running: boolean
-  confirmation?: ConfirmItem
+  approval?: ApprovalItem
   queuedMessages: QueuedMessage[]
   contextUsage?: ContextUsage
   centered?: boolean
@@ -63,7 +64,7 @@ export function Composer({
   onSend: (text: string, images: MessageImage[], delivery?: DeliveryMode) => void
   onRemoveQueued: (id: string) => Promise<void>
   onStop: () => void
-  onResolve: (id: string, allow: boolean) => Promise<void>
+  onResolve: (id: string, choice: ApprovalChoice) => Promise<void>
   onSelectProject: (path?: string) => void
   onBrowseProjects: () => void
   onConfigureModel: () => void
@@ -85,7 +86,7 @@ export function Composer({
   const [compactFeedback, setCompactFeedback] = useState<CompactFeedback>()
   const [images, setImages] = useState<PendingImage[]>([])
   const [delivery, setDelivery] = useState<DeliveryMode>('steer')
-  const awaitingApproval = Boolean(confirmation)
+  const awaitingApproval = Boolean(approval)
   const modelConfigured = Boolean(modelProvider && modelID && thinkingLevel)
   const inputDisabled =
     awaitingApproval || !connected || updatingSettings || compacting || !modelConfigured
@@ -245,7 +246,7 @@ export function Composer({
         {queuedMessages.length > 0 && (
           <PendingQueue messages={queuedMessages} onRemove={(id) => void removeQueued(id)} />
         )}
-        {confirmation && <Approval key={confirmation.id} item={confirmation} onResolve={onResolve} />}
+        {approval && <Approval key={approval.id} item={approval} onResolve={onResolve} />}
 
         <div
           hidden={awaitingApproval}

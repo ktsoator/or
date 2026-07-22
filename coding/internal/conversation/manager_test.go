@@ -17,10 +17,12 @@ import (
 
 type testTransport struct{}
 
-func (*testTransport) Publish(Event)                   {}
-func (*testTransport) PublishAgent(engine.Event)       {}
-func (*testTransport) Confirm(permission.Request) bool { return false }
-func (*testTransport) HasPendingApproval() bool        { return false }
+func (*testTransport) Publish(Event)             {}
+func (*testTransport) PublishAgent(engine.Event) {}
+func (*testTransport) Decide(context.Context, permission.ApprovalRequest) (permission.ApprovalResponse, error) {
+	return permission.ApprovalResponse{Choice: permission.Reject}, nil
+}
+func (*testTransport) HasPendingApproval() bool { return false }
 
 func TestManagerCreatesAndRestoresProjectConversation(t *testing.T) {
 	dataDir := t.TempDir()

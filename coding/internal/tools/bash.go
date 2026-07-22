@@ -72,13 +72,7 @@ func Bash(root string, ops ExecOps, shells *BackgroundShells) Tool {
 				return textResult(b.String()), nil
 			},
 		},
-		// A bash call is read-only only when its command merely inspects state, so
-		// inspection commands run without confirmation while anything that could
-		// change the workspace still asks.
-		ReadOnlyFor: func(args map[string]any) bool {
-			command, _ := args["command"].(string)
-			return commandIsReadOnly(command)
-		},
+		AccessFor:     commandAccess,
 		PromptSnippet: bashText.snippet,
 		Guidelines:    bashText.guidelines,
 	}

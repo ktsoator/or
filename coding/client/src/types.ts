@@ -39,8 +39,9 @@ export type WireEvent = {
     | 'turn_discard'
     | 'compaction_start'
     | 'compaction_end'
-    | 'confirm_request'
-    | 'confirm_resolved'
+    | 'approval_request'
+    | 'approval_resolved'
+    | 'approval_cancelled'
     | 'queue_cancelled'
     | 'queue_removed'
     | 'error'
@@ -65,6 +66,7 @@ export type WireEvent = {
   modelName?: string
   id?: string
   summary?: string
+  reason?: string
   title?: string
   aiTitle?: string
   customTitle?: string
@@ -182,10 +184,12 @@ export type ToolItem = {
   result?: string
   change?: Change
 }
-export type ConfirmItem = {
-  kind: 'confirm'
+export type ApprovalChoice = 'allow_once' | 'deny'
+export type ApprovalItem = {
+  kind: 'approval'
   id: string
   summary: string
+  reason: string
 }
 export type ErrorItem = { kind: 'error'; id: string; text: string }
 
@@ -195,7 +199,7 @@ export type Item =
   | AssistantItem
   | ThinkingItem
   | ToolItem
-  | ConfirmItem
+  | ApprovalItem
   | ErrorItem
 
 export type ConnectionStatus = 'connecting' | 'ready' | 'disconnected'

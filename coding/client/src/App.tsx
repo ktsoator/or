@@ -90,7 +90,7 @@ export default function App() {
     items,
     queuedMessages,
     contextUsage,
-    confirmation,
+    approval,
     running,
     autoCompacting,
     loading,
@@ -112,7 +112,7 @@ export default function App() {
     send,
     removeQueuedMessage,
     stop,
-    resolveConfirm,
+    resolveApproval,
   } = useSession()
   const logRef = useRef<HTMLDivElement>(null)
   const followLatestRef = useRef(true)
@@ -386,7 +386,7 @@ export default function App() {
     }
   }
 
-  const emptySession = !loading && items.length === 0 && !confirmation
+  const emptySession = !loading && items.length === 0 && !approval
   // Nothing renders between sending a prompt and the first assistant event, so
   // a slow model looks like a dead thread. The placeholder fills that gap and
   // is replaced by the real item as soon as anything streams in.
@@ -397,7 +397,7 @@ export default function App() {
       key={draft?.id ?? activeSessionID ?? 'empty-session'}
       connected={status === 'ready' && !creating}
       running={running}
-      confirmation={confirmation}
+      approval={approval}
       queuedMessages={queuedMessages}
       contextUsage={contextUsage}
       centered={centered}
@@ -413,7 +413,7 @@ export default function App() {
       onSend={send}
       onRemoveQueued={removeQueuedMessage}
       onStop={stop}
-      onResolve={resolveConfirm}
+      onResolve={resolveApproval}
       onSelectProject={(path) => {
         updateDraftWorkspace(path, Boolean(path))
         setSelectedWorkspacePath(path)
@@ -1539,8 +1539,6 @@ function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
       return <Thinking item={item} />
     case 'tool':
       return <ToolCard item={item} cwd={cwd} />
-    case 'confirm':
-      return null
     case 'error':
       return (
         <div

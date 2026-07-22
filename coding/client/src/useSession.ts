@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { APIError, apiURL } from './api'
 import type {
-  ConfirmItem,
+  ApprovalChoice,
+  ApprovalItem,
   CompactionResult,
   ConnectionStatus,
   ContextUsage,
@@ -57,7 +58,7 @@ type Action =
       model: string
       contextWindow: number
     }
-  | { t: 'resolve'; sessionID: string; id: string }
+  | { t: 'resolveApproval'; sessionID: string; id: string }
   | { t: 'forget'; sessionID: string }
 
 const emptyUsage = (): Usage => ({
@@ -208,11 +209,11 @@ function threadsReducer(state: ThreadsState, action: Action): ThreadsState {
         },
       }
       break
-    case 'resolve':
+    case 'resolveApproval':
       next = {
         ...current,
         items: current.items.filter(
-          (item) => !(item.kind === 'confirm' && item.id === action.id),
+          (item) => !(item.kind === 'approval' && item.id === action.id),
         ),
       }
       break
@@ -521,18 +522,24 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
       }
       break
 
-    case 'confirm_request': {
+    case 'approval_request': {
       completeThinking()
       running = true
       const id = ev.id ?? nextId()
-      const idx = lastIndex(items, (it) => it.kind === 'confirm' && it.id === id)
-      const confirm: ConfirmItem = { kind: 'confirm', id, summary: ev.summary ?? '' }
-      items = idx >= 0 ? replaceAt(items, idx, confirm) : [...items, confirm]
+      const idx = lastIndex(items, (it) => it.kind === 'approval' && it.id === id)
+      const approval: ApprovalItem = {
+        kind: 'approval',
+        id,
+        summary: ev.summary ?? '',
+        reason: ev.reason ?? '',
+      }
+      items = idx >= 0 ? replaceAt(items, idx, approval) : [...items, approval]
       break
     }
 
-    case 'confirm_resolved':
-      if (ev.id) items = items.filter((item) => !(item.kind === 'confirm' && item.id === ev.id))
+    case 'approval_resolved':
+    case 'approval_cancelled':
+      if (ev.id) items = items.filter((item) => !(item.kind === 'approval' && item.id === ev.id))
       break
 
     case 'turn_discard': {
@@ -683,7 +690,7 @@ export type Session = {
   items: Item[]
   queuedMessages: QueuedMessage[]
   contextUsage?: ContextUsage
-  confirmation?: ConfirmItem
+  approval?: ApprovalItem
   running: boolean
   autoCompacting: boolean
   loading: boolean
@@ -705,7 +712,7 @@ export type Session = {
   send: (text: string, images: MessageImage[], delivery?: DeliveryMode) => void
   removeQueuedMessage: (id: string) => Promise<void>
   stop: () => void
-  resolveConfirm: (id: string, allow: boolean) => Promise<void>
+  resolveApproval: (id: string, choice: ApprovalChoice) => Promise<void>
 }
 
 export type SessionDraft = {
@@ -906,7 +913,7 @@ export function useSession(): Session {
 
     const applyWire = (wire: WireEvent) => {
       dispatch({ t: 'wire', sessionID, ev: wire })
-      if (wire.type === 'confirm_request') {
+      if (wire.type === 'approval_request') {
         setSessions((current) =>
           current.map((session) =>
             session.id === sessionID
@@ -914,7 +921,7 @@ export function useSession(): Session {
               : session,
           ),
         )
-      } else if (wire.type === 'confirm_resolved') {
+      } else if (wire.type === 'approval_resolved' || wire.type === 'approval_cancelled') {
         setSessions((current) =>
           current.map((session) =>
             session.id === sessionID ? { ...session, hasApproval: false } : session,
@@ -995,7 +1002,7 @@ export function useSession(): Session {
         const history = (await response.json()) as HistoryResponse
         if (!active) return
         dispatch({ t: 'reset', sessionID, history })
-        const hasApproval = history.events.some((event) => event.type === 'confirm_request')
+        const hasApproval = history.events.some((event) => event.type === 'approval_request')
         setSessions((current) =>
           current.map((session) =>
             session.id === sessionID
@@ -1517,16 +1524,16 @@ export function useSession(): Session {
     dispatch({ t: 'queueRemove', sessionID, id })
   }
 
-  const resolveConfirm = async (id: string, allow: boolean) => {
+  const resolveApproval = async (id: string, choice: ApprovalChoice) => {
     if (!activeSessionID) throw new Error('no active session')
     const sessionID = activeSessionID
-    const response = await fetch(sessionURL(sessionID, '/confirm'), {
+    const response = await fetch(sessionURL(sessionID, `/approvals/${encodeURIComponent(id)}`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, allow }),
+      body: JSON.stringify({ choice }),
     })
     if (!response.ok) throw new Error('request failed')
-    dispatch({ t: 'resolve', sessionID, id })
+    dispatch({ t: 'resolveApproval', sessionID, id })
     setSessions((current) =>
       current.map((session) =>
         session.id === sessionID ? { ...session, hasApproval: false } : session,
@@ -1534,10 +1541,10 @@ export function useSession(): Session {
     )
   }
 
-  const confirmation = thread?.items.findLast(
-    (item): item is ConfirmItem => item.kind === 'confirm',
+  const approval = thread?.items.findLast(
+    (item): item is ApprovalItem => item.kind === 'approval',
   )
-  const items = thread?.items.filter((item) => item.kind !== 'confirm') ?? []
+  const items = thread?.items.filter((item) => item.kind !== 'approval') ?? []
 
   return {
     sessions,
@@ -1548,7 +1555,7 @@ export function useSession(): Session {
     items,
     queuedMessages: thread?.queue ?? [],
     contextUsage: thread?.contextUsage,
-    confirmation,
+    approval,
     running: thread?.running ?? activeSession?.running ?? false,
     autoCompacting: thread?.autoCompacting ?? false,
     loading: initializing || (Boolean(activeSessionID) && !thread?.loaded),
@@ -1570,6 +1577,6 @@ export function useSession(): Session {
     send,
     removeQueuedMessage,
     stop,
-    resolveConfirm,
+    resolveApproval,
   }
 }

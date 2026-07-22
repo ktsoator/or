@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/ktsoator/or/agent"
+	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -83,7 +84,7 @@ func Read(root string, ops FileOps, files *FileStateStore) Tool {
 				return textResult(formatReadResult(result)), nil
 			},
 		},
-		ReadOnly:      true,
+		AccessFor:     pathAccess(permission.Read),
 		PromptSnippet: readText.snippet,
 		Guidelines:    readText.guidelines,
 	}

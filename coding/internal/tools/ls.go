@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/ktsoator/or/agent"
+	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -59,7 +60,7 @@ func LS(root string, ops FileOps) Tool {
 				return textResult(strings.Join(names, "\n")), nil
 			},
 		},
-		ReadOnly:      true,
+		AccessFor:     pathAccess(permission.Read),
 		PromptSnippet: lsText.snippet,
 		Guidelines:    lsText.guidelines,
 	}

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/ktsoator/or/agent"
+	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -103,6 +104,7 @@ func Write(root string, ops FileOps, files *FileStateStore) Tool {
 				return resultWith(formatWriteResult(change), change), nil
 			},
 		},
+		AccessFor:     pathAccess(permission.Write),
 		PromptSnippet: writeText.snippet,
 		Guidelines:    writeText.guidelines,
 	}

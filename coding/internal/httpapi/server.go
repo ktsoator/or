@@ -19,7 +19,7 @@ func init() {
 }
 
 // Server wires the multi-session API: session discovery plus scoped history,
-// SSE, prompt, confirmation, and abort endpoints. The React application is
+// SSE, prompt, approval, and abort endpoints. The React application is
 // built and deployed independently from this service.
 // Each field is the store one group of routes actually reads. Handlers reach
 // for the store they need and never through another component to find it.

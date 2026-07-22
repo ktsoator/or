@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 
 	"github.com/ktsoator/or/agent"
+	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -20,23 +21,17 @@ type Tool struct {
 	// Guidelines are bullet points appended to the system prompt's guidelines
 	// section while this tool is active.
 	Guidelines []string
-	// ReadOnly reports whether the tool leaves the workspace unchanged. The
-	// permission layer uses it to decide what needs confirmation.
-	ReadOnly bool
-	// ReadOnlyFor optionally decides read-only status per call from the validated
-	// arguments, for a tool like bash whose effect depends on its input. When set
-	// it overrides ReadOnly for that call; nil falls back to the static ReadOnly.
-	// A conservative implementation returns false whenever it is unsure.
-	ReadOnlyFor func(args map[string]any) bool
+	// AccessFor describes the effects of one validated call. A nil function is
+	// treated as unknown access and therefore requires approval.
+	AccessFor func(args map[string]any) []permission.Access
 }
 
-// IsReadOnly reports whether a specific call is read-only, using the per-call
-// classifier when the tool provides one and the static flag otherwise.
-func (t Tool) IsReadOnly(args map[string]any) bool {
-	if t.ReadOnlyFor != nil {
-		return t.ReadOnlyFor(args)
+// Accesses returns the declared effects of one validated call.
+func (t Tool) Accesses(args map[string]any) []permission.Access {
+	if t.AccessFor == nil {
+		return nil
 	}
-	return t.ReadOnly
+	return t.AccessFor(args)
 }
 
 // Name returns the tool's advertised name.
@@ -79,6 +74,24 @@ func AgentTools(tools []Tool) []agent.AgentTool {
 		out[i] = t.AgentTool
 	}
 	return out
+}
+
+func pathAccess(action permission.Action) func(map[string]any) []permission.Access {
+	return func(args map[string]any) []permission.Access {
+		path, _ := args["path"].(string)
+		return []permission.Access{{Action: action, Path: path}}
+	}
+}
+
+func commandAccess(args map[string]any) []permission.Access {
+	command, _ := args["command"].(string)
+	return []permission.Access{{Action: permission.Execute, Command: command}}
+}
+
+// InternalAccess describes a tool that only interacts with state already owned
+// by the coding session, such as buffered shell output or loaded skill text.
+func InternalAccess(map[string]any) []permission.Access {
+	return []permission.Access{{Action: permission.Internal}}
 }
 
 // textResult builds a ToolResult carrying a single text block.

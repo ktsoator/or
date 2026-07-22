@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/ktsoator/or/coding/internal/conversation"
@@ -18,12 +19,12 @@ import (
 // having to describe channels or byte frames it does not care about.
 type sessionTransport struct {
 	hub    *Hub
-	broker *ConfirmBroker
+	broker *ApprovalBroker
 }
 
 func newSessionTransport() *sessionTransport {
 	hub := NewHub()
-	return &sessionTransport{hub: hub, broker: NewConfirmBroker(hub)}
+	return &sessionTransport{hub: hub, broker: NewApprovalBroker(hub)}
 }
 
 // NewSessionTransport creates the HTTP delivery link attached to one
@@ -42,8 +43,8 @@ func (t *sessionTransport) PublishAgent(event engine.Event) {
 	}
 }
 
-func (t *sessionTransport) Confirm(req permission.Request) bool {
-	return t.broker.Confirm(req)
+func (t *sessionTransport) Decide(ctx context.Context, req permission.ApprovalRequest) (permission.ApprovalResponse, error) {
+	return t.broker.Decide(ctx, req)
 }
 
 func (t *sessionTransport) HasPendingApproval() bool {

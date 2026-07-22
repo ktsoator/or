@@ -34,8 +34,7 @@ func BashOutput(shells *BackgroundShells) Tool {
 				return textResult(renderBackgroundOutput(out)), nil
 			},
 		},
-		// Reading buffered output changes nothing in the workspace.
-		ReadOnly:      true,
+		AccessFor:     InternalAccess,
 		PromptSnippet: bashOutputText.snippet,
 	}
 }
@@ -63,9 +62,7 @@ func KillBash(shells *BackgroundShells) Tool {
 				return textResult(fmt.Sprintf("Stopped background shell %s.", in.ShellID)), nil
 			},
 		},
-		// Stopping a process the agent itself started leaves the workspace
-		// unchanged, so it needs no confirmation.
-		ReadOnly:      true,
+		AccessFor:     InternalAccess,
 		PromptSnippet: killBashText.snippet,
 	}
 }

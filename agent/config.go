@@ -1,6 +1,10 @@
 package agent
 
-import "github.com/ktsoator/or/llm"
+import (
+	"context"
+
+	"github.com/ktsoator/or/llm"
+)
 
 // Context is the starting transcript, system prompt, and tools for a run.
 type Context struct {
@@ -33,6 +37,9 @@ type TurnUpdate struct {
 // BeforeToolCallCtx is passed to BeforeToolCall, after arguments validate and
 // before the tool executes.
 type BeforeToolCallCtx struct {
+	// RunContext is cancelled when the active agent run is aborted. Hooks that
+	// wait on external input must stop waiting when it is done.
+	RunContext       context.Context
 	AssistantMessage llm.AssistantMessage
 	ToolCall         llm.ToolCall
 	Args             any

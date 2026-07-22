@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/ktsoator/or/agent"
+	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -35,7 +36,7 @@ func Glob(root string, ops FileOps) Tool {
 				return runGlob(ctx, root, ops, in)
 			},
 		},
-		ReadOnly:      true,
+		AccessFor:     pathAccess(permission.Read),
 		PromptSnippet: globText.snippet,
 		Guidelines:    globText.guidelines,
 	}

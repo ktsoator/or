@@ -24,12 +24,12 @@ type engineSessionConfig struct {
 
 // newEngineSession builds the product's standard agent session. cfg carries
 // the per-conversation values the manager has already resolved — workspace,
-// transcript path, model — and confirm is how this session asks its viewer to
+// transcript path, model — and approval is how this session asks its viewer to
 // approve a tool call.
 func newEngineSession(
 	ctx context.Context,
 	cfg engineSessionConfig,
-	confirm permission.Confirm,
+	approver permission.Approver,
 ) (*engine.Session, error) {
 	return engine.New(ctx, engine.Options{
 		Model:         cfg.Model,
@@ -37,7 +37,7 @@ func newEngineSession(
 		Cwd:           cfg.WorkspacePath,
 		Store:         transcript.NewJSONL(cfg.TranscriptPath),
 		DetailsStore:  transcript.NewJSONLDetails(detailsFile(cfg.TranscriptPath)),
-		Policy:        permission.Gate{Confirm: confirm},
+		Approver:      approver,
 		Skills:        loadSkills(cfg.WorkspacePath),
 	})
 }

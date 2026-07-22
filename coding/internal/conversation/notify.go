@@ -1,6 +1,8 @@
 package conversation
 
 import (
+	"context"
+
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/llm"
@@ -15,7 +17,7 @@ type Event interface{ Event() }
 // layer supplies an implementation per session; this package never learns how
 // an event is encoded or who receives it.
 //
-// Confirm and HasPendingApproval are here rather than on a separate type
+// Decide and HasPendingApproval are here rather than on a separate type
 // because a permission gate is a conversation with the same viewer: the
 // session cannot know whether one is answerable without asking its transport.
 type Transport interface {
@@ -23,8 +25,8 @@ type Transport interface {
 	Publish(Event)
 	// PublishAgent delivers an event raised by the agent underneath.
 	PublishAgent(engine.Event)
-	// Confirm gates one tool call, blocking until answered or denied.
-	Confirm(permission.Request) bool
+	// Decide gates one tool call, blocking until answered or cancelled.
+	Decide(context.Context, permission.ApprovalRequest) (permission.ApprovalResponse, error)
 	// HasPendingApproval reports a gate still waiting on a viewer.
 	HasPendingApproval() bool
 }

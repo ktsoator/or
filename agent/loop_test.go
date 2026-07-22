@@ -225,6 +225,9 @@ func TestRunLoopToolCallThenText(t *testing.T) {
 
 func TestRunLoopBeforeToolCallBlocks(t *testing.T) {
 	executed := 0
+	type contextKey struct{}
+	runContext := context.WithValue(context.Background(), contextKey{}, "run")
+	var hookContext context.Context
 	rec := &recorder{turns: [][]llm.Event{
 		{done(toolCallAssistant("c1", "echo", map[string]any{"text": "hi"}))},
 		{done(textAssistant("ok"))},
@@ -232,14 +235,18 @@ func TestRunLoopBeforeToolCallBlocks(t *testing.T) {
 	cfg := LoopConfig{
 		Model:    testModel,
 		StreamFn: rec.fn(),
-		BeforeToolCall: func(BeforeToolCallCtx) (bool, string) {
+		BeforeToolCall: func(ctx BeforeToolCallCtx) (bool, string) {
+			hookContext = ctx.RunContext
 			return true, "not allowed"
 		},
 	}
 	base := Context{Tools: []AgentTool{echoTool(func() { executed++ })}}
 
-	events := collect(RunLoop(context.Background(), []AgentMessage{userPrompt("use echo")}, base, cfg))
+	events := collect(RunLoop(runContext, []AgentMessage{userPrompt("use echo")}, base, cfg))
 
+	if hookContext == nil || hookContext.Value(contextKey{}) != "run" {
+		t.Fatal("BeforeToolCall did not receive the run context")
+	}
 	if executed != 0 {
 		t.Fatalf("blocked tool executed %d times, want 0", executed)
 	}

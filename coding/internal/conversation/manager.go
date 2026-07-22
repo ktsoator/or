@@ -115,7 +115,7 @@ func (m *Manager) build(record record) (*Runtime, error) {
 		TranscriptPath: record.Transcript,
 		Model:          model,
 		ThinkingLevel:  thinking,
-	}, transport.Confirm)
+	}, transport)
 	if err != nil {
 		return nil, err
 	}

@@ -35,13 +35,13 @@ var grepText = toolText{
 	description: `Search file contents across the workspace with a regular expression (Go regexp syntax). Built for code search.
 
 Usage:
-- ALWAYS use grep for searching code. NEVER run grep, rg, or find through the bash tool — grep is faster and needs no confirmation.
+- ALWAYS use grep for searching code. NEVER run grep, rg, or find through the bash tool — the dedicated tools are faster and preserve workspace-aware access checks.
 - Returns matching file paths by default (mode "files"). Set mode to "content" for matching lines with line numbers.
 - Narrow the search with path (a subdirectory) and glob (a filename filter such as "*.go").
 - Results are capped; refine the pattern if output is truncated. Common vendored directories (.git, node_modules, and similar) are skipped.`,
 	snippet: "grep — search file contents by regular expression",
 	guidelines: []string{
-		"Find code with `grep` and `glob`, never with `grep`/`rg`/`find` through `bash` — the dedicated tools are faster and need no confirmation.",
+		"Find code with `grep` and `glob`, never with `grep`/`rg`/`find` through `bash` — the dedicated tools are faster and preserve workspace-aware access checks.",
 	},
 }
 
@@ -54,7 +54,7 @@ Usage:
 - Use glob to find files by name; use grep to search their contents. Do not use find through the bash tool.`,
 	snippet: "glob — find files by name pattern",
 	guidelines: []string{
-		"Find code with `grep` and `glob`, never with `grep`/`rg`/`find` through `bash` — the dedicated tools are faster and need no confirmation.",
+		"Find code with `grep` and `glob`, never with `grep`/`rg`/`find` through `bash` — the dedicated tools are faster and preserve workspace-aware access checks.",
 	},
 }
 

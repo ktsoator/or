@@ -16,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/ktsoator/or/coding/internal/conversation"
 	"github.com/ktsoator/or/coding/internal/engine"
+	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/coding/internal/workspace"
 	"github.com/ktsoator/or/llm"
 )
@@ -346,21 +347,22 @@ func (s *Server) handleRemoveQueuedMessage(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// handleConfirm resolves a pending permission request.
-func (s *Server) handleConfirm(c *gin.Context) {
+// handleApproval resolves a pending permission request.
+func (s *Server) handleApproval(c *gin.Context) {
 	runtime, ok := s.runtime(c)
 	if !ok {
 		return
 	}
 	var body struct {
-		ID    string `json:"id"`
-		Allow bool   `json:"allow"`
+		Choice permission.ApprovalChoice `json:"choice"`
 	}
-	if err := c.ShouldBindJSON(&body); err != nil || body.ID == "" {
+	id := c.Param("approvalID")
+	if err := c.ShouldBindJSON(&body); err != nil || id == "" ||
+		(body.Choice != permission.AllowOnce && body.Choice != permission.Reject) {
 		c.Status(http.StatusBadRequest)
 		return
 	}
-	if !transportOf(runtime).broker.Resolve(body.ID, body.Allow) {
+	if !transportOf(runtime).broker.Resolve(id, body.Choice) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "approval request not found"})
 		return
 	}
@@ -444,7 +446,7 @@ func (s *Server) mountSessions(r gin.IRouter) {
 	one.POST("/steer", s.handleSteer)
 	one.POST("/follow-up", s.handleFollowUp)
 	one.DELETE("/queue/:messageID", s.handleRemoveQueuedMessage)
-	one.POST("/confirm", s.handleConfirm)
+	one.POST("/approvals/:approvalID", s.handleApproval)
 	one.POST("/abort", s.handleAbort)
 	one.POST("/compact", s.handleCompact)
 }

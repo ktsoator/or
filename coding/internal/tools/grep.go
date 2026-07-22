@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/ktsoator/or/agent"
+	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -42,7 +43,7 @@ func Grep(root string, ops FileOps) Tool {
 				return runGrep(ctx, root, ops, in)
 			},
 		},
-		ReadOnly:      true,
+		AccessFor:     pathAccess(permission.Read),
 		PromptSnippet: grepText.snippet,
 		Guidelines:    grepText.guidelines,
 	}

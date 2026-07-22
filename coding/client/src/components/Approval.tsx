@@ -1,25 +1,25 @@
 import { useState } from 'react'
 import { Check, LoaderCircle, ShieldAlert, X } from 'lucide-react'
-import type { ConfirmItem } from '@/types'
+import type { ApprovalChoice, ApprovalItem } from '@/types'
 import { useI18n } from '@/i18n'
 
 export function Approval({
   item,
   onResolve,
 }: {
-  item: ConfirmItem
-  onResolve: (id: string, allow: boolean) => Promise<void>
+  item: ApprovalItem
+  onResolve: (id: string, choice: ApprovalChoice) => Promise<void>
 }) {
   const { t } = useI18n()
-  const [decision, setDecision] = useState<'allow' | 'deny'>()
+  const [decision, setDecision] = useState<ApprovalChoice>()
   const [error, setError] = useState('')
   const busy = decision !== undefined
 
-  const decide = async (allow: boolean) => {
-    setDecision(allow ? 'allow' : 'deny')
+  const decide = async (choice: ApprovalChoice) => {
+    setDecision(choice)
     setError('')
     try {
-      await onResolve(item.id, allow)
+      await onResolve(item.id, choice)
     } catch {
       setError(t('approval.couldNotSend'))
       setDecision(undefined)
@@ -54,7 +54,7 @@ export function Approval({
             className="inline-flex h-9 min-w-[5rem] cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3 text-[0.8125rem] font-medium text-stone-600 outline-none transition-[background-color,border-color,color] hover:border-stone-300 hover:bg-stone-50 hover:text-stone-950 focus-visible:ring-2 focus-visible:ring-stone-300 disabled:cursor-wait disabled:opacity-50 max-sm:flex-1"
             type="button"
             disabled={busy}
-            onClick={() => decide(false)}
+            onClick={() => decide('deny')}
           >
             {decision === 'deny' ? (
               <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
@@ -67,9 +67,9 @@ export function Approval({
             className="inline-flex h-9 min-w-[7rem] cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-stone-900 bg-stone-900 px-3.5 text-[0.8125rem] font-medium text-white outline-none transition-[background-color,border-color] hover:border-black hover:bg-black focus-visible:ring-2 focus-visible:ring-stone-400 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-50 max-sm:flex-1"
             type="button"
             disabled={busy}
-            onClick={() => decide(true)}
+            onClick={() => decide('allow_once')}
           >
-            {decision === 'allow' ? (
+            {decision === 'allow_once' ? (
               <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
             ) : (
               <Check className="size-3.5" aria-hidden="true" />

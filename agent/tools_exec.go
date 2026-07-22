@@ -169,6 +169,7 @@ func (e *engine) preflight(current Context, assistant llm.AssistantMessage, call
 
 	if e.cfg.BeforeToolCall != nil {
 		block, reason := e.cfg.BeforeToolCall(BeforeToolCallCtx{
+			RunContext:       e.ctx,
 			AssistantMessage: assistant,
 			ToolCall:         call,
 			Args:             validated,
