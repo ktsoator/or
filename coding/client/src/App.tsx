@@ -41,6 +41,7 @@ import { Composer } from './components/Composer'
 import { Thinking } from './components/Thinking'
 import { StepGroup } from './components/StepGroup'
 import { groupItems } from './lib/steps'
+import { chooseNativeDirectory } from './lib/desktop'
 import { ProfileMenu } from './components/ProfileMenu'
 import { ResponseActions } from './components/ResponseActions'
 import { formatMessageTime } from './lib/time'
@@ -48,7 +49,6 @@ import { SettingsPage, type SettingsSection } from './components/SettingsPage'
 import { SkillsPage } from './components/SkillsPage'
 import { WorkspacePickerDialog } from './components/WorkspacePickerDialog'
 import { useI18n } from './i18n'
-import logoImage from './assets/logo.svg'
 
 const DEFAULT_SIDEBAR_WIDTH = 240
 const MIN_SIDEBAR_WIDTH = 206
@@ -170,7 +170,7 @@ export default function App() {
       ...group,
       sessions: pinnedFirst(group.sessions, pinnedSessionIDSet),
     }))
-  }, [pinnedSessionIDSet, sessions, t, workspaces])
+  }, [pinnedSessionIDSet, sessions, workspaces])
   const chatSessions = useMemo(
     () => pinnedFirst(sessions.filter((session) => session.scope === 'chat'), pinnedSessionIDSet),
     [pinnedSessionIDSet, sessions],
@@ -388,6 +388,29 @@ export default function App() {
     }
   }
 
+  const selectWorkspaceFolder = async (path: string) => {
+    const workspace = await registerWorkspace(path)
+    updateDraftWorkspace(workspace.path, true)
+    setSelectedWorkspacePath(workspace.path)
+    setWorkspacePickerOpen(false)
+    setMobileSessionsOpen(false)
+  }
+
+  const browseWorkspaceFolders = async () => {
+    try {
+      const path = await chooseNativeDirectory(workspacePickerPath, t('workspace.chooseFolder'))
+      if (path === undefined) {
+        setWorkspacePickerOpen(true)
+        return
+      }
+      if (!path) return
+      await selectWorkspaceFolder(path)
+    } catch {
+      // The web picker remains a usable fallback when the native bridge fails.
+      setWorkspacePickerOpen(true)
+    }
+  }
+
   const emptySession = !loading && items.length === 0 && !approval
   // Nothing renders between sending a prompt and the first assistant event, so
   // a slow model looks like a dead thread. The placeholder fills that gap and
@@ -422,7 +445,7 @@ export default function App() {
         setSelectedWorkspacePath(path)
       }}
       onBrowseProjects={() => {
-        setWorkspacePickerOpen(true)
+        void browseWorkspaceFolders()
       }}
       onConfigureModel={() => {
         setSettingsSection('models')
@@ -447,13 +470,16 @@ export default function App() {
   return (
     <div
       className={cn(
-        'grid h-full grid-cols-[var(--sidebar-width)_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] overflow-hidden bg-white motion-reduce:transition-none max-md:grid-cols-1',
+        'relative grid h-full grid-cols-[var(--sidebar-width)_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] overflow-hidden bg-white motion-reduce:transition-none max-md:grid-cols-1',
         !sidebarResizing &&
-          'transition-[grid-template-columns] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]',
+          'transition-[grid-template-columns] duration-[180ms] ease-[cubic-bezier(0.2,0,0,1)]',
       )}
       style={
         {
-          '--sidebar-width': `${sidebarCollapsed ? 60 : sidebarWidth}px`,
+          '--sidebar-expanded-width': `${sidebarWidth}px`,
+          '--sidebar-width': sidebarCollapsed
+            ? '0px'
+            : 'var(--sidebar-expanded-width)',
         } as CSSProperties
       }
     >
@@ -465,45 +491,55 @@ export default function App() {
           onClick={() => setMobileSessionsOpen(false)}
         />
       )}
-      <aside
-        className={cn(
-          'relative z-50 flex min-h-0 min-w-0 flex-col overflow-hidden border-r border-stone-200/75 bg-white text-stone-700 transition-transform duration-200 ease-out',
-          'max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:w-[17.5rem] max-md:shadow-2xl',
-          mobileSessionsOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full',
-        )}
-        aria-label={t('app.sessions')}
+      <button
+        className="window-sidebar-toggle size-7 cursor-pointer place-items-center rounded-md text-stone-500 transition-colors duration-100 hover:bg-stone-200/75 hover:text-stone-950 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-stone-400"
+        data-testid="window-sidebar-toggle"
+        type="button"
+        title={sidebarCollapsed ? t('app.expandSidebar') : t('app.collapseSidebar')}
+        aria-label={sidebarCollapsed ? t('app.expandSidebar') : t('app.collapseSidebar')}
+        aria-expanded={!sidebarCollapsed}
+        onClick={toggleSidebar}
       >
-        <div className="relative h-16 w-full shrink-0 max-md:w-[17.5rem]">
-          <div
-            className={cn(
-              'absolute inset-y-0 left-3.5 flex items-center transition-opacity duration-100 ease-out motion-reduce:transition-none',
-              sidebarCollapsed ? 'opacity-0' : 'opacity-100',
-            )}
-          >
-            <img className="size-[1.5625rem] shrink-0" src={logoImage} alt="" aria-hidden="true" />
-          </div>
+        <PanelLeft className="size-4" aria-hidden="true" />
+      </button>
+
+      <div
+        className="sidebar-viewport relative z-50 min-h-0 min-w-0 overflow-hidden max-md:contents"
+        data-testid="sidebar-viewport"
+      >
+        <aside
+          className={cn(
+            'app-sidebar relative flex h-full w-[var(--sidebar-expanded-width)] min-h-0 min-w-0 flex-col overflow-hidden border-r border-stone-200/75 bg-white text-stone-700 transition-transform duration-200 ease-out',
+            'max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:w-[17.5rem] max-md:shadow-2xl',
+            mobileSessionsOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full',
+          )}
+          aria-label={t('app.sessions')}
+          aria-hidden={sidebarCollapsed && !mobileSessionsOpen ? true : undefined}
+          inert={sidebarCollapsed && !mobileSessionsOpen}
+        >
+          <div className="app-sidebar-header window-drag-region relative h-16 w-full shrink-0 max-md:w-[17.5rem]">
           <button
             className={cn(
-              'absolute top-4 right-14 grid size-8 cursor-pointer place-items-center rounded-lg text-stone-500 transition-[opacity,color,background-color,transform] duration-100 ease-out motion-reduce:transition-none hover:bg-stone-200/75 hover:text-stone-950 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-stone-400',
+              'sidebar-header-action sidebar-search-action absolute top-4 right-14 grid size-8 cursor-pointer place-items-center rounded-lg text-stone-500 transition-[opacity,color,background-color,transform] duration-100 ease-out motion-reduce:transition-none hover:bg-stone-200/75 hover:text-stone-950 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-stone-400',
               sidebarCollapsed ? 'pointer-events-none opacity-0' : 'opacity-100',
             )}
             type="button"
             title={t('app.searchSessions')}
             aria-label={t('app.searchSessions')}
           >
-            <Search className="size-[1.125rem]" aria-hidden="true" />
+            <Search className="size-4" aria-hidden="true" />
           </button>
           <button
-            className="absolute top-4 right-4 grid size-8 cursor-pointer place-items-center rounded-lg text-stone-500 transition-colors duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none hover:bg-stone-200/75 hover:text-stone-950"
+            className="sidebar-header-action sidebar-collapse-action absolute top-4 right-4 grid size-8 cursor-pointer place-items-center rounded-lg text-stone-500 transition-colors duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none hover:bg-stone-200/75 hover:text-stone-950"
             type="button"
             title={sidebarCollapsed ? t('app.expandSidebar') : t('app.collapseSidebar')}
             aria-label={sidebarCollapsed ? t('app.expandSidebar') : t('app.collapseSidebar')}
             aria-expanded={!sidebarCollapsed}
             onClick={toggleSidebar}
           >
-            <PanelLeft className="size-[1.125rem]" aria-hidden="true" />
+            <PanelLeft className="size-4" aria-hidden="true" />
           </button>
-        </div>
+          </div>
 
         <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
           <div className="w-full px-3 pb-3 max-md:w-[17.5rem]">
@@ -528,11 +564,11 @@ export default function App() {
                 />
                 {creating ? (
                   <LoaderCircle
-                    className="relative size-[1.125rem] animate-spin"
+                    className="relative size-4 animate-spin"
                     aria-hidden="true"
                   />
                 ) : (
-                  <SquarePen className="relative size-[1.125rem]" aria-hidden="true" />
+                  <SquarePen className="relative size-4" aria-hidden="true" />
                 )}
               </span>
               <span
@@ -688,18 +724,41 @@ export default function App() {
             />
           </div>
         )}
-      </aside>
+        </aside>
+      </div>
 
       {skillsOpen ? (
         <SkillsPage
           onBack={() => setSkillsOpen(false)}
+          sidebarCollapsed={sidebarCollapsed}
+          onExpandSidebar={() => setSidebarCollapsed(false)}
           workspacePath={activeSession?.workspacePath}
           workspaceName={activeSession?.workspaceName}
         />
       ) : (
       <div className="relative flex h-full min-w-0 flex-col">
-        <header className="z-20 flex h-13 shrink-0 items-center gap-3 border-b border-stone-200/80 bg-white px-6 max-md:h-12 max-md:px-4">
-          <div className="flex min-w-0 items-center gap-2.5">
+        <header
+          className={cn(
+            'conversation-header window-drag-region z-20 flex h-[45px] shrink-0 items-center gap-3 border-b border-stone-200/80 bg-white px-6 max-md:h-12 max-md:px-4',
+            sidebarCollapsed && 'sidebar-is-collapsed',
+          )}
+          data-testid="conversation-header"
+        >
+          <div
+            className="conversation-title-group flex min-w-0 items-center gap-2.5"
+            data-testid="conversation-title"
+          >
+            {sidebarCollapsed && (
+              <button
+                className="desktop-sidebar-toggle hidden size-8 shrink-0 cursor-pointer place-items-center rounded-lg text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-950 md:grid"
+                type="button"
+                title={t('app.expandSidebar')}
+                aria-label={t('app.expandSidebar')}
+                onClick={() => setSidebarCollapsed(false)}
+              >
+                <PanelLeft className="size-4" aria-hidden="true" />
+              </button>
+            )}
             <button
               className="-ml-1 grid size-7 shrink-0 place-items-center rounded-md text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-900 md:hidden"
               type="button"
@@ -745,7 +804,7 @@ export default function App() {
         >
           <div
             className={cn(
-              'mx-auto min-h-full w-full max-w-[750px] py-8 pb-12 max-md:py-6',
+              'mx-auto min-h-full w-full max-w-[750px] pt-5 pb-9 max-md:pt-4 max-md:pb-7',
               (loading || emptySession) && 'grid place-items-center',
             )}
           >
@@ -820,11 +879,7 @@ export default function App() {
             setWorkspacePickerOpen(false)
           }}
           onSelect={async (path) => {
-            const workspace = await registerWorkspace(path)
-            updateDraftWorkspace(workspace.path, true)
-            setSelectedWorkspacePath(workspace.path)
-            setWorkspacePickerOpen(false)
-            setMobileSessionsOpen(false)
+            await selectWorkspaceFolder(path)
           }}
         />
       )}
@@ -877,13 +932,13 @@ function WorkspaceSessions({
         >
           {expanded ? (
             <FolderOpen
-              className="size-[1.0625rem] shrink-0 text-stone-600"
+              className="size-4 shrink-0 text-stone-600"
               strokeWidth={1.8}
               aria-hidden="true"
             />
           ) : (
             <Folder
-              className="size-[1.0625rem] shrink-0 text-stone-600"
+              className="size-4 shrink-0 text-stone-600"
               strokeWidth={1.8}
               aria-hidden="true"
             />
@@ -1211,7 +1266,7 @@ function SidebarNavItem({
           aria-hidden="true"
         />
         <Icon
-          className="relative size-[1.125rem] text-stone-700"
+          className="relative size-4 text-stone-700"
           strokeWidth={1.85}
           aria-hidden="true"
         />
@@ -1484,10 +1539,10 @@ function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
   switch (item.kind) {
     case 'user':
       return (
-        <section className="my-5 flex animate-[fade-in_160ms_ease-out] justify-end">
-          <div className="flex max-w-[78%] flex-col items-end gap-3 max-md:max-w-[88%]">
+        <section className="my-3.5 flex animate-[fade-in_160ms_ease-out] justify-end">
+          <div className="flex max-w-[78%] flex-col items-end gap-2 max-md:max-w-[88%]">
             {item.images.length > 0 && (
-              <div className="flex max-w-full flex-wrap justify-end gap-3">
+              <div className="flex max-w-full flex-wrap justify-end gap-2">
                 {item.images.map((image, index) => (
                   <img
                     key={`${image.mimeType}-${index}`}
@@ -1499,12 +1554,12 @@ function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
               </div>
             )}
             {item.text && (
-              <div className="rounded-xl bg-stone-100 px-3.5 py-2.5 text-[14px] leading-[22px] whitespace-pre-wrap">
+              <div className="rounded-[10px] bg-stone-100 px-3 py-2 text-[14px] leading-[22px] whitespace-pre-wrap">
                 {item.text}
               </div>
             )}
             {(item.sentAt || item.deliveryStatus === 'failed') && (
-              <div className="-mt-1 flex items-center justify-end gap-2 px-1 text-[0.75rem] leading-4 tabular-nums">
+              <div className="-mt-0.5 flex items-center justify-end gap-2 px-1 text-[0.75rem] leading-4 tabular-nums">
                 {item.deliveryStatus === 'failed' && (
                   <span className="text-red-600">{t('app.notSent')}</span>
                 )}
@@ -1520,7 +1575,7 @@ function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
       )
     case 'assistant':
       return (
-        <section className="my-4 animate-[fade-in_160ms_ease-out]">
+        <section className="my-3 animate-[fade-in_160ms_ease-out]">
           <Markdown source={item.markdown} />
           {item.complete && (
             <ResponseActions
@@ -1541,7 +1596,7 @@ function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
     case 'error':
       return (
         <div
-          className="my-4 flex animate-[fade-in_160ms_ease-out] gap-2.5 border-l-2 border-red-300 py-1 pl-3 text-red-700"
+          className="my-3 flex animate-[fade-in_160ms_ease-out] gap-2.5 border-l-2 border-red-300 py-1 pl-3 text-red-700"
           role="alert"
         >
           <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
@@ -1572,11 +1627,11 @@ function RunDuration({ item }: { item: Extract<Item, { kind: 'run' }> }) {
   const duration = formatRunDuration(durationMs, locale)
 
   return (
-    <div className="mt-7 mb-4 animate-[fade-in_160ms_ease-out]">
+    <div className="mt-3.5 mb-1 animate-[fade-in_160ms_ease-out]">
       <div className="text-[0.8125rem] leading-5 text-stone-400 tabular-nums">
         {t(running ? 'run.working' : 'run.completed', { duration })}
       </div>
-      <div className="mt-2.5 h-px bg-stone-200/80" aria-hidden="true" />
+      <div className="mt-1.5 h-px bg-stone-200/80" aria-hidden="true" />
     </div>
   )
 }

@@ -14,7 +14,7 @@ export function Thinking({ item }: { item: ThinkingItem }) {
   const [open, setOpen] = useState(false)
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="my-1 animate-[fade-in_160ms_ease-out] text-stone-400">
+    <Collapsible open={open} onOpenChange={setOpen} className="my-0.5 animate-[fade-in_160ms_ease-out] text-stone-400">
       <CollapsibleTrigger
         className={cn(
           'group flex cursor-pointer items-center gap-1.5 border-0 bg-transparent py-0.5 text-[0.8125rem] font-normal text-inherit hover:text-stone-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400',
@@ -29,7 +29,7 @@ export function Thinking({ item }: { item: ThinkingItem }) {
         />
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="mt-1.5 max-h-56 overflow-auto border-l border-stone-200 pl-3.5 text-[0.84375rem] leading-[1.6] whitespace-pre-wrap text-stone-500">
+        <div className="mt-1 max-h-56 overflow-auto border-l border-stone-200 pl-3 text-[0.84375rem] leading-[1.5] whitespace-pre-wrap text-stone-500">
           {item.text}
         </div>
       </CollapsibleContent>

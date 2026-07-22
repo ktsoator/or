@@ -21,6 +21,7 @@ import (
 // simply by never taking mu inside a registry call.
 type Manager struct {
 	ctx        context.Context
+	cancel     context.CancelFunc
 	indexPath  string
 	scratch    *workspace.Scratch
 	workspaces *workspace.Registry
@@ -28,9 +29,12 @@ type Manager struct {
 	// layer supplies it, so this package never names a transport type.
 	newTransport NewTransport
 
-	mu       sync.RWMutex
-	sessions map[string]*Runtime
-	usage    *usage.Store
+	mu        sync.RWMutex
+	sessions  map[string]*Runtime
+	usage     *usage.Store
+	closed    bool
+	tasks     sync.WaitGroup
+	closeOnce sync.Once
 }
 
 // Options supplies the product services and storage root owned by a Manager.
@@ -44,9 +48,11 @@ type Options struct {
 // NewManager restores the session index. The ledger and registry are passed in
 // because the HTTP layer also serves them directly.
 func NewManager(ctx context.Context, opts Options) (*Manager, error) {
+	ctx, cancel := context.WithCancel(ctx)
 	dir := filepath.Join(opts.DataDir, "sessions")
 	m := &Manager{
 		ctx:          ctx,
+		cancel:       cancel,
 		indexPath:    filepath.Join(dir, "index.json"),
 		scratch:      workspace.NewScratch(opts.DataDir),
 		workspaces:   opts.Workspaces,
@@ -57,22 +63,64 @@ func NewManager(ctx context.Context, opts Options) (*Manager, error) {
 
 	records, err := m.loadRecords()
 	if err != nil {
+		cancel()
 		return nil, err
 	}
 	for _, record := range records {
 		runtime, err := m.build(record)
 		if err != nil {
+			m.closeSessions()
+			cancel()
 			return nil, fmt.Errorf("session: restore session %s: %w", record.ID, err)
 		}
 		m.sessions[record.ID] = runtime
 		if err := m.usage.BackfillEntries(record.ID, runtime.session.Entries()); err != nil {
+			m.closeSessions()
+			cancel()
 			return nil, fmt.Errorf("session: backfill usage for session %s: %w", record.ID, err)
 		}
 	}
 	if err := m.saveLocked(); err != nil {
+		m.closeSessions()
+		cancel()
 		return nil, err
 	}
 	return m, nil
+}
+
+// Close stops accepting new work, cancels active runs and title generation,
+// then releases every session-owned process. It is safe to call repeatedly.
+func (m *Manager) Close() {
+	m.closeOnce.Do(func() {
+		m.mu.Lock()
+		m.closed = true
+		runtimes := make([]*Runtime, 0, len(m.sessions))
+		for _, runtime := range m.sessions {
+			runtimes = append(runtimes, runtime)
+		}
+		m.mu.Unlock()
+
+		m.cancel()
+		for _, runtime := range runtimes {
+			runtime.running.Store(false)
+			runtime.live.Store(false)
+			runtime.session.Abort()
+			runtime.cancelPending()
+			runtime.session.ClearQueuedMessages()
+		}
+		m.tasks.Wait()
+		for _, runtime := range runtimes {
+			runtime.session.Close()
+		}
+	})
+}
+
+func (m *Manager) closeSessions() {
+	for _, runtime := range m.sessions {
+		runtime.session.Abort()
+		runtime.session.ClearQueuedMessages()
+		runtime.session.Close()
+	}
 }
 
 func (m *Manager) build(record record) (*Runtime, error) {

@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/ktsoator/or/coding/internal/app"
 	"github.com/ktsoator/or/coding/internal/config"
@@ -22,7 +24,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := app.Run(context.Background(), cfg); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := app.Run(ctx, cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "coding: %v\n", err)
 		os.Exit(1)
 	}

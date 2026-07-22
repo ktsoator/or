@@ -66,7 +66,7 @@ export function Composer({
   permissionMode: PermissionMode
   updatingSettings: boolean
   compacting: boolean
-  onSend: (text: string, images: MessageImage[], delivery?: DeliveryMode) => void
+  onSend: (text: string, images: MessageImage[], delivery?: DeliveryMode) => Promise<boolean>
   onRemoveQueued: (id: string) => Promise<void>
   onStop: () => void
   onResolve: (id: string, choice: ApprovalChoice) => Promise<void>
@@ -85,10 +85,12 @@ export function Composer({
   const ref = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const composingRef = useRef(false)
+  const submittingRef = useRef(false)
   const compactFeedbackTimerRef = useRef<number | undefined>(undefined)
   const [settingsError, setSettingsError] = useState('')
   const [attachmentError, setAttachmentError] = useState('')
   const [queueError, setQueueError] = useState('')
+  const [sendError, setSendError] = useState('')
   const [compactFeedback, setCompactFeedback] = useState<CompactFeedback>()
   const [images, setImages] = useState<PendingImage[]>([])
   const [delivery, setDelivery] = useState<DeliveryMode>('steer')
@@ -133,24 +135,33 @@ export function Composer({
     [],
   )
 
-  const submit = () => {
+  const submit = async () => {
     const el = ref.current
-    if (!el) return
+    if (!el || submittingRef.current) return
     const text = el.value.trim()
     if ((!text && images.length === 0) || inputDisabled) return
     if (images.length > 0 && !supportsImages) {
       setAttachmentError(t('composer.modelNoImages'))
       return
     }
-    onSend(
-      text,
-      images.map(({ data, mimeType }) => ({ data, mimeType })),
-      running ? delivery : undefined,
-    )
-    el.value = ''
-    setImages([])
-    setAttachmentError('')
-    autosize()
+    submittingRef.current = true
+    setSendError('')
+    try {
+      const accepted = await onSend(
+        text,
+        images.map(({ data, mimeType }) => ({ data, mimeType })),
+        running ? delivery : undefined,
+      )
+      if (!accepted) return
+      el.value = ''
+      setImages([])
+      setAttachmentError('')
+      autosize()
+    } catch (error) {
+      setSendError(error instanceof Error ? error.message : t('composer.couldNotSend'))
+    } finally {
+      submittingRef.current = false
+    }
   }
 
   const addImages = async (files: FileList | null) => {
@@ -385,7 +396,7 @@ export function Composer({
                   }
                   if (event.key === 'Enter' && !event.shiftKey) {
                     event.preventDefault()
-                    submit()
+                    void submit()
                   }
                 }}
               />
@@ -448,7 +459,7 @@ export function Composer({
                       : t('composer.waitingForCodingAPI')
                 }
                 disabled={inputDisabled}
-                onClick={submit}
+                onClick={() => void submit()}
               >
                 <ArrowUp className="size-4" aria-hidden="true" />
                 <span
@@ -503,9 +514,9 @@ export function Composer({
             </button>
           </div>
         )}
-        {(settingsError || attachmentError || queueError) && (
+        {(settingsError || attachmentError || queueError || sendError) && (
           <p className="px-4 text-[0.75rem] leading-5 text-red-700" role="alert">
-            {settingsError || attachmentError || queueError}
+            {settingsError || attachmentError || queueError || sendError}
           </p>
         )}
       </div>

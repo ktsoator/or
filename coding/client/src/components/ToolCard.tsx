@@ -157,7 +157,7 @@ function Status({ status }: { status: ToolItem['status'] }) {
 function DetailBlock({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="border-b border-stone-200 last:border-b-0">
-      <div className="border-b border-stone-200 bg-stone-50 px-3 py-1.5 text-[0.71875rem] font-medium tracking-wide text-stone-500 uppercase">
+      <div className="border-b border-stone-200 bg-stone-50 px-3 py-1 text-[0.71875rem] font-medium tracking-wide text-stone-500 uppercase">
         {title}
       </div>
       {children}
@@ -214,12 +214,12 @@ function ReadPreview({ output, path, failed }: { output: string; path: string; f
   return (
     <div
       className={cn(
-        'mt-1.5 ml-5 overflow-hidden rounded-lg border border-stone-300/80 bg-white max-md:ml-0',
+        'mt-1 ml-5 overflow-hidden rounded-lg border border-stone-300/80 bg-white max-md:ml-0',
         failed && 'border-red-200 bg-red-50/60',
       )}
     >
       <div
-        className="overflow-hidden border-b border-stone-300/70 bg-white px-3 py-1.5 font-mono text-[0.75rem] text-stone-500 text-ellipsis whitespace-nowrap"
+        className="overflow-hidden border-b border-stone-300/70 bg-white px-3 py-1 font-mono text-[0.75rem] text-stone-500 text-ellipsis whitespace-nowrap"
         title={path}
       >
         {path}
@@ -232,10 +232,10 @@ function ReadPreview({ output, path, failed }: { output: string; path: string; f
             aria-label={t('tool.contentsOf', { path })}
             tabIndex={0}
           >
-            <pre className="sticky left-0 z-10 m-0 border-r border-stone-200 bg-white px-2.5 py-1.5 text-right font-mono text-[var(--tool-detail-font-size)] leading-4.5 whitespace-pre text-stone-400 select-none">
+            <pre className="sticky left-0 z-10 m-0 border-r border-stone-200 bg-white px-2.5 py-1 text-right font-mono text-[var(--tool-detail-font-size)] leading-4.5 whitespace-pre text-stone-400 select-none">
               {content.lineNumbers}
             </pre>
-            <pre className="m-0 min-w-full bg-transparent px-2.5 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-4.5 whitespace-pre text-stone-900">
+            <pre className="m-0 min-w-full bg-transparent px-2.5 py-1 font-mono text-[var(--tool-detail-font-size)] leading-4.5 whitespace-pre text-stone-900">
               <code
                 className="or-code-theme hljs block min-w-full bg-transparent! p-0!"
                 dangerouslySetInnerHTML={{ __html: html }}
@@ -251,7 +251,7 @@ function ReadPreview({ output, path, failed }: { output: string; path: string; f
       ) : (
         <pre
           className={cn(
-            'code-scroll-area m-0 max-h-[min(52vh,32.5rem)] overflow-auto bg-transparent px-2.5 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-4.5 whitespace-pre-wrap text-stone-800',
+            'code-scroll-area m-0 max-h-[min(52vh,32.5rem)] overflow-auto bg-transparent px-2.5 py-1 font-mono text-[var(--tool-detail-font-size)] leading-4.5 whitespace-pre-wrap text-stone-800',
             failed && 'text-red-700',
           )}
         >
@@ -266,7 +266,7 @@ function InspectPreview({ output, failed }: { output: string; failed: boolean })
   const { t } = useI18n()
   if (failed) {
     return (
-      <div className="mt-1.5 ml-5 rounded-md border-l-2 border-red-300 bg-red-50/50 px-3 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-5 text-red-700 max-md:ml-0">
+      <div className="mt-1 ml-5 rounded-md border-l-2 border-red-300 bg-red-50/50 px-3 py-1 font-mono text-[var(--tool-detail-font-size)] leading-5 text-red-700 max-md:ml-0">
         {output || t('tool.inspectionFailed')}
       </div>
     )
@@ -279,7 +279,7 @@ function InspectPreview({ output, failed }: { output: string; failed: boolean })
   const empty = paths.length === 0 || (paths.length === 1 && paths[0] === 'No files found.')
 
   return (
-    <div className="mt-1.5 ml-5 max-w-full overflow-hidden rounded-lg border border-stone-200/90 bg-stone-50/70 max-md:ml-0">
+    <div className="mt-1 ml-5 max-w-full overflow-hidden rounded-lg border border-stone-200/90 bg-stone-50/70 max-md:ml-0">
       <div className="flex h-7 items-center px-3 text-[0.75rem] text-stone-500">
         {empty
           ? t('tool.noMatchingFiles')
@@ -387,7 +387,7 @@ function ShellPreview({
   return (
     <div
       className={cn(
-        'mt-1.5 ml-5 overflow-hidden rounded-lg border border-stone-200 bg-white antialiased max-md:ml-0',
+        'mt-1 ml-5 overflow-hidden rounded-lg border border-stone-200 bg-white antialiased max-md:ml-0',
         failed && 'border-red-200 bg-red-50/60',
       )}
     >
@@ -407,7 +407,7 @@ function ShellPreview({
       {log && (
         <pre
           className={cn(
-            'code-scroll-area m-0 max-h-[min(46vh,26.25rem)] overflow-auto border-t border-stone-200 bg-white px-2.5 py-2 font-mono text-[var(--tool-detail-font-size)] leading-4.5 font-normal tracking-[0.005em] whitespace-pre text-stone-600',
+            'code-scroll-area m-0 max-h-[min(46vh,26.25rem)] overflow-auto border-t border-stone-200 bg-white px-2.5 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-4.5 font-normal tracking-[0.005em] whitespace-pre text-stone-600',
             failed && 'border-red-200 bg-red-50/40 text-red-700',
           )}
           role="region"
@@ -504,11 +504,11 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
   )
 
   if (!hasDetails) {
-    return <div className="group my-1.5 flex w-fit max-w-full animate-[fade-in_160ms_ease-out]">{summary}</div>
+    return <div className="group my-1 flex w-fit max-w-full animate-[fade-in_160ms_ease-out]">{summary}</div>
   }
 
   return (
-    <Collapsible className="my-1.5 animate-[fade-in_160ms_ease-out]">
+    <Collapsible className="my-1 animate-[fade-in_160ms_ease-out]">
       <CollapsibleTrigger className="group inline-flex max-w-full cursor-pointer items-center border-0 bg-transparent p-0 text-left focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-400">
         {summary}
         <ChevronRight
@@ -518,7 +518,7 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
       </CollapsibleTrigger>
       <CollapsibleContent>
         {kind === 'skill' ? (
-          <div className="mt-1.5 ml-5 overflow-hidden rounded-lg border border-stone-200 bg-white max-md:ml-0">
+          <div className="mt-1 ml-5 overflow-hidden rounded-lg border border-stone-200 bg-white max-md:ml-0">
             {skillArgs && (
               <DetailBlock title={t('tool.skillArguments')}>
                 <pre className="m-0 max-h-80 overflow-auto bg-white px-2.5 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-4.5 whitespace-pre-wrap text-stone-700">
@@ -547,7 +547,7 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
         ) : item.change ? (
           <FileChange change={item.change} />
         ) : (
-          <div className="mt-1.5 ml-5 overflow-hidden rounded-lg border border-stone-200 bg-white max-md:ml-0">
+          <div className="mt-1 ml-5 overflow-hidden rounded-lg border border-stone-200 bg-white max-md:ml-0">
             {args && (
               <DetailBlock title={t('tool.input')}>
                 <pre className="m-0 max-h-80 overflow-auto bg-white px-2.5 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-4.5 whitespace-pre-wrap text-stone-700">

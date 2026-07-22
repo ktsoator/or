@@ -57,7 +57,7 @@ export function StepGroup({ items, cwd }: { items: Item[]; cwd?: string }) {
     <Collapsible
       open={open}
       onOpenChange={setOpen}
-      className="my-1.5 animate-[fade-in_160ms_ease-out]"
+      className="my-1 animate-[fade-in_160ms_ease-out]"
     >
       <CollapsibleTrigger
         className={cn(
@@ -75,7 +75,7 @@ export function StepGroup({ items, cwd }: { items: Item[]; cwd?: string }) {
         />
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="mt-0.5 ml-2 border-l border-stone-200 pl-3.5 max-md:ml-0">
+        <div className="mt-0.5 ml-2 border-l border-stone-200 pl-3 max-md:ml-0">
           {items.map((it) =>
             it.kind === 'tool' ? (
               <ToolCard key={it.id} item={it} cwd={cwd} />
