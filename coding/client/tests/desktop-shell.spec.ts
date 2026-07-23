@@ -49,6 +49,10 @@ async function openDesktopClient(page: Page, options: { failCreate?: boolean } =
           const testWindow = window as Window & { __maximiseCount?: number }
           testWindow.__maximiseCount = (testWindow.__maximiseCount ?? 0) + 1
         },
+        BrowserOpenURL(url: string) {
+          const testWindow = window as Window & { __openedURL?: string }
+          testWindow.__openedURL = url
+        },
       },
     })
 
@@ -190,6 +194,25 @@ test('double-clicking a draggable header toggles window maximisation once', asyn
   await expect.poll(() =>
     page.evaluate(() => (window as Window & { __maximiseCount?: number }).__maximiseCount ?? 0),
   ).toBe(1)
+})
+
+test('desktop external links open in the system browser without leaving Coding', async ({ page }) => {
+  await openDesktopClient(page)
+  const appURL = page.url()
+
+  await page.evaluate(() => {
+    const anchor = document.createElement('a')
+    anchor.href = 'http://localhost:3000'
+    anchor.textContent = 'Open preview'
+    document.body.append(anchor)
+  })
+  await page.getByRole('link', { name: 'Open preview' }).click()
+
+  await expect.poll(() =>
+    page.evaluate(() => (window as Window & { __openedURL?: string }).__openedURL),
+  ).toBe('http://localhost:3000/')
+  expect(page.url()).toBe(appURL)
+  await expect(page.getByTestId('conversation-header')).toBeVisible()
 })
 
 test('first send creates a session and renders the user message', async ({ page }) => {
