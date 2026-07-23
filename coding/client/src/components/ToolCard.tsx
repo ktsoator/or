@@ -10,6 +10,7 @@ import {
   FileSearch,
   Folder,
   FolderSearch,
+  Globe2,
   LoaderCircle,
   PencilLine,
   ScrollText,
@@ -73,10 +74,12 @@ type ToolKind =
   | 'logs'
   | 'kill'
   | 'skill'
+  | 'preview'
 
 function toolPresentation(name: string): { Icon: LucideIcon; kind: ToolKind } {
   const value = name.toLowerCase()
   if (value === 'skill') return { Icon: BookOpenText, kind: 'skill' }
+  if (value === 'open_preview') return { Icon: Globe2, kind: 'preview' }
   if (value.includes('read') || value.includes('cat')) return { Icon: FileSearch, kind: 'read' }
   if (value.includes('write')) return { Icon: FilePlus2, kind: 'write' }
   if (value.includes('edit')) return { Icon: PencilLine, kind: 'edit' }
@@ -104,6 +107,7 @@ function argHint(args: unknown): string {
     record.file ??
     record.command ??
     record.cmd ??
+    record.url ??
     record.shell_id
   return typeof value === 'string' ? value : ''
 }
@@ -133,13 +137,43 @@ function commandDescription(args: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function Status({ status }: { status: ToolItem['status'] }) {
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function generatedLineCount(kind: ToolKind, args: unknown): number | undefined {
+  if (!args || typeof args !== 'object') return undefined
+  const record = args as Record<string, unknown>
+  const content = kind === 'write' ? record.content : kind === 'edit' ? record.new_string : undefined
+  if (typeof content !== 'string') return undefined
+  return content === '' ? 0 : content.split(/\r?\n/).length
+}
+
+function Status({
+  status,
+  generatedBytes,
+  lineCount,
+}: {
+  status: ToolItem['status']
+  generatedBytes?: number
+  lineCount?: number
+}) {
   const { t } = useI18n()
-  if (status === 'running') {
+  if (status === 'preparing' || status === 'running') {
+    const detail =
+      lineCount !== undefined
+        ? t('tool.lines', { count: lineCount })
+        : status === 'preparing' && generatedBytes
+          ? formatBytes(generatedBytes)
+          : status === 'running'
+            ? t('tool.running')
+            : ''
     return (
       <span className="ml-auto flex shrink-0 items-center gap-1 text-[0.75rem] text-stone-500">
         <LoaderCircle className="size-3 animate-spin" aria-hidden="true" />
-        {t('tool.running')}
+        {detail}
       </span>
     )
   }
@@ -433,6 +467,15 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
   const description = kind === 'run' ? commandDescription(item.args) : ''
   const skillTitle = kind === 'skill' ? skillField(item.args, 'name') : ''
   const skillArgs = kind === 'skill' ? skillField(item.args, 'arguments') : ''
+  const lineCount = generatedLineCount(kind, item.args)
+  const preparingLabel =
+    item.status === 'preparing' && item.args === undefined
+      ? kind === 'write'
+        ? t('tool.preparingWrite')
+        : kind === 'edit'
+          ? t('tool.preparingEdit')
+          : t('tool.preparing')
+      : ''
   const target =
     kind === 'run'
       ? stripLeadingCd(command)
@@ -443,8 +486,10 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
   const fileChange = item.change?.changeType === 'file' ? item.change : undefined
   const changedFilename = fileChange?.path.split('/').filter(Boolean).pop() || fileChange?.path
   const hasDetails =
-    kind === 'read'
-      ? item.status !== 'running'
+    kind === 'preview'
+      ? false
+      : kind === 'read'
+        ? item.status === 'complete' || item.status === 'error'
       : kind === 'skill'
         ? Boolean(skillArgs || item.status === 'error')
         : Boolean(args || item.change || item.result || item.status === 'error')
@@ -462,7 +507,9 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
         )}
         aria-hidden="true"
       />
-      {!description && (
+      {preparingLabel ? (
+        <span>{preparingLabel}</span>
+      ) : !description && (
         <span>
           {fileChange
             ? fileChange.op === 'create'
@@ -471,7 +518,7 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
             : verb}
         </span>
       )}
-      {fileChange ? (
+      {preparingLabel ? null : fileChange ? (
         <>
           <span
             className="min-w-0 overflow-hidden font-normal text-stone-500 underline decoration-stone-400/70 underline-offset-2 text-ellipsis whitespace-nowrap transition-colors group-hover:text-stone-950"
@@ -499,7 +546,7 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
           {target}
         </code>
       )}
-      <Status status={item.status} />
+      <Status status={item.status} generatedBytes={item.generatedBytes} lineCount={lineCount} />
     </span>
   )
 

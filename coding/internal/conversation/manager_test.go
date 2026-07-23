@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/permission"
@@ -23,6 +24,17 @@ func (*testTransport) Decide(context.Context, permission.ApprovalRequest) (permi
 	return permission.ApprovalResponse{Choice: permission.Reject}, nil
 }
 func (*testTransport) HasPendingApproval() bool { return false }
+
+type recordingTransport struct {
+	events chan Event
+}
+
+func (t *recordingTransport) Publish(event Event)     { t.events <- event }
+func (*recordingTransport) PublishAgent(engine.Event) {}
+func (*recordingTransport) Decide(context.Context, permission.ApprovalRequest) (permission.ApprovalResponse, error) {
+	return permission.ApprovalResponse{Choice: permission.Reject}, nil
+}
+func (*recordingTransport) HasPendingApproval() bool { return false }
 
 func TestManagerCreatesAndRestoresProjectConversation(t *testing.T) {
 	dataDir := t.TempDir()
@@ -104,6 +116,70 @@ func TestManagerRunReservationProtectsConversation(t *testing.T) {
 	}
 	if err := manager.Delete(created.ID); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestManagerGeneratesTitleBeforeAssistantResponseCompletes(t *testing.T) {
+	dataDir := t.TempDir()
+	model, thinking := testCatalogModel(t)
+	manager := newTestManager(t, dataDir)
+	created, err := manager.Create("", t.TempDir(), ScopeProject, model, thinking, permission.ModeAsk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime, ok := manager.Get(created.ID)
+	if !ok {
+		t.Fatal("created conversation not found")
+	}
+
+	started := make(chan string, 1)
+	release := make(chan struct{})
+	manager.generateTitle = func(ctx context.Context, _ llm.Model, prompt string) (string, error) {
+		started <- prompt
+		select {
+		case <-release:
+			return "Inspect parser behavior", nil
+		case <-ctx.Done():
+			return "", ctx.Err()
+		}
+	}
+	events := make(chan Event, 1)
+	runtime.transport = &recordingTransport{events: events}
+
+	manager.handleSessionEvent(created.ID, runtime, engine.Event{
+		Type: engine.UserMessageCompleted,
+		Text: "Inspect the parser behavior",
+	})
+	select {
+	case prompt := <-started:
+		if prompt != "Inspect the parser behavior" {
+			t.Fatalf("title prompt = %q", prompt)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("title generation did not start after the user message")
+	}
+
+	manager.handleSessionEvent(created.ID, runtime, engine.Event{
+		Type:          engine.MessageCompleted,
+		FinalResponse: false,
+	})
+	close(release)
+
+	select {
+	case event := <-events:
+		changed, ok := event.(TitleChanged)
+		if !ok {
+			t.Fatalf("event type = %T, want TitleChanged", event)
+		}
+		if changed.Title != "Inspect parser behavior" || changed.AITitle != "Inspect parser behavior" {
+			t.Fatalf("title event = %+v", changed)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("title was not published after an interrupted response")
+	}
+
+	if got := manager.List()[0]; got.Title != "Inspect parser behavior" || got.AITitle != "Inspect parser behavior" {
+		t.Fatalf("conversation summary = %+v", got)
 	}
 }
 

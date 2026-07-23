@@ -81,6 +81,7 @@ func (s *Server) Handler() http.Handler {
 	s.mountUsage(api)
 	s.mountSkills(api)
 	s.mountDirectories(api)
+	s.mountPreview(api)
 
 	return allowClientOrigin(r, s.clientOrigin, routedMethods(r))
 }

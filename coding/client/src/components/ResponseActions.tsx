@@ -48,7 +48,10 @@ export function ResponseActions({
   }
 
   return (
-    <div className="mt-0.5 flex h-7 animate-[fade-in_160ms_ease-out] items-center gap-0.5">
+    <div
+      className="mt-0.5 flex h-7 min-w-0 animate-[fade-in_160ms_ease-out] items-center gap-0.5 overflow-hidden"
+      data-testid="response-actions"
+    >
       <Tooltip.Provider delayDuration={80} skipDelayDuration={100}>
         <ActionButton
           icon={copied ? Check : Copy}
@@ -80,33 +83,37 @@ export function ResponseActions({
 
         {usage && hasUsage(usage) && (
           <>
-            <span className="mx-1 h-3 w-px bg-stone-200" aria-hidden="true" />
+            <span className="mx-1 h-3 w-px shrink-0 bg-stone-200" aria-hidden="true" />
             <Tooltip.Root>
               <Tooltip.Trigger asChild>
                 <button
-                  className="group inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg px-2 text-[0.75rem] leading-5 text-stone-400 tabular-nums outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-600 focus-visible:bg-[rgb(241,241,241)] focus-visible:text-stone-600 focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=delayed-open]:bg-[rgb(241,241,241)] data-[state=delayed-open]:text-stone-600"
+                  className="group inline-flex h-7 min-w-0 max-w-full shrink cursor-pointer items-center rounded-lg px-2 text-[0.75rem] leading-5 text-stone-400 tabular-nums outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-600 focus-visible:bg-[rgb(241,241,241)] focus-visible:text-stone-600 focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=delayed-open]:bg-[rgb(241,241,241)] data-[state=delayed-open]:text-stone-600"
                   type="button"
                   aria-label={t('actions.showUsage')}
+                  data-testid="response-usage-trigger"
                 >
-                  <span className="font-medium text-stone-500">{t('actions.usage')}</span>
-                  <span className="text-stone-300">·</span>
-                  <span>
-                    {formatCompactNumber(totalTokens, formatNumber)} {t('actions.tokens')}
+                  <span
+                    className="block min-w-0 truncate text-left whitespace-nowrap"
+                    data-testid="response-usage-summary"
+                  >
+                    <span className="font-medium text-stone-500">{t('actions.usage')}</span>
+                    <span className="mx-1.5 text-stone-300">·</span>
+                    <span>
+                      {formatCompactNumber(totalTokens, formatNumber)} {t('actions.tokens')}
+                    </span>
+                    {usage.cost.total > 0 && (
+                      <>
+                        <span className="mx-1.5 text-stone-300">·</span>
+                        <span>{formatSummaryCost(usage.cost.total)}</span>
+                      </>
+                    )}
+                    {modelName && (
+                      <>
+                        <span className="mx-1.5 text-stone-300">·</span>
+                        <span>{modelName}</span>
+                      </>
+                    )}
                   </span>
-                  {usage.cost.total > 0 && (
-                    <>
-                      <span className="text-stone-300">·</span>
-                      <span>{formatSummaryCost(usage.cost.total)}</span>
-                    </>
-                  )}
-                  {modelName && (
-                    <>
-                      <span className="text-stone-300">·</span>
-                      <span className="max-w-[9rem] truncate max-sm:max-w-[6rem]">
-                        {modelName}
-                      </span>
-                    </>
-                  )}
                 </button>
               </Tooltip.Trigger>
 
@@ -168,7 +175,7 @@ function ActionButton({
       <Tooltip.Trigger asChild>
         <button
           className={cn(
-            'grid size-7 cursor-pointer place-items-center rounded-lg text-stone-400 outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-700 focus-visible:ring-2 focus-visible:ring-stone-300 disabled:cursor-not-allowed disabled:opacity-30',
+            'grid size-7 shrink-0 cursor-pointer place-items-center rounded-lg text-stone-400 outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-700 focus-visible:ring-2 focus-visible:ring-stone-300 disabled:cursor-not-allowed disabled:opacity-30',
             pressed && 'bg-[rgb(237,237,237)] text-stone-800',
           )}
           type="button"

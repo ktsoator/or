@@ -90,16 +90,25 @@ export function ModelSettingsMenu({
     <DropdownMenu.Root open={open} onOpenChange={handleOpenChange}>
       <DropdownMenu.Trigger asChild>
         <button
+          data-testid="model-settings-trigger"
           type="button"
-          className="group inline-flex h-9 max-w-[15.5rem] cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[0.875rem] font-medium outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:bg-[rgb(241,241,241)] data-[state=open]:bg-[rgb(237,237,237)] disabled:cursor-not-allowed disabled:opacity-40 max-sm:max-w-[8rem] max-sm:px-2"
+          className="group inline-flex h-9 min-w-0 max-w-[15.5rem] cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[0.875rem] font-medium outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:bg-[rgb(241,241,241)] data-[state=open]:bg-[rgb(237,237,237)] disabled:cursor-not-allowed disabled:opacity-40 max-sm:max-w-[8rem] max-sm:px-2"
           aria-label={t('model.settings')}
           disabled={unavailable}
         >
           <ProviderIcon provider={modelProvider ?? ''} />
-          <span className="max-w-[9.375rem] truncate text-stone-800 max-sm:max-w-[5.5rem]">
+          <span
+            data-testid="model-settings-name"
+            className="min-w-0 max-w-[9.375rem] flex-1 truncate text-stone-500 max-sm:max-w-[5.5rem]"
+          >
             {modelName}
           </span>
-          <span className="shrink-0 text-stone-400 max-sm:hidden">{effortName}</span>
+          <span
+            data-testid="model-settings-effort"
+            className="shrink-0 text-stone-400 @max-[430px]:hidden max-sm:hidden"
+          >
+            {effortName}
+          </span>
           <ChevronDown
             className="size-3.5 shrink-0 text-stone-400 transition-transform duration-150 group-data-[state=open]:rotate-180"
             aria-hidden="true"

@@ -261,6 +261,7 @@ export function Composer({
 
   return (
     <footer
+      data-testid="composer"
       className={cn(
         'z-30 w-full',
         centered
@@ -277,13 +278,13 @@ export function Composer({
         <div
           hidden={awaitingApproval}
           className={cn(
-            'rounded-[28px] border border-stone-200 bg-white',
+            'rounded-[28px] border border-stone-200 bg-white [container-type:inline-size]',
             !centered &&
               'transition-colors focus-within:border-stone-300',
           )}
         >
           <div
-            className="grid min-h-24 grid-cols-[2.5rem_minmax(0,1fr)_auto] grid-rows-[auto_2.5rem] items-center gap-x-3 gap-y-1 px-3 py-2.5 max-sm:gap-x-2"
+            className="grid min-h-24 grid-cols-[2.5rem_minmax(0,1fr)] grid-rows-[auto_2.5rem] items-center gap-x-3 gap-y-1 px-3 py-2.5 max-sm:gap-x-2"
           >
             <button
               className="group relative col-start-1 row-start-2 grid size-10 cursor-pointer place-items-center rounded-full text-stone-700 transition-colors hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-30"
@@ -311,23 +312,7 @@ export function Composer({
                 event.target.value = ''
               }}
             />
-            <div className="col-start-2 row-start-2 flex min-w-0 items-center gap-1">
-              <PermissionModeMenu
-                value={permissionMode}
-                disabled={settingsDisabled}
-                onChange={changePermissionMode}
-              />
-              {projectPickerVisible && (
-                <ProjectPicker
-                  workspaces={workspaces}
-                  selectedPath={workspacePath}
-                  disabled={inputDisabled}
-                  onSelect={onSelectProject}
-                  onBrowse={onBrowseProjects}
-                />
-              )}
-            </div>
-            <div className="col-span-3 col-start-1 row-start-1 flex min-w-0 flex-col gap-2">
+            <div className="col-span-2 col-start-1 row-start-1 flex min-w-0 flex-col gap-2">
               {images.length > 0 && (
                 <div className="flex flex-wrap gap-2 px-1 pt-1">
                   {images.map((image) => (
@@ -401,73 +386,76 @@ export function Composer({
                 }}
               />
             </div>
-            <div
-              className="col-start-3 row-start-2 flex shrink-0 items-center gap-2.5 max-sm:gap-1.5"
-            >
-              {modelConfigured ? (
-                <ModelSettingsMenu
-                  models={models}
-                  modelProvider={modelProvider}
-                  modelID={modelID}
-                  thinkingLevel={thinkingLevel}
-                  contextUsage={contextUsage}
-                  disabled={settingsDisabled}
-                  onChange={changeSettings}
-                  compacting={compacting}
-                  onCompact={onCompact ? compactContext : undefined}
-                />
-              ) : (
-                <button
-                  type="button"
-                  onClick={onConfigureModel}
-                  className="inline-flex h-9 cursor-pointer items-center rounded-full px-3 text-[0.8125rem] font-medium text-stone-500 outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-950 focus-visible:bg-[rgb(241,241,241)]"
-                >
-                  {t('composer.configureModel')}
-                </button>
-              )}
-              {running && !awaitingApproval && (
-                <RunDeliveryMenu value={delivery} onValueChange={setDelivery} />
-              )}
-              {running && !awaitingApproval && (
-                <button
-                  className="group relative grid size-9 cursor-pointer place-items-center rounded-full bg-stone-200 text-stone-700 transition-colors hover:bg-stone-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
-                  type="button"
-                  aria-label={t('composer.stopGenerating')}
-                  onClick={onStop}
-                >
-                  <Square className="size-3 fill-current" aria-hidden="true" />
-                  <span
-                    className="pointer-events-none absolute right-0 bottom-[calc(100%+0.5625rem)] z-50 translate-y-1 whitespace-nowrap rounded-md bg-stone-900 px-2.5 py-1.5 text-[0.75rem] leading-4 font-medium text-white opacity-0 shadow-lg transition-[opacity,transform] duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
-                    aria-hidden="true"
-                  >
-                    {t('composer.stopGenerating')}
-                  </span>
-                </button>
-              )}
-              <button
-                className="group relative grid size-10 cursor-pointer place-items-center rounded-full bg-black text-white transition-colors hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
-                type="button"
-                aria-label={
-                  awaitingApproval
-                    ? t('composer.resolveApprovalFirst')
-                    : connected
-                      ? running
-                        ? delivery === 'steer'
-                          ? t('composer.steerRun')
-                          : t('composer.queueFollowUp')
-                        : t('composer.sendPrompt')
-                      : t('composer.waitingForCodingAPI')
-                }
-                disabled={inputDisabled}
-                onClick={() => void submit()}
+            <div className="col-start-2 row-start-2 flex min-w-0 items-center gap-2.5 max-sm:gap-1.5">
+              <div
+                data-testid="composer-permission-controls"
+                className="flex min-w-0 shrink items-center gap-1"
               >
-                <ArrowUp className="size-4" aria-hidden="true" />
-                <span
-                  className="pointer-events-none absolute right-0 bottom-[calc(100%+0.5625rem)] z-50 flex translate-y-1 items-center gap-2 whitespace-nowrap rounded-md bg-stone-900 px-2.5 py-1.5 text-[0.75rem] leading-4 font-medium text-white opacity-0 shadow-lg transition-[opacity,transform] duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
-                  aria-hidden="true"
-                >
-                  <span>
-                    {awaitingApproval
+                <PermissionModeMenu
+                  value={permissionMode}
+                  disabled={settingsDisabled}
+                  onChange={changePermissionMode}
+                />
+                {projectPickerVisible && (
+                  <ProjectPicker
+                    workspaces={workspaces}
+                    selectedPath={workspacePath}
+                    disabled={inputDisabled}
+                    onSelect={onSelectProject}
+                    onBrowse={onBrowseProjects}
+                  />
+                )}
+              </div>
+              <div
+                data-testid="composer-model-controls"
+                className="ml-auto flex min-w-0 items-center gap-2.5 max-sm:gap-1.5"
+              >
+                {modelConfigured ? (
+                  <ModelSettingsMenu
+                    models={models}
+                    modelProvider={modelProvider}
+                    modelID={modelID}
+                    thinkingLevel={thinkingLevel}
+                    contextUsage={contextUsage}
+                    disabled={settingsDisabled}
+                    onChange={changeSettings}
+                    compacting={compacting}
+                    onCompact={onCompact ? compactContext : undefined}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={onConfigureModel}
+                    className="inline-flex h-9 min-w-0 cursor-pointer items-center truncate rounded-full px-3 text-[0.8125rem] font-medium text-stone-500 outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-950 focus-visible:bg-[rgb(241,241,241)]"
+                  >
+                    {t('composer.configureModel')}
+                  </button>
+                )}
+                {running && !awaitingApproval && (
+                  <RunDeliveryMenu value={delivery} onValueChange={setDelivery} />
+                )}
+                {running && !awaitingApproval && (
+                  <button
+                    className="group relative grid size-9 shrink-0 cursor-pointer place-items-center rounded-full bg-stone-200 text-stone-700 transition-colors hover:bg-stone-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
+                    type="button"
+                    aria-label={t('composer.stopGenerating')}
+                    onClick={onStop}
+                  >
+                    <Square className="size-3 fill-current" aria-hidden="true" />
+                    <span
+                      className="pointer-events-none absolute right-0 bottom-[calc(100%+0.5625rem)] z-50 translate-y-1 whitespace-nowrap rounded-md bg-stone-900 px-2.5 py-1.5 text-[0.75rem] leading-4 font-medium text-white opacity-0 shadow-lg transition-[opacity,transform] duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
+                      aria-hidden="true"
+                    >
+                      {t('composer.stopGenerating')}
+                    </span>
+                  </button>
+                )}
+                <button
+                  data-testid="composer-send"
+                  className="group relative grid size-10 shrink-0 cursor-pointer place-items-center rounded-full bg-black text-white transition-colors hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
+                  type="button"
+                  aria-label={
+                    awaitingApproval
                       ? t('composer.resolveApprovalFirst')
                       : connected
                         ? running
@@ -475,13 +463,33 @@ export function Composer({
                             ? t('composer.steerRun')
                             : t('composer.queueFollowUp')
                           : t('composer.sendPrompt')
-                        : t('composer.waitingForAPIShort')}
+                        : t('composer.waitingForCodingAPI')
+                  }
+                  disabled={inputDisabled}
+                  onClick={() => void submit()}
+                >
+                  <ArrowUp className="size-4" aria-hidden="true" />
+                  <span
+                    className="pointer-events-none absolute right-0 bottom-[calc(100%+0.5625rem)] z-50 flex translate-y-1 items-center gap-2 whitespace-nowrap rounded-md bg-stone-900 px-2.5 py-1.5 text-[0.75rem] leading-4 font-medium text-white opacity-0 shadow-lg transition-[opacity,transform] duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
+                    aria-hidden="true"
+                  >
+                    <span>
+                      {awaitingApproval
+                        ? t('composer.resolveApprovalFirst')
+                        : connected
+                          ? running
+                            ? delivery === 'steer'
+                              ? t('composer.steerRun')
+                              : t('composer.queueFollowUp')
+                            : t('composer.sendPrompt')
+                          : t('composer.waitingForAPIShort')}
+                    </span>
+                    {connected && !awaitingApproval && (
+                      <kbd className="font-mono text-[0.6875rem] font-normal text-stone-400">↵</kbd>
+                    )}
                   </span>
-                  {connected && !awaitingApproval && (
-                    <kbd className="font-mono text-[0.6875rem] font-normal text-stone-400">↵</kbd>
-                  )}
-                </span>
-              </button>
+                </button>
+              </div>
             </div>
           </div>
         </div>

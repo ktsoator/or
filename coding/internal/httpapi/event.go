@@ -27,10 +27,15 @@ type wireEvent struct {
 	Tool   string `json:"tool,omitempty"`
 	Args   any    `json:"args,omitempty"`
 	Result string `json:"result,omitempty"`
+	// ToolContentIndex correlates tool argument events before every provider has
+	// supplied a stable tool-call ID. Bytes is the size of one argument delta.
+	ToolContentIndex *int `json:"toolContentIndex,omitempty"`
+	Bytes            int  `json:"bytes,omitempty"`
 	// Change is the structured file-change result (tools.FileChange) or failure
 	// (tools.MutationFailure), when the tool produced one, for rich rendering.
-	Change  any  `json:"change,omitempty"`
-	IsError bool `json:"isError,omitempty"`
+	Change  any          `json:"change,omitempty"`
+	Preview *wirePreview `json:"preview,omitempty"`
+	IsError bool         `json:"isError,omitempty"`
 	// message_end fallback text (used when nothing streamed)
 	Text   string      `json:"text,omitempty"`
 	Images []wireImage `json:"images,omitempty"`
@@ -61,6 +66,13 @@ type wireEvent struct {
 type wireImage struct {
 	Data     string `json:"data"`
 	MIMEType string `json:"mimeType"`
+}
+
+type wirePreview struct {
+	URL          string `json:"url,omitempty"`
+	Path         string `json:"path,omitempty"`
+	RelativePath string `json:"relativePath,omitempty"`
+	Title        string `json:"title,omitempty"`
 }
 
 type wireUsage struct {
@@ -114,11 +126,20 @@ func ProjectEvent(ev engine.Event) ([]byte, bool) {
 	case engine.ThinkingDelta:
 		out = wireEvent{Type: "delta", Kind: "thinking", Delta: ev.Delta}
 
+	case engine.ToolInputStarted:
+		out = wireEvent{Type: "tool_input_start", ID: ev.ToolCallID, Tool: ev.ToolName, ToolContentIndex: intPointer(ev.ToolContentIndex)}
+
+	case engine.ToolInputDelta:
+		out = wireEvent{Type: "tool_input_delta", ID: ev.ToolCallID, Tool: ev.ToolName, ToolContentIndex: intPointer(ev.ToolContentIndex), Bytes: ev.ToolInputBytes}
+
+	case engine.ToolInputCompleted:
+		out = wireEvent{Type: "tool_input_end", ID: ev.ToolCallID, Tool: ev.ToolName, Args: ev.ToolArgs, ToolContentIndex: intPointer(ev.ToolContentIndex)}
+
 	case engine.ToolStarted:
 		out = wireEvent{Type: "tool_start", ID: ev.ToolCallID, Tool: ev.ToolName, Args: ev.ToolArgs}
 
 	case engine.ToolFinished:
-		out = wireEvent{Type: "tool_end", ID: ev.ToolCallID, Tool: ev.ToolName, Result: wireToolResult(ev.ToolName, ev.ToolResult), Change: fileChangePayload(ev.ToolDetails), IsError: ev.IsError}
+		out = wireEvent{Type: "tool_end", ID: ev.ToolCallID, Tool: ev.ToolName, Result: wireToolResult(ev.ToolName, ev.ToolResult), Change: fileChangePayload(ev.ToolDetails), Preview: previewPayload(ev.ToolDetails), IsError: ev.IsError}
 
 	case engine.MessageCompleted:
 		out = wireEvent{
@@ -170,6 +191,10 @@ func ProjectEvent(ev engine.Event) ([]byte, bool) {
 		return nil, false
 	}
 	return data, true
+}
+
+func intPointer(value int) *int {
+	return &value
 }
 
 // ProjectHistory maps a UI-neutral conversation snapshot to the same event
@@ -331,6 +356,19 @@ func fileChangePayload(details any) any {
 		}
 	default:
 		return nil
+	}
+}
+
+func previewPayload(details any) *wirePreview {
+	preview, ok := details.(tools.PreviewRequest)
+	if !ok {
+		return nil
+	}
+	return &wirePreview{
+		URL:          preview.URL,
+		Path:         preview.Path,
+		RelativePath: preview.RelativePath,
+		Title:        preview.Title,
 	}
 }
 

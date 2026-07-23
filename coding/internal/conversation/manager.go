@@ -27,7 +27,8 @@ type Manager struct {
 	workspaces *workspace.Registry
 	// newTransport builds each session's link to its viewers. The delivery
 	// layer supplies it, so this package never names a transport type.
-	newTransport NewTransport
+	newTransport  NewTransport
+	generateTitle titleGenerator
 
 	mu        sync.RWMutex
 	sessions  map[string]*Runtime
@@ -51,14 +52,15 @@ func NewManager(ctx context.Context, opts Options) (*Manager, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	dir := filepath.Join(opts.DataDir, "sessions")
 	m := &Manager{
-		ctx:          ctx,
-		cancel:       cancel,
-		indexPath:    filepath.Join(dir, "index.json"),
-		scratch:      workspace.NewScratch(opts.DataDir),
-		workspaces:   opts.Workspaces,
-		newTransport: opts.NewTransport,
-		sessions:     make(map[string]*Runtime),
-		usage:        opts.Usage,
+		ctx:           ctx,
+		cancel:        cancel,
+		indexPath:     filepath.Join(dir, "index.json"),
+		scratch:       workspace.NewScratch(opts.DataDir),
+		workspaces:    opts.Workspaces,
+		newTransport:  opts.NewTransport,
+		generateTitle: defaultTitleGenerator,
+		sessions:      make(map[string]*Runtime),
+		usage:         opts.Usage,
 	}
 
 	records, err := m.loadRecords()
@@ -173,30 +175,7 @@ func (m *Manager) build(record record) (*Runtime, error) {
 	}
 	runtime := &Runtime{record: record, session: session, transport: transport}
 	session.Subscribe(func(ev engine.Event) {
-		if ev.Type == engine.MessageCompleted || ev.Type == engine.CompactionCompleted {
-			// Usage accounting must not interrupt a successful model run. The
-			// transcript remains available for idempotent startup backfill if an
-			// append fails transiently.
-			_ = m.usage.RecordEvent(record.ID, ev)
-		}
-		if ev.Type == engine.MessageCompleted && ev.FinalResponse {
-			m.maybeGenerateTitle(runtime)
-		}
-		if ev.Type == engine.UserMessageCompleted {
-			if queued, found := runtime.consumePending(ev.Text, ev.Images); found {
-				runtime.emit(MessageAccepted{
-					ID:       queued.ID,
-					Text:     ev.Text,
-					Images:   ev.Images,
-					Delivery: queued.Delivery,
-				})
-				return
-			}
-		}
-		if ev.Type == engine.RunCompleted {
-			runtime.live.Store(false)
-		}
-		runtime.forward(ev)
+		m.handleSessionEvent(record.ID, runtime, ev)
 	})
 	if record.AutoTitle {
 		for _, item := range session.History() {
@@ -208,4 +187,31 @@ func (m *Manager) build(record record) (*Runtime, error) {
 		}
 	}
 	return runtime, nil
+}
+
+func (m *Manager) handleSessionEvent(sessionID string, runtime *Runtime, ev engine.Event) {
+	if ev.Type == engine.MessageCompleted || ev.Type == engine.CompactionCompleted {
+		// Usage accounting must not interrupt a successful model run. The
+		// transcript remains available for idempotent startup backfill if an
+		// append fails transiently.
+		_ = m.usage.RecordEvent(sessionID, ev)
+	}
+	if ev.Type == engine.UserMessageCompleted {
+		// Title generation is independent of the assistant run. Starting it
+		// here means an interrupted first response can still receive an AI title.
+		m.maybeGenerateTitle(runtime, ev.Text)
+		if queued, found := runtime.consumePending(ev.Text, ev.Images); found {
+			runtime.emit(MessageAccepted{
+				ID:       queued.ID,
+				Text:     ev.Text,
+				Images:   ev.Images,
+				Delivery: queued.Delivery,
+			})
+			return
+		}
+	}
+	if ev.Type == engine.RunCompleted {
+		runtime.live.Store(false)
+	}
+	runtime.forward(ev)
 }

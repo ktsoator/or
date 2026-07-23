@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ktsoator/or/coding/internal/engine"
+	"github.com/ktsoator/or/coding/internal/tools"
 )
 
 func TestProjectEventIncludesResponseCompletionTime(t *testing.T) {
@@ -42,5 +43,94 @@ func TestProjectHistoryIncludesResponseCompletionTime(t *testing.T) {
 	}
 	if want := completedAt.Format(time.RFC3339Nano); events[0].CompletedAt != want {
 		t.Fatalf("completedAt = %q, want %q", events[0].CompletedAt, want)
+	}
+}
+
+func TestProjectEventIncludesToolInputProgress(t *testing.T) {
+	data, ok := ProjectEvent(engine.Event{
+		Type:             engine.ToolInputDelta,
+		ToolCallID:       "call-1",
+		ToolName:         "write",
+		ToolContentIndex: 0,
+		ToolInputBytes:   128,
+	})
+	if !ok {
+		t.Fatal("tool input event was not projected")
+	}
+
+	var event wireEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		t.Fatal(err)
+	}
+	if event.Type != "tool_input_delta" || event.ID != "call-1" || event.Tool != "write" {
+		t.Fatalf("event = %#v", event)
+	}
+	if event.ToolContentIndex == nil || *event.ToolContentIndex != 0 {
+		t.Fatalf("toolContentIndex = %#v, want 0", event.ToolContentIndex)
+	}
+	if event.Bytes != 128 {
+		t.Fatalf("bytes = %d, want 128", event.Bytes)
+	}
+}
+
+func TestProjectEventIncludesLivePreviewRequest(t *testing.T) {
+	data, ok := ProjectEvent(engine.Event{
+		Type:       engine.ToolFinished,
+		ToolCallID: "preview-call",
+		ToolName:   "open_preview",
+		ToolDetails: tools.PreviewRequest{
+			URL:   "http://localhost:3000",
+			Title: "Local app",
+		},
+	})
+	if !ok {
+		t.Fatal("preview tool event was not projected")
+	}
+
+	var event wireEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		t.Fatal(err)
+	}
+	if event.Preview == nil || event.Preview.URL != "http://localhost:3000" || event.Preview.Title != "Local app" {
+		t.Fatalf("preview = %#v", event.Preview)
+	}
+}
+
+func TestProjectEventIncludesWorkspacePreviewPath(t *testing.T) {
+	data, ok := ProjectEvent(engine.Event{
+		Type:       engine.ToolFinished,
+		ToolCallID: "preview-call",
+		ToolName:   "open_preview",
+		ToolDetails: tools.PreviewRequest{
+			Path:         "/workspace/web/index.html",
+			RelativePath: "web/index.html",
+			Title:        "Static page",
+		},
+	})
+	if !ok {
+		t.Fatal("preview tool event was not projected")
+	}
+
+	var event wireEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		t.Fatal(err)
+	}
+	if event.Preview == nil || event.Preview.Path != "/workspace/web/index.html" || event.Preview.RelativePath != "web/index.html" || event.Preview.Title != "Static page" || event.Preview.URL != "" {
+		t.Fatalf("preview = %#v", event.Preview)
+	}
+}
+
+func TestProjectHistoryDoesNotReopenPreview(t *testing.T) {
+	events := ProjectHistory([]engine.HistoryItem{{
+		Type:        engine.HistoryToolResult,
+		ToolCallID:  "preview-call",
+		ToolName:    "open_preview",
+		ToolDetails: tools.PreviewRequest{URL: "http://localhost:3000"},
+	}})
+	if len(events) != 1 {
+		t.Fatalf("events = %#v, want one event", events)
+	}
+	if events[0].Preview != nil {
+		t.Fatalf("history preview = %#v, want nil", events[0].Preview)
 	}
 }

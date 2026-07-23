@@ -93,7 +93,7 @@ type Runtime struct {
 	pending   []QueuedMessage
 
 	// titleGenerating is held only while an attempt is in flight, so a failed
-	// attempt is retried on the next completed response.
+	// attempt is retried when the next user message enters the session.
 	titleGenerating atomic.Bool
 }
 

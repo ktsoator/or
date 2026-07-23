@@ -17,6 +17,9 @@ const (
 	UserMessageCompleted EventType = "user_message_completed"
 	TextDelta            EventType = "text_delta"
 	ThinkingDelta        EventType = "thinking_delta"
+	ToolInputStarted     EventType = "tool_input_started"
+	ToolInputDelta       EventType = "tool_input_delta"
+	ToolInputCompleted   EventType = "tool_input_completed"
 	ToolStarted          EventType = "tool_started"
 	ToolFinished         EventType = "tool_finished"
 	MessageCompleted     EventType = "message_completed"
@@ -42,10 +45,12 @@ type Event struct {
 	FinalResponse bool
 
 	// Tool lifecycle data.
-	ToolCallID string
-	ToolName   string
-	ToolArgs   any
-	ToolResult string
+	ToolCallID       string
+	ToolName         string
+	ToolArgs         any
+	ToolContentIndex int
+	ToolInputBytes   int
+	ToolResult       string
 	// ToolDetails is the tool's structured result (for example a tools.FileChange
 	// or tools.MutationFailure), when it produced one. Product shells render it;
 	// ToolResult remains the text fallback. It is not persisted, so it is present
@@ -96,6 +101,14 @@ func projectAgentEvent(ev agent.AgentEvent) (Event, bool) {
 			return Event{Type: TextDelta, Delta: ev.LLMEvent.Delta}, true
 		case llm.EventThinkingDelta:
 			return Event{Type: ThinkingDelta, Delta: ev.LLMEvent.Delta}, true
+		case llm.EventToolCallStart:
+			return projectToolInputEvent(ToolInputStarted, ev.LLMEvent), true
+		case llm.EventToolCallDelta:
+			projected := projectToolInputEvent(ToolInputDelta, ev.LLMEvent)
+			projected.ToolInputBytes = len([]byte(ev.LLMEvent.Delta))
+			return projected, true
+		case llm.EventToolCallEnd:
+			return projectToolInputEvent(ToolInputCompleted, ev.LLMEvent), true
 		default:
 			return Event{}, false
 		}
@@ -148,6 +161,21 @@ func projectAgentEvent(ev agent.AgentEvent) (Event, bool) {
 	default:
 		return Event{}, false
 	}
+}
+
+func projectToolInputEvent(eventType EventType, event *llm.Event) Event {
+	projected := Event{
+		Type:             eventType,
+		ToolContentIndex: event.ContentIndex,
+	}
+	if event.ToolCall != nil {
+		projected.ToolCallID = event.ToolCall.ID
+		projected.ToolName = event.ToolCall.Name
+		if eventType == ToolInputCompleted {
+			projected.ToolArgs = event.ToolCall.Arguments
+		}
+	}
+	return projected
 }
 
 func eventUserMessage(message agent.AgentMessage) (string, []llm.ImageContent, bool) {

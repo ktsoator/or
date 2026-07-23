@@ -58,14 +58,20 @@ export function PermissionModeMenu({
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <button
+          data-testid="permission-mode-trigger"
           type="button"
-          className="group inline-flex h-9 max-w-[10rem] cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[0.875rem] font-medium text-stone-700 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:bg-[rgb(241,241,241)] data-[state=open]:bg-[rgb(237,237,237)] disabled:cursor-not-allowed disabled:opacity-40 max-sm:px-2"
+          className="group inline-flex h-9 min-w-0 max-w-[10rem] cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[0.875rem] font-medium text-stone-500 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:bg-[rgb(241,241,241)] data-[state=open]:bg-[rgb(237,237,237)] disabled:cursor-not-allowed disabled:opacity-40 max-sm:px-2"
           aria-label={t('permission.choose')}
           title={t(selected.labelKey)}
           disabled={disabled}
         >
-          <ShieldCheck className="size-4 shrink-0 text-stone-600" aria-hidden="true" />
-          <span className="truncate max-sm:hidden">{t(selected.shortLabelKey)}</span>
+          <ShieldCheck className="size-4 shrink-0 text-stone-500" aria-hidden="true" />
+          <span
+            data-testid="permission-mode-label"
+            className="min-w-0 truncate @max-[390px]:hidden max-sm:hidden"
+          >
+            {t(selected.shortLabelKey)}
+          </span>
           <ChevronDown
             className="size-3.5 shrink-0 text-stone-400 transition-transform duration-150 group-data-[state=open]:rotate-180"
             aria-hidden="true"

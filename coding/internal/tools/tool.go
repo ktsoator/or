@@ -62,6 +62,7 @@ func CodingToolsWithShells(root string, ops Ops) ([]Tool, *BackgroundShells) {
 		Write(root, ops, files),
 		Bash(root, ops, shells),
 		BashOutput(shells),
+		OpenPreview(root),
 		KillBash(shells),
 	}, shells
 }

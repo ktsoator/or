@@ -21,6 +21,7 @@ import {
   GitFork,
   LoaderCircle,
   PanelLeft,
+  PanelRight,
   Pin,
   PencilLine,
   Search,
@@ -48,15 +49,36 @@ import { formatMessageTime } from './lib/time'
 import { SettingsPage, type SettingsSection } from './components/SettingsPage'
 import { SkillsPage } from './components/SkillsPage'
 import { WorkspacePickerDialog } from './components/WorkspacePickerDialog'
+import { WorkbenchPanel } from './components/WorkbenchPanel'
 import { useI18n } from './i18n'
 
 const DEFAULT_SIDEBAR_WIDTH = 240
 const MIN_SIDEBAR_WIDTH = 206
 const MAX_SIDEBAR_WIDTH = 338
+const DEFAULT_WORKBENCH_RATIO = 0.48
+const MIN_WORKBENCH_WIDTH = 300
+const MIN_CHAT_WIDTH = 360
+const MAX_WORKBENCH_RATIO = 0.68
+const AUTO_COLLAPSE_CHAT_WIDTH = 520
+const AUTO_COLLAPSE_RESET_WIDTH = 560
 const PINNED_SESSIONS_KEY = 'coding.pinned-session-ids'
 
 function clampSidebarWidth(width: number) {
   return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width))
+}
+
+function workbenchWidthBounds(layoutWidth: number) {
+  const minimum = Math.min(MIN_WORKBENCH_WIDTH, layoutWidth)
+  const maximum = Math.max(
+    minimum,
+    Math.min(layoutWidth * MAX_WORKBENCH_RATIO, layoutWidth - MIN_CHAT_WIDTH),
+  )
+  return { minimum, maximum }
+}
+
+function clampWorkbenchWidth(width: number, layoutWidth: number) {
+  const { minimum, maximum } = workbenchWidthBounds(layoutWidth)
+  return Math.min(maximum, Math.max(minimum, width))
 }
 
 function wheelDeltaInPixels(event: WheelEvent, pageHeight: number) {
@@ -91,6 +113,8 @@ export default function App() {
     items,
     queuedMessages,
     contextUsage,
+    preview,
+    previewOpen,
     approval,
     running,
     autoCompacting,
@@ -115,6 +139,7 @@ export default function App() {
     removeQueuedMessage,
     stop,
     resolveApproval,
+    setPreviewOpen,
   } = useSession()
   const logRef = useRef<HTMLDivElement>(null)
   const followLatestRef = useRef(true)
@@ -127,10 +152,36 @@ export default function App() {
       }
     | undefined
   >(undefined)
+  const workbenchLayoutRef = useRef<HTMLDivElement>(null)
+  const workbenchViewportRef = useRef<HTMLElement>(null)
+  const workbenchResizeRef = useRef<
+    | {
+        pointerID: number
+        startX: number
+        startWidth: number
+      }
+    | undefined
+  >(undefined)
+  const workbenchWidthRef = useRef<number | undefined>(undefined)
+  const workbenchPreferredWidthRef = useRef<number | undefined>(undefined)
+  const workbenchConstrainedRef = useRef(false)
+  const workbenchOpenRef = useRef(false)
+  const workbenchMaximizedRef = useRef(false)
+  const workbenchResizingRef = useRef(false)
+  const setWorkbenchOpenRef = useRef<(open: boolean) => void>(() => {})
+  const previousPreviewRevisionRef = useRef<string | undefined>(undefined)
+  const workbenchAutoCollapsedRef = useRef(false)
+  const workbenchAutoLayoutFrameRef = useRef<number | undefined>(undefined)
   const [mobileSessionsOpen, setMobileSessionsOpen] = useState(false)
+  const [draftWorkbenchOpen, setDraftWorkbenchOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH)
   const [sidebarResizing, setSidebarResizing] = useState(false)
+  const [workbenchWidth, setWorkbenchWidth] = useState<number>()
+  const [workbenchResizing, setWorkbenchResizing] = useState(false)
+  const [workbenchMaximized, setWorkbenchMaximized] = useState(false)
+  const [workbenchConstrained, setWorkbenchConstrained] = useState(false)
+  const [workbenchAutoLayoutChanging, setWorkbenchAutoLayoutChanging] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<SessionSummary>()
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
@@ -177,10 +228,45 @@ export default function App() {
   )
   const workspacePickerPath =
     selectedWorkspacePath || draft?.workspacePath || activeSession?.workspacePath || workspaceGroups[0]?.path
+  const workbenchOpen = activeSessionID ? previewOpen : draftWorkbenchOpen
+
+  const setWorkbenchOpen = (open: boolean) => {
+    if (!open) setWorkbenchMaximized(false)
+    if (activeSessionID) setPreviewOpen(open)
+    else setDraftWorkbenchOpen(open)
+  }
+
+  workbenchWidthRef.current = workbenchWidth
+  workbenchOpenRef.current = workbenchOpen
+  workbenchMaximizedRef.current = workbenchMaximized
+  workbenchResizingRef.current = workbenchResizing
+  setWorkbenchOpenRef.current = setWorkbenchOpen
+
+  const toggleWorkbench = () => {
+    workbenchAutoCollapsedRef.current = false
+    if (workbenchOpen) {
+      setWorkbenchOpen(false)
+      return
+    }
+    if (workbenchConstrainedRef.current) setWorkbenchMaximized(true)
+    setWorkbenchOpen(true)
+  }
 
   useEffect(() => {
     localStorage.setItem(PINNED_SESSIONS_KEY, JSON.stringify(pinnedSessionIDs))
   }, [pinnedSessionIDs])
+
+  useEffect(() => {
+    return () => {
+      if (workbenchAutoLayoutFrameRef.current !== undefined) {
+        cancelAnimationFrame(workbenchAutoLayoutFrameRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    workbenchAutoCollapsedRef.current = false
+  }, [activeSessionID, draft?.id])
 
   useEffect(() => {
     if (draft || selectedWorkspacePath) return
@@ -205,7 +291,7 @@ export default function App() {
   }, [settingsOpen])
 
   useEffect(() => {
-    if (!sidebarResizing) return
+    if (!sidebarResizing && !workbenchResizing) return
     const previousCursor = document.body.style.cursor
     const previousUserSelect = document.body.style.userSelect
     document.body.style.cursor = 'col-resize'
@@ -214,7 +300,87 @@ export default function App() {
       document.body.style.cursor = previousCursor
       document.body.style.userSelect = previousUserSelect
     }
-  }, [sidebarResizing])
+  }, [sidebarResizing, workbenchResizing])
+
+  useLayoutEffect(() => {
+    const layout = workbenchLayoutRef.current
+    if (!layout) return
+
+    const setWorkbenchOpenForLayout = (open: boolean) => {
+      setWorkbenchAutoLayoutChanging(true)
+      setWorkbenchOpenRef.current(open)
+      if (workbenchAutoLayoutFrameRef.current !== undefined) {
+        cancelAnimationFrame(workbenchAutoLayoutFrameRef.current)
+      }
+      workbenchAutoLayoutFrameRef.current = requestAnimationFrame(() => {
+        workbenchAutoLayoutFrameRef.current = requestAnimationFrame(() => {
+          workbenchAutoLayoutFrameRef.current = undefined
+          setWorkbenchAutoLayoutChanging(false)
+        })
+      })
+    }
+
+    const keepWidthInBounds = () => {
+      const layoutWidth = layout.getBoundingClientRect().width
+      if (layoutWidth <= 0) return
+      const currentWidth = workbenchWidthRef.current
+      const preferredWidth =
+        workbenchPreferredWidthRef.current ?? layoutWidth * DEFAULT_WORKBENCH_RATIO
+      workbenchPreferredWidthRef.current = preferredWidth
+      const nextWidth = clampWorkbenchWidth(
+        preferredWidth,
+        layoutWidth,
+      )
+      if (currentWidth === undefined || Math.abs(currentWidth - nextWidth) >= 0.5) {
+        workbenchWidthRef.current = nextWidth
+        setWorkbenchWidth(nextWidth)
+      }
+
+      const availableChatWidth = layoutWidth - nextWidth
+      const wasConstrained = workbenchConstrainedRef.current
+      const nextConstrained = wasConstrained
+        ? availableChatWidth < AUTO_COLLAPSE_RESET_WIDTH
+        : availableChatWidth < AUTO_COLLAPSE_CHAT_WIDTH
+      if (nextConstrained === wasConstrained) return
+
+      workbenchConstrainedRef.current = nextConstrained
+      setWorkbenchConstrained(nextConstrained)
+      if (
+        nextConstrained &&
+        workbenchOpenRef.current &&
+        !workbenchMaximizedRef.current &&
+        !workbenchResizingRef.current
+      ) {
+        // The native window is already animating its size. Snap the grid closed
+        // so the old workbench width cannot temporarily squeeze Chat to zero.
+        workbenchAutoCollapsedRef.current = true
+        setWorkbenchOpenForLayout(false)
+      } else if (!nextConstrained && workbenchAutoCollapsedRef.current) {
+        workbenchAutoCollapsedRef.current = false
+        setWorkbenchOpenForLayout(true)
+      }
+    }
+
+    keepWidthInBounds()
+    const observer = new ResizeObserver(keepWidthInBounds)
+    observer.observe(layout)
+    return () => observer.disconnect()
+  }, [settingsOpen, skillsOpen])
+
+  useLayoutEffect(() => {
+    const revisionKey = preview
+      ? `${activeSessionID ?? 'draft'}:${preview.revision}`
+      : undefined
+    if (!revisionKey || previousPreviewRevisionRef.current === revisionKey) return
+    previousPreviewRevisionRef.current = revisionKey
+    if (workbenchOpen) workbenchAutoCollapsedRef.current = false
+    if (
+      (workbenchConstrained || workbenchConstrainedRef.current) &&
+      workbenchOpen
+    ) {
+      setWorkbenchMaximized(true)
+    }
+  }, [activeSessionID, preview, workbenchConstrained, workbenchOpen])
 
   useLayoutEffect(() => {
     const el = logRef.current
@@ -305,6 +471,74 @@ export default function App() {
     if (nextWidth === undefined) return
     event.preventDefault()
     setSidebarWidth(clampSidebarWidth(nextWidth))
+  }
+
+  const getWorkbenchLayoutWidth = () =>
+    workbenchLayoutRef.current?.getBoundingClientRect().width ??
+    MIN_WORKBENCH_WIDTH + MIN_CHAT_WIDTH
+
+  const setUserWorkbenchWidth = (width: number) => {
+    workbenchPreferredWidthRef.current = width
+    workbenchWidthRef.current = width
+    setWorkbenchWidth(width)
+  }
+
+  const startWorkbenchResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!workbenchOpen) return
+    event.preventDefault()
+    const layoutWidth = getWorkbenchLayoutWidth()
+    const startWidth = clampWorkbenchWidth(
+      workbenchViewportRef.current?.getBoundingClientRect().width ??
+        workbenchWidth ??
+        layoutWidth * DEFAULT_WORKBENCH_RATIO,
+      layoutWidth,
+    )
+    workbenchResizeRef.current = {
+      pointerID: event.pointerId,
+      startX: event.clientX,
+      startWidth,
+    }
+    setUserWorkbenchWidth(startWidth)
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setWorkbenchResizing(true)
+  }
+
+  const resizeWorkbench = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const resize = workbenchResizeRef.current
+    if (!resize || resize.pointerID !== event.pointerId) return
+    setUserWorkbenchWidth(
+      clampWorkbenchWidth(
+        resize.startWidth + resize.startX - event.clientX,
+        getWorkbenchLayoutWidth(),
+      ),
+    )
+  }
+
+  const stopWorkbenchResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const resize = workbenchResizeRef.current
+    if (!resize || resize.pointerID !== event.pointerId) return
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    workbenchResizeRef.current = undefined
+    setWorkbenchResizing(false)
+  }
+
+  const resizeWorkbenchWithKeyboard = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const layoutWidth = getWorkbenchLayoutWidth()
+    const { minimum, maximum } = workbenchWidthBounds(layoutWidth)
+    const currentWidth =
+      workbenchViewportRef.current?.getBoundingClientRect().width ??
+      workbenchWidth ??
+      layoutWidth * DEFAULT_WORKBENCH_RATIO
+    let nextWidth: number | undefined
+    if (event.key === 'ArrowLeft') nextWidth = currentWidth + 16
+    if (event.key === 'ArrowRight') nextWidth = currentWidth - 16
+    if (event.key === 'Home') nextWidth = minimum
+    if (event.key === 'End') nextWidth = maximum
+    if (nextWidth === undefined) return
+    event.preventDefault()
+    setUserWorkbenchWidth(clampWorkbenchWidth(nextWidth, layoutWidth))
   }
 
   const trackScrollPosition = () => {
@@ -502,6 +736,25 @@ export default function App() {
       >
         <PanelLeft className="size-4" aria-hidden="true" />
       </button>
+      {!skillsOpen && (
+        <button
+          className="absolute top-2 right-2 z-[70] grid size-7 cursor-pointer place-items-center rounded-md text-stone-500 transition-colors duration-100 hover:bg-stone-200/75 hover:text-stone-950 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-stone-400"
+          data-testid="workbench-panel-toggle"
+          type="button"
+          title={workbenchOpen ? t('workbench.hide') : t('workbench.show')}
+          aria-label={workbenchOpen ? t('workbench.hide') : t('workbench.show')}
+          aria-expanded={workbenchOpen}
+          onClick={toggleWorkbench}
+        >
+          <PanelRight className="size-4" aria-hidden="true" />
+          {preview && !workbenchOpen && (
+            <span
+              className="absolute top-0.5 right-0.5 size-1.5 rounded-full border border-white bg-blue-500"
+              aria-hidden="true"
+            />
+          )}
+        </button>
+      )}
 
       <div
         className="sidebar-viewport relative z-50 min-h-0 min-w-0 overflow-hidden max-md:contents"
@@ -736,16 +989,41 @@ export default function App() {
           workspaceName={activeSession?.workspaceName}
         />
       ) : (
-      <div className="relative flex h-full min-w-0 flex-col">
+      <div
+        ref={workbenchLayoutRef}
+        className={cn(
+          'relative grid h-full min-h-0 min-w-0 grid-cols-1 grid-rows-[minmax(0,1fr)] overflow-hidden motion-reduce:transition-none [container-type:inline-size] md:grid-cols-[minmax(0,1fr)_minmax(0,var(--workbench-width))]',
+          !workbenchResizing &&
+            !workbenchAutoLayoutChanging &&
+            'transition-[grid-template-columns] duration-[260ms] ease-[cubic-bezier(0.4,0,0.2,1)]',
+        )}
+        data-testid="workbench-layout"
+        style={
+          {
+            '--workbench-expanded-width': workbenchWidth === undefined
+              ? `${DEFAULT_WORKBENCH_RATIO * 100}cqw`
+              : `${workbenchWidth}px`,
+            '--workbench-width': workbenchOpen
+              ? 'var(--workbench-expanded-width)'
+              : '0px',
+          } as CSSProperties
+        }
+      >
+      <div
+        className="relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden"
+        data-testid="conversation-pane"
+        aria-hidden={workbenchMaximized}
+        inert={workbenchMaximized}
+      >
         <header
           className={cn(
-            'conversation-header window-drag-region z-20 flex h-[45px] shrink-0 items-center gap-3 border-b border-stone-200/80 bg-white px-6 max-md:h-12 max-md:px-4',
+            'conversation-header window-drag-region z-20 flex h-[45px] shrink-0 items-center gap-3 border-b border-stone-200/80 bg-white py-0 pr-12 pl-6 max-md:h-12 max-md:px-4 max-md:pr-12',
             sidebarCollapsed && 'sidebar-is-collapsed',
           )}
           data-testid="conversation-header"
         >
           <div
-            className="conversation-title-group flex min-w-0 items-center gap-2.5"
+            className="conversation-title-group flex min-w-0 flex-1 select-none items-center gap-2.5"
             data-testid="conversation-title"
           >
             {sidebarCollapsed && (
@@ -799,6 +1077,7 @@ export default function App() {
 
         <main
           ref={logRef}
+          data-testid="conversation-transcript"
           className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 md:px-6 md:[scrollbar-gutter:stable_both-edges]"
           onScroll={trackScrollPosition}
         >
@@ -845,6 +1124,60 @@ export default function App() {
         </main>
 
         {!loading && !emptySession && composer()}
+      </div>
+      <aside
+        ref={workbenchViewportRef}
+        className={cn(
+          'relative min-h-0 min-w-0 overflow-hidden bg-white transition-[visibility] duration-0 motion-reduce:delay-0',
+          workbenchOpen
+            ? workbenchMaximized
+              ? 'visible absolute inset-0 z-40 delay-0'
+              : 'visible absolute inset-0 z-40 border-l border-stone-200 delay-0 md:relative md:z-auto'
+            : workbenchAutoLayoutChanging
+              ? 'invisible hidden delay-0 md:block'
+              : 'invisible hidden delay-[260ms] md:block',
+        )}
+        data-testid="workbench-viewport"
+        aria-hidden={!workbenchOpen}
+        inert={!workbenchOpen}
+      >
+        {workbenchOpen && !workbenchMaximized && (
+          <div
+            className="group absolute inset-y-0 left-0 z-50 hidden w-1.5 touch-none cursor-col-resize outline-none md:block"
+            data-testid="workbench-resize-handle"
+            role="separator"
+            aria-label={t('workbench.resize')}
+            aria-orientation="vertical"
+            aria-valuemin={Math.round(workbenchWidthBounds(getWorkbenchLayoutWidth()).minimum)}
+            aria-valuemax={Math.round(workbenchWidthBounds(getWorkbenchLayoutWidth()).maximum)}
+            aria-valuenow={Math.round(
+              workbenchWidth ?? getWorkbenchLayoutWidth() * DEFAULT_WORKBENCH_RATIO,
+            )}
+            tabIndex={0}
+            onPointerDown={startWorkbenchResize}
+            onPointerMove={resizeWorkbench}
+            onPointerUp={stopWorkbenchResize}
+            onPointerCancel={stopWorkbenchResize}
+            onKeyDown={resizeWorkbenchWithKeyboard}
+          >
+            <span
+              className={cn(
+                'absolute inset-y-0 left-0 w-px transition-colors group-hover:bg-stone-400/70 group-focus-visible:bg-stone-500/75',
+                workbenchResizing && 'bg-stone-500/75',
+              )}
+              aria-hidden="true"
+            />
+          </div>
+        )}
+        <WorkbenchPanel
+          key={activeSessionID ?? draft?.id ?? 'empty-workbench'}
+          open={workbenchOpen}
+          preview={preview}
+          sessionID={activeSessionID}
+          maximized={workbenchMaximized}
+          onToggleMaximized={() => setWorkbenchMaximized((current) => !current)}
+        />
+      </aside>
       </div>
       )}
 
@@ -1627,11 +1960,10 @@ function RunDuration({ item }: { item: Extract<Item, { kind: 'run' }> }) {
   const duration = formatRunDuration(durationMs, locale)
 
   return (
-    <div className="mt-3.5 mb-1 animate-[fade-in_160ms_ease-out]">
+    <div className="mt-3.5 mb-2.5 animate-[fade-in_160ms_ease-out]">
       <div className="text-[0.8125rem] leading-5 text-stone-400 tabular-nums">
         {t(running ? 'run.working' : 'run.completed', { duration })}
       </div>
-      <div className="mt-1.5 h-px bg-stone-200/80" aria-hidden="true" />
     </div>
   )
 }

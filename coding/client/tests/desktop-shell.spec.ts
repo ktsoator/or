@@ -16,7 +16,15 @@ const models = {
   defaultThinkingLevel: 'medium',
 }
 
-async function openDesktopClient(page: Page, options: { failCreate?: boolean } = {}) {
+async function openDesktopClient(
+  page: Page,
+  options: {
+    failCreate?: boolean
+    existingSession?: boolean
+    historyEvents?: unknown[]
+    modelName?: string
+  } = {},
+) {
   const requests: Array<{ method: string; path: string; body?: unknown }> = []
   const createdSession = {
     id: 'test-session',
@@ -31,11 +39,11 @@ async function openDesktopClient(page: Page, options: { failCreate?: boolean } =
     hasApproval: false,
     modelProvider: 'openai',
     modelId: 'test-model',
-    modelName: 'Test model',
+    modelName: options.modelName ?? 'Test model',
     thinkingLevel: 'medium',
     permissionMode: 'ask',
   }
-  let sessionCreated = false
+  let sessionCreated = Boolean(options.existingSession)
 
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'platform', {
@@ -62,6 +70,8 @@ async function openDesktopClient(page: Page, options: { failCreate?: boolean } =
       onmessage: ((event: MessageEvent) => void) | null = null
 
       constructor() {
+        const testWindow = window as Window & { __eventSources?: TestEventSource[] }
+        testWindow.__eventSources = [...(testWindow.__eventSources ?? []), this]
         window.setTimeout(() => this.onopen?.(new Event('open')), 0)
       }
 
@@ -71,6 +81,15 @@ async function openDesktopClient(page: Page, options: { failCreate?: boolean } =
     Object.defineProperty(window, 'EventSource', {
       configurable: true,
       value: TestEventSource,
+    })
+    Object.defineProperty(window, '__emitSSE', {
+      configurable: true,
+      value: (payload: unknown) => {
+        const sources = (window as Window & { __eventSources?: TestEventSource[] }).__eventSources
+        sources?.at(-1)?.onmessage?.(
+          new MessageEvent('message', { data: JSON.stringify(payload) }),
+        )
+      },
     })
   })
 
@@ -114,13 +133,42 @@ async function openDesktopClient(page: Page, options: { failCreate?: boolean } =
       return
     }
 
+    if (path === '/api/preview/check' && method === 'POST') {
+      const previewURL = (requestBody as { url: string }).url
+      const unavailable = previewURL.includes(':4311')
+      await route.fulfill({
+        status: unavailable ? 400 : 200,
+        contentType: 'application/json',
+        body: JSON.stringify(
+          unavailable ? { error: 'local server is not reachable' } : { url: previewURL },
+        ),
+      })
+      return
+    }
+
+    if (path === '/api/sessions/test-session/preview/web/index.html' && method === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: '<!doctype html><title>Static page</title><main>Direct HTML preview</main>',
+      })
+      return
+    }
+
     let body: unknown = []
     let status = 200
-    if (path === '/api/models') body = models
+    if (path === '/api/models') {
+      body = options.modelName
+        ? {
+            ...models,
+            models: models.models.map((model) => ({ ...model, name: options.modelName })),
+          }
+        : models
+    }
     if (path === '/api/sessions') body = sessionCreated ? [createdSession] : []
     if (path === '/api/sessions/test-session/history') {
       body = {
-        events: [],
+        events: options.historyEvents ?? [],
         queue: [],
         context: {},
         running: false,
@@ -154,6 +202,7 @@ test('sidebar collapse keeps the titlebar control stable and clears the divider'
   const title = page.getByTestId('conversation-title')
 
   await expect(toggle).toBeVisible()
+  await expect(title).toHaveCSS('user-select', 'none')
   await expect.poll(() => header.evaluate((element) => element.getBoundingClientRect().height)).toBe(45)
   await expect.poll(() => sidebar.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(200)
 
@@ -213,6 +262,781 @@ test('desktop external links open in the system browser without leaving Coding',
   ).toBe('http://localhost:3000/')
   expect(page.url()).toBe(appURL)
   await expect(page.getByTestId('conversation-header')).toBeVisible()
+})
+
+test('workbench opens before a preview and launches Browser without hiding Chat', async ({
+  page,
+}) => {
+  await page.route('http://127.0.0.1:4310/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><title>Preview fixture</title><main>Local preview ready</main>',
+    })
+  })
+  const requests = await openDesktopClient(page, { existingSession: true })
+
+  const workbenchToggle = page.getByTestId('workbench-panel-toggle')
+  await expect(workbenchToggle).toBeVisible()
+  await expect(workbenchToggle).toHaveAccessibleName('Show workbench')
+  const togglePosition = await workbenchToggle.boundingBox()
+  expect(togglePosition).not.toBeNull()
+  await workbenchToggle.click()
+  await page.waitForTimeout(60)
+  const toggleDuringOpen = await workbenchToggle.boundingBox()
+  expect(toggleDuringOpen).not.toBeNull()
+  expect(toggleDuringOpen!.x).toBeCloseTo(togglePosition!.x, 1)
+  expect(toggleDuringOpen!.y).toBeCloseTo(togglePosition!.y, 1)
+
+  const workbench = page.getByTestId('workbench-panel')
+  await expect(workbench).toBeVisible()
+  await expect(workbenchToggle).toHaveAccessibleName('Hide workbench')
+  const conversationHeaderColor = await page
+    .getByTestId('conversation-header')
+    .evaluate((element) => getComputedStyle(element).backgroundColor)
+  await expect(workbench.getByTestId('workbench-titlebar')).toHaveCSS(
+    'background-color',
+    conversationHeaderColor,
+  )
+  await expect(workbench.getByTestId('workbench-titlebar')).toHaveCSS(
+    'border-bottom-width',
+    '0px',
+  )
+  const settledWorkbench = await workbench.boundingBox()
+  expect(settledWorkbench).not.toBeNull()
+  await expect(workbench.getByTestId('workbench-empty')).toContainText('No open views')
+  await expect(workbench.getByRole('button', { name: 'Browser' })).toHaveCount(0)
+  await expect(workbench.getByRole('button', { name: 'Chat' })).toHaveCount(0)
+
+  await workbench.getByRole('button', { name: 'Add view' }).click()
+  await page.getByRole('menu').getByRole('menuitem', { name: 'Browser' }).click()
+  await expect(page.getByTestId('browser-view')).toBeVisible()
+  await expect(page.getByText('New tab', { exact: true })).toBeVisible()
+  await expect(page.getByTestId('browser-titlebar')).toHaveCSS('user-select', 'none')
+  await expect(page.getByTestId('browser-titlebar')).toHaveCSS(
+    'background-color',
+    conversationHeaderColor,
+  )
+  await expect(page.getByTestId('browser-titlebar')).toHaveCSS('border-bottom-width', '0px')
+  const address = page.getByRole('textbox', { name: 'Preview address' })
+  await address.fill('127.0.0.1:4310')
+  await address.press('Enter')
+  await expect(page.getByTestId('browser-frame')).toHaveAttribute(
+    'src',
+    'http://127.0.0.1:4310/',
+  )
+  await expect.poll(
+    () => requests.filter((request) => request.path === '/api/preview/check').length,
+  ).toBe(1)
+  await expect(page.getByRole('main')).toBeVisible()
+
+  const originalTab = page.getByRole('tab', { name: '127.0.0.1:4310' })
+  await expect(originalTab).toHaveAttribute('aria-selected', 'true')
+  await page.getByRole('button', { name: 'Add view' }).click()
+  const addViewMenu = page.getByRole('menu')
+  await expect.poll(() =>
+    addViewMenu.evaluate((element) => element.getBoundingClientRect().width),
+  ).toBe(232.5)
+  await expect.poll(() =>
+    addViewMenu
+      .getByRole('menuitem', { name: 'Browser' })
+      .evaluate((element) => element.getBoundingClientRect().height),
+  ).toBe(30)
+  await expect(addViewMenu.getByRole('menuitem')).toHaveCount(2)
+  await expect(addViewMenu.getByRole('menuitem', { name: 'Chat' })).toBeDisabled()
+  await addViewMenu.getByRole('menuitem', { name: 'Browser' }).click()
+  await expect(page.getByRole('tab')).toHaveCount(2)
+  await expect(page.getByRole('tab', { name: 'New tab' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  await expect(page.getByTestId('browser-frame')).toHaveCount(0)
+  await address.fill('https://example.com')
+  await address.press('Enter')
+  await expect.poll(() =>
+    page.evaluate(() => (window as Window & { __openedURL?: string }).__openedURL),
+  ).toBe('https://example.com/')
+  await expect(page.getByTestId('browser-frame')).toHaveCount(0)
+  await expect(page.getByTestId('external-page')).toContainText('example.com')
+  await expect(
+    page.getByTestId('external-page').getByRole('button', { name: 'Open in browser' }),
+  ).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'example.com' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  expect(requests.filter((request) => request.path === '/api/preview/check')).toHaveLength(1)
+
+  await originalTab.click()
+  await expect(originalTab).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByTestId('browser-frame')).toHaveAttribute(
+    'src',
+    'http://127.0.0.1:4310/',
+  )
+  await page.getByRole('button', { name: 'Close tab: 127.0.0.1:4310' }).click()
+  await expect(page.getByRole('tab')).toHaveCount(1)
+  await expect(page.getByRole('tab', { name: 'example.com' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  await page.getByRole('button', { name: 'Close tab: example.com' }).click()
+  await expect(page.getByTestId('browser-view')).toHaveCount(0)
+  await expect(workbench.getByTestId('workbench-empty')).toContainText('No open views')
+  await workbenchToggle.click()
+  await page.waitForTimeout(60)
+  const toggleDuringClose = await workbenchToggle.boundingBox()
+  const workbenchDuringClose = await workbench.boundingBox()
+  expect(toggleDuringClose).not.toBeNull()
+  expect(workbenchDuringClose).not.toBeNull()
+  expect(toggleDuringClose!.x).toBeCloseTo(togglePosition!.x, 1)
+  expect(toggleDuringClose!.y).toBeCloseTo(togglePosition!.y, 1)
+  expect(workbenchDuringClose!.width).toBeCloseTo(settledWorkbench!.width, 1)
+  await expect(workbench).toBeHidden()
+  await expect(workbenchToggle).toBeVisible()
+  await expect(workbenchToggle).toHaveAccessibleName('Show workbench')
+  const toggleAfterClose = await workbenchToggle.boundingBox()
+  expect(toggleAfterClose).not.toBeNull()
+  expect(toggleAfterClose!.x).toBeCloseTo(togglePosition!.x, 1)
+  expect(toggleAfterClose!.y).toBeCloseTo(togglePosition!.y, 1)
+})
+
+test('workbench divider resizes the panel without moving the corner control', async ({
+  page,
+}) => {
+  await openDesktopClient(page, { existingSession: true })
+  const toggle = page.getByTestId('workbench-panel-toggle')
+  await toggle.click()
+
+  const viewport = page.getByTestId('workbench-viewport')
+  const handle = page.getByTestId('workbench-resize-handle')
+  await expect(handle).toBeVisible()
+  await expect.poll(async () => (await viewport.boundingBox())?.width).toBeGreaterThan(490)
+  const before = await viewport.boundingBox()
+  const handleBefore = await handle.boundingBox()
+  const toggleBefore = await toggle.boundingBox()
+  expect(before).not.toBeNull()
+  expect(handleBefore).not.toBeNull()
+  expect(toggleBefore).not.toBeNull()
+  expect(Math.abs(handleBefore!.x - before!.x)).toBeLessThanOrEqual(1)
+
+  await page.mouse.move(handleBefore!.x + 2, handleBefore!.y + handleBefore!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(handleBefore!.x - 70, handleBefore!.y + handleBefore!.height / 2, {
+    steps: 8,
+  })
+  await page.mouse.up()
+
+  await expect.poll(async () => (await viewport.boundingBox())?.width).toBeCloseTo(
+    before!.width + 72,
+    0,
+  )
+  const afterDrag = await viewport.boundingBox()
+  const handleAfterDrag = await handle.boundingBox()
+  const toggleAfterDrag = await toggle.boundingBox()
+  expect(afterDrag).not.toBeNull()
+  expect(handleAfterDrag).not.toBeNull()
+  expect(toggleAfterDrag).not.toBeNull()
+  expect(Math.abs(handleAfterDrag!.x - afterDrag!.x)).toBeLessThanOrEqual(1)
+  expect(toggleAfterDrag!.x).toBeCloseTo(toggleBefore!.x, 1)
+  expect(toggleAfterDrag!.y).toBeCloseTo(toggleBefore!.y, 1)
+
+  await handle.focus()
+  await handle.press('ArrowRight')
+  await expect.poll(async () => (await viewport.boundingBox())?.width).toBeCloseTo(
+    afterDrag!.width - 16,
+    0,
+  )
+})
+
+test('workbench restores after an automatic collapse but respects a manual close', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1728, height: 1000 })
+  await openDesktopClient(page, { existingSession: true })
+  const toggle = page.getByTestId('workbench-panel-toggle')
+  const viewport = page.getByTestId('workbench-viewport')
+  const conversation = page.getByTestId('conversation-pane')
+
+  await toggle.click()
+  await expect(viewport.getByRole('button', { name: 'Maximize workbench' })).toBeVisible()
+  await expect.poll(async () => (await viewport.boundingBox())?.width).toBeGreaterThan(700)
+  const originalWorkbenchWidth = (await viewport.boundingBox())!.width
+
+  await page.setViewportSize({ width: 960, height: 700 })
+  await expect(toggle).toHaveAccessibleName('Show workbench')
+  const collapsedLayout = await page.getByTestId('workbench-layout').boundingBox()
+  const expandedConversation = await conversation.boundingBox()
+  expect(collapsedLayout).not.toBeNull()
+  expect(expandedConversation).not.toBeNull()
+  expect(expandedConversation!.width).toBeCloseTo(collapsedLayout!.width, 1)
+  await expect(page.getByTestId('workbench-panel')).toBeHidden()
+
+  // 520-560 px is a dead band: growing slightly does not flip back to split mode.
+  await page.setViewportSize({ width: 1490, height: 900 })
+  await expect(toggle).toHaveAccessibleName('Show workbench')
+
+  await page.setViewportSize({ width: 1728, height: 1000 })
+  await expect(toggle).toHaveAccessibleName('Hide workbench')
+  await expect(viewport.getByRole('button', { name: 'Maximize workbench' })).toBeVisible()
+  await expect.poll(async () => (await viewport.boundingBox())?.width).toBeCloseTo(
+    originalWorkbenchWidth,
+    0,
+  )
+  await expect(conversation).toHaveAttribute('aria-hidden', 'false')
+
+  await toggle.click()
+  await page.setViewportSize({ width: 960, height: 700 })
+  await page.setViewportSize({ width: 1728, height: 1000 })
+  await expect(toggle).toHaveAccessibleName('Show workbench')
+})
+
+test('manual and AI workbench opens cover Chat when the layout is constrained', async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 700 })
+  await openDesktopClient(page, { existingSession: true })
+  const toggle = page.getByTestId('workbench-panel-toggle')
+  const layout = page.getByTestId('workbench-layout')
+  const viewport = page.getByTestId('workbench-viewport')
+  const conversation = page.getByTestId('conversation-pane')
+  const sidebar = page.getByTestId('sidebar-viewport')
+
+  await toggle.click()
+  await expect(viewport.getByRole('button', { name: 'Restore workbench' })).toBeVisible()
+  await expect.poll(async () => (await viewport.boundingBox())?.width).toBeCloseTo(
+    (await layout.boundingBox())!.width,
+    0,
+  )
+  await expect(conversation).toHaveAttribute('aria-hidden', 'true')
+  await expect(sidebar).toBeVisible()
+
+  await toggle.click()
+  await expect.poll(() =>
+    page.evaluate(
+      () => (window as Window & { __eventSources?: unknown[] }).__eventSources?.length ?? 0,
+    ),
+  ).toBeGreaterThan(0)
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'tool_end',
+      id: 'narrow-preview',
+      tool: 'open_preview',
+      result: 'Opened preview at http://127.0.0.1:4310',
+      preview: { url: 'http://127.0.0.1:4310', title: 'Narrow preview' },
+    })
+  })
+
+  await expect(page.getByTestId('browser-view')).toBeVisible()
+  await expect(viewport.getByRole('button', { name: 'Restore workbench' })).toBeVisible()
+  await expect.poll(async () => (await viewport.boundingBox())?.width).toBeCloseTo(
+    (await layout.boundingBox())!.width,
+    0,
+  )
+  await expect(conversation).toHaveAttribute('aria-hidden', 'true')
+})
+
+test('empty workbench keeps header actions and can cover Chat without hiding the sidebar', async ({
+  page,
+}) => {
+  await openDesktopClient(page, { existingSession: true })
+  await page.getByTestId('workbench-panel-toggle').click()
+
+  const layout = page.getByTestId('workbench-layout')
+  const viewport = page.getByTestId('workbench-viewport')
+  const conversation = page.getByTestId('conversation-pane')
+  const sidebar = page.getByTestId('sidebar-viewport')
+  const resizeHandle = page.getByTestId('workbench-resize-handle')
+  const addView = viewport.getByRole('button', { name: 'Add view' })
+  const maximize = viewport.getByRole('button', { name: 'Maximize workbench' })
+
+  await expect.poll(async () => (await viewport.boundingBox())?.width).toBeGreaterThan(490)
+  const normalWidth = (await viewport.boundingBox())!.width
+  const normalConversationWidth = (await conversation.boundingBox())!.width
+  await expect(addView).toBeVisible()
+  await expect(maximize).toBeVisible()
+  await addView.click()
+  await expect(page.getByRole('menu').getByRole('menuitem', { name: 'Browser' })).toBeVisible()
+  await page.keyboard.press('Escape')
+
+  await maximize.click()
+  await expect(viewport.getByRole('button', { name: 'Restore workbench' })).toBeVisible()
+  const layoutWidth = (await layout.boundingBox())!.width
+  await expect.poll(async () => (await viewport.boundingBox())?.width).toBeCloseTo(
+    layoutWidth,
+    0,
+  )
+  expect((await conversation.boundingBox())!.width).toBeCloseTo(normalConversationWidth, 0)
+  await expect(conversation).toHaveAttribute('aria-hidden', 'true')
+  await expect(resizeHandle).toHaveCount(0)
+  await expect(sidebar).toBeVisible()
+  expect((await sidebar.boundingBox())!.width).toBeGreaterThan(200)
+
+  await viewport.getByRole('button', { name: 'Restore workbench' }).click()
+  await expect.poll(async () => (await viewport.boundingBox())?.width).toBeCloseTo(
+    normalWidth,
+    0,
+  )
+  await expect(conversation).toHaveAttribute('aria-hidden', 'false')
+  await expect(resizeHandle).toBeVisible()
+})
+
+test('AI preview tool opens Browser in the workbench beside Chat', async ({ page }) => {
+  await page.route('http://127.0.0.1:4310/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><title>Preview fixture</title><main>Local preview ready</main>',
+    })
+  })
+  await openDesktopClient(page, { existingSession: true })
+  await expect.poll(() =>
+    page.evaluate(
+      () =>
+        (window as Window & { __eventSources?: unknown[] }).__eventSources?.length ?? 0,
+    ),
+  ).toBeGreaterThan(0)
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'tool_start',
+      id: 'preview-call',
+      tool: 'open_preview',
+      args: { url: 'http://127.0.0.1:4310', title: 'Local app' },
+    })
+    emit?.({
+      type: 'tool_end',
+      id: 'preview-call',
+      tool: 'open_preview',
+      result: 'Opened preview at http://127.0.0.1:4310',
+      preview: { url: 'http://127.0.0.1:4310', title: 'Local app' },
+    })
+  })
+
+  await expect(page.getByTestId('browser-view')).toBeVisible()
+  await expect(page.getByTestId('browser-frame')).toHaveAttribute('src', 'http://127.0.0.1:4310')
+  await expect(page.getByRole('main')).toBeVisible()
+  await expect.poll(async () => {
+    const chatBox = await page.getByRole('main').boundingBox()
+    const browserBox = await page.getByTestId('workbench-viewport').boundingBox()
+    if (!chatBox || !browserBox) return Number.POSITIVE_INFINITY
+    return chatBox.x + chatBox.width - browserBox.x
+  }).toBeLessThanOrEqual(1)
+
+  await expect(page.getByRole('tab', { name: 'Local app' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  await page.getByRole('button', { name: 'Add view' }).click()
+  await page.getByRole('menu').getByRole('menuitem', { name: 'Browser' }).click()
+  await expect(page.getByRole('tab')).toHaveCount(2)
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'tool_end',
+      id: 'preview-call-2',
+      tool: 'open_preview',
+      result: 'Updated preview at http://127.0.0.1:4310',
+      preview: { url: 'http://127.0.0.1:4310', title: 'Updated app' },
+    })
+  })
+  await expect(page.getByRole('tab')).toHaveCount(2)
+  await expect(page.getByRole('tab', { name: 'Updated app' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+
+  await page.getByRole('button', { name: 'Open in browser' }).click()
+  await expect.poll(() =>
+    page.evaluate(() => (window as Window & { __openedURL?: string }).__openedURL),
+  ).toBe('http://127.0.0.1:4310')
+
+  await page.getByTestId('workbench-panel-toggle').click()
+  await expect(page.getByTestId('browser-view')).toBeHidden()
+  await expect(page.getByRole('main')).toBeVisible()
+  await expect(page.getByTestId('workbench-panel-toggle')).toHaveAccessibleName('Show workbench')
+
+  await page.getByTestId('workbench-panel-toggle').click()
+  await expect(page.getByTestId('browser-view')).toBeVisible()
+  await page.getByTestId('workbench-panel-toggle').click()
+  await expect(page.getByTestId('workbench-panel')).toBeHidden()
+  await expect(page.getByRole('main')).toBeVisible()
+  await expect(page.getByTestId('workbench-panel-toggle')).toBeVisible()
+})
+
+test('streaming tool input shows write progress without duplicating the tool row', async ({
+  page,
+}) => {
+  await openDesktopClient(page, { existingSession: true })
+  await expect.poll(() =>
+    page.evaluate(
+      () =>
+        (window as Window & { __eventSources?: unknown[] }).__eventSources?.length ?? 0,
+    ),
+  ).toBeGreaterThan(0)
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'tool_input_start',
+      tool: 'write',
+      toolContentIndex: 0,
+    })
+    emit?.({
+      type: 'tool_input_delta',
+      tool: 'write',
+      toolContentIndex: 0,
+      bytes: 1024,
+    })
+    emit?.({
+      type: 'tool_input_delta',
+      id: 'write-call',
+      tool: 'write',
+      toolContentIndex: 0,
+      bytes: 512,
+    })
+  })
+
+  await expect(page.getByText('Preparing file content')).toBeVisible()
+  await expect(page.getByText('1.5 KB')).toBeVisible()
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'tool_input_end',
+      id: 'write-call',
+      tool: 'write',
+      toolContentIndex: 0,
+      args: { path: 'src/main.go', content: 'one\ntwo\nthree' },
+    })
+    emit?.({
+      type: 'tool_start',
+      id: 'write-call',
+      tool: 'write',
+      args: { path: 'src/main.go', content: 'one\ntwo\nthree' },
+    })
+  })
+
+  await expect(page.getByText('src/main.go', { exact: true })).toHaveCount(1)
+  await expect(page.getByText('3 lines')).toBeVisible()
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'tool_end',
+      id: 'write-call',
+      tool: 'write',
+      result: 'Created src/main.go',
+      change: {
+        changeType: 'file',
+        path: 'src/main.go',
+        op: 'create',
+        additions: 3,
+        deletions: 0,
+        bytes: 13,
+        hunks: [],
+      },
+    })
+    emit?.({
+      type: 'tool_input_start',
+      id: 'abandoned-call',
+      tool: 'write',
+      toolContentIndex: 1,
+    })
+  })
+  await expect(page.getByText('Preparing file content')).toBeVisible()
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({ type: 'done' })
+  })
+  await expect(page.getByText('Preparing file content')).toHaveCount(0)
+})
+
+test('AI preview opens workspace HTML directly without starting or probing a server', async ({
+  page,
+}) => {
+  const requests = await openDesktopClient(page, { existingSession: true })
+  await expect.poll(() =>
+    page.evaluate(
+      () =>
+        (window as Window & { __eventSources?: unknown[] }).__eventSources?.length ?? 0,
+    ),
+  ).toBeGreaterThan(0)
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'tool_end',
+      id: 'preview-static',
+      tool: 'open_preview',
+      result: 'Opened preview at /tmp/test-session/web/index.html',
+      preview: {
+        path: '/tmp/test-session/web/index.html',
+        relativePath: 'web/index.html',
+        title: 'Static page',
+      },
+    })
+  })
+
+  const frame = page.getByTestId('browser-frame')
+  await expect(frame).toHaveAttribute(
+    'src',
+    '/api/sessions/test-session/preview/web/index.html',
+  )
+  await expect(frame).toHaveAttribute(
+    'sandbox',
+    'allow-downloads allow-forms allow-modals allow-popups allow-scripts',
+  )
+  await expect(page.getByRole('textbox', { name: 'Preview address' })).toHaveValue(
+    '/tmp/test-session/web/index.html',
+  )
+  const openExternal = page.getByRole('button', { name: 'Open in browser' })
+  await expect(openExternal).toBeEnabled()
+  await openExternal.click()
+  await expect.poll(() =>
+    page.evaluate(() => (window as Window & { __openedURL?: string }).__openedURL),
+  ).toBe('file:///tmp/test-session/web/index.html')
+  expect(requests.filter((request) => request.path === '/api/preview/check')).toHaveLength(0)
+  expect(
+    requests.filter(
+      (request) =>
+        request.path === '/api/sessions/test-session/preview/web/index.html',
+    ),
+  ).toHaveLength(1)
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'tool_end',
+      id: 'edit-static',
+      tool: 'edit',
+      result: 'Updated web/index.html',
+      change: {
+        changeType: 'file',
+        path: 'web/index.html',
+        op: 'update',
+        additions: 1,
+        deletions: 1,
+        bytes: 128,
+        hunks: [],
+      },
+    })
+  })
+  await expect.poll(() =>
+    requests.filter(
+      (request) =>
+        request.path === '/api/sessions/test-session/preview/web/index.html',
+    ).length,
+  ).toBe(2)
+})
+
+test('Browser replaces a failed iframe load with a retry state', async ({ page }) => {
+  const requests = await openDesktopClient(page, { existingSession: true })
+  await page.getByTestId('workbench-panel-toggle').click()
+  await page.getByTestId('workbench-panel').getByRole('button', { name: 'Add view' }).click()
+  await page.getByRole('menu').getByRole('menuitem', { name: 'Browser' }).click()
+
+  const address = page.getByRole('textbox', { name: 'Preview address' })
+  await address.fill('127.0.0.1:4311')
+  await address.press('Enter')
+
+  const frame = page.getByTestId('browser-frame')
+  await expect(frame).toHaveAttribute('src', 'http://127.0.0.1:4311/')
+
+  await expect(page.getByRole('alert')).toContainText('Preview unavailable')
+  await expect(page.getByRole('alert')).toContainText(
+    'Check that the local server is running, then try again.',
+  )
+  await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible()
+  await expect(page.getByRole('status')).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Retry' }).click()
+  await expect.poll(
+    () => requests.filter((request) => request.path === '/api/preview/check').length,
+  ).toBe(2)
+  await expect(page.getByRole('alert')).toContainText('Preview unavailable')
+})
+
+test('long threads keep the titlebar and Composer fixed while the transcript scrolls', async ({
+  page,
+}) => {
+  const historyEvents = Array.from({ length: 18 }, (_, index) => [
+    {
+      type: 'user_message',
+      id: `user-${index}`,
+      text: `Question ${index + 1} with enough content to exercise the conversation layout`,
+      images: [],
+    },
+    {
+      type: 'run_start',
+      id: `run-${index}`,
+      startedAt: `2026-07-22T00:00:${String(index).padStart(2, '0')}Z`,
+      durationMs: 2000,
+    },
+    {
+      type: 'message_end',
+      text: `Response ${index + 1}. This completed answer makes the restored transcript tall enough to require its own scroll container.`,
+      finalResponse: true,
+      modelName: 'Test model',
+      completedAt: `2026-07-22T00:01:${String(index).padStart(2, '0')}Z`,
+    },
+  ]).flat()
+
+  await openDesktopClient(page, { existingSession: true, historyEvents })
+
+  const header = page.getByTestId('conversation-header')
+  const transcript = page.getByTestId('conversation-transcript')
+  const composer = page.getByTestId('composer')
+  const viewport = page.viewportSize()
+  const headerBox = await header.boundingBox()
+  const composerBox = await composer.boundingBox()
+  const scrollSize = await transcript.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }))
+
+  expect(viewport).not.toBeNull()
+  expect(headerBox).not.toBeNull()
+  expect(composerBox).not.toBeNull()
+  expect(headerBox!.y).toBeGreaterThanOrEqual(0)
+  expect(headerBox!.height).toBe(45)
+  expect(composerBox!.y + composerBox!.height).toBeLessThanOrEqual(viewport!.height)
+  expect(scrollSize.clientHeight).toBeGreaterThan(0)
+  expect(scrollSize.scrollHeight).toBeGreaterThan(scrollSize.clientHeight)
+
+  await transcript.evaluate((element) => {
+    element.scrollTop = 0
+  })
+  await transcript.hover()
+  await page.mouse.wheel(0, 480)
+  await expect.poll(() => transcript.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+})
+
+test('response usage stays on one line and truncates when Chat is narrow', async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 700 })
+  await openDesktopClient(page, {
+    existingSession: true,
+    historyEvents: [
+      {
+        type: 'user_message',
+        id: 'user-usage',
+        text: 'Show a compact response footer',
+        images: [],
+      },
+      {
+        type: 'run_start',
+        id: 'run-usage',
+        startedAt: '2026-07-22T20:45:49Z',
+        durationMs: 11000,
+      },
+      {
+        type: 'message_end',
+        text: 'Completed response',
+        finalResponse: true,
+        modelName: 'DeepSeek V4 Pro Extended Preview Model',
+        completedAt: '2026-07-22T20:46:00Z',
+        usage: {
+          input: 750000,
+          output: 11000,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 761000,
+          cost: {
+            input: 0.01,
+            output: 0.003,
+            cacheRead: 0,
+            cacheWrite: 0,
+            total: 0.013,
+          },
+        },
+      },
+    ],
+  })
+  const actions = page.getByTestId('response-actions')
+  const usageTrigger = page.getByTestId('response-usage-trigger')
+  const [actionsBox, usageTriggerBox] = await Promise.all([
+    actions.boundingBox(),
+    usageTrigger.boundingBox(),
+  ])
+  expect(actionsBox).not.toBeNull()
+  expect(usageTriggerBox).not.toBeNull()
+  expect(usageTriggerBox!.width).toBeLessThan(actionsBox!.width - 40)
+
+  await page.getByTestId('workbench-panel-toggle').click()
+  await page
+    .getByTestId('workbench-viewport')
+    .getByRole('button', { name: 'Restore workbench' })
+    .click()
+  await expect.poll(async () =>
+    (await page.getByTestId('workbench-viewport').boundingBox())?.width,
+  ).toBeGreaterThan(330)
+
+  const summary = page.getByTestId('response-usage-summary')
+  await expect(summary).toBeVisible()
+  const layout = await summary.evaluate((element) => {
+    const style = getComputedStyle(element)
+    return {
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+      whiteSpace: style.whiteSpace,
+      textOverflow: style.textOverflow,
+    }
+  })
+  expect(layout.whiteSpace).toBe('nowrap')
+  expect(layout.textOverflow).toBe('ellipsis')
+  expect(layout.scrollWidth).toBeGreaterThan(layout.clientWidth)
+  await expect(actions).toHaveCSS('overflow', 'hidden')
+})
+
+test('Composer controls stay separate and compact when Chat is narrow', async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 700 })
+  await openDesktopClient(page, {
+    existingSession: true,
+    modelName: 'DeepSeek V4 Pro Extended Preview Model',
+  })
+  await page.getByTestId('workbench-panel-toggle').click()
+  await page
+    .getByTestId('workbench-viewport')
+    .getByRole('button', { name: 'Restore workbench' })
+    .click()
+  await expect.poll(async () =>
+    (await page.getByTestId('workbench-viewport').boundingBox())?.width,
+  ).toBeGreaterThan(330)
+
+  const composer = page.getByTestId('composer')
+  const permission = page.getByTestId('permission-mode-trigger')
+  const model = page.getByTestId('model-settings-trigger')
+  const send = page.getByTestId('composer-send')
+  const [composerBox, permissionBox, modelBox, sendBox] = await Promise.all([
+    composer.boundingBox(),
+    permission.boundingBox(),
+    model.boundingBox(),
+    send.boundingBox(),
+  ])
+
+  expect(composerBox).not.toBeNull()
+  expect(permissionBox).not.toBeNull()
+  expect(modelBox).not.toBeNull()
+  expect(sendBox).not.toBeNull()
+  expect(permissionBox!.x + permissionBox!.width).toBeLessThanOrEqual(modelBox!.x)
+  expect(modelBox!.x + modelBox!.width).toBeLessThanOrEqual(sendBox!.x)
+  expect(sendBox!.x + sendBox!.width).toBeLessThanOrEqual(
+    composerBox!.x + composerBox!.width,
+  )
+  expect(modelBox!.width).toBeGreaterThan(40)
+
+  await expect(permission).toHaveClass(/text-stone-500/)
+  await expect(page.getByTestId('model-settings-name')).toHaveClass(/text-stone-500/)
+  await expect(page.getByTestId('model-settings-effort')).toBeHidden()
+  await expect(page.getByTestId('permission-mode-label')).toBeHidden()
+  await expect(page.getByTestId('model-settings-name')).toHaveCSS('text-overflow', 'ellipsis')
+  const modelNameLayout = await page.getByTestId('model-settings-name').evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+    whiteSpace: getComputedStyle(element).whiteSpace,
+  }))
+  expect(modelNameLayout.whiteSpace).toBe('nowrap')
+  expect(modelNameLayout.scrollWidth).toBeGreaterThan(modelNameLayout.clientWidth)
 })
 
 test('first send creates a session and renders the user message', async ({ page }) => {
@@ -275,7 +1099,9 @@ test('desktop project browsing uses the native directory picker', async ({ page 
   })
   const requests = await openDesktopClient(page)
 
-  await page.getByRole('button', { name: 'Choose project' }).click()
+  const projectPicker = page.getByRole('button', { name: 'Choose project' })
+  await expect(projectPicker).toHaveClass(/text-stone-500/)
+  await projectPicker.click()
   await page.getByText('New project', { exact: true }).hover()
   await page.getByText('Use an existing folder', { exact: true }).click()
 

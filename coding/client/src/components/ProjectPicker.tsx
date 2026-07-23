@@ -42,7 +42,7 @@ export function ProjectPicker({
       <DropdownMenu.Trigger asChild>
         <button
           type="button"
-          className="group inline-flex h-8 max-w-full cursor-pointer items-center gap-2 rounded-xl px-2.5 text-[0.875rem] font-medium text-stone-800 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(237,237,237)] disabled:cursor-not-allowed disabled:opacity-45 max-sm:size-9 max-sm:justify-center max-sm:p-0"
+          className="group inline-flex h-8 max-w-full cursor-pointer items-center gap-2 rounded-xl px-2.5 text-[0.875rem] font-medium text-stone-500 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(237,237,237)] disabled:cursor-not-allowed disabled:opacity-45 max-sm:size-9 max-sm:justify-center max-sm:p-0"
           aria-label={t('workspace.chooseProject')}
           disabled={disabled}
         >

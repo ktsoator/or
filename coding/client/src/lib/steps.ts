@@ -5,9 +5,9 @@ export type RenderUnit =
   | { kind: 'steps'; id: string; items: Item[] }
 
 // groupItems folds each maximal run of consecutive tool/thinking items into a
-// step group when it holds two or more tool calls, leaving single-tool runs and
-// every other item (prose, user turns) inline. This mirrors how an agent's
-// back-to-back actions read as one batch until it speaks again.
+// step group when it holds two or more tool calls. A tool whose input is still
+// streaming stays inline so its live progress is never hidden by a newly formed
+// collapsed group; it joins the group once execution starts.
 export function groupItems(items: Item[]): RenderUnit[] {
   const units: RenderUnit[] = []
   let buffer: Item[] = []
@@ -24,6 +24,11 @@ export function groupItems(items: Item[]): RenderUnit[] {
   }
 
   for (const item of items) {
+    if (item.kind === 'tool' && item.status === 'preparing') {
+      flush()
+      units.push({ kind: 'item', item })
+      continue
+    }
     if (item.kind === 'tool' || item.kind === 'thinking') {
       buffer.push(item)
     } else {

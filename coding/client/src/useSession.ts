@@ -12,6 +12,7 @@ import type {
   ModelCatalogResponse,
   ModelOption,
   PermissionMode,
+  PreviewState,
   MessageImage,
   QueuedMessage,
   SessionSummary,
@@ -26,6 +27,8 @@ type ThreadState = {
   queue: QueuedMessage[]
   responseUsage: Usage
   contextUsage?: ContextUsage
+  preview?: PreviewState
+  previewOpen: boolean
   running: boolean
   autoCompacting: boolean
   status: ConnectionStatus
@@ -60,6 +63,7 @@ type Action =
       contextWindow: number
     }
   | { t: 'resolveApproval'; sessionID: string; id: string }
+  | { t: 'setPreviewOpen'; sessionID: string; open: boolean }
   | { t: 'forget'; sessionID: string }
 
 const emptyUsage = (): Usage => ({
@@ -76,6 +80,8 @@ const emptyThread = (): ThreadState => ({
   queue: [],
   responseUsage: emptyUsage(),
   contextUsage: undefined,
+  preview: undefined,
+  previewOpen: false,
   running: false,
   autoCompacting: false,
   status: 'connecting',
@@ -116,6 +122,8 @@ function threadsReducer(state: ThreadsState, action: Action): ThreadsState {
       next = {
         ...next,
         contextUsage: action.history.context,
+        preview: current.preview,
+        previewOpen: Boolean(current.preview && current.previewOpen),
         running: action.history.running,
         items: action.history.running ? next.items : completeOpenRun(next.items),
       }
@@ -219,6 +227,9 @@ function threadsReducer(state: ThreadsState, action: Action): ThreadsState {
         ),
       }
       break
+    case 'setPreviewOpen':
+      next = { ...current, previewOpen: action.open }
+      break
     case 'wire':
       next = reduceWire(current, action.ev)
       break
@@ -232,6 +243,8 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
   let queue = state.queue
   let responseUsage = state.responseUsage
   let contextUsage = state.contextUsage
+  let preview = state.preview
+  let previewOpen = state.previewOpen
   let running = state.running
   let autoCompacting = state.autoCompacting
   let seq = state.seq
@@ -244,6 +257,9 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
     items = items.map((it) =>
       it.kind === 'thinking' && it.streaming ? { ...it, streaming: false } : it,
     )
+  }
+  const removePreparingTools = () => {
+    items = items.filter((it) => it.kind !== 'tool' || it.status !== 'preparing')
   }
   const completeRun = (durationMs?: number, startedAt?: string) => {
     let idx = startedAt
@@ -430,10 +446,129 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
       }
       break
 
-    case 'tool_start':
+    case 'tool_input_start': {
       closeAssistant()
       completeThinking()
-      if (!ev.id || !items.some((item) => item.kind === 'tool' && item.id === ev.id)) {
+      let idx = ev.id ? lastIndex(items, (it) => it.kind === 'tool' && it.id === ev.id) : -1
+      if (idx < 0 && ev.toolContentIndex !== undefined) {
+        idx = lastIndex(
+          items,
+          (it) =>
+            it.kind === 'tool' &&
+            it.status === 'preparing' &&
+            it.toolContentIndex === ev.toolContentIndex,
+        )
+      }
+      if (idx < 0) {
+        items = [
+          ...items,
+          {
+            kind: 'tool',
+            id: ev.id ?? nextId(),
+            name: ev.tool ?? 'tool',
+            args: undefined,
+            status: 'preparing',
+            toolContentIndex: ev.toolContentIndex,
+            generatedBytes: 0,
+          },
+        ]
+      }
+      break
+    }
+
+    case 'tool_input_delta': {
+      let idx = ev.id ? lastIndex(items, (it) => it.kind === 'tool' && it.id === ev.id) : -1
+      if (idx < 0 && ev.toolContentIndex !== undefined) {
+        idx = lastIndex(
+          items,
+          (it) =>
+            it.kind === 'tool' &&
+            it.status === 'preparing' &&
+            it.toolContentIndex === ev.toolContentIndex,
+        )
+      }
+      if (idx >= 0) {
+        const cur = items[idx] as Extract<Item, { kind: 'tool' }>
+        items = replaceAt(items, idx, {
+          ...cur,
+          id: ev.id ?? cur.id,
+          name: ev.tool || cur.name,
+          generatedBytes: (cur.generatedBytes ?? 0) + (ev.bytes ?? 0),
+        })
+      } else {
+        items = [
+          ...items,
+          {
+            kind: 'tool',
+            id: ev.id ?? nextId(),
+            name: ev.tool ?? 'tool',
+            args: undefined,
+            status: 'preparing',
+            toolContentIndex: ev.toolContentIndex,
+            generatedBytes: ev.bytes ?? 0,
+          },
+        ]
+      }
+      break
+    }
+
+    case 'tool_input_end': {
+      let idx = ev.id ? lastIndex(items, (it) => it.kind === 'tool' && it.id === ev.id) : -1
+      if (idx < 0 && ev.toolContentIndex !== undefined) {
+        idx = lastIndex(
+          items,
+          (it) =>
+            it.kind === 'tool' &&
+            it.status === 'preparing' &&
+            it.toolContentIndex === ev.toolContentIndex,
+        )
+      }
+      const patch = {
+        name: ev.tool ?? 'tool',
+        args: ev.args,
+        status: 'preparing' as const,
+        toolContentIndex: ev.toolContentIndex,
+      }
+      if (idx >= 0) {
+        const cur = items[idx] as Extract<Item, { kind: 'tool' }>
+        items = replaceAt(items, idx, {
+          ...cur,
+          ...patch,
+          id: ev.id ?? cur.id,
+          name: ev.tool || cur.name,
+        })
+      } else {
+        items = [
+          ...items,
+          { kind: 'tool', id: ev.id ?? nextId(), generatedBytes: 0, ...patch },
+        ]
+      }
+      break
+    }
+
+    case 'tool_start': {
+      closeAssistant()
+      completeThinking()
+      let idx = ev.id ? lastIndex(items, (it) => it.kind === 'tool' && it.id === ev.id) : -1
+      if (idx < 0) {
+        idx = lastIndex(
+          items,
+          (it) =>
+            it.kind === 'tool' &&
+            it.status === 'preparing' &&
+            (!ev.tool || it.name === ev.tool),
+        )
+      }
+      if (idx >= 0) {
+        const cur = items[idx] as Extract<Item, { kind: 'tool' }>
+        items = replaceAt(items, idx, {
+          ...cur,
+          id: ev.id ?? cur.id,
+          name: ev.tool || cur.name,
+          args: ev.args ?? cur.args,
+          status: 'running',
+        })
+      } else {
         items = [
           ...items,
           {
@@ -446,13 +581,17 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
         ]
       }
       break
+    }
 
     case 'tool_end': {
       let idx = ev.id ? lastIndex(items, (it) => it.kind === 'tool' && it.id === ev.id) : -1
       if (idx < 0) {
         idx = lastIndex(
           items,
-          (it) => it.kind === 'tool' && it.status === 'running' && (!ev.tool || it.name === ev.tool),
+          (it) =>
+            it.kind === 'tool' &&
+            (it.status === 'running' || it.status === 'preparing') &&
+            (!ev.tool || it.name === ev.tool),
         )
       }
       const patch = {
@@ -468,6 +607,18 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
           ...items,
           { kind: 'tool', id: ev.id ?? nextId(), name: ev.tool ?? 'tool', args: undefined, ...patch },
         ]
+      }
+      if (ev.preview?.url || ev.preview?.path) {
+        preview = {
+          ...ev.preview,
+          revision: (preview?.revision ?? 0) + 1,
+        }
+        previewOpen = true
+      } else if (ev.change?.changeType === 'file' && preview?.path) {
+        preview = {
+          ...preview,
+          revision: preview.revision + 1,
+        }
       }
       break
     }
@@ -559,6 +710,7 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
       break
 
     case 'turn_discard': {
+      removePreparingTools()
       const assistantIndex = lastIndex(items, (item) => item.kind === 'assistant')
       const boundaryIndex = lastIndex(
         items,
@@ -592,6 +744,7 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
       break
 
     case 'error':
+      removePreparingTools()
       completeRun(ev.durationMs, ev.startedAt)
       items = [...items, { kind: 'error', id: nextId(), text: ev.text ?? '' }]
       running = false
@@ -602,6 +755,7 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
       break
 
     case 'done':
+      removePreparingTools()
       completeRun(ev.durationMs, ev.startedAt)
       running = false
       autoCompacting = false
@@ -611,7 +765,18 @@ function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
       break
   }
 
-  return { ...state, items, queue, responseUsage, contextUsage, running, autoCompacting, seq }
+  return {
+    ...state,
+    items,
+    queue,
+    responseUsage,
+    contextUsage,
+    preview,
+    previewOpen,
+    running,
+    autoCompacting,
+    seq,
+  }
 }
 
 function elapsedSince(startedAt: string): number {
@@ -706,6 +871,8 @@ export type Session = {
   items: Item[]
   queuedMessages: QueuedMessage[]
   contextUsage?: ContextUsage
+  preview?: PreviewState
+  previewOpen: boolean
   approval?: ApprovalItem
   running: boolean
   autoCompacting: boolean
@@ -730,6 +897,7 @@ export type Session = {
   removeQueuedMessage: (id: string) => Promise<void>
   stop: () => void
   resolveApproval: (id: string, choice: ApprovalChoice) => Promise<void>
+  setPreviewOpen: (open: boolean) => void
 }
 
 export type SessionDraft = {
@@ -1616,6 +1784,11 @@ export function useSession(): Session {
   )
   const items = thread?.items.filter((item) => item.kind !== 'approval') ?? []
 
+  const setPreviewOpen = (open: boolean) => {
+    if (!activeSessionID) return
+    dispatch({ t: 'setPreviewOpen', sessionID: activeSessionID, open })
+  }
+
   return {
     sessions,
     workspaces,
@@ -1625,6 +1798,8 @@ export function useSession(): Session {
     items,
     queuedMessages: thread?.queue ?? [],
     contextUsage: thread?.contextUsage,
+    preview: thread?.preview,
+    previewOpen: thread?.previewOpen ?? false,
     approval,
     running: thread?.running ?? activeSession?.running ?? false,
     autoCompacting: thread?.autoCompacting ?? false,
@@ -1649,5 +1824,6 @@ export function useSession(): Session {
     removeQueuedMessage,
     stop,
     resolveApproval,
+    setPreviewOpen,
   }
 }

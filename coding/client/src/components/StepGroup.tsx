@@ -15,6 +15,7 @@ import { useI18n } from '@/i18n'
 // in ToolCard's toolPresentation so the summary reads consistently.
 function stepCategory(name: string): string {
   const v = name.toLowerCase()
+  if (v === 'open_preview') return 'preview'
   if (v.includes('read') || v.includes('cat')) return 'read'
   if (v.includes('write')) return 'write'
   if (v.includes('edit') || v.includes('patch')) return 'edit'
@@ -48,7 +49,7 @@ export function StepGroup({ items, cwd }: { items: Item[]; cwd?: string }) {
   const { t } = useI18n()
   const active = items.some(
     (it) =>
-      (it.kind === 'tool' && it.status === 'running') ||
+      (it.kind === 'tool' && (it.status === 'preparing' || it.status === 'running')) ||
       (it.kind === 'thinking' && it.streaming),
   )
   const [open, setOpen] = useState(false)

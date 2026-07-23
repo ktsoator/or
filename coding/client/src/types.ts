@@ -28,11 +28,25 @@ export type FailureChangePayload = {
 
 export type Change = FileChangePayload | FailureChangePayload
 
+export type PreviewRequest = {
+  url?: string
+  path?: string
+  relativePath?: string
+  title?: string
+}
+
+export type PreviewState = PreviewRequest & {
+  revision: number
+}
+
 export type WireEvent = {
   type:
     | 'user_message'
     | 'run_start'
     | 'delta'
+    | 'tool_input_start'
+    | 'tool_input_delta'
+    | 'tool_input_end'
     | 'tool_start'
     | 'tool_end'
     | 'message_end'
@@ -53,7 +67,10 @@ export type WireEvent = {
   tool?: string
   args?: unknown
   result?: string
+  toolContentIndex?: number
+  bytes?: number
   change?: Change
+  preview?: PreviewRequest
   isError?: boolean
   text?: string
   images?: MessageImage[]
@@ -183,7 +200,9 @@ export type ToolItem = {
   id: string
   name: string
   args: unknown
-  status: 'running' | 'complete' | 'error'
+  status: 'preparing' | 'running' | 'complete' | 'error'
+  toolContentIndex?: number
+  generatedBytes?: number
   result?: string
   change?: Change
 }

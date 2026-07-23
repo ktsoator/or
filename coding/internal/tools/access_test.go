@@ -29,6 +29,8 @@ func TestBuiltInToolsDescribeAccess(t *testing.T) {
 		{tool: "write", args: map[string]any{"path": "main.go"}, action: permission.Write, path: "main.go"},
 		{tool: "bash", args: map[string]any{"command": "pwd"}, action: permission.Execute, command: "pwd"},
 		{tool: "bash_output", args: map[string]any{}, action: permission.Internal},
+		{tool: "open_preview", args: map[string]any{}, action: permission.Internal},
+		{tool: "open_preview", args: map[string]any{"url": "web/index.html"}, action: permission.Read, path: "web/index.html"},
 		{tool: "kill_bash", args: map[string]any{}, action: permission.Internal},
 	}
 	for _, test := range tests {

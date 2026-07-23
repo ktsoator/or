@@ -6,6 +6,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -80,6 +81,18 @@ func firstExistingDirectory(paths ...string) string {
 	return ""
 }
 
+func routeAPI(api http.Handler) assetserver.Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+			if request.URL.Path == "/api" || strings.HasPrefix(request.URL.Path, "/api/") {
+				api.ServeHTTP(response, request)
+				return
+			}
+			next.ServeHTTP(response, request)
+		})
+	}
+}
+
 func (d *DesktopBridge) focus() {
 	ctx := d.context()
 	if ctx == nil {
@@ -120,8 +133,9 @@ func run() error {
 		MinWidth:  960,
 		MinHeight: 640,
 		AssetServer: &assetserver.Options{
-			Assets:  assets,
-			Handler: productRuntime.Handler(),
+			Assets:     assets,
+			Handler:    productRuntime.Handler(),
+			Middleware: routeAPI(productRuntime.Handler()),
 		},
 		BackgroundColour: options.NewRGB(255, 255, 255),
 		SingleInstanceLock: &options.SingleInstanceLock{

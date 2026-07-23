@@ -3,6 +3,8 @@ package conversation
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"log"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -15,6 +17,8 @@ import (
 // a name a model generated from the first prompt, and a truncation of that
 // prompt. This file owns all three plus the generation that produces the
 // middle one.
+
+type titleGenerator func(context.Context, llm.Model, string) (string, error)
 
 func titleFromPrompt(prompt string) string {
 	title := strings.Join(strings.Fields(prompt), " ")
@@ -62,38 +66,16 @@ func (s *Runtime) broadcastTitle() {
 	})
 }
 
-// maybeGenerateTitle starts background AI title generation after a session
-// finishes a response, unless the user has already named it or a title was
-// generated earlier. The flag only guards against two generations running at
-// once: a failed attempt clears it so the next completed response retries,
+// maybeGenerateTitle starts background AI title generation as soon as a user
+// message enters the session, unless the user has already named it or a title
+// was generated earlier. The flag only guards against two generations running
+// at once: a failed attempt clears it so the next user message retries,
 // because a model error or an unparseable reply should not cost the session its
 // title for the lifetime of the process. Runs on the session's event goroutine,
 // so it must not block on the model call.
-func (m *Manager) maybeGenerateTitle(runtime *Runtime) {
-	m.mu.Lock()
-	needsTitle := !m.closed && runtime.record.CustomTitle == "" && runtime.record.AITitle == ""
-	provider, model := runtime.record.Provider, runtime.record.Model
-	if !needsTitle || !runtime.titleGenerating.CompareAndSwap(false, true) {
-		m.mu.Unlock()
-		return
-	}
-	m.tasks.Add(1)
-	m.mu.Unlock()
-	go func() {
-		defer m.tasks.Done()
-		defer runtime.titleGenerating.Store(false)
-		m.generateSessionTitle(m.ctx, runtime, provider, model)
-	}()
-}
-
-// generateSessionTitle asks the model for a concise session title derived from
-// the first user message and stores it as the session's AI title. Failures are
-// silent: the session keeps its prompt-derived title.
-func (m *Manager) generateSessionTitle(ctx context.Context, runtime *Runtime, provider, modelID string) {
-	// Find the first user message with text content.
-	history := runtime.session.History()
-	var firstPrompt string
-	for _, item := range history {
+func (m *Manager) maybeGenerateTitle(runtime *Runtime, eventPrompt string) {
+	firstPrompt := strings.TrimSpace(eventPrompt)
+	for _, item := range runtime.session.History() {
 		if item.Type == engine.HistoryUser && strings.TrimSpace(item.Text) != "" {
 			firstPrompt = strings.TrimSpace(item.Text)
 			break
@@ -103,11 +85,68 @@ func (m *Manager) generateSessionTitle(ctx context.Context, runtime *Runtime, pr
 		return
 	}
 
-	model, ok := llm.LookupModel(provider, modelID)
-	if !ok {
+	m.mu.Lock()
+	needsTitle := !m.closed && runtime.record.CustomTitle == "" && runtime.record.AITitle == ""
+	sessionID := runtime.record.ID
+	provider, model := runtime.record.Provider, runtime.record.Model
+	generate := m.generateTitle
+	if !needsTitle || !runtime.titleGenerating.CompareAndSwap(false, true) {
+		m.mu.Unlock()
 		return
 	}
+	m.tasks.Add(1)
+	m.mu.Unlock()
+	go func() {
+		defer m.tasks.Done()
+		defer runtime.titleGenerating.Store(false)
+		if err := m.generateSessionTitle(m.ctx, runtime, provider, model, firstPrompt, generate); err != nil {
+			if !errors.Is(err, context.Canceled) {
+				log.Printf("coding: generate title for session %s: %v", sessionID, err)
+			}
+		}
+	}()
+}
 
+// generateSessionTitle asks the model for a concise session title derived from
+// the first user message and stores it as the session's AI title. Failures are
+// reported while the session keeps its prompt-derived title.
+func (m *Manager) generateSessionTitle(
+	ctx context.Context,
+	runtime *Runtime,
+	provider, modelID, firstPrompt string,
+	generate titleGenerator,
+) error {
+	model, ok := llm.LookupModel(provider, modelID)
+	if !ok {
+		return errors.New("selected model is no longer available")
+	}
+	titleCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	title, err := generate(titleCtx, model, firstPrompt)
+	if err != nil {
+		return err
+	}
+	title = clampTitle(title)
+	if title == "" {
+		return errors.New("model returned an invalid title")
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	current, exists := m.sessions[runtime.record.ID]
+	if m.closed || !exists || current != runtime || runtime.record.CustomTitle != "" {
+		return nil
+	}
+	runtime.record.AITitle = title
+	if err := m.saveLocked(); err != nil {
+		runtime.record.AITitle = ""
+		return err
+	}
+	runtime.broadcastTitle()
+	return nil
+}
+
+func defaultTitleGenerator(ctx context.Context, model llm.Model, firstPrompt string) (string, error) {
 	systemPrompt := `Generate a concise, sentence-case title (3-7 words) that captures the main topic of the user's first message. Use sentence case: capitalize only the first word and proper nouns. Return JSON with a single "title" field.
 
 Good examples:
@@ -118,39 +157,16 @@ Good examples:
 Bad (too vague): {"title": "Code changes"}
 Bad (too long): {"title": "Investigate and fix the issue with the login flow"}`
 
-	titleCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
 	// Thinking is off: a title needs none, and reasoning tokens would consume
 	// the output budget before any JSON is emitted.
-	result, err := llm.Complete(titleCtx, model, llm.PromptWithSystem(systemPrompt, firstPrompt), llm.StreamOptions{
+	result, err := llm.Complete(ctx, model, llm.PromptWithSystem(systemPrompt, firstPrompt), llm.StreamOptions{
 		MaxTokens: 128,
 		Reasoning: llm.ModelThinkingOff,
 	})
 	if err != nil {
-		return
+		return "", err
 	}
-
-	title := clampTitle(parseTitleJSON(result.Text()))
-	if title == "" {
-		return
-	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.closed {
-		return
-	}
-	// Re-check under the lock: the user may have renamed while we generated.
-	if runtime.record.CustomTitle != "" {
-		return
-	}
-	runtime.record.AITitle = title
-	if err := m.saveLocked(); err != nil {
-		runtime.record.AITitle = ""
-		return
-	}
-	runtime.broadcastTitle()
+	return parseTitleJSON(result.Text()), nil
 }
 
 // parseTitleJSON pulls the title out of a model response. It accepts the JSON

@@ -6,7 +6,8 @@
   "assetdir": "../client/dist",
   "frontend:install": "bun install --frozen-lockfile",
   "frontend:build": "bun run build",
-  "frontend:dev:watcher": "bun run build -- --watch",
+  "frontend:dev:watcher": "bun run dev -- --host 127.0.0.1",
+  "frontend:dev:serverUrl": "auto",
   "wailsjsdir": "./generated",
   "author": {
     "name": "Kt",
