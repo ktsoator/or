@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { PanelTopDashed } from 'lucide-react'
-import type { PreviewState } from '@/types'
+import { CircleAlert, PanelTopDashed, X } from 'lucide-react'
+import type { ModelOption, PreviewState, WorkspaceSummary } from '@/types'
+import type { SessionThread } from '@/useSession'
 import { cn } from '@/lib/utils'
 import { BrowserView, WorkbenchHeaderActions } from './BrowserView'
 import { useI18n } from '@/i18n'
@@ -11,21 +12,43 @@ export function WorkbenchPanel({
   open,
   preview,
   sessionID,
+  activatePreview,
+  conversation,
+  models,
+  workspaces,
   maximized,
+  creatingConversation,
+  creationError,
+  onCreateConversation,
+  onDismissCreationError,
+  onCloseConversation,
+  onConfigureModel,
   onToggleMaximized,
 }: {
   open: boolean
   preview?: PreviewState
   sessionID?: string
+  activatePreview: boolean
+  conversation?: SessionThread
+  models: ModelOption[]
+  workspaces: WorkspaceSummary[]
   maximized: boolean
+  creatingConversation: boolean
+  creationError: string
+  onCreateConversation: () => void
+  onDismissCreationError: () => void
+  onCloseConversation: () => void
+  onConfigureModel: () => void
   onToggleMaximized: () => void
 }) {
   const { t } = useI18n()
-  const [mode, setMode] = useState<WorkbenchMode>(preview ? 'browser' : 'launcher')
+  const [mode, setMode] = useState<WorkbenchMode>(
+    preview || conversation ? 'browser' : 'launcher',
+  )
 
   useEffect(() => {
-    if (preview) setMode('browser')
-  }, [preview])
+    if (preview || conversation) setMode('browser')
+  }, [conversation, preview])
 
   return (
     <section
@@ -43,16 +66,46 @@ export function WorkbenchPanel({
         <BrowserView
           preview={preview}
           sessionID={sessionID}
+          activatePreview={activatePreview}
+          conversation={conversation}
+          creatingConversation={creatingConversation}
+          models={models}
+          workspaces={workspaces}
           onCloseTab={() => setMode('launcher')}
+          onCloseConversation={onCloseConversation}
+          onConfigureModel={onConfigureModel}
+          onCreateConversation={onCreateConversation}
           maximized={maximized}
           onToggleMaximized={onToggleMaximized}
         />
       ) : (
         <WorkbenchLauncher
           maximized={maximized}
+          creatingConversation={creatingConversation}
+          onCreateConversation={onCreateConversation}
           onToggleMaximized={onToggleMaximized}
           onOpenBrowser={() => setMode('browser')}
         />
+      )}
+      {creationError && (
+        <div
+          className="absolute inset-x-3 top-[49px] z-[80] flex min-h-9 items-center gap-2 rounded-lg border border-red-200/80 bg-white px-2.5 py-2 text-xs leading-4 text-red-700 shadow-[0_10px_28px_-18px_rgba(127,29,29,0.45)]"
+          role="alert"
+        >
+          <CircleAlert className="size-3.5 shrink-0" aria-hidden="true" />
+          <span className="min-w-0 flex-1 truncate" title={creationError}>
+            {creationError}
+          </span>
+          <button
+            className="grid size-5 shrink-0 cursor-pointer place-items-center rounded text-red-500 hover:bg-red-50 hover:text-red-800 focus-visible:outline-2 focus-visible:outline-red-300"
+            type="button"
+            title={t('workbench.dismissError')}
+            aria-label={t('workbench.dismissError')}
+            onClick={onDismissCreationError}
+          >
+            <X className="size-3.5" aria-hidden="true" />
+          </button>
+        </div>
       )}
     </section>
   )
@@ -60,10 +113,14 @@ export function WorkbenchPanel({
 
 function WorkbenchLauncher({
   maximized,
+  creatingConversation,
+  onCreateConversation,
   onToggleMaximized,
   onOpenBrowser,
 }: {
   maximized: boolean
+  creatingConversation: boolean
+  onCreateConversation: () => void
   onToggleMaximized: () => void
   onOpenBrowser: () => void
 }) {
@@ -77,6 +134,8 @@ function WorkbenchLauncher({
       >
         <WorkbenchHeaderActions
           maximized={maximized}
+          creatingConversation={creatingConversation}
+          onCreateConversation={onCreateConversation}
           onToggleMaximized={onToggleMaximized}
           onOpenBrowser={onOpenBrowser}
         />

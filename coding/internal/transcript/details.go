@@ -14,8 +14,8 @@ import (
 
 // DetailsStore persists per-tool structured results out of band from the
 // transcript, keyed by tool-call ID. The transcript itself carries only the
-// model-facing text; a tool's structured Details (a file change or a failure)
-// lives here so a reloaded session can restore the same rich rendering it showed
+// model-facing text; recognized structured Details live here so a reloaded
+// session can restore the same rich rendering and preview targets it showed
 // live. A nil DetailsStore disables this and history replays as plain text.
 type DetailsStore interface {
 	// Load returns every stored payload keyed by tool-call ID.

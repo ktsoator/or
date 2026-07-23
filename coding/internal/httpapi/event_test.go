@@ -120,17 +120,22 @@ func TestProjectEventIncludesWorkspacePreviewPath(t *testing.T) {
 	}
 }
 
-func TestProjectHistoryDoesNotReopenPreview(t *testing.T) {
+func TestProjectHistoryRestoresPreviewRequest(t *testing.T) {
 	events := ProjectHistory([]engine.HistoryItem{{
-		Type:        engine.HistoryToolResult,
-		ToolCallID:  "preview-call",
-		ToolName:    "open_preview",
-		ToolDetails: tools.PreviewRequest{URL: "http://localhost:3000"},
+		Type:       engine.HistoryToolResult,
+		ToolCallID: "preview-call",
+		ToolName:   "open_preview",
+		ToolDetails: tools.PreviewRequest{
+			Path:         "/workspace/web/index.html",
+			RelativePath: "web/index.html",
+			Title:        "Static page",
+		},
 	}})
 	if len(events) != 1 {
 		t.Fatalf("events = %#v, want one event", events)
 	}
-	if events[0].Preview != nil {
-		t.Fatalf("history preview = %#v, want nil", events[0].Preview)
+	preview := events[0].Preview
+	if preview == nil || preview.Path != "/workspace/web/index.html" || preview.RelativePath != "web/index.html" || preview.Title != "Static page" {
+		t.Fatalf("history preview = %#v", preview)
 	}
 }

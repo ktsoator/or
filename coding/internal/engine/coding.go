@@ -52,9 +52,9 @@ type Options struct {
 	// Compactor creates checkpoint summaries. Nil uses a native, tool-free LLM
 	// request configured from StreamFn, StreamOptions, and GetAPIKey.
 	Compactor compaction.Compactor
-	// DetailsStore persists tools' structured results (file changes and failures)
-	// out of band, keyed by tool-call ID, so a reloaded session restores the rich
-	// rendering it showed live. Nil replays history as plain text.
+	// DetailsStore persists recognized structured tool results out of band, keyed
+	// by tool-call ID, so a reloaded session restores rich rendering and preview
+	// targets. Nil replays history as plain text.
 	DetailsStore transcript.DetailsStore
 	// Instructions overrides the base system-prompt preamble. Empty uses
 	// prompt.DefaultInstructions.

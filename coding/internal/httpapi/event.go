@@ -242,6 +242,7 @@ func ProjectHistory(items []engine.HistoryItem) []wireEvent {
 				Tool:    item.ToolName,
 				Result:  wireToolResult(item.ToolName, item.ToolResult),
 				Change:  fileChangePayload(item.ToolDetails),
+				Preview: previewPayload(item.ToolDetails),
 				IsError: item.IsError,
 			})
 

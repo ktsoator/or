@@ -22,6 +22,7 @@ import {
   LoaderCircle,
   PanelLeft,
   PanelRight,
+  PanelRightOpen,
   Pin,
   PencilLine,
   Search,
@@ -34,18 +35,18 @@ import {
 } from 'lucide-react'
 import { DropdownMenu } from 'radix-ui'
 import { useSession } from './useSession'
-import type { Item, SessionSummary } from './types'
+import type { SessionSummary } from './types'
 import { cn } from './lib/utils'
-import { Markdown } from './components/Markdown'
-import { ToolCard } from './components/ToolCard'
 import { Composer } from './components/Composer'
-import { Thinking } from './components/Thinking'
 import { StepGroup } from './components/StepGroup'
+import {
+  AutoCompactionStatus,
+  AwaitingResponse,
+  ThreadItem,
+} from './components/ConversationThread'
 import { groupItems } from './lib/steps'
 import { chooseNativeDirectory } from './lib/desktop'
 import { ProfileMenu } from './components/ProfileMenu'
-import { ResponseActions } from './components/ResponseActions'
-import { formatMessageTime } from './lib/time'
 import { SettingsPage, type SettingsSection } from './components/SettingsPage'
 import { SkillsPage } from './components/SkillsPage'
 import { WorkspacePickerDialog } from './components/WorkspacePickerDialog'
@@ -104,6 +105,7 @@ function pinnedFirst(items: SessionSummary[], pinned: Set<string>): SessionSumma
 
 export default function App() {
   const { t } = useI18n()
+  const [secondarySessionID, setSecondarySessionID] = useState<string>()
   const {
     sessions,
     workspaces,
@@ -128,6 +130,7 @@ export default function App() {
     registerWorkspace,
     removeWorkspace,
     startDraft,
+    createChatSession,
     updateDraftWorkspace,
     deleteSession,
     renameSession,
@@ -139,8 +142,8 @@ export default function App() {
     removeQueuedMessage,
     stop,
     resolveApproval,
-    setPreviewOpen,
-  } = useSession()
+    secondaryThread,
+  } = useSession(secondarySessionID)
   const logRef = useRef<HTMLDivElement>(null)
   const followLatestRef = useRef(true)
   const previousSessionIDRef = useRef<string | undefined>(undefined)
@@ -169,11 +172,16 @@ export default function App() {
   const workbenchMaximizedRef = useRef(false)
   const workbenchResizingRef = useRef(false)
   const setWorkbenchOpenRef = useRef<(open: boolean) => void>(() => {})
-  const previousPreviewRevisionRef = useRef<string | undefined>(undefined)
+  const previousPreviewKeysRef = useRef<{
+    primary?: string
+    secondary?: string
+  }>({})
   const workbenchAutoCollapsedRef = useRef(false)
   const workbenchAutoLayoutFrameRef = useRef<number | undefined>(undefined)
   const [mobileSessionsOpen, setMobileSessionsOpen] = useState(false)
-  const [draftWorkbenchOpen, setDraftWorkbenchOpen] = useState(false)
+  const [workbenchOpen, setWorkbenchOpenState] = useState(false)
+  const [workbenchPreviewSessionID, setWorkbenchPreviewSessionID] = useState<string>()
+  const [workbenchCreateError, setWorkbenchCreateError] = useState('')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH)
   const [sidebarResizing, setSidebarResizing] = useState(false)
@@ -228,12 +236,23 @@ export default function App() {
   )
   const workspacePickerPath =
     selectedWorkspacePath || draft?.workspacePath || activeSession?.workspacePath || workspaceGroups[0]?.path
-  const workbenchOpen = activeSessionID ? previewOpen : draftWorkbenchOpen
-
+  const workbenchPreview =
+    secondaryThread && workbenchPreviewSessionID === secondaryThread.session.id
+      ? secondaryThread.preview
+      : !workbenchPreviewSessionID || workbenchPreviewSessionID === activeSessionID
+        ? preview
+        : undefined
+  const workbenchPreviewOwnerID = workbenchPreview
+    ? workbenchPreviewSessionID ?? activeSessionID
+    : undefined
+  const activateWorkbenchPreview = workbenchPreviewOwnerID === activeSessionID
+    ? previewOpen
+    : secondaryThread && workbenchPreviewOwnerID === secondaryThread.session.id
+      ? secondaryThread.previewOpen
+      : false
   const setWorkbenchOpen = (open: boolean) => {
     if (!open) setWorkbenchMaximized(false)
-    if (activeSessionID) setPreviewOpen(open)
-    else setDraftWorkbenchOpen(open)
+    setWorkbenchOpenState(open)
   }
 
   workbenchWidthRef.current = workbenchWidth
@@ -255,6 +274,16 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(PINNED_SESSIONS_KEY, JSON.stringify(pinnedSessionIDs))
   }, [pinnedSessionIDs])
+
+  useEffect(() => {
+    if (
+      secondarySessionID &&
+      !loading &&
+      !sessions.some((session) => session.id === secondarySessionID)
+    ) {
+      setSecondarySessionID(undefined)
+    }
+  }, [loading, secondarySessionID, sessions])
 
   useEffect(() => {
     return () => {
@@ -368,19 +397,31 @@ export default function App() {
   }, [settingsOpen, skillsOpen])
 
   useLayoutEffect(() => {
-    const revisionKey = preview
+    const primaryKey = preview && previewOpen
       ? `${activeSessionID ?? 'draft'}:${preview.revision}`
       : undefined
-    if (!revisionKey || previousPreviewRevisionRef.current === revisionKey) return
-    previousPreviewRevisionRef.current = revisionKey
-    if (workbenchOpen) workbenchAutoCollapsedRef.current = false
-    if (
-      (workbenchConstrained || workbenchConstrainedRef.current) &&
-      workbenchOpen
-    ) {
+    const secondaryKey = secondaryThread?.preview && secondaryThread.previewOpen
+      ? `${secondaryThread.session.id}:${secondaryThread.preview.revision}`
+      : undefined
+    let changedSessionID: string | undefined
+    if (primaryKey && primaryKey !== previousPreviewKeysRef.current.primary) {
+      changedSessionID = activeSessionID
+    }
+    if (secondaryKey && secondaryKey !== previousPreviewKeysRef.current.secondary) {
+      changedSessionID = secondaryThread?.session.id
+    }
+    previousPreviewKeysRef.current = {
+      primary: primaryKey,
+      secondary: secondaryKey,
+    }
+    if (!changedSessionID) return
+    setWorkbenchPreviewSessionID(changedSessionID)
+    workbenchAutoCollapsedRef.current = false
+    if (!workbenchOpen) setWorkbenchOpen(true)
+    if (workbenchConstrained || workbenchConstrainedRef.current) {
       setWorkbenchMaximized(true)
     }
-  }, [activeSessionID, preview, workbenchConstrained, workbenchOpen])
+  }, [activeSessionID, preview, previewOpen, secondaryThread, workbenchConstrained, workbenchOpen])
 
   useLayoutEffect(() => {
     const el = logRef.current
@@ -554,6 +595,33 @@ export default function App() {
     setMobileSessionsOpen(false)
   }
 
+  const openSessionInWorkbench = (id: string) => {
+    if (!sessions.some((session) => session.id === id)) return
+    setWorkbenchCreateError('')
+    setSecondarySessionID(id)
+    setWorkbenchPreviewSessionID(id)
+    workbenchAutoCollapsedRef.current = false
+    if (workbenchConstrainedRef.current) setWorkbenchMaximized(true)
+    setWorkbenchOpen(true)
+    setMobileSessionsOpen(false)
+  }
+
+  const createSessionInWorkbench = async () => {
+    setWorkbenchCreateError('')
+    try {
+      const created = await createChatSession()
+      setSecondarySessionID(created.id)
+      setWorkbenchPreviewSessionID(created.id)
+      workbenchAutoCollapsedRef.current = false
+      if (workbenchConstrainedRef.current) setWorkbenchMaximized(true)
+      setWorkbenchOpen(true)
+    } catch (error) {
+      setWorkbenchCreateError(
+        error instanceof Error ? error.message : t('workbench.createChatFailed'),
+      )
+    }
+  }
+
   const addSession = (workspacePath?: string, projectScoped = false) => {
     setSelectedWorkspacePath(projectScoped ? workspacePath : undefined)
     startDraft(workspacePath, projectScoped)
@@ -587,6 +655,7 @@ export default function App() {
     setDeleteError('')
     try {
       await deleteSession(deleteTarget.id)
+      if (secondarySessionID === deleteTarget.id) setSecondarySessionID(undefined)
       setPinnedSessionIDs((current) => current.filter((id) => id !== deleteTarget.id))
       setDeleteTarget(undefined)
       setMobileSessionsOpen(false)
@@ -893,6 +962,7 @@ export default function App() {
                     active={session.id === activeSessionID}
                     pinned={pinnedSessionIDSet.has(session.id)}
                     onSelect={() => chooseSession(session.id)}
+                    onOpenInWorkbench={() => openSessionInWorkbench(session.id)}
                     onTogglePin={() => togglePinnedSession(session.id)}
                     onDelete={() => requestDelete(session)}
                     onRename={(title) => handleRename(session.id, title)}
@@ -928,6 +998,7 @@ export default function App() {
                   activeSessionID={activeSessionID}
                   onSelectWorkspace={(path) => setSelectedWorkspacePath(path)}
                   onSelectSession={chooseSession}
+                  onOpenSessionInWorkbench={openSessionInWorkbench}
                   onCreateSession={(path) => addSession(path, true)}
                   pinnedSessionIDs={pinnedSessionIDSet}
                   onTogglePinnedSession={togglePinnedSession}
@@ -1170,11 +1241,23 @@ export default function App() {
           </div>
         )}
         <WorkbenchPanel
-          key={activeSessionID ?? draft?.id ?? 'empty-workbench'}
           open={workbenchOpen}
-          preview={preview}
-          sessionID={activeSessionID}
+          preview={workbenchPreview}
+          sessionID={workbenchPreviewOwnerID}
+          activatePreview={activateWorkbenchPreview}
+          conversation={secondaryThread}
+          models={models}
+          workspaces={workspaces}
           maximized={workbenchMaximized}
+          creatingConversation={creating}
+          creationError={workbenchCreateError}
+          onCreateConversation={() => void createSessionInWorkbench()}
+          onDismissCreationError={() => setWorkbenchCreateError('')}
+          onCloseConversation={() => setSecondarySessionID(undefined)}
+          onConfigureModel={() => {
+            setSettingsSection('models')
+            setSettingsOpen(true)
+          }}
           onToggleMaximized={() => setWorkbenchMaximized((current) => !current)}
         />
       </aside>
@@ -1227,6 +1310,7 @@ function WorkspaceSessions({
   activeSessionID,
   onSelectWorkspace,
   onSelectSession,
+  onOpenSessionInWorkbench,
   onCreateSession,
   pinnedSessionIDs,
   onTogglePinnedSession,
@@ -1240,6 +1324,7 @@ function WorkspaceSessions({
   activeSessionID?: string
   onSelectWorkspace: (path: string) => void
   onSelectSession: (id: string) => void
+  onOpenSessionInWorkbench: (id: string) => void
   onCreateSession: (path: string) => void
   pinnedSessionIDs: Set<string>
   onTogglePinnedSession: (id: string) => void
@@ -1362,6 +1447,7 @@ function WorkspaceSessions({
                 active={session.id === activeSessionID}
                 pinned={pinnedSessionIDs.has(session.id)}
                 onSelect={() => onSelectSession(session.id)}
+                onOpenInWorkbench={() => onOpenSessionInWorkbench(session.id)}
                 onTogglePin={() => onTogglePinnedSession(session.id)}
                 onDelete={() => onDeleteSession(session)}
                 onRename={(title) => onRenameSession(session.id, title)}
@@ -1380,6 +1466,7 @@ function SessionRow({
   active,
   pinned,
   onSelect,
+  onOpenInWorkbench,
   onTogglePin,
   onDelete,
   onRename,
@@ -1389,6 +1476,7 @@ function SessionRow({
   active: boolean
   pinned: boolean
   onSelect: () => void
+  onOpenInWorkbench: () => void
   onTogglePin: () => void
   onDelete: () => void
   onRename: (customTitle: string) => Promise<void>
@@ -1541,6 +1629,13 @@ function SessionRow({
               >
                 <PencilLine className="size-4 text-stone-600" aria-hidden="true" />
                 <span>{t('app.renameSession')}</span>
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)]"
+                onSelect={onOpenInWorkbench}
+              >
+                <PanelRightOpen className="size-4 text-stone-600" aria-hidden="true" />
+                <span>{t('app.openInWorkbench')}</span>
               </DropdownMenu.Item>
               <DropdownMenu.Item
                 className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)]"
@@ -1828,158 +1923,4 @@ function RemoveWorkspaceDialog({
       </section>
     </div>
   )
-}
-
-// AwaitingResponse holds the thread's place between a sent prompt and the first
-// assistant event. It mirrors the streaming Thinking header so the transition to
-// real output is not a visual jump.
-function AwaitingResponse() {
-  const { t } = useI18n()
-  return (
-    <div
-      className="my-1 flex animate-[fade-in_160ms_ease-out] items-center gap-1.5 py-0.5 text-[0.8125rem] text-stone-400"
-      role="status"
-    >
-      <span className="size-1 animate-pulse rounded-full bg-indigo-500" />
-      <span className="streaming-sheen">{t('thinking.working')}</span>
-    </div>
-  )
-}
-
-function AutoCompactionStatus() {
-  const { t } = useI18n()
-  const [visible, setVisible] = useState(false)
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setVisible(true), 350)
-    return () => window.clearTimeout(timer)
-  }, [])
-
-  if (!visible) return null
-  return (
-    <div
-      className="my-1 flex animate-[fade-in_160ms_ease-out] items-center gap-1.5 py-0.5 text-[0.8125rem] text-stone-400"
-      role="status"
-    >
-      <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
-      <span>{t('compaction.automatic')}</span>
-    </div>
-  )
-}
-
-function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
-  const { locale, t } = useI18n()
-  switch (item.kind) {
-    case 'user':
-      return (
-        <section className="my-3.5 flex animate-[fade-in_160ms_ease-out] justify-end">
-          <div className="flex max-w-[78%] flex-col items-end gap-2 max-md:max-w-[88%]">
-            {item.images.length > 0 && (
-              <div className="flex max-w-full flex-wrap justify-end gap-2">
-                {item.images.map((image, index) => (
-                  <img
-                    key={`${image.mimeType}-${index}`}
-                    className="size-[8.5rem] shrink-0 rounded-2xl border border-stone-200 bg-white object-cover shadow-[0_7px_18px_-15px_rgba(28,25,23,0.55)] max-sm:size-28"
-                    src={`data:${image.mimeType};base64,${image.data}`}
-                    alt={t('app.uploadedImage', { index: index + 1 })}
-                  />
-                ))}
-              </div>
-            )}
-            {item.text && (
-              <div className="rounded-[10px] bg-stone-100 px-3 py-2 text-[14px] leading-[22px] whitespace-pre-wrap">
-                {item.text}
-              </div>
-            )}
-            {(item.sentAt || item.deliveryStatus === 'failed') && (
-              <div className="-mt-0.5 flex items-center justify-end gap-2 px-1 text-[0.75rem] leading-4 tabular-nums">
-                {item.deliveryStatus === 'failed' && (
-                  <span className="text-red-600">{t('app.notSent')}</span>
-                )}
-                {item.sentAt && (
-                  <time className="text-stone-400" dateTime={item.sentAt}>
-                    {formatMessageTime(item.sentAt, locale)}
-                  </time>
-                )}
-              </div>
-            )}
-          </div>
-        </section>
-      )
-    case 'assistant':
-      return (
-        <section className="my-3 animate-[fade-in_160ms_ease-out]">
-          <Markdown source={item.markdown} />
-          {item.complete && (
-            <ResponseActions
-              usage={item.usage}
-              modelName={item.modelName || item.model}
-              responseText={item.markdown}
-              completedAt={item.completedAt}
-            />
-          )}
-        </section>
-      )
-    case 'run':
-      return <RunDuration item={item} />
-    case 'thinking':
-      return <Thinking item={item} />
-    case 'tool':
-      return <ToolCard item={item} cwd={cwd} />
-    case 'error':
-      return (
-        <div
-          className="my-3 flex animate-[fade-in_160ms_ease-out] gap-2.5 border-l-2 border-red-300 py-1 pl-3 text-red-700"
-          role="alert"
-        >
-          <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          <div className="flex flex-col gap-0.5">
-            <strong className="text-[0.8125rem] font-semibold">{t('app.somethingWentWrong')}</strong>
-            <span className="text-[0.8125rem]">{item.text}</span>
-          </div>
-        </div>
-      )
-  }
-}
-
-function RunDuration({ item }: { item: Extract<Item, { kind: 'run' }> }) {
-  const { locale, t } = useI18n()
-  const [now, setNow] = useState(() => Date.now())
-  const running = item.durationMs === undefined
-
-  useEffect(() => {
-    if (!running) return
-    setNow(Date.now())
-    const interval = window.setInterval(() => setNow(Date.now()), 1000)
-    return () => window.clearInterval(interval)
-  }, [item.startedAt, running])
-
-  const startedAt = new Date(item.startedAt).getTime()
-  const durationMs =
-    item.durationMs ?? (Number.isFinite(startedAt) ? Math.max(0, now - startedAt) : 0)
-  const duration = formatRunDuration(durationMs, locale)
-
-  return (
-    <div className="mt-3.5 mb-2.5 animate-[fade-in_160ms_ease-out]">
-      <div className="text-[0.8125rem] leading-5 text-stone-400 tabular-nums">
-        {t(running ? 'run.working' : 'run.completed', { duration })}
-      </div>
-    </div>
-  )
-}
-
-function formatRunDuration(durationMs: number, locale: 'en' | 'zh-CN'): string {
-  const totalSeconds = Math.max(0, Math.floor(durationMs / 1000))
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = totalSeconds % 60
-
-  if (locale === 'zh-CN') {
-    if (hours > 0) return `${hours} 小时 ${minutes} 分 ${seconds} 秒`
-    if (minutes > 0) return `${minutes} 分 ${seconds} 秒`
-    return `${seconds} 秒`
-  }
-  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`
-  if (minutes > 0) return `${minutes}m ${seconds}s`
-  return `${seconds}s`
 }

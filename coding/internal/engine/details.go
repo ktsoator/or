@@ -14,6 +14,7 @@ import (
 const (
 	kindFileChange      = "file_change"
 	kindMutationFailure = "mutation_failure"
+	kindPreview         = "preview"
 )
 
 // detailsEnvelope tags a persisted payload with its concrete type so decode can
@@ -32,6 +33,8 @@ func encodeDetails(details any) (json.RawMessage, bool) {
 		kind = kindFileChange
 	case tools.MutationFailure:
 		kind = kindMutationFailure
+	case tools.PreviewRequest:
+		kind = kindPreview
 	default:
 		return nil, false
 	}
@@ -63,6 +66,12 @@ func decodeDetails(raw json.RawMessage) any {
 		return v
 	case kindMutationFailure:
 		var v tools.MutationFailure
+		if err := json.Unmarshal(env.Data, &v); err != nil {
+			return nil
+		}
+		return v
+	case kindPreview:
+		var v tools.PreviewRequest
 		if err := json.Unmarshal(env.Data, &v); err != nil {
 			return nil
 		}

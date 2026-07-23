@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useReducer,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from 'react'
 import { APIError, apiURL } from './api'
 import type {
   ApprovalChoice,
@@ -63,7 +71,6 @@ type Action =
       contextWindow: number
     }
   | { t: 'resolveApproval'; sessionID: string; id: string }
-  | { t: 'setPreviewOpen'; sessionID: string; open: boolean }
   | { t: 'forget'; sessionID: string }
 
 const emptyUsage = (): Usage => ({
@@ -119,11 +126,14 @@ function threadsReducer(state: ThreadsState, action: Action): ThreadsState {
       }
       for (const ev of action.history.events) next = reduceWire(next, ev)
       for (const ev of action.history.queue ?? []) next = reduceWire(next, ev)
+      const restoredPreview = next.preview
       next = {
         ...next,
         contextUsage: action.history.context,
-        preview: current.preview,
-        previewOpen: Boolean(current.preview && current.previewOpen),
+        preview: restoredPreview ?? current.preview,
+        // History makes the last preview available as a tab, but only a live
+        // open_preview event should bring the workbench forward.
+        previewOpen: Boolean(current.previewOpen && (restoredPreview || current.preview)),
         running: action.history.running,
         items: action.history.running ? next.items : completeOpenRun(next.items),
       }
@@ -226,9 +236,6 @@ function threadsReducer(state: ThreadsState, action: Action): ThreadsState {
           (item) => !(item.kind === 'approval' && item.id === action.id),
         ),
       }
-      break
-    case 'setPreviewOpen':
-      next = { ...current, previewOpen: action.open }
       break
     case 'wire':
       next = reduceWire(current, action.ev)
@@ -886,6 +893,7 @@ export type Session = {
   registerWorkspace: (path: string) => Promise<WorkspaceSummary>
   removeWorkspace: (path: string) => Promise<void>
   startDraft: (workspacePath?: string, projectScoped?: boolean) => void
+  createChatSession: () => Promise<SessionSummary>
   updateDraftWorkspace: (workspacePath?: string, projectScoped?: boolean) => void
   deleteSession: (id: string) => Promise<void>
   renameSession: (id: string, customTitle: string) => Promise<SessionSummary>
@@ -897,7 +905,30 @@ export type Session = {
   removeQueuedMessage: (id: string) => Promise<void>
   stop: () => void
   resolveApproval: (id: string, choice: ApprovalChoice) => Promise<void>
-  setPreviewOpen: (open: boolean) => void
+  secondaryThread?: SessionThread
+}
+
+export type SessionThread = {
+  session: SessionSummary
+  items: Item[]
+  queuedMessages: QueuedMessage[]
+  contextUsage?: ContextUsage
+  preview?: PreviewState
+  previewOpen: boolean
+  approval?: ApprovalItem
+  running: boolean
+  autoCompacting: boolean
+  loading: boolean
+  updatingSettings: boolean
+  compacting: boolean
+  status: ConnectionStatus
+  send: (text: string, images: MessageImage[], delivery?: DeliveryMode) => Promise<boolean>
+  removeQueuedMessage: (id: string) => Promise<void>
+  stop: () => void
+  resolveApproval: (id: string, choice: ApprovalChoice) => Promise<void>
+  updateSettings: (provider: string, model: string, thinkingLevel: ThinkingLevel) => Promise<void>
+  updatePermissionMode: (mode: PermissionMode) => Promise<void>
+  compactContext: () => Promise<CompactionResult>
 }
 
 export type SessionDraft = {
@@ -969,7 +1000,160 @@ function resolveSessionDraft(
   }
 }
 
-export function useSession(): Session {
+function useSessionConnection(
+  sessionID: string | undefined,
+  dispatch: Dispatch<Action>,
+  setSessions: Dispatch<SetStateAction<SessionSummary[]>>,
+  setPrimaryStatus?: Dispatch<SetStateAction<ConnectionStatus>>,
+) {
+  useEffect(() => {
+    if (!sessionID) return
+    const observedSessionID = sessionID
+    let active = true
+    let es: EventSource | null = null
+    let syncing = false
+    const controller = new AbortController()
+    dispatch({ t: 'status', sessionID: observedSessionID, status: 'connecting' })
+
+    const applyWire = (wire: WireEvent) => {
+      dispatch({ t: 'wire', sessionID: observedSessionID, ev: wire })
+      if (wire.type === 'approval_request') {
+        setSessions((current) =>
+          current.map((session) =>
+            session.id === observedSessionID
+              ? { ...session, running: true, hasApproval: true }
+              : session,
+          ),
+        )
+      } else if (wire.type === 'approval_resolved' || wire.type === 'approval_cancelled') {
+        setSessions((current) =>
+          current.map((session) =>
+            session.id === observedSessionID ? { ...session, hasApproval: false } : session,
+          ),
+        )
+      } else if (wire.type === 'done' || wire.type === 'error') {
+        setSessions((current) =>
+          current.map((session) =>
+            session.id === observedSessionID ? { ...session, running: false } : session,
+          ),
+        )
+      } else if (wire.type === 'title_update') {
+        setSessions((current) =>
+          current.map((session) =>
+            session.id === observedSessionID
+              ? {
+                  ...session,
+                  title: wire.title ?? session.title,
+                  aiTitle: wire.aiTitle,
+                  customTitle: wire.customTitle,
+                }
+              : session,
+          ),
+        )
+      }
+    }
+
+    const closeEvents = () => {
+      es?.close()
+      es = null
+    }
+
+    function connect(after: number) {
+      if (!active) return
+      closeEvents()
+      const eventsPath = after > 0 ? `/events?after=${encodeURIComponent(after)}` : '/events'
+      const source = new EventSource(sessionURL(observedSessionID, eventsPath))
+      es = source
+      source.onopen = () => {
+        if (es !== source) return
+        dispatch({ t: 'status', sessionID: observedSessionID, status: 'ready' })
+        setPrimaryStatus?.('ready')
+      }
+      source.onerror = () => {
+        if (es !== source) return
+        dispatch({ t: 'status', sessionID: observedSessionID, status: 'disconnected' })
+        setPrimaryStatus?.('disconnected')
+      }
+      source.onmessage = (event) => {
+        if (es !== source) return
+        try {
+          const wire = JSON.parse(event.data) as WireEvent
+          if (wire.type === 'sync_required') {
+            void restoreHistory(false)
+            return
+          }
+          applyWire(wire)
+        } catch {
+          applyWire({
+            type: 'error',
+            text: 'Received an invalid server event.',
+          })
+        }
+      }
+    }
+
+    async function restoreHistory(initial: boolean) {
+      if (!active || syncing) return
+      syncing = true
+      closeEvents()
+      dispatch({ t: 'status', sessionID: observedSessionID, status: 'connecting' })
+      try {
+        const response = await fetch(sessionURL(observedSessionID, '/history'), {
+          cache: 'no-store',
+          signal: controller.signal,
+        })
+        if (!response.ok) throw new Error(`history request failed (${response.status})`)
+        const history = (await response.json()) as HistoryResponse
+        if (!active) return
+        dispatch({ t: 'reset', sessionID: observedSessionID, history })
+        const hasApproval = history.events.reduce(
+          (pending, event) =>
+            event.type === 'approval_request'
+              ? true
+              : event.type === 'approval_resolved' || event.type === 'approval_cancelled'
+                ? false
+                : pending,
+          false,
+        )
+        setSessions((current) =>
+          current.map((session) =>
+            session.id === observedSessionID
+              ? { ...session, running: history.running, hasApproval }
+              : session,
+          ),
+        )
+        connect(history.eventSeq ?? 0)
+      } catch (error: unknown) {
+        if (!active || (error instanceof DOMException && error.name === 'AbortError')) return
+        dispatch({ t: 'status', sessionID: observedSessionID, status: 'disconnected' })
+        setPrimaryStatus?.('disconnected')
+        if (initial) {
+          dispatch({
+            t: 'reset',
+            sessionID: observedSessionID,
+            history: {
+              running: false,
+              events: [{ type: 'error', text: 'History could not be restored.' }],
+            },
+          })
+          connect(0)
+        }
+      } finally {
+        syncing = false
+      }
+    }
+
+    void restoreHistory(true)
+
+    return () => {
+      active = false
+      controller.abort()
+      closeEvents()
+    }
+  }, [dispatch, sessionID, setPrimaryStatus, setSessions])
+}
+
+export function useSession(secondarySessionID?: string): Session {
   const [threads, dispatch] = useReducer(threadsReducer, {})
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([])
@@ -1090,143 +1274,17 @@ export function useSession(): Session {
   }, [refreshSessions, refreshWorkspaces])
 
   useEffect(() => {
-    if (!activeSessionID) return
-    const sessionID = activeSessionID
-    localStorage.setItem(selectedSessionKey, sessionID)
-    let active = true
-    let es: EventSource | null = null
-    let syncing = false
-    const controller = new AbortController()
-    dispatch({ t: 'status', sessionID, status: 'connecting' })
-
-    const applyWire = (wire: WireEvent) => {
-      dispatch({ t: 'wire', sessionID, ev: wire })
-      if (wire.type === 'approval_request') {
-        setSessions((current) =>
-          current.map((session) =>
-            session.id === sessionID
-              ? { ...session, running: true, hasApproval: true }
-              : session,
-          ),
-        )
-      } else if (wire.type === 'approval_resolved' || wire.type === 'approval_cancelled') {
-        setSessions((current) =>
-          current.map((session) =>
-            session.id === sessionID ? { ...session, hasApproval: false } : session,
-          ),
-        )
-      } else if (wire.type === 'done' || wire.type === 'error') {
-        setSessions((current) =>
-          current.map((session) =>
-            session.id === sessionID ? { ...session, running: false } : session,
-          ),
-        )
-      } else if (wire.type === 'title_update') {
-        setSessions((current) =>
-          current.map((session) =>
-            session.id === sessionID
-              ? {
-                  ...session,
-                  title: wire.title ?? session.title,
-                  aiTitle: wire.aiTitle,
-                  customTitle: wire.customTitle,
-                }
-              : session,
-          ),
-        )
-      }
-    }
-
-    const closeEvents = () => {
-      es?.close()
-      es = null
-    }
-
-    function connect(after: number) {
-      if (!active) return
-      closeEvents()
-      const eventsPath = after > 0 ? `/events?after=${encodeURIComponent(after)}` : '/events'
-      const source = new EventSource(sessionURL(sessionID, eventsPath))
-      es = source
-      source.onopen = () => {
-        if (es !== source) return
-        dispatch({ t: 'status', sessionID, status: 'ready' })
-        setServiceStatus('ready')
-      }
-      source.onerror = () => {
-        if (es !== source) return
-        dispatch({ t: 'status', sessionID, status: 'disconnected' })
-        setServiceStatus('disconnected')
-      }
-      source.onmessage = (event) => {
-        if (es !== source) return
-        try {
-          const wire = JSON.parse(event.data) as WireEvent
-          if (wire.type === 'sync_required') {
-            void restoreHistory(false)
-            return
-          }
-          applyWire(wire)
-        } catch {
-          applyWire({
-            type: 'error',
-            text: 'Received an invalid server event.',
-          })
-        }
-      }
-    }
-
-    async function restoreHistory(initial: boolean) {
-      if (!active || syncing) return
-      syncing = true
-      closeEvents()
-      dispatch({ t: 'status', sessionID, status: 'connecting' })
-      try {
-        const response = await fetch(sessionURL(sessionID, '/history'), {
-          cache: 'no-store',
-          signal: controller.signal,
-        })
-        if (!response.ok) throw new Error(`history request failed (${response.status})`)
-        const history = (await response.json()) as HistoryResponse
-        if (!active) return
-        dispatch({ t: 'reset', sessionID, history })
-        const hasApproval = history.events.some((event) => event.type === 'approval_request')
-        setSessions((current) =>
-          current.map((session) =>
-            session.id === sessionID
-              ? { ...session, running: history.running, hasApproval }
-              : session,
-          ),
-        )
-        connect(history.eventSeq ?? 0)
-      } catch (error: unknown) {
-        if (!active || (error instanceof DOMException && error.name === 'AbortError')) return
-        dispatch({ t: 'status', sessionID, status: 'disconnected' })
-        setServiceStatus('disconnected')
-        if (initial) {
-          dispatch({
-            t: 'reset',
-            sessionID,
-            history: {
-              running: false,
-              events: [{ type: 'error', text: 'History could not be restored.' }],
-            },
-          })
-          connect(0)
-        }
-      } finally {
-        syncing = false
-      }
-    }
-
-    void restoreHistory(true)
-
-    return () => {
-      active = false
-      controller.abort()
-      closeEvents()
-    }
+    if (activeSessionID) localStorage.setItem(selectedSessionKey, activeSessionID)
   }, [activeSessionID])
+
+  useSessionConnection(activeSessionID, dispatch, setSessions, setServiceStatus)
+  useSessionConnection(
+    secondarySessionID && secondarySessionID !== activeSessionID
+      ? secondarySessionID
+      : undefined,
+    dispatch,
+    setSessions,
+  )
 
   const activeSession = sessions.find((session) => session.id === activeSessionID)
   const effectiveDraft = draft ? resolveSessionDraft(draft, models, modelDefaults) : undefined
@@ -1313,6 +1371,7 @@ export function useSession(): Session {
     model: string,
     thinkingLevel: ThinkingLevel,
     permissionMode: PermissionMode,
+    select = true,
   ) => {
     const response = await fetch(apiURL('/sessions'), {
       method: 'POST',
@@ -1351,8 +1410,36 @@ export function useSession(): Session {
         ]
       })
     }
-    setActiveSessionID(created.id)
+    if (select) setActiveSessionID(created.id)
     return created
+  }
+
+  const createChatSession = async () => {
+    if (creating) throw new Error('session creation is already in progress')
+    const settings = effectiveDraft ?? newSessionDraft(
+      undefined,
+      false,
+      activeSession,
+      models,
+      modelDefaults,
+    )
+    if (!settings.modelProvider || !settings.modelID || !settings.thinkingLevel) {
+      throw new Error('configure a model before creating a session')
+    }
+    setCreating(true)
+    try {
+      return await createSessionRecord(
+        undefined,
+        false,
+        settings.modelProvider,
+        settings.modelID,
+        settings.thinkingLevel,
+        settings.permissionMode,
+        false,
+      )
+    } finally {
+      setCreating(false)
+    }
   }
 
   const deleteSession = async (id: string) => {
@@ -1422,19 +1509,13 @@ export function useSession(): Session {
     return (await response.json()) as SessionSummary
   }
 
-  const updateSettings = async (
+  const updateSessionSettings = async (
+    sessionID: string,
     provider: string,
     model: string,
     thinkingLevel: ThinkingLevel,
   ) => {
-    if (draftRef.current) {
-      const next = { ...draftRef.current, modelProvider: provider, modelID: model, thinkingLevel }
-      draftRef.current = next
-      setDraft(next)
-      return
-    }
-    if (!activeSessionID || updatingSettings) return
-    const sessionID = activeSessionID
+    if (updatingSettings) return
     setUpdatingSettings(true)
     try {
       const updated = await patchSessionSettings(sessionID, provider, model, thinkingLevel)
@@ -1465,15 +1546,23 @@ export function useSession(): Session {
     }
   }
 
-  const updatePermissionMode = async (mode: PermissionMode) => {
+  const updateSettings = async (
+    provider: string,
+    model: string,
+    thinkingLevel: ThinkingLevel,
+  ) => {
     if (draftRef.current) {
-      const next = { ...draftRef.current, permissionMode: mode }
+      const next = { ...draftRef.current, modelProvider: provider, modelID: model, thinkingLevel }
       draftRef.current = next
       setDraft(next)
       return
     }
-    if (!activeSessionID || updatingSettings) return
-    const sessionID = activeSessionID
+    if (!activeSessionID) return
+    await updateSessionSettings(activeSessionID, provider, model, thinkingLevel)
+  }
+
+  const updateSessionPermissionMode = async (sessionID: string, mode: PermissionMode) => {
+    if (updatingSettings) return
     setUpdatingSettings(true)
     try {
       const response = await fetch(sessionURL(sessionID, '/permission-mode'), {
@@ -1501,11 +1590,22 @@ export function useSession(): Session {
     }
   }
 
-  const compactContext = async () => {
-    if (!activeSessionID || compactingSessionID || activeSession?.running) {
+  const updatePermissionMode = async (mode: PermissionMode) => {
+    if (draftRef.current) {
+      const next = { ...draftRef.current, permissionMode: mode }
+      draftRef.current = next
+      setDraft(next)
+      return
+    }
+    if (!activeSessionID) return
+    await updateSessionPermissionMode(activeSessionID, mode)
+  }
+
+  const compactSessionContext = async (sessionID: string) => {
+    const target = sessions.find((session) => session.id === sessionID)
+    if (compactingSessionID || target?.running) {
       throw new Error('session is not idle')
     }
-    const sessionID = activeSessionID
     setCompactingSessionID(sessionID)
     try {
       const response = await fetch(sessionURL(sessionID, '/compact'), {
@@ -1546,6 +1646,11 @@ export function useSession(): Session {
     } finally {
       setCompactingSessionID((current) => (current === sessionID ? undefined : current))
     }
+  }
+
+  const compactContext = async () => {
+    if (!activeSessionID) throw new Error('session is not idle')
+    return compactSessionContext(activeSessionID)
   }
 
   const thread = activeSessionID ? threads[activeSessionID] : undefined
@@ -1617,47 +1722,16 @@ export function useSession(): Session {
       })
   }, [activeSessionID, pendingDraftSend, refreshSessions, thread?.loaded, thread?.status])
 
-  const send = async (
+  const sendToSession = async (
+    sessionID: string,
     text: string,
     images: MessageImage[],
     delivery?: DeliveryMode,
   ): Promise<boolean> => {
     const trimmed = text.trim()
-    if ((!trimmed && images.length === 0)) return false
-    if (effectiveDraft) {
-      if (delivery || creating || serviceStatus !== 'ready') return false
-      const requestedDraft = effectiveDraft
-      if (
-        !requestedDraft.modelProvider ||
-        !requestedDraft.modelID ||
-        !requestedDraft.thinkingLevel
-      ) return false
-      const provider = requestedDraft.modelProvider
-      const model = requestedDraft.modelID
-      const thinkingLevel = requestedDraft.thinkingLevel
-      const permissionMode = requestedDraft.permissionMode
-      setCreating(true)
-      try {
-        const created = await createSessionRecord(
-          requestedDraft.workspacePath,
-          requestedDraft.projectScoped,
-          provider,
-          model,
-          thinkingLevel,
-          permissionMode,
-        )
-        draftRef.current = undefined
-        setDraft(undefined)
-        setPendingDraftSend({ sessionID: created.id, text: trimmed, images })
-        return true
-      } finally {
-        setCreating(false)
-      }
-    }
-    if (!activeSessionID || !thread) return false
-    if ((!trimmed && images.length === 0) || thread.status !== 'ready') return false
-    const sessionID = activeSessionID
-    const queued = thread.running
+    const targetThread = threads[sessionID]
+    if ((!trimmed && images.length === 0) || targetThread?.status !== 'ready') return false
+    const queued = targetThread.running
     if (queued && !delivery) return false
     if (!queued && delivery) return false
     const id = `local-${sessionID}-${crypto.randomUUID()}`
@@ -1729,16 +1803,60 @@ export function useSession(): Session {
     return true
   }
 
-  const stop = () => {
-    if (!activeSessionID) return
-    void fetch(sessionURL(activeSessionID, '/abort'), { method: 'POST' })
+  const send = async (
+    text: string,
+    images: MessageImage[],
+    delivery?: DeliveryMode,
+  ): Promise<boolean> => {
+    const trimmed = text.trim()
+    if ((!trimmed && images.length === 0)) return false
+    if (effectiveDraft) {
+      if (delivery || creating || serviceStatus !== 'ready') return false
+      const requestedDraft = effectiveDraft
+      if (
+        !requestedDraft.modelProvider ||
+        !requestedDraft.modelID ||
+        !requestedDraft.thinkingLevel
+      ) return false
+      const provider = requestedDraft.modelProvider
+      const model = requestedDraft.modelID
+      const thinkingLevel = requestedDraft.thinkingLevel
+      const permissionMode = requestedDraft.permissionMode
+      setCreating(true)
+      try {
+        const created = await createSessionRecord(
+          requestedDraft.workspacePath,
+          requestedDraft.projectScoped,
+          provider,
+          model,
+          thinkingLevel,
+          permissionMode,
+        )
+        draftRef.current = undefined
+        setDraft(undefined)
+        setPendingDraftSend({ sessionID: created.id, text: trimmed, images })
+        return true
+      } finally {
+        setCreating(false)
+      }
+    }
+    if (!activeSessionID) return false
+    return sendToSession(activeSessionID, trimmed, images, delivery)
   }
 
-  const removeQueuedMessage = async (id: string) => {
-    if (!activeSessionID || !thread) return
-    const message = thread.queue.find((item) => item.id === id)
+  const stopSession = (sessionID: string) => {
+    void fetch(sessionURL(sessionID, '/abort'), { method: 'POST' })
+  }
+
+  const stop = () => {
+    if (activeSessionID) stopSession(activeSessionID)
+  }
+
+  const removeSessionQueuedMessage = async (sessionID: string, id: string) => {
+    const targetThread = threads[sessionID]
+    if (!targetThread) return
+    const message = targetThread.queue.find((item) => item.id === id)
     if (!message || message.status === 'removing') return
-    const sessionID = activeSessionID
     if (message.status === 'failed') {
       dispatch({ t: 'queueRemove', sessionID, id })
       return
@@ -1762,9 +1880,15 @@ export function useSession(): Session {
     dispatch({ t: 'queueRemove', sessionID, id })
   }
 
-  const resolveApproval = async (id: string, choice: ApprovalChoice) => {
-    if (!activeSessionID) throw new Error('no active session')
-    const sessionID = activeSessionID
+  const removeQueuedMessage = async (id: string) => {
+    if (activeSessionID) await removeSessionQueuedMessage(activeSessionID, id)
+  }
+
+  const resolveSessionApproval = async (
+    sessionID: string,
+    id: string,
+    choice: ApprovalChoice,
+  ) => {
     const response = await fetch(sessionURL(sessionID, `/approvals/${encodeURIComponent(id)}`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1779,15 +1903,50 @@ export function useSession(): Session {
     )
   }
 
+  const resolveApproval = async (id: string, choice: ApprovalChoice) => {
+    if (!activeSessionID) throw new Error('no active session')
+    await resolveSessionApproval(activeSessionID, id, choice)
+  }
+
   const approval = thread?.items.findLast(
     (item): item is ApprovalItem => item.kind === 'approval',
   )
   const items = thread?.items.filter((item) => item.kind !== 'approval') ?? []
 
-  const setPreviewOpen = (open: boolean) => {
-    if (!activeSessionID) return
-    dispatch({ t: 'setPreviewOpen', sessionID: activeSessionID, open })
-  }
+  const secondarySession = sessions.find((session) => session.id === secondarySessionID)
+  const secondaryState = secondarySessionID ? threads[secondarySessionID] : undefined
+  const secondaryApproval = secondaryState?.items.findLast(
+    (item): item is ApprovalItem => item.kind === 'approval',
+  )
+  const secondaryThread = secondarySession
+    ? {
+        session: secondarySession,
+        items: secondaryState?.items.filter((item) => item.kind !== 'approval') ?? [],
+        queuedMessages: secondaryState?.queue ?? [],
+        contextUsage: secondaryState?.contextUsage,
+        preview: secondaryState?.preview,
+        previewOpen: secondaryState?.previewOpen ?? false,
+        approval: secondaryApproval,
+        running: secondaryState?.running ?? secondarySession.running,
+        autoCompacting: secondaryState?.autoCompacting ?? false,
+        loading: !secondaryState?.loaded,
+        updatingSettings,
+        compacting: compactingSessionID === secondarySession.id,
+        status: secondaryState?.status ?? serviceStatus,
+        send: (text: string, images: MessageImage[], delivery?: DeliveryMode) =>
+          sendToSession(secondarySession.id, text, images, delivery),
+        removeQueuedMessage: (id: string) =>
+          removeSessionQueuedMessage(secondarySession.id, id),
+        stop: () => stopSession(secondarySession.id),
+        resolveApproval: (id: string, choice: ApprovalChoice) =>
+          resolveSessionApproval(secondarySession.id, id, choice),
+        updateSettings: (provider: string, model: string, thinkingLevel: ThinkingLevel) =>
+          updateSessionSettings(secondarySession.id, provider, model, thinkingLevel),
+        updatePermissionMode: (mode: PermissionMode) =>
+          updateSessionPermissionMode(secondarySession.id, mode),
+        compactContext: () => compactSessionContext(secondarySession.id),
+      }
+    : undefined
 
   return {
     sessions,
@@ -1813,6 +1972,7 @@ export function useSession(): Session {
     registerWorkspace,
     removeWorkspace,
     startDraft,
+    createChatSession,
     updateDraftWorkspace,
     deleteSession,
     renameSession,
@@ -1824,6 +1984,6 @@ export function useSession(): Session {
     removeQueuedMessage,
     stop,
     resolveApproval,
-    setPreviewOpen,
+    secondaryThread,
   }
 }

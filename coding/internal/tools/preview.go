@@ -22,9 +22,9 @@ type openPreviewArgs struct {
 	Title string `json:"title,omitempty" jsonschema:"description=A short title for the preview"`
 }
 
-// PreviewRequest is the structured UI intent emitted by open_preview. It is
-// deliberately ephemeral: live product shells act on it, while transcripts
-// retain only the model-facing tool result text.
+// PreviewRequest is the structured UI intent emitted by open_preview. Product
+// shells act on it live, and the details sidecar retains it so a reopened
+// conversation can offer the same preview again.
 type PreviewRequest struct {
 	URL          string
 	Path         string

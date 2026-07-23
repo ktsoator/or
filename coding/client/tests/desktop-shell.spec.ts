@@ -22,6 +22,8 @@ async function openDesktopClient(
     failCreate?: boolean
     existingSession?: boolean
     historyEvents?: unknown[]
+    secondarySession?: boolean
+    secondaryHistoryEvents?: unknown[]
     modelName?: string
   } = {},
 ) {
@@ -43,7 +45,25 @@ async function openDesktopClient(
     thinkingLevel: 'medium',
     permissionMode: 'ask',
   }
+  const secondarySession = {
+    ...createdSession,
+    id: 'secondary-session',
+    title: 'Secondary task',
+    workspacePath: '/tmp/secondary-session',
+    workspaceName: 'secondary-session',
+    createdAt: '2026-07-21T00:00:00Z',
+    updatedAt: '2026-07-21T00:00:00Z',
+  }
+  const workbenchSession = {
+    ...createdSession,
+    id: 'workbench-session',
+    workspacePath: '/tmp/workbench-session',
+    workspaceName: 'workbench-session',
+    createdAt: '2026-07-23T00:00:00Z',
+    updatedAt: '2026-07-23T00:00:00Z',
+  }
   let sessionCreated = Boolean(options.existingSession)
+  let workbenchSessionCreated = false
 
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'platform', {
@@ -68,14 +88,19 @@ async function openDesktopClient(
       onopen: ((event: Event) => void) | null = null
       onerror: ((event: Event) => void) | null = null
       onmessage: ((event: MessageEvent) => void) | null = null
+      readonly url: string
+      closed = false
 
-      constructor() {
+      constructor(url: string) {
+        this.url = url
         const testWindow = window as Window & { __eventSources?: TestEventSource[] }
         testWindow.__eventSources = [...(testWindow.__eventSources ?? []), this]
         window.setTimeout(() => this.onopen?.(new Event('open')), 0)
       }
 
-      close() {}
+      close() {
+        this.closed = true
+      }
     }
 
     Object.defineProperty(window, 'EventSource', {
@@ -86,9 +111,18 @@ async function openDesktopClient(
       configurable: true,
       value: (payload: unknown) => {
         const sources = (window as Window & { __eventSources?: TestEventSource[] }).__eventSources
-        sources?.at(-1)?.onmessage?.(
+        sources?.findLast((source) => !source.closed)?.onmessage?.(
           new MessageEvent('message', { data: JSON.stringify(payload) }),
         )
+      },
+    })
+    Object.defineProperty(window, '__emitSessionSSE', {
+      configurable: true,
+      value: (sessionID: string, payload: unknown) => {
+        const sources = (window as Window & { __eventSources?: TestEventSource[] }).__eventSources
+        sources
+          ?.findLast((source) => !source.closed && source.url.includes(`/sessions/${sessionID}/events`))
+          ?.onmessage?.(new MessageEvent('message', { data: JSON.stringify(payload) }))
       },
     })
   })
@@ -110,11 +144,13 @@ async function openDesktopClient(
         })
         return
       }
+      const created = sessionCreated ? workbenchSession : createdSession
+      if (created.id === workbenchSession.id) workbenchSessionCreated = true
       sessionCreated = true
       await route.fulfill({
         status: 201,
         contentType: 'application/json',
-        body: JSON.stringify(createdSession),
+        body: JSON.stringify(created),
       })
       return
     }
@@ -154,6 +190,14 @@ async function openDesktopClient(
       })
       return
     }
+    if (path === '/api/sessions/secondary-session/preview/web/index.html' && method === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: '<!doctype html><title>Secondary preview</title><main>Secondary page</main>',
+      })
+      return
+    }
 
     let body: unknown = []
     let status = 200
@@ -165,7 +209,15 @@ async function openDesktopClient(
           }
         : models
     }
-    if (path === '/api/sessions') body = sessionCreated ? [createdSession] : []
+    if (path === '/api/sessions') {
+      body = sessionCreated
+        ? [
+            ...(workbenchSessionCreated ? [workbenchSession] : []),
+            createdSession,
+            ...(options.secondarySession ? [secondarySession] : []),
+          ]
+        : []
+    }
     if (path === '/api/sessions/test-session/history') {
       body = {
         events: options.historyEvents ?? [],
@@ -175,7 +227,33 @@ async function openDesktopClient(
         eventSeq: 0,
       }
     }
+    if (path === '/api/sessions/secondary-session/history') {
+      body = {
+        events: options.secondaryHistoryEvents ?? [],
+        queue: [],
+        context: {},
+        running: false,
+        eventSeq: 0,
+      }
+    }
+    if (path === '/api/sessions/workbench-session/history') {
+      body = {
+        events: [],
+        queue: [],
+        context: {},
+        running: false,
+        eventSeq: 0,
+      }
+    }
     if (path === '/api/sessions/test-session/prompt') {
+      body = {}
+      status = 202
+    }
+    if (path === '/api/sessions/secondary-session/prompt') {
+      body = {}
+      status = 202
+    }
+    if (path === '/api/sessions/workbench-session/prompt') {
       body = {}
       status = 202
     }
@@ -343,7 +421,7 @@ test('workbench opens before a preview and launches Browser without hiding Chat'
       .evaluate((element) => element.getBoundingClientRect().height),
   ).toBe(30)
   await expect(addViewMenu.getByRole('menuitem')).toHaveCount(2)
-  await expect(addViewMenu.getByRole('menuitem', { name: 'Chat' })).toBeDisabled()
+  await expect(addViewMenu.getByRole('menuitem', { name: 'Chat' })).toBeEnabled()
   await addViewMenu.getByRole('menuitem', { name: 'Browser' }).click()
   await expect(page.getByRole('tab')).toHaveCount(2)
   await expect(page.getByRole('tab', { name: 'New tab' })).toHaveAttribute(
@@ -398,6 +476,305 @@ test('workbench opens before a preview and launches Browser without hiding Chat'
   expect(toggleAfterClose).not.toBeNull()
   expect(toggleAfterClose!.x).toBeCloseTo(togglePosition!.x, 1)
   expect(toggleAfterClose!.y).toBeCloseTo(togglePosition!.y, 1)
+})
+
+test('Add view creates a chat directly in the right panel', async ({ page }) => {
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    historyEvents: [
+      {
+        type: 'user_message',
+        id: 'main-user',
+        text: 'Keep this conversation on the left',
+        images: [],
+      },
+      {
+        type: 'message_end',
+        text: 'Main answer remains visible',
+        finalResponse: true,
+        modelName: 'Test model',
+      },
+    ],
+  })
+
+  const mainConversation = page.getByTestId('conversation-pane')
+  await expect(mainConversation.getByText('Main answer remains visible')).toBeVisible()
+
+  await page.getByTestId('workbench-panel-toggle').click()
+  const workbench = page.getByTestId('workbench-panel')
+  await workbench.getByRole('button', { name: 'Add view' }).click()
+  const chatItem = page.getByRole('menuitem', { name: 'Chat' })
+  await expect(chatItem).toBeEnabled()
+  await chatItem.click()
+
+  await expect.poll(() =>
+    requests.find(
+      (request) => request.path === '/api/sessions' && request.method === 'POST',
+    )?.body,
+  ).toEqual({
+    scope: 'chat',
+    provider: 'openai',
+    model: 'test-model',
+    thinkingLevel: 'medium',
+    permissionMode: 'ask',
+  })
+  await expect(workbench.getByRole('tab', { name: 'New session' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  await expect(mainConversation.getByText('Main answer remains visible')).toBeVisible()
+
+  const sideConversation = workbench.getByTestId('workbench-conversation')
+  const input = sideConversation.getByPlaceholder('Ask anything')
+  await expect(input).toBeEnabled()
+  await input.fill('Start on the right')
+  await input.press('Enter')
+  await expect(sideConversation.getByText('Start on the right')).toBeVisible()
+  await expect(mainConversation.getByText('Start on the right')).toHaveCount(0)
+  await expect.poll(() =>
+    requests.find(
+      (request) => request.path === '/api/sessions/workbench-session/prompt',
+    )?.body,
+  ).toEqual({ text: 'Start on the right', images: [] })
+
+  await workbench.getByRole('button', { name: 'Close conversation view' }).click()
+  expect(
+    requests.filter(
+      (request) =>
+        request.method === 'DELETE' && request.path === '/api/sessions/workbench-session',
+    ),
+  ).toHaveLength(0)
+})
+
+test('an existing chat opens and remains interactive in the right panel', async ({ page }) => {
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    secondarySession: true,
+    secondaryHistoryEvents: [
+      {
+        type: 'user_message',
+        id: 'secondary-user',
+        text: 'Secondary history',
+        images: [],
+      },
+      {
+        type: 'run_start',
+        id: 'secondary-run',
+        startedAt: '2026-07-22T00:00:00Z',
+        durationMs: 1200,
+      },
+      {
+        type: 'message_end',
+        text: 'Secondary answer',
+        finalResponse: true,
+        modelName: 'Test model',
+      },
+      { type: 'done', durationMs: 1200 },
+    ],
+  })
+
+  await page.getByRole('button', { name: 'Actions for Secondary task' }).click()
+  await page.getByRole('menuitem', { name: 'Open in right panel' }).click()
+
+  const mainConversation = page.getByTestId('conversation-pane')
+  const workbench = page.getByTestId('workbench-panel')
+  const sideConversation = workbench.getByTestId('workbench-conversation')
+  await expect(workbench.getByRole('tab', { name: 'Secondary task' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  await expect(sideConversation.getByText('Secondary history')).toBeVisible()
+  await expect(sideConversation.getByText('Secondary answer')).toBeVisible()
+  await expect(mainConversation.getByText('Secondary history')).toHaveCount(0)
+  await expect
+    .poll(() =>
+      requests.filter(
+        (request) => request.path === '/api/sessions/secondary-session/history',
+      ).length,
+    )
+    .toBe(1)
+
+  const input = sideConversation.getByPlaceholder('Ask anything')
+  await input.fill('Continue on the right')
+  await input.press('Enter')
+  await expect(sideConversation.getByText('Continue on the right')).toBeVisible()
+  await expect(mainConversation.getByText('Continue on the right')).toHaveCount(0)
+  await expect
+    .poll(() =>
+      requests.filter(
+        (request) => request.path === '/api/sessions/secondary-session/prompt',
+      ).length,
+    )
+    .toBe(1)
+
+  await page.evaluate(() => {
+    const emit = (
+      window as Window & {
+        __emitSessionSSE?: (sessionID: string, payload: unknown) => void
+      }
+    ).__emitSessionSSE
+    emit?.('secondary-session', {
+      type: 'delta',
+      kind: 'text',
+      delta: 'Streamed on the right',
+    })
+  })
+  await expect(sideConversation.getByText('Streamed on the right')).toBeVisible()
+  await expect(mainConversation.getByText('Streamed on the right')).toHaveCount(0)
+
+  await workbench.getByRole('button', { name: 'Close conversation view' }).click()
+  await expect(workbench.getByTestId('workbench-empty')).toContainText('No open views')
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const sources = (
+          window as Window & {
+            __eventSources?: Array<{ url: string; closed: boolean }>
+          }
+        ).__eventSources
+        return sources
+          ?.filter((source) => source.url.includes('/sessions/secondary-session/events'))
+          .every((source) => source.closed)
+      }),
+    )
+    .toBe(true)
+  expect(
+    requests.filter(
+      (request) =>
+        request.method === 'DELETE' && request.path === '/api/sessions/secondary-session',
+    ),
+  ).toHaveLength(0)
+  await expect(mainConversation).toBeVisible()
+})
+
+test('a restored right-side preview stays available without taking focus from Chat', async ({
+  page,
+}) => {
+  await openDesktopClient(page, {
+    existingSession: true,
+    secondarySession: true,
+    secondaryHistoryEvents: [
+      {
+        type: 'tool_start',
+        id: 'restored-preview',
+        tool: 'open_preview',
+        args: {
+          url: '/tmp/secondary-session/web/index.html',
+          title: 'Saved preview',
+        },
+      },
+      {
+        type: 'tool_end',
+        id: 'restored-preview',
+        tool: 'open_preview',
+        result: 'Opened preview at /tmp/secondary-session/web/index.html',
+        preview: {
+          path: '/tmp/secondary-session/web/index.html',
+          relativePath: 'web/index.html',
+          title: 'Saved preview',
+        },
+      },
+    ],
+  })
+
+  await page.getByRole('button', { name: 'Actions for Secondary task' }).click()
+  await page.getByRole('menuitem', { name: 'Open in right panel' }).click()
+
+  const workbench = page.getByTestId('workbench-panel')
+  await expect(workbench.getByRole('tab', { name: 'Secondary task' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  const previewTab = workbench.getByRole('tab', { name: 'Saved preview' })
+  await expect(previewTab).toHaveAttribute('aria-selected', 'false')
+
+  await previewTab.click()
+  await expect(workbench.getByTestId('browser-frame')).toHaveAttribute(
+    'src',
+    '/api/sessions/secondary-session/preview/web/index.html',
+  )
+})
+
+test('main and right-side chats keep separate preview tabs and workspace routes', async ({
+  page,
+}) => {
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    secondarySession: true,
+  })
+
+  await page.getByRole('button', { name: 'Actions for Secondary task' }).click()
+  await page.getByRole('menuitem', { name: 'Open in right panel' }).click()
+
+  await page.evaluate(() => {
+    const emit = (
+      window as Window & {
+        __emitSessionSSE?: (sessionID: string, payload: unknown) => void
+      }
+    ).__emitSessionSSE
+    emit?.('test-session', {
+      type: 'tool_end',
+      id: 'main-preview',
+      tool: 'open_preview',
+      result: 'Opened preview at /tmp/test-session/web/index.html',
+      preview: {
+        path: '/tmp/test-session/web/index.html',
+        relativePath: 'web/index.html',
+        title: 'Main preview',
+      },
+    })
+  })
+
+  const workbench = page.getByTestId('workbench-panel')
+  await expect(workbench.getByRole('tab', { name: 'Main preview' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+
+  await page.evaluate(() => {
+    const emit = (
+      window as Window & {
+        __emitSessionSSE?: (sessionID: string, payload: unknown) => void
+      }
+    ).__emitSessionSSE
+    emit?.('secondary-session', {
+      type: 'tool_end',
+      id: 'secondary-preview',
+      tool: 'open_preview',
+      result: 'Opened preview at /tmp/secondary-session/web/index.html',
+      preview: {
+        path: '/tmp/secondary-session/web/index.html',
+        relativePath: 'web/index.html',
+        title: 'Secondary preview',
+      },
+    })
+  })
+
+  await expect(workbench.getByRole('tab')).toHaveCount(3)
+  await expect(workbench.getByRole('tab', { name: 'Main preview' })).toHaveAttribute(
+    'aria-selected',
+    'false',
+  )
+  await expect(workbench.getByRole('tab', { name: 'Secondary preview' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  await expect(workbench.getByRole('textbox', { name: 'Preview address' })).toHaveValue(
+    '/tmp/secondary-session/web/index.html',
+  )
+  await expect
+    .poll(() =>
+      requests.filter(
+        (request) =>
+          request.path === '/api/sessions/secondary-session/preview/web/index.html',
+      ).length,
+    )
+    .toBeGreaterThan(0)
+  expect(
+    requests.filter(
+      (request) => request.path === '/api/sessions/test-session/preview/web/index.html',
+    ).length,
+  ).toBeGreaterThan(0)
 })
 
 test('workbench divider resizes the panel without moving the corner control', async ({

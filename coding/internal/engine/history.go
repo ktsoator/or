@@ -41,9 +41,8 @@ type HistoryItem struct {
 	ToolName   string
 	ToolArgs   any
 	ToolResult string
-	// ToolDetails is the tool's structured result (a tools.FileChange or
-	// tools.MutationFailure) restored from the DetailsStore, when one was
-	// persisted. It is nil when history replays as plain text.
+	// ToolDetails is a recognized structured tool result restored from the
+	// DetailsStore. It is nil when history replays as plain text.
 	ToolDetails any
 	IsError     bool
 
