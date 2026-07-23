@@ -15,17 +15,17 @@ func TestBuildContextUsesLatestCompactionAndKeepsOriginalMessages(t *testing.T) 
 		agent.UserMessage("kept user"),
 		agent.FromLLM(assistant("kept assistant")),
 	)
-	compact := NewCompaction(entries[len(entries)-1].ID, Compaction{
+	compact := NewCompaction(Compaction{
 		Summary:          "old work summarized",
 		FirstKeptEntryID: entries[2].ID,
 		TokensBefore:     100,
 		TokensAfter:      40,
 	})
 	entries = append(entries, compact)
-	last := NewMessage(compact.ID, agent.UserMessage("new user"))
+	last := NewMessage(agent.UserMessage("new user"))
 	entries = append(entries, last)
 
-	context, err := BuildContext(entries, last.ID)
+	context, err := BuildContext(entries)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,10 +42,7 @@ func TestBuildContextUsesLatestCompactionAndKeepsOriginalMessages(t *testing.T) 
 		t.Fatalf("new message = %q", got)
 	}
 
-	full, err := Messages(entries, last.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	full := Messages(entries)
 	if len(full) != 5 {
 		t.Fatalf("full message length = %d, want 5", len(full))
 	}
@@ -56,11 +53,8 @@ func TestBuildContextUsesLatestCompactionAndKeepsOriginalMessages(t *testing.T) 
 
 func linearMessages(messages ...agent.AgentMessage) []Entry {
 	entries := make([]Entry, 0, len(messages))
-	parent := ""
 	for _, message := range messages {
-		entry := NewMessage(parent, message)
-		entries = append(entries, entry)
-		parent = entry.ID
+		entries = append(entries, NewMessage(message))
 	}
 	return entries
 }

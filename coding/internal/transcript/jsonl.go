@@ -14,7 +14,7 @@ import (
 
 const maxLine = 16 << 20 // 16 MiB
 
-// JSONL persists a v2 session log: one header followed by typed append-only
+// JSONL persists a session log: one header followed by typed append-only
 // entries.
 type JSONL struct {
 	mu    sync.Mutex
@@ -137,7 +137,7 @@ func decodeEntries(lines [][]byte) ([]Entry, error) {
 	for index, line := range lines {
 		var entry Entry
 		if err := json.Unmarshal(line, &entry); err != nil {
-			return nil, fmt.Errorf("store: decode v2 line %d: %w", index+2, err)
+			return nil, fmt.Errorf("store: decode session line %d: %w", index+2, err)
 		}
 		entries = append(entries, entry)
 	}
@@ -162,9 +162,6 @@ func validateEntries(entries []Entry) error {
 	for _, entry := range entries {
 		if seen[entry.ID] {
 			return fmt.Errorf("store: duplicate entry id %s", entry.ID)
-		}
-		if entry.ParentID != "" && !seen[entry.ParentID] {
-			return fmt.Errorf("store: entry %s has unknown or forward parent %s", entry.ID, entry.ParentID)
 		}
 		seen[entry.ID] = true
 	}

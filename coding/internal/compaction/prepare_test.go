@@ -30,7 +30,7 @@ func TestPrepareCutsAtUserTurnWithoutSplittingToolPair(t *testing.T) {
 	}
 	entries := makeEntries(messages)
 
-	prepared, err := Prepare(entries, entries[len(entries)-1].ID, 20)
+	prepared, err := Prepare(entries, 20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,11 +47,8 @@ func TestPrepareCutsAtUserTurnWithoutSplittingToolPair(t *testing.T) {
 
 func makeEntries(messages []agent.AgentMessage) []transcript.Entry {
 	entries := make([]transcript.Entry, 0, len(messages))
-	parent := ""
 	for _, message := range messages {
-		entry := transcript.NewMessage(parent, message)
-		entries = append(entries, entry)
-		parent = entry.ID
+		entries = append(entries, transcript.NewMessage(message))
 	}
 	return entries
 }

@@ -45,14 +45,38 @@ func TestJSONLLoadRejectsLegacyMessagesWithoutRewriting(t *testing.T) {
 	}
 }
 
+func TestJSONLRejectsVersion2(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	data := []byte("{\"type\":\"session\",\"version\":2}\n")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	store := NewJSONL(path)
+	if _, err := store.Load(context.Background()); err == nil ||
+		!strings.Contains(err.Error(), "unsupported session version 2") {
+		t.Fatalf("Load() error = %v, want unsupported version 2", err)
+	}
+}
+
 func TestJSONLRoundTripsRunTiming(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session.jsonl")
 	startedAt := time.Date(2026, time.July, 21, 12, 0, 0, 0, time.UTC)
-	message := NewMessage("", agent.UserMessage("hello"))
-	run := NewRun(message.ID, message.ID, startedAt, startedAt.Add(2*time.Second))
+	message := NewMessage(agent.UserMessage("hello"))
+	run := NewRun(message.ID, startedAt, startedAt.Add(2*time.Second))
 	store := NewJSONL(path)
 	if err := store.Append(context.Background(), message, run); err != nil {
 		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(data, []byte(`"version":3`)) {
+		t.Fatalf("session header is not v3:\n%s", data)
+	}
+	if bytes.Contains(data, []byte(`"parentId"`)) {
+		t.Fatalf("linear session contains parentId:\n%s", data)
 	}
 
 	entries, err := store.Load(context.Background())

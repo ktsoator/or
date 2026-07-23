@@ -59,13 +59,9 @@ type HistoryItem struct {
 // History returns a displayable snapshot of the conversation in transcript
 // order. The returned slice is detached from the agent's mutable state.
 func (s *Session) History() []HistoryItem {
-	_, activeStartedAt, activeParentID := s.activeRunState()
-	entries, leafID, persistedLen := s.snapshotTranscriptState()
+	_, activeStartedAt, activeEntryStart := s.activeRunState()
+	entries, persistedLen := s.snapshotTranscriptState()
 	details := s.snapshotDetails()
-	path, err := transcript.BuildPath(entries, leafID)
-	if err != nil {
-		return projectHistory(s.Messages(), details)
-	}
 
 	active := s.agent.Snapshot().Messages
 	var messages []agent.AgentMessage
@@ -73,20 +69,20 @@ func (s *Session) History() []HistoryItem {
 		messages = active[persistedLen:]
 	}
 	if !activeStartedAt.IsZero() {
-		firstEntryID, firstErr := firstMessageAfter(entries, leafID, activeParentID)
-		if firstErr == nil && firstEntryID != "" {
-			path = append(path, transcript.Entry{
+		firstEntryID := firstMessageFrom(entries, activeEntryStart)
+		if firstEntryID != "" {
+			entries = append(entries, transcript.Entry{
 				Type: transcript.RunEntry,
 				Run:  &transcript.Run{FirstEntryID: firstEntryID, StartedAt: activeStartedAt},
 			})
-			items := projectEntryHistory(path, details)
+			items := projectEntryHistory(entries, details)
 			return append(items, projectHistory(messages, details)...)
 		}
-		items := projectEntryHistory(path, details)
+		items := projectEntryHistory(entries, details)
 		return append(items, projectRunHistory(messages, details, activeStartedAt, time.Time{})...)
 	}
 
-	items := projectEntryHistory(path, details)
+	items := projectEntryHistory(entries, details)
 	if len(messages) > 0 {
 		items = append(items, projectHistory(messages, details)...)
 	}

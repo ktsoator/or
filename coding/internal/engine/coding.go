@@ -95,12 +95,11 @@ type Session struct {
 	runStateMu           sync.RWMutex
 	runCtx               context.Context
 	runStartedAt         time.Time
-	runParentID          string
+	runEntryStart        int
 	autoCompactAttempted bool
 
 	transcriptMu sync.RWMutex
 	entries      []transcript.Entry
-	leafID       string
 	usageStart   int
 
 	detailsStore transcript.DetailsStore
@@ -153,20 +152,12 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		}
 		entries = loaded
 	}
-	leafID := ""
-	if len(entries) > 0 {
-		leafID = entries[len(entries)-1].ID
-	}
-	seed, err := transcript.BuildContext(entries, leafID)
+	seed, err := transcript.BuildContext(entries)
 	if err != nil {
 		return nil, err
 	}
 	usageStart := 0
-	path, err := transcript.BuildPath(entries, leafID)
-	if err != nil {
-		return nil, err
-	}
-	for _, entry := range path {
+	for _, entry := range entries {
 		if entry.Type == transcript.CompactionEntry {
 			usageStart = len(seed)
 		}
@@ -203,7 +194,6 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		compactor:      opts.Compactor,
 		persistedLen:   len(seed),
 		entries:        append([]transcript.Entry(nil), entries...),
-		leafID:         leafID,
 		usageStart:     usageStart,
 		detailsStore:   opts.DetailsStore,
 		details:        details,
@@ -318,14 +308,14 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 		ctx = context.Background()
 	}
 	// Flush any messages left in memory by an earlier store failure before this
-	// run captures its durable parent. Otherwise their later persistence could be
-	// mistaken for messages produced by the new run.
+	// run captures its durable starting position. Otherwise their later
+	// persistence could be mistaken for messages produced by the new run.
 	if err := s.persistNew(ctx); err != nil {
 		return err
 	}
 	startedAt := time.Now().UTC()
-	_, runParentID := s.snapshotTranscript()
-	s.setRunState(ctx, startedAt, runParentID)
+	runEntryStart := len(s.snapshotTranscript())
+	s.setRunState(ctx, startedAt, runEntryStart)
 	defer s.clearRunState()
 	s.dispatchEvent(Event{Type: RunStarted, StartedAt: startedAt})
 
@@ -356,7 +346,7 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 		}
 	}
 	completedAt := time.Now().UTC()
-	persistErr := s.persistNewRun(ctx, runParentID, startedAt, completedAt)
+	persistErr := s.persistNewRun(ctx, runEntryStart, startedAt, completedAt)
 	s.dispatchEvent(Event{
 		Type:        RunCompleted,
 		Usage:       runUsage,
@@ -369,26 +359,25 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 // persistNew appends the messages added since the last persist to the Store. It
 // runs only while runMu is held, so persistedLen is not racing a run.
 func (s *Session) persistNew(ctx context.Context) error {
-	return s.persistNewMessages(ctx, "", time.Time{}, time.Time{})
+	return s.persistNewMessages(ctx, 0, time.Time{}, time.Time{})
 }
 
 func (s *Session) persistNewRun(
 	ctx context.Context,
-	runParentID string,
+	runEntryStart int,
 	startedAt, completedAt time.Time,
 ) error {
-	return s.persistNewMessages(ctx, runParentID, startedAt, completedAt)
+	return s.persistNewMessages(ctx, runEntryStart, startedAt, completedAt)
 }
 
 func (s *Session) persistNewMessages(
 	ctx context.Context,
-	runParentID string,
+	runEntryStart int,
 	startedAt, completedAt time.Time,
 ) error {
 	all := s.agent.Snapshot().Messages
 	s.transcriptMu.RLock()
 	persistedLen := s.persistedLen
-	parentID := s.leafID
 	existing := append([]transcript.Entry(nil), s.entries...)
 	s.transcriptMu.RUnlock()
 	var added []agent.AgentMessage
@@ -397,19 +386,12 @@ func (s *Session) persistNewMessages(
 	}
 	entries := make([]transcript.Entry, 0, len(added)+1)
 	for _, message := range added {
-		entry := transcript.NewMessage(parentID, message)
-		entries = append(entries, entry)
-		parentID = entry.ID
+		entries = append(entries, transcript.NewMessage(message))
 	}
 	if !startedAt.IsZero() && !completedAt.IsZero() {
 		candidate := append(existing, entries...)
-		firstEntryID, err := firstMessageAfter(candidate, parentID, runParentID)
-		if err != nil {
-			return err
-		}
-		runEntry := transcript.NewRun(parentID, firstEntryID, startedAt, completedAt)
-		entries = append(entries, runEntry)
-		parentID = runEntry.ID
+		firstEntryID := firstMessageFrom(candidate, runEntryStart)
+		entries = append(entries, transcript.NewRun(firstEntryID, startedAt, completedAt))
 	}
 	if len(entries) == 0 {
 		return nil
@@ -421,46 +403,28 @@ func (s *Session) persistNewMessages(
 	}
 	s.transcriptMu.Lock()
 	s.entries = append(s.entries, entries...)
-	s.leafID = parentID
 	s.persistedLen = len(all)
 	s.transcriptMu.Unlock()
 	return nil
 }
 
-func firstMessageAfter(
-	entries []transcript.Entry,
-	leafID string,
-	ancestorID string,
-) (string, error) {
-	path, err := transcript.BuildPath(entries, leafID)
-	if err != nil {
-		return "", err
+func firstMessageFrom(entries []transcript.Entry, start int) string {
+	if start < 0 || start >= len(entries) {
+		return ""
 	}
-	afterAncestor := ancestorID == ""
-	foundAncestor := afterAncestor
-	for _, entry := range path {
-		if !afterAncestor {
-			if entry.ID == ancestorID {
-				afterAncestor = true
-				foundAncestor = true
-			}
-			continue
-		}
+	for _, entry := range entries[start:] {
 		if entry.Type == transcript.MessageEntry {
-			return entry.ID, nil
+			return entry.ID
 		}
 	}
-	if !foundAncestor {
-		return "", errors.New("coding: run parent is not on the active transcript path")
-	}
-	return "", nil
+	return ""
 }
 
-func (s *Session) setRunState(ctx context.Context, startedAt time.Time, parentID string) {
+func (s *Session) setRunState(ctx context.Context, startedAt time.Time, entryStart int) {
 	s.runStateMu.Lock()
 	s.runCtx = ctx
 	s.runStartedAt = startedAt
-	s.runParentID = parentID
+	s.runEntryStart = entryStart
 	s.autoCompactAttempted = false
 	s.runStateMu.Unlock()
 }
@@ -469,15 +433,15 @@ func (s *Session) clearRunState() {
 	s.runStateMu.Lock()
 	s.runCtx = nil
 	s.runStartedAt = time.Time{}
-	s.runParentID = ""
+	s.runEntryStart = 0
 	s.autoCompactAttempted = false
 	s.runStateMu.Unlock()
 }
 
-func (s *Session) activeRunState() (context.Context, time.Time, string) {
+func (s *Session) activeRunState() (context.Context, time.Time, int) {
 	s.runStateMu.RLock()
 	defer s.runStateMu.RUnlock()
-	return s.runCtx, s.runStartedAt, s.runParentID
+	return s.runCtx, s.runStartedAt, s.runEntryStart
 }
 
 // QueueHandle identifies one message while it remains queued in this Session.
@@ -554,13 +518,9 @@ func (s *Session) Snapshot() agent.State { return s.agent.Snapshot() }
 func (s *Session) Messages() []agent.AgentMessage {
 	s.transcriptMu.RLock()
 	entries := append([]transcript.Entry(nil), s.entries...)
-	leafID := s.leafID
 	persistedLen := s.persistedLen
 	s.transcriptMu.RUnlock()
-	messages, err := transcript.Messages(entries, leafID)
-	if err != nil {
-		return nil
-	}
+	messages := transcript.Messages(entries)
 	active := s.agent.Snapshot().Messages
 	if persistedLen < len(active) {
 		messages = append(messages, active[persistedLen:]...)
@@ -570,8 +530,7 @@ func (s *Session) Messages() []agent.AgentMessage {
 
 // Entries returns a detached snapshot of the durable session log.
 func (s *Session) Entries() []transcript.Entry {
-	entries, _ := s.snapshotTranscript()
-	return entries
+	return s.snapshotTranscript()
 }
 
 // Cwd returns the workspace root.
@@ -596,15 +555,15 @@ func (s *Session) SetPermissionPolicy(policy permission.Policy) {
 	s.authorizer.SetPolicy(policy)
 }
 
-func (s *Session) snapshotTranscript() ([]transcript.Entry, string) {
-	entries, leafID, _ := s.snapshotTranscriptState()
-	return entries, leafID
+func (s *Session) snapshotTranscript() []transcript.Entry {
+	entries, _ := s.snapshotTranscriptState()
+	return entries
 }
 
-func (s *Session) snapshotTranscriptState() ([]transcript.Entry, string, int) {
+func (s *Session) snapshotTranscriptState() ([]transcript.Entry, int) {
 	s.transcriptMu.RLock()
 	defer s.transcriptMu.RUnlock()
-	return append([]transcript.Entry(nil), s.entries...), s.leafID, s.persistedLen
+	return append([]transcript.Entry(nil), s.entries...), s.persistedLen
 }
 
 // buildSystemPrompt assembles the coding system prompt from the active tools'

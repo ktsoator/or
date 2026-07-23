@@ -162,7 +162,6 @@ func TestSessionCompactStoreFailureDoesNotInstallProjection(t *testing.T) {
 
 func seededTurns(count int) []transcript.Entry {
 	entries := make([]transcript.Entry, 0, count*2)
-	parent := ""
 	for index := 0; index < count; index++ {
 		messages := []agent.AgentMessage{
 			agent.UserMessage("request " + strings.Repeat("u", 120)),
@@ -172,9 +171,7 @@ func seededTurns(count int) []transcript.Entry {
 			}),
 		}
 		for _, message := range messages {
-			entry := transcript.NewMessage(parent, message)
-			entries = append(entries, entry)
-			parent = entry.ID
+			entries = append(entries, transcript.NewMessage(message))
 		}
 	}
 	return entries

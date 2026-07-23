@@ -23,16 +23,12 @@ type Prepared struct {
 // Prepare selects complete, oldest user turns for summarization. The retained
 // suffix always begins with a user message, so tool calls and results cannot be
 // separated from the turn that owns them.
-func Prepare(entries []transcript.Entry, leafID string, keepRecentTokens int64) (Prepared, error) {
-	path, err := transcript.BuildPath(entries, leafID)
-	if err != nil {
-		return Prepared{}, err
-	}
+func Prepare(entries []transcript.Entry, keepRecentTokens int64) (Prepared, error) {
 	if keepRecentTokens <= 0 {
 		return Prepared{}, fmt.Errorf("compaction: keep recent tokens must be positive")
 	}
 
-	active, previousSummary, err := activeMessageEntries(path)
+	active, previousSummary, err := activeMessageEntries(entries)
 	if err != nil {
 		return Prepared{}, err
 	}
@@ -73,7 +69,7 @@ func Prepare(entries []transcript.Entry, leafID string, keepRecentTokens int64) 
 	for _, entry := range active[:boundary] {
 		toSummarize = append(toSummarize, entry.Message)
 	}
-	contextMessages, err := transcript.BuildContext(entries, leafID)
+	contextMessages, err := transcript.BuildContext(entries)
 	if err != nil {
 		return Prepared{}, err
 	}

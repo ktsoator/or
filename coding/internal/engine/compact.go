@@ -57,7 +57,7 @@ func (s *Session) compactLocked(
 	if err := s.persistNew(ctx); err != nil {
 		return CompactionResult{}, err
 	}
-	entries, leafID := s.snapshotTranscript()
+	entries := s.snapshotTranscript()
 	keepRecent := defaultKeepRecentTokens
 	if state.Model.ContextWindow > 0 && state.Model.ContextWindow/4 < keepRecent {
 		keepRecent = state.Model.ContextWindow / 4
@@ -65,7 +65,7 @@ func (s *Session) compactLocked(
 	if keepRecent <= 0 {
 		keepRecent = defaultKeepRecentTokens
 	}
-	prepared, err := compaction.Prepare(entries, leafID, keepRecent)
+	prepared, err := compaction.Prepare(entries, keepRecent)
 	if err != nil {
 		return CompactionResult{}, err
 	}
@@ -96,7 +96,7 @@ func (s *Session) compactLocked(
 		return CompactionResult{}, err
 	}
 
-	entry := transcript.NewCompaction(leafID, transcript.Compaction{
+	entry := transcript.NewCompaction(transcript.Compaction{
 		Summary:           summary,
 		FirstKeptEntryID:  prepared.FirstKeptID,
 		TokensBefore:      prepared.TokensBefore,
@@ -108,7 +108,7 @@ func (s *Session) compactLocked(
 		ResponseTimestamp: response.Timestamp,
 	})
 	candidate := append(append([]transcript.Entry(nil), entries...), entry)
-	projected, err := transcript.BuildContext(candidate, entry.ID)
+	projected, err := transcript.BuildContext(candidate)
 	if err != nil {
 		return CompactionResult{}, err
 	}
@@ -125,7 +125,6 @@ func (s *Session) compactLocked(
 	s.agent.SetMessages(projected)
 	s.transcriptMu.Lock()
 	s.entries = candidate
-	s.leafID = entry.ID
 	s.usageStart = len(projected)
 	s.persistedLen = len(projected)
 	s.transcriptMu.Unlock()

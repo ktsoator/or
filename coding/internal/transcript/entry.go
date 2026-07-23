@@ -14,7 +14,7 @@ import (
 	"github.com/ktsoator/or/llm"
 )
 
-const CurrentVersion = 2
+const CurrentVersion = 3
 
 type EntryType string
 
@@ -24,7 +24,7 @@ const (
 	RunEntry        EntryType = "run"
 )
 
-// Header is the first line of a v2 session log.
+// Header is the first line of a session log.
 type Header struct {
 	Type    string `json:"type"`
 	Version int    `json:"version"`
@@ -32,11 +32,9 @@ type Header struct {
 
 func NewHeader() Header { return Header{Type: "session", Version: CurrentVersion} }
 
-// Entry is one node in the session history. ParentID makes the format ready for
-// branching while the first version of coding continues to append linearly.
+// Entry is one item in the session's linear, append-only history.
 type Entry struct {
 	ID         string
-	ParentID   string
 	Timestamp  time.Time
 	Type       EntryType
 	Message    agent.AgentMessage
@@ -71,30 +69,27 @@ type Compaction struct {
 	ResponseTimestamp time.Time `json:"responseTimestamp,omitempty"`
 }
 
-func NewMessage(parentID string, message agent.AgentMessage) Entry {
+func NewMessage(message agent.AgentMessage) Entry {
 	return Entry{
 		ID:        NewID(),
-		ParentID:  parentID,
 		Timestamp: time.Now().UTC(),
 		Type:      MessageEntry,
 		Message:   message,
 	}
 }
 
-func NewCompaction(parentID string, compact Compaction) Entry {
+func NewCompaction(compact Compaction) Entry {
 	return Entry{
 		ID:         NewID(),
-		ParentID:   parentID,
 		Timestamp:  time.Now().UTC(),
 		Type:       CompactionEntry,
 		Compaction: &compact,
 	}
 }
 
-func NewRun(parentID, firstEntryID string, startedAt, completedAt time.Time) Entry {
+func NewRun(firstEntryID string, startedAt, completedAt time.Time) Entry {
 	return Entry{
 		ID:        NewID(),
-		ParentID:  parentID,
 		Timestamp: completedAt.UTC(),
 		Type:      RunEntry,
 		Run: &Run{
@@ -157,14 +152,13 @@ func (e Entry) MarshalJSON() ([]byte, error) {
 	}
 	wire := struct {
 		ID         string          `json:"id"`
-		ParentID   string          `json:"parentId,omitempty"`
 		Timestamp  time.Time       `json:"timestamp"`
 		Type       EntryType       `json:"type"`
 		Message    json.RawMessage `json:"message,omitempty"`
 		Compaction *Compaction     `json:"compaction,omitempty"`
 		Run        *Run            `json:"run,omitempty"`
 	}{
-		ID: e.ID, ParentID: e.ParentID, Timestamp: e.Timestamp, Type: e.Type,
+		ID: e.ID, Timestamp: e.Timestamp, Type: e.Type,
 		Compaction: e.Compaction, Run: e.Run,
 	}
 	if e.Message != nil {
@@ -184,7 +178,6 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 	}
 	wire := struct {
 		ID         string          `json:"id"`
-		ParentID   string          `json:"parentId"`
 		Timestamp  time.Time       `json:"timestamp"`
 		Type       EntryType       `json:"type"`
 		Message    json.RawMessage `json:"message"`
@@ -195,7 +188,7 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	decoded := Entry{
-		ID: wire.ID, ParentID: wire.ParentID, Timestamp: wire.Timestamp,
+		ID: wire.ID, Timestamp: wire.Timestamp,
 		Type: wire.Type, Compaction: wire.Compaction, Run: wire.Run,
 	}
 	if len(wire.Message) > 0 && string(wire.Message) != "null" {
