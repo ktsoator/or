@@ -37,6 +37,7 @@ func (r *SessionTransports) New(sessionID string) conversation.Transport {
 		hub:       hub,
 		broker:    NewApprovalBroker(hub),
 		browser:   NewBrowserBroker(hub),
+		questions: NewQuestionBroker(hub),
 	}
 	r.mu.Lock()
 	previous := r.sessions[sessionID]
@@ -79,6 +80,7 @@ type sessionTransport struct {
 	hub       *Hub
 	broker    *ApprovalBroker
 	browser   *BrowserBroker
+	questions *QuestionBroker
 	closeOnce sync.Once
 }
 
@@ -120,6 +122,17 @@ func (t *sessionTransport) OpenBrowser(
 
 func (t *sessionTransport) InspectBrowser(ctx context.Context) (tools.BrowserInspectionResult, error) {
 	return t.browser.InspectBrowser(ctx)
+}
+
+func (t *sessionTransport) Ask(
+	ctx context.Context,
+	questions []tools.Question,
+) ([]tools.Answer, error) {
+	return t.questions.Ask(ctx, questions)
+}
+
+func (t *sessionTransport) HasPendingQuestion() bool {
+	return t.questions.HasPending()
 }
 
 func (t *sessionTransport) Close() {

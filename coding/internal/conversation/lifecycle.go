@@ -115,7 +115,7 @@ func (m *Manager) Delete(id string) error {
 		m.mu.Unlock()
 		return os.ErrNotExist
 	}
-	if runtime.running.Load() || runtime.transport.HasPendingApproval() {
+	if runtime.running.Load() || runtime.awaitingUser() {
 		m.mu.Unlock()
 		return ErrSessionActive
 	}
@@ -166,7 +166,7 @@ func (m *Manager) UpdateSettings(
 	if !ok {
 		return Summary{}, os.ErrNotExist
 	}
-	if runtime.running.Load() || runtime.transport.HasPendingApproval() {
+	if runtime.running.Load() || runtime.awaitingUser() {
 		return Summary{}, ErrSessionActive
 	}
 
@@ -201,7 +201,7 @@ func (m *Manager) UpdatePermissionMode(id string, mode permission.Mode) (Summary
 	if !ok {
 		return Summary{}, os.ErrNotExist
 	}
-	if runtime.running.Load() || runtime.transport.HasPendingApproval() {
+	if runtime.running.Load() || runtime.awaitingUser() {
 		return Summary{}, ErrSessionActive
 	}
 
