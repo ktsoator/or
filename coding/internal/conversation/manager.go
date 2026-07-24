@@ -209,7 +209,7 @@ func (m *Manager) handleSessionEvent(sessionID string, runtime *Runtime, ev engi
 		// Title generation is independent of the assistant run. Starting it
 		// here means an interrupted first response can still receive an AI title.
 		m.maybeGenerateTitle(runtime, ev.Text)
-		if queued, found := runtime.consumePending(ev.Text, ev.Images); found {
+		if queued, found := runtime.consumePending(ev.QueueHandle); found {
 			runtime.emit(MessageAccepted{
 				ID:       queued.ID,
 				Text:     ev.Text,

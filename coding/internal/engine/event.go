@@ -40,6 +40,9 @@ type Event struct {
 	Delta  string
 	Text   string
 	Images []llm.ImageContent
+	// QueueHandle identifies the queued user message represented by a
+	// UserMessageCompleted event. It is zero for an ordinary prompt.
+	QueueHandle QueueHandle
 	// FinalResponse distinguishes a user-visible completed reply from an
 	// assistant message that paused only to call tools.
 	FinalResponse bool
@@ -133,7 +136,15 @@ func projectAgentEvent(ev agent.AgentEvent) (Event, bool) {
 
 	case agent.MessageEnd:
 		if text, images, ok := eventUserMessage(ev.Message); ok {
-			return Event{Type: UserMessageCompleted, Text: text, Images: images}, true
+			projected := Event{
+				Type:   UserMessageCompleted,
+				Text:   text,
+				Images: images,
+			}
+			if handle, queued := agent.QueueHandleOf(ev.Message); queued {
+				projected.QueueHandle = QueueHandle{agent: handle}
+			}
+			return projected, true
 		}
 		assistant, ok := eventAssistantMessage(ev.Message)
 		if !ok {

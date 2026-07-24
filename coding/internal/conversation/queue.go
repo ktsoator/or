@@ -59,11 +59,11 @@ func (s *Runtime) Dequeue(id string) (found, removed bool) {
 	return false, false
 }
 
-func (s *Runtime) consumePending(text string, images []llm.ImageContent) (QueuedMessage, bool) {
+func (s *Runtime) consumePending(handle engine.QueueHandle) (QueuedMessage, bool) {
 	s.pendingMu.Lock()
 	defer s.pendingMu.Unlock()
 	for index, message := range s.pending {
-		if message.Text != text || !sameImages(message.Images, images) {
+		if message.Handle != handle {
 			continue
 		}
 		s.pending = append(s.pending[:index], s.pending[index+1:]...)
@@ -95,16 +95,4 @@ func (s *Runtime) cancelPending() []QueuedMessage {
 	cancelled := append([]QueuedMessage(nil), s.pending...)
 	s.pending = nil
 	return cancelled
-}
-
-func sameImages(left, right []llm.ImageContent) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for index := range left {
-		if left[index].MIMEType != right[index].MIMEType || left[index].Data != right[index].Data {
-			return false
-		}
-	}
-	return true
 }

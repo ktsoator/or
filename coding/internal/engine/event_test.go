@@ -1,9 +1,11 @@
 package engine
 
 import (
+	"context"
 	"testing"
 
 	"github.com/ktsoator/or/agent"
+	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -73,5 +75,37 @@ func TestProjectAgentEventProjectsToolInputLifecycle(t *testing.T) {
 				t.Fatalf("ToolArgs = %#v, want present %v", got.ToolArgs, tt.wantArgs)
 			}
 		})
+	}
+}
+
+func TestSessionProjectsQueuedUserMessageHandle(t *testing.T) {
+	session, err := New(context.Background(), Options{
+		Model:    llm.Model{Provider: "test", ID: "model"},
+		Tools:    []tools.Tool{},
+		StreamFn: fixedResponse("answer"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	handle := session.FollowUp("same content")
+	var userEvents []Event
+	session.Subscribe(func(event Event) {
+		if event.Type == UserMessageCompleted {
+			userEvents = append(userEvents, event)
+		}
+	})
+	if err := session.Prompt(context.Background(), "same content"); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(userEvents) != 2 {
+		t.Fatalf("user completion events = %#v, want initial and queued messages", userEvents)
+	}
+	if userEvents[0].QueueHandle != (QueueHandle{}) {
+		t.Fatalf("initial prompt handle = %#v, want zero", userEvents[0].QueueHandle)
+	}
+	if userEvents[1].QueueHandle != handle {
+		t.Fatalf("queued prompt handle = %#v, want %#v", userEvents[1].QueueHandle, handle)
 	}
 }

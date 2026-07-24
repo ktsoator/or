@@ -444,7 +444,8 @@ func (s *Session) activeRunState() (context.Context, time.Time, int) {
 	return s.runCtx, s.runStartedAt, s.runEntryStart
 }
 
-// QueueHandle identifies one message while it remains queued in this Session.
+// QueueHandle identifies one message submitted to this Session's queue. The
+// identity remains stable when the message enters the run.
 type QueueHandle struct {
 	agent agent.QueueHandle
 }
