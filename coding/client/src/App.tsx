@@ -48,6 +48,7 @@ import { SettingsPage, type SettingsSection } from './components/SettingsPage'
 import { SkillsPage } from './components/SkillsPage'
 import { WorkspacePickerDialog } from './components/WorkspacePickerDialog'
 import { WorkbenchPanel } from './components/WorkbenchPanel'
+import { SidebarToggleButton } from './components/SidebarToggleButton'
 import { useI18n } from './i18n'
 import { useSidebarLayout } from './useSidebarLayout'
 import { useWorkbenchLayout } from './useWorkbenchLayout'
@@ -147,6 +148,7 @@ export default function App() {
     resizing: workbenchResizing,
     maximized: workbenchMaximized,
     autoLayoutChanging: workbenchAutoLayoutChanging,
+    closing: workbenchClosing,
     resizeMinimum: workbenchResizeMinimum,
     resizeMaximum: workbenchResizeMaximum,
     resizeValue: workbenchResizeValue,
@@ -426,6 +428,28 @@ export default function App() {
     />
   )
 
+  const workbenchOwnsToggle =
+    workbenchOpen || workbenchClosing || workbenchAutoLayoutChanging
+  const workbenchToggleControl = (
+    <button
+      className="window-titlebar-control relative grid size-7 shrink-0 cursor-pointer place-items-center rounded-md text-stone-500 outline-none transition-colors duration-100 hover:bg-stone-200/75 hover:text-stone-950 focus-visible:ring-2 focus-visible:ring-stone-300"
+      data-testid="workbench-panel-toggle"
+      type="button"
+      title={workbenchOpen ? t('workbench.hide') : t('workbench.show')}
+      aria-label={workbenchOpen ? t('workbench.hide') : t('workbench.show')}
+      aria-expanded={workbenchOpen}
+      onClick={toggleWorkbench}
+    >
+      <PanelRight className="size-4" aria-hidden="true" />
+      {preview && !workbenchOpen && (
+        <span
+          className="absolute top-0.5 right-0.5 size-1.5 rounded-full border border-white bg-blue-500"
+          aria-hidden="true"
+        />
+      )}
+    </button>
+  )
+
   if (settingsOpen) {
     return (
       <SettingsPage
@@ -460,37 +484,6 @@ export default function App() {
           onClick={closeMobileSessions}
         />
       )}
-      <button
-        className="window-sidebar-toggle size-7 cursor-pointer place-items-center rounded-md text-stone-500 transition-colors duration-100 hover:bg-stone-200/75 hover:text-stone-950 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-stone-400"
-        data-testid="window-sidebar-toggle"
-        type="button"
-        title={sidebarCollapsed ? t('app.expandSidebar') : t('app.collapseSidebar')}
-        aria-label={sidebarCollapsed ? t('app.expandSidebar') : t('app.collapseSidebar')}
-        aria-expanded={!sidebarCollapsed}
-        onClick={toggleSidebar}
-      >
-        <PanelLeft className="size-4" aria-hidden="true" />
-      </button>
-      {!skillsOpen && (
-        <button
-          className="absolute top-2 right-2 z-[70] grid size-7 cursor-pointer place-items-center rounded-md text-stone-500 transition-colors duration-100 hover:bg-stone-200/75 hover:text-stone-950 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-stone-400"
-          data-testid="workbench-panel-toggle"
-          type="button"
-          title={workbenchOpen ? t('workbench.hide') : t('workbench.show')}
-          aria-label={workbenchOpen ? t('workbench.hide') : t('workbench.show')}
-          aria-expanded={workbenchOpen}
-          onClick={toggleWorkbench}
-        >
-          <PanelRight className="size-4" aria-hidden="true" />
-          {preview && !workbenchOpen && (
-            <span
-              className="absolute top-0.5 right-0.5 size-1.5 rounded-full border border-white bg-blue-500"
-              aria-hidden="true"
-            />
-          )}
-        </button>
-      )}
-
       <div
         className="sidebar-viewport relative z-50 min-h-0 min-w-0 overflow-hidden max-md:contents"
         data-testid="sidebar-viewport"
@@ -505,28 +498,27 @@ export default function App() {
           aria-hidden={sidebarCollapsed && !mobileSessionsOpen ? true : undefined}
           inert={sidebarCollapsed && !mobileSessionsOpen}
         >
-          <div className="app-sidebar-header window-drag-region relative h-16 w-full shrink-0 max-md:w-[17.5rem]">
-          <button
-            className={cn(
-              'sidebar-header-action sidebar-search-action absolute top-4 right-14 grid size-8 cursor-pointer place-items-center rounded-lg text-stone-500 transition-[opacity,color,background-color,transform] duration-100 ease-out motion-reduce:transition-none hover:bg-stone-200/75 hover:text-stone-950 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-stone-400',
-              sidebarCollapsed ? 'pointer-events-none opacity-0' : 'opacity-100',
-            )}
-            type="button"
-            title={t('app.searchSessions')}
-            aria-label={t('app.searchSessions')}
-          >
-            <Search className="size-4" aria-hidden="true" />
-          </button>
-          <button
-            className="sidebar-header-action sidebar-collapse-action absolute top-4 right-4 grid size-8 cursor-pointer place-items-center rounded-lg text-stone-500 transition-colors duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none hover:bg-stone-200/75 hover:text-stone-950"
-            type="button"
-            title={sidebarCollapsed ? t('app.expandSidebar') : t('app.collapseSidebar')}
-            aria-label={sidebarCollapsed ? t('app.expandSidebar') : t('app.collapseSidebar')}
-            aria-expanded={!sidebarCollapsed}
-            onClick={toggleSidebar}
-          >
-            <PanelLeft className="size-4" aria-hidden="true" />
-          </button>
+          <div className="app-sidebar-header window-titlebar relative h-16 w-full shrink-0 max-md:w-[17.5rem]">
+            <div className="window-titlebar-controls">
+              <button
+                className={cn(
+                  'sidebar-header-action sidebar-search-action absolute top-4 right-14 grid size-8 cursor-pointer place-items-center rounded-lg text-stone-500 transition-[opacity,color,background-color,transform] duration-100 ease-out motion-reduce:transition-none hover:bg-stone-200/75 hover:text-stone-950 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-stone-400',
+                  sidebarCollapsed ? 'pointer-events-none opacity-0' : 'opacity-100',
+                )}
+                type="button"
+                title={t('app.searchSessions')}
+                aria-label={t('app.searchSessions')}
+              >
+                <Search className="size-4" aria-hidden="true" />
+              </button>
+              {!sidebarCollapsed && (
+                <SidebarToggleButton
+                  expanded
+                  className="sidebar-header-action sidebar-collapse-action absolute top-4 right-4 motion-reduce:transition-none"
+                  onToggle={toggleSidebar}
+                />
+              )}
+            </div>
           </div>
 
         <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
@@ -752,28 +744,24 @@ export default function App() {
       >
         <header
           className={cn(
-            'conversation-header window-drag-region z-20 flex h-[45px] shrink-0 items-center gap-3 border-b border-stone-200/80 bg-white py-0 pr-12 pl-6 max-md:h-12 max-md:px-4 max-md:pr-12',
+            'conversation-header window-titlebar z-20 flex h-[45px] shrink-0 items-center gap-3 border-b border-stone-200/80 bg-white py-0 pr-2 pl-6 max-md:h-12 max-md:px-2 max-md:pl-4',
             sidebarCollapsed && 'sidebar-is-collapsed',
           )}
           data-testid="conversation-header"
         >
+          {sidebarCollapsed && (
+            <SidebarToggleButton
+              expanded={false}
+              className="desktop-sidebar-toggle hidden md:grid"
+              onToggle={expandSidebar}
+            />
+          )}
           <div
             className="conversation-title-group flex min-w-0 flex-1 select-none items-center gap-2.5"
             data-testid="conversation-title"
           >
-            {sidebarCollapsed && (
-              <button
-                className="desktop-sidebar-toggle hidden size-8 shrink-0 cursor-pointer place-items-center rounded-lg text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-950 md:grid"
-                type="button"
-                title={t('app.expandSidebar')}
-                aria-label={t('app.expandSidebar')}
-                onClick={expandSidebar}
-              >
-                <PanelLeft className="size-4" aria-hidden="true" />
-              </button>
-            )}
             <button
-              className="-ml-1 grid size-7 shrink-0 place-items-center rounded-md text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-900 md:hidden"
+              className="window-titlebar-control -ml-1 grid size-7 shrink-0 place-items-center rounded-md text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-900 md:hidden"
               type="button"
               title={t('app.sessions')}
               onClick={openMobileSessions}
@@ -805,6 +793,7 @@ export default function App() {
               </span>
             </div>
           </div>
+          {!workbenchOwnsToggle && workbenchToggleControl}
         </header>
 
         <main
@@ -860,11 +849,11 @@ export default function App() {
       <aside
         ref={workbenchViewportRef}
         className={cn(
-          'relative min-h-0 min-w-0 overflow-hidden bg-white transition-[visibility] duration-0 motion-reduce:delay-0',
+          'relative min-h-0 min-w-0 overflow-visible bg-white transition-[visibility] duration-0 motion-reduce:delay-0',
           workbenchOpen
             ? workbenchMaximized
               ? 'visible absolute inset-0 z-40 delay-0'
-              : 'visible absolute inset-0 z-40 border-l border-stone-200 delay-0 md:relative md:z-auto'
+              : 'visible absolute inset-0 z-40 delay-0 md:relative md:z-auto'
             : workbenchAutoLayoutChanging
               ? 'invisible hidden delay-0 md:block'
               : 'invisible hidden delay-[260ms] md:block',
@@ -875,7 +864,7 @@ export default function App() {
       >
         {workbenchOpen && !workbenchMaximized && (
           <div
-            className="group absolute inset-y-0 left-0 z-50 hidden w-1.5 touch-none cursor-col-resize outline-none md:block"
+            className="group absolute inset-y-0 -left-1.5 z-50 hidden w-1.5 touch-none cursor-col-resize outline-none md:block"
             data-testid="workbench-resize-handle"
             role="separator"
             aria-label={t('workbench.resize')}
@@ -892,33 +881,37 @@ export default function App() {
           >
             <span
               className={cn(
-                'absolute inset-y-0 left-0 w-px transition-colors group-hover:bg-stone-400/70 group-focus-visible:bg-stone-500/75',
-                workbenchResizing && 'bg-stone-500/75',
+                'absolute inset-y-0 right-0 w-px bg-stone-300/80 transition-colors group-hover:bg-stone-500/70 group-focus-visible:bg-stone-500/80',
+                workbenchResizing && 'bg-stone-500/80',
               )}
+              data-testid="workbench-divider-line"
               aria-hidden="true"
             />
           </div>
         )}
-        <WorkbenchPanel
-          open={workbenchOpen}
-          preview={workbenchPreview}
-          sessionID={workbenchPreviewOwnerID}
-          activatePreview={activateWorkbenchPreview}
-          conversation={secondaryThread}
-          models={models}
-          workspaces={workspaces}
-          maximized={workbenchMaximized}
-          creatingConversation={creating}
-          creationError={workbenchCreateError}
-          onCreateConversation={() => void createSessionInWorkbench()}
-          onDismissCreationError={() => setWorkbenchCreateError('')}
-          onCloseConversation={() => setSecondarySessionID(undefined)}
-          onConfigureModel={() => {
-            setSettingsSection('models')
-            setSettingsOpen(true)
-          }}
-          onToggleMaximized={toggleWorkbenchMaximized}
-        />
+        <div className="relative h-full min-h-0 min-w-0 overflow-hidden">
+          <WorkbenchPanel
+            open={workbenchOpen}
+            preview={workbenchPreview}
+            sessionID={workbenchPreviewOwnerID}
+            activatePreview={activateWorkbenchPreview}
+            conversation={secondaryThread}
+            models={models}
+            workspaces={workspaces}
+            maximized={workbenchMaximized}
+            creatingConversation={creating}
+            creationError={workbenchCreateError}
+            onCreateConversation={() => void createSessionInWorkbench()}
+            onDismissCreationError={() => setWorkbenchCreateError('')}
+            onCloseConversation={() => setSecondarySessionID(undefined)}
+            onConfigureModel={() => {
+              setSettingsSection('models')
+              setSettingsOpen(true)
+            }}
+            onToggleMaximized={toggleWorkbenchMaximized}
+            toggleControl={workbenchOwnsToggle ? workbenchToggleControl : undefined}
+          />
+        </div>
       </aside>
       </div>
       )}

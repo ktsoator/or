@@ -135,13 +135,22 @@ func TestOpenPreviewRejectsStoppedLocalServer(t *testing.T) {
 	}
 }
 
-func TestOpenPreviewRejectsExternalURL(t *testing.T) {
-	result, err := executePreview(t, `{"url":"https://example.com"}`)
+func TestOpenPreviewAcceptsExternalURLWithoutProbingIt(t *testing.T) {
+	const address = "https://example.invalid/search?q=coding#results"
+	result, err := executePreview(t, `{"url":"`+address+`","title":"Search"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Details != nil {
-		t.Fatalf("Details = %#v, want nil", result.Details)
+	details, ok := result.Details.(PreviewRequest)
+	if !ok || details.URL != address || details.Title != "Search" {
+		t.Fatalf("Details = %#v, want external PreviewRequest", result.Details)
+	}
+}
+
+func TestCheckPreviewStillRejectsExternalURL(t *testing.T) {
+	_, err := CheckPreview(context.Background(), "https://example.com")
+	if err == nil || !strings.Contains(err.Error(), "localhost") {
+		t.Fatalf("CheckPreview error = %v, want localhost restriction", err)
 	}
 }
 

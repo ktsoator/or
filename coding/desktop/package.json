@@ -1,0 +1,64 @@
+{
+  "name": "coding-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron desktop shell for Coding",
+  "author": "Kt <ktsoator@gmail.com>",
+  "main": "dist/main.js",
+  "scripts": {
+    "build:main": "tsc -p tsconfig.json",
+    "build:sidecar": "node scripts/build-sidecar.mjs",
+    "build:client": "bun run --cwd ../client build",
+    "build": "bun run build:client && bun run build:main && bun run build:sidecar",
+    "dev": "bun run build:main && bun run build:sidecar && electron . --dev",
+    "package": "bun run build && electron-builder",
+    "package:dir": "bun run build && electron-builder --dir"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "electron": "^43.0.0",
+    "electron-builder": "^26.0.12",
+    "typescript": "~6.0.2"
+  },
+  "build": {
+    "appId": "com.ktsoator.or.coding",
+    "productName": "Coding",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../client/dist",
+        "to": "client"
+      },
+      {
+        "from": "dist/sidecar",
+        "to": "bin"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "hardenedRuntime": true,
+      "icon": "build/appicon.png",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "category": "Development",
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    }
+  }
+}

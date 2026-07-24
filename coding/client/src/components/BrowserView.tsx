@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import {
   ArrowLeft,
   ArrowRight,
@@ -17,12 +17,18 @@ import { DropdownMenu } from 'radix-ui'
 import type { ModelOption, PreviewState, WorkspaceSummary } from '@/types'
 import type { SessionThread } from '@/useSession'
 import {
-  isLocalPreviewURL,
   normalizeBrowserAddress,
   workspaceFileURL,
   workspacePreviewURL,
 } from '@/lib/browser'
-import { openExternalURL } from '@/lib/desktop'
+import {
+  closeNativeBrowser,
+  goBackNativeBrowser,
+  goForwardNativeBrowser,
+  hasNativeBrowser,
+  openExternalURL,
+  type NativeBrowserState,
+} from '@/lib/desktop'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 import { BrowserSurface } from './BrowserSurface'
@@ -45,6 +51,10 @@ type BrowserTab = {
   navigation: number
   invalidAddress: boolean
   workspacePath?: string
+  loading: boolean
+  canGoBack: boolean
+  canGoForward: boolean
+  error?: string
 }
 
 function previewTabID(sessionID?: string): string {
@@ -70,6 +80,9 @@ function createBrowserTab(
     navigation: 0,
     invalidAddress: false,
     workspacePath,
+    loading: false,
+    canGoBack: false,
+    canGoForward: false,
   }
 }
 
@@ -86,7 +99,9 @@ export function BrowserView({
   onCreateConversation,
   onConfigureModel,
   maximized,
+  open,
   onToggleMaximized,
+  toggleControl,
 }: {
   preview?: PreviewState
   sessionID?: string
@@ -100,7 +115,9 @@ export function BrowserView({
   onCreateConversation: () => void
   onConfigureModel: () => void
   maximized: boolean
+  open: boolean
   onToggleMaximized: () => void
+  toggleControl?: ReactNode
 }) {
   const { t } = useI18n()
   const initialTabRef = useRef<BrowserTab | undefined>(undefined)
@@ -128,17 +145,12 @@ export function BrowserView({
   const conversationTabID = conversation ? `conversation:${conversation.session.id}` : undefined
   const conversationActive = activeTabID === conversationTabID
   const activeTab = tabs.find((tab) => tab.id === activeTabID) ?? tabs[0]
-  const activeTitle = activeTab
-    ? activeTab.title ||
-      activeTab.workspacePath?.split('/').at(-1) ||
-      addressTitle(activeTab.url) ||
-      t('preview.newTab')
-    : ''
   const activeExternalURL = activeTab
     ? activeTab.workspacePath
       ? workspaceFileURL(activeTab.workspacePath)
       : activeTab.url
     : ''
+  const nativeBrowser = hasNativeBrowser()
 
   const updateTab = (tabID: string, values: Partial<BrowserTab>) => {
     setTabs((current) =>
@@ -205,7 +217,6 @@ export function BrowserView({
       updateTab(activeTab.id, { invalidAddress: true })
       return
     }
-    if (!isLocalPreviewURL(next)) openExternalURL(next)
     updateTab(activeTab.id, {
       title: undefined,
       address: next,
@@ -224,6 +235,7 @@ export function BrowserView({
   }
 
   const closeTab = (tabID: string) => {
+    void closeNativeBrowser(tabID)
     if (tabs.length === 1 && !conversation) {
       onCloseTab()
       return
@@ -244,7 +256,7 @@ export function BrowserView({
       aria-label={t('view.browser')}
     >
       <div
-        className="window-drag-region flex h-[45px] shrink-0 select-none items-center bg-white px-2.5 pr-11"
+        className="window-titlebar flex h-[45px] shrink-0 select-none items-center bg-white px-2"
         data-testid="browser-titlebar"
       >
         <div
@@ -348,6 +360,7 @@ export function BrowserView({
           onOpenBrowser={newTab}
           creatingConversation={creatingConversation}
           onCreateConversation={onCreateConversation}
+          toggleControl={toggleControl}
         />
       </div>
 
@@ -362,20 +375,22 @@ export function BrowserView({
         <>
           <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-stone-200 bg-white px-2.5">
             <button
-              className="grid size-7 place-items-center rounded-md text-stone-300"
+              className="grid size-7 cursor-pointer place-items-center rounded-md text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-900 focus-visible:outline-2 focus-visible:outline-stone-400 disabled:cursor-default disabled:text-stone-300 disabled:hover:bg-transparent"
               type="button"
               title={t('preview.back')}
               aria-label={t('preview.back')}
-              disabled
+              disabled={!nativeBrowser || !activeTab.canGoBack}
+              onClick={() => void goBackNativeBrowser(activeTab.id)}
             >
               <ArrowLeft className="size-4" aria-hidden="true" />
             </button>
             <button
-              className="grid size-7 place-items-center rounded-md text-stone-300"
+              className="grid size-7 cursor-pointer place-items-center rounded-md text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-900 focus-visible:outline-2 focus-visible:outline-stone-400 disabled:cursor-default disabled:text-stone-300 disabled:hover:bg-transparent"
               type="button"
               title={t('preview.forward')}
               aria-label={t('preview.forward')}
-              disabled
+              disabled={!nativeBrowser || !activeTab.canGoForward}
+              onClick={() => void goForwardNativeBrowser(activeTab.id)}
             >
               <ArrowRight className="size-4" aria-hidden="true" />
             </button>
@@ -385,12 +400,14 @@ export function BrowserView({
               title={t('preview.refresh')}
               aria-label={t('preview.refresh')}
               disabled={
-                !activeTab.url ||
-                (!activeTab.workspacePath && !isLocalPreviewURL(activeTab.url))
+                !nativeBrowser || !activeTab.url
               }
               onClick={reload}
             >
-              <RefreshCw className="size-3.5" aria-hidden="true" />
+              <RefreshCw
+                className={cn('size-3.5', activeTab.loading && 'animate-spin')}
+                aria-hidden="true"
+              />
             </button>
             <form className="mx-1 min-w-0 flex-1" onSubmit={navigate}>
               <input
@@ -425,13 +442,26 @@ export function BrowserView({
           </div>
 
           <BrowserSurface
-            key={`${activeTab.id}-${activeTab.navigation}-${activeTab.url}`}
+            key={activeTab.id}
+            tabID={activeTab.id}
             navigation={activeTab.navigation}
-            title={activeTitle}
             url={activeTab.url}
+            visible={open}
             workspaceFile={Boolean(activeTab.workspacePath)}
             onResolveURL={(url) => updateTab(activeTab.id, { address: url, url })}
             onRetry={reload}
+            onState={(state: NativeBrowserState) => {
+              updateTab(activeTab.id, {
+                title: state.title || activeTab.title,
+                loading: state.loading,
+                canGoBack: state.canGoBack,
+                canGoForward: state.canGoForward,
+                error: state.error,
+                ...(activeTab.workspacePath || !state.url
+                  ? {}
+                  : { address: state.url, url: state.url }),
+              })
+            }}
           />
         </>
       ) : null}
@@ -445,18 +475,20 @@ export function WorkbenchHeaderActions({
   onOpenBrowser,
   creatingConversation,
   onCreateConversation,
+  toggleControl,
 }: {
   maximized: boolean
   onToggleMaximized: () => void
   onOpenBrowser: () => void
   creatingConversation: boolean
   onCreateConversation: () => void
+  toggleControl?: ReactNode
 }) {
   const { t } = useI18n()
   const ExpandIcon = maximized ? Minimize2 : Maximize2
 
   return (
-    <div className="ml-1 flex shrink-0 items-center gap-0.5">
+    <div className="window-titlebar-controls ml-1 flex h-[44px] shrink-0 items-center gap-0.5 self-start">
       <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild>
           <button
@@ -498,6 +530,7 @@ export function WorkbenchHeaderActions({
       >
         <ExpandIcon className="size-3.5" aria-hidden="true" />
       </button>
+      {toggleControl}
     </div>
   )
 }

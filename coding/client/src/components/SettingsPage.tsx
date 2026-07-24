@@ -116,7 +116,7 @@ export function SettingsPage({
 
   return (
     <div className="settings-page relative grid h-full min-h-0 grid-cols-[16rem_minmax(0,1fr)] overflow-hidden bg-white max-md:grid-cols-1 max-md:grid-rows-[auto_minmax(0,1fr)]">
-      <div className="desktop-titlebar-drag-region" aria-hidden="true" />
+      <div className="window-titlebar-drag-surface" aria-hidden="true" />
       <aside className="settings-sidebar flex min-h-0 flex-col border-r border-stone-200/80 bg-[#fbfbfa] px-3 py-4 max-md:border-r-0 max-md:border-b max-md:px-3 max-md:py-2.5">
         <button
           className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-[10px] px-2.5 text-[0.84375rem] font-normal text-stone-500 outline-none transition-colors hover:bg-stone-200/65 hover:text-stone-900 focus-visible:ring-2 focus-visible:ring-stone-300 max-md:w-fit"

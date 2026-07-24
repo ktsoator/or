@@ -1,5 +1,43 @@
 import { expect, test, type Page } from '@playwright/test'
 
+type NativeBrowserInput = {
+  tabID: string
+  url: string
+  bounds: { x: number; y: number; width: number; height: number }
+  navigation: number
+  workspacePreview: boolean
+}
+
+type NativeBrowserState = {
+  tabID: string
+  url: string
+  title: string
+  loading: boolean
+  canGoBack: boolean
+  canGoForward: boolean
+  error?: string
+}
+
+type NativeBrowserRecord = NativeBrowserInput & {
+  visible: boolean
+  state?: NativeBrowserState
+}
+
+async function nativeBrowserView(
+  page: Page,
+  tabID: string,
+): Promise<NativeBrowserRecord | undefined> {
+  return page.evaluate(
+    (id) =>
+      (
+        window as Window & {
+          __browserViews?: Record<string, NativeBrowserRecord>
+        }
+      ).__browserViews?.[id],
+    tabID,
+  )
+}
+
 const models = {
   models: [
     {
@@ -25,6 +63,7 @@ async function openDesktopClient(
     secondarySession?: boolean
     secondaryHistoryEvents?: unknown[]
     modelName?: string
+    nativeDirectory?: string
   } = {},
 ) {
   const requests: Array<{ method: string; path: string; body?: unknown }> = []
@@ -65,21 +104,95 @@ async function openDesktopClient(
   let sessionCreated = Boolean(options.existingSession)
   let workbenchSessionCreated = false
 
-  await page.addInitScript(() => {
+  await page.addInitScript(({ nativeDirectory }) => {
+    type BrowserTestWindow = Window & {
+      __browserViews?: Record<string, NativeBrowserRecord>
+      __browserActions?: Array<{ action: string; tabID: string }>
+      __emitBrowserState?: (state: NativeBrowserState) => void
+    }
+    const browserWindow = window as BrowserTestWindow
+    const browserListeners = new Set<(state: NativeBrowserState) => void>()
+    const browserViews: Record<string, NativeBrowserRecord> = {}
+    const browserActions: Array<{ action: string; tabID: string }> = []
+    browserWindow.__browserViews = browserViews
+    browserWindow.__browserActions = browserActions
+    browserWindow.__emitBrowserState = (state) => {
+      const view = browserViews[state.tabID]
+      if (view) {
+        view.url = state.url
+        view.state = state
+      }
+      for (const listener of browserListeners) listener(state)
+    }
+
     Object.defineProperty(navigator, 'platform', {
       configurable: true,
       get: () => 'MacIntel',
     })
-    Object.defineProperty(window, 'runtime', {
+    Object.defineProperty(window, 'codingDesktop', {
       configurable: true,
       value: {
-        WindowToggleMaximise() {
-          const testWindow = window as Window & { __maximiseCount?: number }
-          testWindow.__maximiseCount = (testWindow.__maximiseCount ?? 0) + 1
-        },
-        BrowserOpenURL(url: string) {
+        platform: 'darwin',
+        openExternalURL(url: string) {
           const testWindow = window as Window & { __openedURL?: string }
           testWindow.__openedURL = url
+        },
+        chooseDirectory(initialPath: string, title: string) {
+          const testWindow = window as Window & {
+            __directoryArgs?: { initialPath: string; title: string }
+          }
+          testWindow.__directoryArgs = { initialPath, title }
+          return Promise.resolve(nativeDirectory ?? '')
+        },
+        browser: {
+          show(input: NativeBrowserInput) {
+            const url = new URL(input.url, window.location.href).href
+            const previousState = browserViews[input.tabID]?.state
+            browserViews[input.tabID] = {
+              ...input,
+              url,
+              visible: true,
+              state: previousState?.url === url ? previousState : undefined,
+            }
+            window.setTimeout(() => {
+              browserWindow.__emitBrowserState?.(
+                browserViews[input.tabID]?.state ?? {
+                  tabID: input.tabID,
+                  url,
+                  title: '',
+                  loading: false,
+                  canGoBack: false,
+                  canGoForward: false,
+                },
+              )
+            }, 0)
+            return Promise.resolve()
+          },
+          hide(tabID: string) {
+            if (browserViews[tabID]) browserViews[tabID].visible = false
+            return Promise.resolve()
+          },
+          close(tabID: string) {
+            delete browserViews[tabID]
+            browserActions.push({ action: 'close', tabID })
+            return Promise.resolve()
+          },
+          goBack(tabID: string) {
+            browserActions.push({ action: 'back', tabID })
+            return Promise.resolve()
+          },
+          goForward(tabID: string) {
+            browserActions.push({ action: 'forward', tabID })
+            return Promise.resolve()
+          },
+          reload(tabID: string) {
+            browserActions.push({ action: 'reload', tabID })
+            return Promise.resolve()
+          },
+          onState(listener: (state: NativeBrowserState) => void) {
+            browserListeners.add(listener)
+            return () => browserListeners.delete(listener)
+          },
         },
       },
     })
@@ -125,7 +238,7 @@ async function openDesktopClient(
           ?.onmessage?.(new MessageEvent('message', { data: JSON.stringify(payload) }))
       },
     })
-  })
+  }, { nativeDirectory: options.nativeDirectory })
 
   await page.route('**/api/**', async (route) => {
     const request = route.request()
@@ -265,7 +378,7 @@ async function openDesktopClient(
   })
 
   await page.goto('/')
-  await expect(page.locator('html')).toHaveClass(/wails-macos/)
+  await expect(page.locator('html')).toHaveClass(/desktop-macos/)
   await expect(page.getByTestId('conversation-header')).toBeVisible()
   return requests
 }
@@ -274,7 +387,7 @@ test('sidebar collapse keeps the titlebar control stable and clears the divider'
   page,
 }) => {
   await openDesktopClient(page)
-  const toggle = page.getByTestId('window-sidebar-toggle')
+  const toggle = page.getByTestId('sidebar-panel-toggle')
   const sidebar = page.getByTestId('sidebar-viewport')
   const header = page.getByTestId('conversation-header')
   const title = page.getByTestId('conversation-title')
@@ -286,6 +399,9 @@ test('sidebar collapse keeps the titlebar control stable and clears the divider'
 
   const before = await toggle.boundingBox()
   expect(before).not.toBeNull()
+  await expect.poll(() =>
+    toggle.evaluate((element) => element.closest('.app-sidebar-header') !== null),
+  ).toBe(true)
 
   await toggle.click()
   await page.waitForTimeout(60)
@@ -293,6 +409,9 @@ test('sidebar collapse keeps the titlebar control stable and clears the divider'
   expect(during).not.toBeNull()
   expect(during!.x).toBeCloseTo(before!.x, 1)
   expect(during!.y).toBeCloseTo(before!.y, 1)
+  await expect.poll(() =>
+    toggle.evaluate((element) => element.closest('[data-testid="conversation-header"]') !== null),
+  ).toBe(true)
 
   await expect.poll(() => sidebar.evaluate((element) => element.getBoundingClientRect().width)).toBeLessThan(1)
 
@@ -302,6 +421,9 @@ test('sidebar collapse keeps the titlebar control stable and clears the divider'
   expect(titleBox).not.toBeNull()
   expect(after!.x).toBeCloseTo(before!.x, 1)
   expect(after!.y).toBeCloseTo(before!.y, 1)
+  await expect.poll(() =>
+    toggle.evaluate((element) => element.closest('[data-testid="conversation-header"]') !== null),
+  ).toBe(true)
   expect(titleBox!.x).toBeGreaterThanOrEqual(after!.x + after!.width + 10)
 
   const borderColor = await header.evaluate(
@@ -313,14 +435,24 @@ test('sidebar collapse keeps the titlebar control stable and clears the divider'
   await expect.poll(() => sidebar.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(200)
 })
 
-test('double-clicking a draggable header toggles window maximisation once', async ({ page }) => {
+test('desktop headers expose native drag regions while controls remain interactive', async ({ page }) => {
   await openDesktopClient(page)
   const header = page.getByTestId('conversation-header')
-  await header.dblclick({ position: { x: 720, y: 20 } })
-
+  const sidebarControl = page.getByTestId('sidebar-panel-toggle')
+  const workbenchToggle = page.getByTestId('workbench-panel-toggle')
+  await expect(header).toHaveCSS('-webkit-app-region', 'drag')
+  await expect(sidebarControl).toHaveCSS('-webkit-app-region', 'no-drag')
+  await expect(workbenchToggle).toHaveCSS('-webkit-app-region', 'no-drag')
   await expect.poll(() =>
-    page.evaluate(() => (window as Window & { __maximiseCount?: number }).__maximiseCount ?? 0),
-  ).toBe(1)
+    sidebarControl.evaluate((element) => element.closest('.window-titlebar') !== null),
+  ).toBe(true)
+  await expect.poll(() =>
+    workbenchToggle.evaluate((element) => element.closest('.window-titlebar') !== null),
+  ).toBe(true)
+  await workbenchToggle.click()
+  await expect(workbenchToggle).toHaveAccessibleName('Hide workbench')
+  await workbenchToggle.click()
+  await expect(workbenchToggle).toHaveAccessibleName('Show workbench')
 })
 
 test('desktop external links open in the system browser without leaving Coding', async ({ page }) => {
@@ -399,10 +531,17 @@ test('workbench opens before a preview and launches Browser without hiding Chat'
   const address = page.getByRole('textbox', { name: 'Preview address' })
   await address.fill('127.0.0.1:4310')
   await address.press('Enter')
-  await expect(page.getByTestId('browser-frame')).toHaveAttribute(
-    'src',
+  await expect.poll(async () => (await nativeBrowserView(page, 'tab-1'))?.url).toBe(
     'http://127.0.0.1:4310/',
   )
+  const localhostView = await nativeBrowserView(page, 'tab-1')
+  expect(localhostView).toMatchObject({
+    navigation: 1,
+    workspacePreview: false,
+    visible: true,
+  })
+  expect(localhostView?.bounds.width).toBeGreaterThan(0)
+  expect(localhostView?.bounds.height).toBeGreaterThan(0)
   await expect.poll(
     () => requests.filter((request) => request.path === '/api/preview/check').length,
   ).toBe(1)
@@ -428,36 +567,79 @@ test('workbench opens before a preview and launches Browser without hiding Chat'
     'aria-selected',
     'true',
   )
-  await expect(page.getByTestId('browser-frame')).toHaveCount(0)
+  await expect.poll(async () => nativeBrowserView(page, 'tab-2')).toBeUndefined()
   await address.fill('https://example.com')
   await address.press('Enter')
-  await expect.poll(() =>
-    page.evaluate(() => (window as Window & { __openedURL?: string }).__openedURL),
-  ).toBe('https://example.com/')
-  await expect(page.getByTestId('browser-frame')).toHaveCount(0)
-  await expect(page.getByTestId('external-page')).toContainText('example.com')
-  await expect(
-    page.getByTestId('external-page').getByRole('button', { name: 'Open in browser' }),
-  ).toBeVisible()
+  await expect.poll(async () => (await nativeBrowserView(page, 'tab-2'))?.url).toBe(
+    'https://example.com/',
+  )
+  expect(await nativeBrowserView(page, 'tab-2')).toMatchObject({
+    workspacePreview: false,
+    visible: true,
+  })
+  expect(
+    await page.evaluate(() => (window as Window & { __openedURL?: string }).__openedURL),
+  ).toBeUndefined()
   await expect(page.getByRole('tab', { name: 'example.com' })).toHaveAttribute(
     'aria-selected',
     'true',
   )
   expect(requests.filter((request) => request.path === '/api/preview/check')).toHaveLength(1)
-
-  await originalTab.click()
-  await expect(originalTab).toHaveAttribute('aria-selected', 'true')
-  await expect(page.getByTestId('browser-frame')).toHaveAttribute(
-    'src',
-    'http://127.0.0.1:4310/',
+  await expect(page.getByTestId('native-browser-surface')).toHaveAttribute(
+    'data-status',
+    'ready',
   )
-  await page.getByRole('button', { name: 'Close tab: 127.0.0.1:4310' }).click()
-  await expect(page.getByRole('tab')).toHaveCount(1)
-  await expect(page.getByRole('tab', { name: 'example.com' })).toHaveAttribute(
+
+  await page.evaluate(() => {
+    const emit = (
+      window as Window & {
+        __emitBrowserState?: (state: NativeBrowserState) => void
+      }
+    ).__emitBrowserState
+    emit?.({
+      tabID: 'tab-2',
+      url: 'https://example.com/search',
+      title: 'Example',
+      loading: false,
+      canGoBack: true,
+      canGoForward: false,
+    })
+  })
+  await expect(address).toHaveValue('https://example.com/search')
+  await expect(page.getByRole('tab', { name: 'Example' })).toHaveAttribute(
     'aria-selected',
     'true',
   )
-  await page.getByRole('button', { name: 'Close tab: example.com' }).click()
+  const back = page.getByRole('button', { name: 'Back' })
+  await expect(back).toBeEnabled()
+  await back.click()
+  await expect.poll(() =>
+    page.evaluate(() =>
+      (
+        window as Window & {
+          __browserActions?: Array<{ action: string; tabID: string }>
+        }
+      ).__browserActions?.some(
+        (entry) => entry.action === 'back' && entry.tabID === 'tab-2',
+      ),
+    ),
+  ).toBe(true)
+
+  await originalTab.click()
+  await expect(originalTab).toHaveAttribute('aria-selected', 'true')
+  await expect.poll(async () => (await nativeBrowserView(page, 'tab-1'))?.visible).toBe(true)
+  await expect.poll(async () => (await nativeBrowserView(page, 'tab-2'))?.visible).toBe(false)
+  await page.getByRole('button', { name: 'Close tab: 127.0.0.1:4310' }).click()
+  await expect(page.getByRole('tab')).toHaveCount(1)
+  await expect(page.getByRole('tab', { name: 'Example' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  await page.getByRole('button', { name: 'Open in browser' }).click()
+  await expect.poll(() =>
+    page.evaluate(() => (window as Window & { __openedURL?: string }).__openedURL),
+  ).toBe('https://example.com/search')
+  await page.getByRole('button', { name: 'Close tab: Example' }).click()
   await expect(page.getByTestId('browser-view')).toHaveCount(0)
   await expect(workbench.getByTestId('workbench-empty')).toContainText('No open views')
   await workbenchToggle.click()
@@ -689,10 +871,15 @@ test('a restored right-side preview stays available without taking focus from Ch
   await expect(previewTab).toHaveAttribute('aria-selected', 'false')
 
   await previewTab.click()
-  await expect(workbench.getByTestId('browser-frame')).toHaveAttribute(
-    'src',
-    '/api/sessions/secondary-session/preview/web/index.html',
-  )
+  await expect.poll(async () =>
+    (await nativeBrowserView(page, 'preview:secondary-session'))?.url.endsWith(
+      '/api/sessions/secondary-session/preview/web/index.html',
+    ),
+  ).toBe(true)
+  expect(await nativeBrowserView(page, 'preview:secondary-session')).toMatchObject({
+    workspacePreview: true,
+    visible: true,
+  })
 })
 
 test('main and right-side chats keep separate preview tabs and workspace routes', async ({
@@ -762,19 +949,22 @@ test('main and right-side chats keep separate preview tabs and workspace routes'
   await expect(workbench.getByRole('textbox', { name: 'Preview address' })).toHaveValue(
     '/tmp/secondary-session/web/index.html',
   )
-  await expect
-    .poll(() =>
-      requests.filter(
-        (request) =>
-          request.path === '/api/sessions/secondary-session/preview/web/index.html',
-      ).length,
-    )
-    .toBeGreaterThan(0)
+  await expect.poll(async () =>
+    (await nativeBrowserView(page, 'preview:secondary-session'))?.url.endsWith(
+      '/api/sessions/secondary-session/preview/web/index.html',
+    ),
+  ).toBe(true)
+  expect(await nativeBrowserView(page, 'preview:secondary-session')).toMatchObject({
+    workspacePreview: true,
+    visible: true,
+  })
+  expect(await nativeBrowserView(page, 'preview:test-session')).toMatchObject({
+    workspacePreview: true,
+    visible: false,
+  })
   expect(
-    requests.filter(
-      (request) => request.path === '/api/sessions/test-session/preview/web/index.html',
-    ).length,
-  ).toBeGreaterThan(0)
+    requests.filter((request) => request.path.includes('/preview/web/index.html')),
+  ).toHaveLength(0)
 })
 
 test('workbench divider resizes the panel without moving the corner control', async ({
@@ -786,15 +976,26 @@ test('workbench divider resizes the panel without moving the corner control', as
 
   const viewport = page.getByTestId('workbench-viewport')
   const handle = page.getByTestId('workbench-resize-handle')
+  const divider = page.getByTestId('workbench-divider-line')
   await expect(handle).toBeVisible()
+  await expect.poll(() => divider.evaluate((element) => {
+    const color = getComputedStyle(element).backgroundColor
+    return color !== 'transparent' && color !== 'rgba(0, 0, 0, 0)'
+  })).toBe(true)
   await expect.poll(async () => (await viewport.boundingBox())?.width).toBeGreaterThan(490)
   const before = await viewport.boundingBox()
   const handleBefore = await handle.boundingBox()
+  const dividerBefore = await divider.boundingBox()
   const toggleBefore = await toggle.boundingBox()
   expect(before).not.toBeNull()
   expect(handleBefore).not.toBeNull()
+  expect(dividerBefore).not.toBeNull()
   expect(toggleBefore).not.toBeNull()
-  expect(Math.abs(handleBefore!.x - before!.x)).toBeLessThanOrEqual(1)
+  expect(Math.abs(handleBefore!.x + handleBefore!.width - before!.x)).toBeLessThanOrEqual(1)
+  expect(dividerBefore!.height).toBeCloseTo(before!.height, 0)
+  expect(
+    Math.abs(dividerBefore!.x + dividerBefore!.width - before!.x),
+  ).toBeLessThanOrEqual(1)
 
   await page.mouse.move(handleBefore!.x + 2, handleBefore!.y + handleBefore!.height / 2)
   await page.mouse.down()
@@ -813,7 +1014,9 @@ test('workbench divider resizes the panel without moving the corner control', as
   expect(afterDrag).not.toBeNull()
   expect(handleAfterDrag).not.toBeNull()
   expect(toggleAfterDrag).not.toBeNull()
-  expect(Math.abs(handleAfterDrag!.x - afterDrag!.x)).toBeLessThanOrEqual(1)
+  expect(
+    Math.abs(handleAfterDrag!.x + handleAfterDrag!.width - afterDrag!.x),
+  ).toBeLessThanOrEqual(1)
   expect(toggleAfterDrag!.x).toBeCloseTo(toggleBefore!.x, 1)
   expect(toggleAfterDrag!.y).toBeCloseTo(toggleBefore!.y, 1)
 
@@ -990,7 +1193,15 @@ test('AI preview tool opens Browser in the workbench beside Chat', async ({ page
   })
 
   await expect(page.getByTestId('browser-view')).toBeVisible()
-  await expect(page.getByTestId('browser-frame')).toHaveAttribute('src', 'http://127.0.0.1:4310')
+  await expect.poll(async () =>
+    (await nativeBrowserView(page, 'preview:test-session'))?.url,
+  ).toBe('http://127.0.0.1:4310/')
+  await expect.poll(async () =>
+    (await nativeBrowserView(page, 'preview:test-session'))?.visible,
+  ).toBe(true)
+  expect(await nativeBrowserView(page, 'preview:test-session')).toMatchObject({
+    workspacePreview: false,
+  })
   await expect(page.getByRole('main')).toBeVisible()
   await expect.poll(async () => {
     const chatBox = await page.getByRole('main').boundingBox()
@@ -1025,19 +1236,72 @@ test('AI preview tool opens Browser in the workbench beside Chat', async ({ page
   await page.getByRole('button', { name: 'Open in browser' }).click()
   await expect.poll(() =>
     page.evaluate(() => (window as Window & { __openedURL?: string }).__openedURL),
-  ).toBe('http://127.0.0.1:4310')
+  ).toBe('http://127.0.0.1:4310/')
 
   await page.getByTestId('workbench-panel-toggle').click()
   await expect(page.getByTestId('browser-view')).toBeHidden()
+  await expect.poll(async () =>
+    (await nativeBrowserView(page, 'preview:test-session'))?.visible,
+  ).toBe(false)
   await expect(page.getByRole('main')).toBeVisible()
   await expect(page.getByTestId('workbench-panel-toggle')).toHaveAccessibleName('Show workbench')
 
   await page.getByTestId('workbench-panel-toggle').click()
   await expect(page.getByTestId('browser-view')).toBeVisible()
+  await expect.poll(async () =>
+    (await nativeBrowserView(page, 'preview:test-session'))?.visible,
+  ).toBe(true)
   await page.getByTestId('workbench-panel-toggle').click()
   await expect(page.getByTestId('workbench-panel')).toBeHidden()
   await expect(page.getByRole('main')).toBeVisible()
   await expect(page.getByTestId('workbench-panel-toggle')).toBeVisible()
+})
+
+test('AI preview tool opens a public website inside the native Browser', async ({ page }) => {
+  const requests = await openDesktopClient(page, { existingSession: true })
+  await expect.poll(() =>
+    page.evaluate(
+      () =>
+        (window as Window & { __eventSources?: unknown[] }).__eventSources?.length ?? 0,
+    ),
+  ).toBeGreaterThan(0)
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'tool_end',
+      id: 'public-preview',
+      tool: 'open_preview',
+      result: 'Opened preview at https://www.google.com',
+      preview: { url: 'https://www.google.com', title: 'Google' },
+    })
+  })
+
+  await expect(page.getByRole('tab', { name: 'Google' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  await expect.poll(async () =>
+    (await nativeBrowserView(page, 'preview:test-session'))?.url,
+  ).toBe('https://www.google.com/')
+  expect(await nativeBrowserView(page, 'preview:test-session')).toMatchObject({
+    workspacePreview: false,
+    visible: true,
+  })
+  const divider = page.getByTestId('workbench-divider-line')
+  await expect.poll(async () => {
+    const dividerBox = await divider.boundingBox()
+    const nativeView = await nativeBrowserView(page, 'preview:test-session')
+    if (!dividerBox || !nativeView) return Number.NEGATIVE_INFINITY
+    return nativeView.bounds.x - (dividerBox.x + dividerBox.width)
+  }).toBeGreaterThanOrEqual(0)
+  await expect(page.getByRole('textbox', { name: 'Preview address' })).toHaveValue(
+    'https://www.google.com/',
+  )
+  expect(requests.filter((request) => request.path === '/api/preview/check')).toHaveLength(0)
+  expect(
+    await page.evaluate(() => (window as Window & { __openedURL?: string }).__openedURL),
+  ).toBeUndefined()
 })
 
 test('streaming tool input shows write progress without duplicating the tool row', async ({
@@ -1155,15 +1419,17 @@ test('AI preview opens workspace HTML directly without starting or probing a ser
     })
   })
 
-  const frame = page.getByTestId('browser-frame')
-  await expect(frame).toHaveAttribute(
-    'src',
-    '/api/sessions/test-session/preview/web/index.html',
-  )
-  await expect(frame).toHaveAttribute(
-    'sandbox',
-    'allow-downloads allow-forms allow-modals allow-popups allow-scripts',
-  )
+  await expect.poll(async () =>
+    (await nativeBrowserView(page, 'preview:test-session'))?.url.endsWith(
+      '/api/sessions/test-session/preview/web/index.html',
+    ),
+  ).toBe(true)
+  const previewView = await nativeBrowserView(page, 'preview:test-session')
+  expect(previewView).toMatchObject({
+    navigation: 0,
+    workspacePreview: true,
+    visible: true,
+  })
   await expect(page.getByRole('textbox', { name: 'Preview address' })).toHaveValue(
     '/tmp/test-session/web/index.html',
   )
@@ -1179,7 +1445,7 @@ test('AI preview opens workspace HTML directly without starting or probing a ser
       (request) =>
         request.path === '/api/sessions/test-session/preview/web/index.html',
     ),
-  ).toHaveLength(1)
+  ).toHaveLength(0)
 
   await page.evaluate(() => {
     const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
@@ -1199,15 +1465,12 @@ test('AI preview opens workspace HTML directly without starting or probing a ser
       },
     })
   })
-  await expect.poll(() =>
-    requests.filter(
-      (request) =>
-        request.path === '/api/sessions/test-session/preview/web/index.html',
-    ).length,
-  ).toBe(2)
+  await expect.poll(async () =>
+    (await nativeBrowserView(page, 'preview:test-session'))?.navigation,
+  ).toBe(1)
 })
 
-test('Browser replaces a failed iframe load with a retry state', async ({ page }) => {
+test('Browser replaces a failed local preview probe with a retry state', async ({ page }) => {
   const requests = await openDesktopClient(page, { existingSession: true })
   await page.getByTestId('workbench-panel-toggle').click()
   await page.getByTestId('workbench-panel').getByRole('button', { name: 'Add view' }).click()
@@ -1217,10 +1480,8 @@ test('Browser replaces a failed iframe load with a retry state', async ({ page }
   await address.fill('127.0.0.1:4311')
   await address.press('Enter')
 
-  const frame = page.getByTestId('browser-frame')
-  await expect(frame).toHaveAttribute('src', 'http://127.0.0.1:4311/')
-
   await expect(page.getByRole('alert')).toContainText('Preview unavailable')
+  expect(await nativeBrowserView(page, 'tab-1')).toBeUndefined()
   await expect(page.getByRole('alert')).toContainText(
     'Check that the local server is running, then try again.',
   )
@@ -1456,25 +1717,7 @@ test('failed first send keeps the draft and shows the server error', async ({ pa
 })
 
 test('desktop project browsing uses the native directory picker', async ({ page }) => {
-  await page.addInitScript(() => {
-    Object.defineProperty(window, 'go', {
-      configurable: true,
-      value: {
-        main: {
-          DesktopBridge: {
-            ChooseDirectory(initialPath: string, title: string) {
-              const testWindow = window as Window & {
-                __directoryArgs?: { initialPath: string; title: string }
-              }
-              testWindow.__directoryArgs = { initialPath, title }
-              return Promise.resolve('/tmp/native-project')
-            },
-          },
-        },
-      },
-    })
-  })
-  const requests = await openDesktopClient(page)
+  const requests = await openDesktopClient(page, { nativeDirectory: '/tmp/native-project' })
 
   const projectPicker = page.getByRole('button', { name: 'Choose project' })
   await expect(projectPicker).toHaveClass(/text-stone-500/)

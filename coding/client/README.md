@@ -2,7 +2,8 @@
 
 The React application consumes the Coding product through relative `/api`
 HTTP and SSE routes. Vite proxies them to `http://localhost:8787` for standalone
-browser development; the Wails shell mounts the same routes in-process.
+browser development. The Electron sidecar serves the production build and API
+from one authenticated loopback origin.
 
 ## Development
 
@@ -28,6 +29,12 @@ bun run dev
 Open `http://localhost:5173`.
 
 Set `CODING_API_PROXY` when the local API uses a different address.
+
+The right-side Browser has no web iframe fallback. It requires the Electron
+preload bridge and renders public sites, localhost apps and workspace HTML in a
+sandboxed `WebContentsView`. Use `bun run dev` from `coding/desktop` when working
+on that feature; standalone Vite mode remains useful for the rest of the React
+client.
 
 Run the desktop-shell UI regression tests with a locally installed Chrome:
 

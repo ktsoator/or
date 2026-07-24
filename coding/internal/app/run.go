@@ -28,7 +28,7 @@ type Runtime struct {
 }
 
 // New assembles one product runtime without choosing how its HTTP handler is
-// hosted. The CLI uses a TCP server; Wails mounts it behind its asset server.
+// hosted. The CLI and authenticated Electron sidecar provide separate hosts.
 func New(ctx context.Context, cfg config.Config) (*Runtime, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	sessionDir := filepath.Join(cfg.DataDir, "sessions")

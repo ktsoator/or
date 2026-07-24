@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { CircleAlert, PanelTopDashed, X } from 'lucide-react'
 import type { ModelOption, PreviewState, WorkspaceSummary } from '@/types'
 import type { SessionThread } from '@/useSession'
@@ -24,6 +24,7 @@ export function WorkbenchPanel({
   onCloseConversation,
   onConfigureModel,
   onToggleMaximized,
+  toggleControl,
 }: {
   open: boolean
   preview?: PreviewState
@@ -40,6 +41,7 @@ export function WorkbenchPanel({
   onCloseConversation: () => void
   onConfigureModel: () => void
   onToggleMaximized: () => void
+  toggleControl?: ReactNode
 }) {
   const { t } = useI18n()
   const [mode, setMode] = useState<WorkbenchMode>(
@@ -53,11 +55,11 @@ export function WorkbenchPanel({
   return (
     <section
       className={cn(
-        'relative h-full min-h-0 bg-white transition-[opacity,transform] duration-[220ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none [contain:layout_paint] md:absolute md:inset-y-0 md:right-0',
+        'relative h-full min-h-0 bg-white transition-opacity duration-[220ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none [contain:layout_paint] md:absolute md:inset-y-0 md:right-0',
         maximized ? 'md:w-full' : 'md:w-[var(--workbench-expanded-width)]',
         open
-          ? 'translate-x-0 opacity-100 delay-[40ms]'
-          : 'translate-x-2 opacity-0 delay-0',
+          ? 'opacity-100 delay-[40ms]'
+          : 'opacity-0 delay-0',
       )}
       data-testid="workbench-panel"
       aria-label={t('workbench.title')}
@@ -75,8 +77,10 @@ export function WorkbenchPanel({
           onCloseConversation={onCloseConversation}
           onConfigureModel={onConfigureModel}
           onCreateConversation={onCreateConversation}
+          open={open}
           maximized={maximized}
           onToggleMaximized={onToggleMaximized}
+          toggleControl={toggleControl}
         />
       ) : (
         <WorkbenchLauncher
@@ -85,6 +89,7 @@ export function WorkbenchPanel({
           onCreateConversation={onCreateConversation}
           onToggleMaximized={onToggleMaximized}
           onOpenBrowser={() => setMode('browser')}
+          toggleControl={toggleControl}
         />
       )}
       {creationError && (
@@ -117,19 +122,21 @@ function WorkbenchLauncher({
   onCreateConversation,
   onToggleMaximized,
   onOpenBrowser,
+  toggleControl,
 }: {
   maximized: boolean
   creatingConversation: boolean
   onCreateConversation: () => void
   onToggleMaximized: () => void
   onOpenBrowser: () => void
+  toggleControl?: ReactNode
 }) {
   const { t } = useI18n()
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div
-        className="window-drag-region flex h-[45px] shrink-0 items-center justify-end bg-white px-2.5 pr-11"
+        className="window-titlebar flex h-[45px] shrink-0 items-center justify-end bg-white px-2"
         data-testid="workbench-titlebar"
       >
         <WorkbenchHeaderActions
@@ -138,6 +145,7 @@ function WorkbenchLauncher({
           onCreateConversation={onCreateConversation}
           onToggleMaximized={onToggleMaximized}
           onOpenBrowser={onOpenBrowser}
+          toggleControl={toggleControl}
         />
       </div>
       <div className="grid min-h-0 flex-1 place-items-center px-8 pb-[5vh]">

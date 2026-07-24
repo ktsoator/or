@@ -127,16 +127,18 @@ Usage:
 }
 
 var openPreviewText = toolText{
-	description: `Open a workspace HTML file or local web application in Coding's built-in Browser view.
+	description: `Open a web page, workspace HTML file, or local web application in Coding's built-in Browser view.
 
 Usage:
+- For a public website, pass its complete http or https URL. Public URLs open directly in the Browser view and are not fetched by the agent runtime.
 - For a static HTML page, pass its absolute workspace path directly. Workspace-relative paths and file:// URLs inside the workspace are also accepted. Do not start a server for static HTML.
 - For an application that requires a runtime or dev server, url must be a complete http or https URL on localhost, 127.0.0.1, ::1, or a wildcard loopback listener such as 0.0.0.0.
 - Start required long-lived development servers with bash run_in_background, then use bash_output to confirm the server is running before opening its URL.
-- Use this when a web interface is ready for the user to inspect. Do not call it for API servers, test runners, or links on the public internet.
+- Use this when the user asks to open a website or when a web interface is ready for inspection. Do not call it for API servers or test runners.
 - title is optional and should be a short name for the page.`,
-	snippet: "open_preview — open a workspace HTML file or running local web app in Coding's Browser view",
+	snippet: "open_preview — open a website, workspace HTML file, or local web app in Coding's Browser view",
 	guidelines: []string{
+		"When the user asks to open a public website, pass its complete HTTP(S) URL to `open_preview`.",
 		"Preview static HTML by passing its absolute workspace path to `open_preview`; do not start a server unless the app requires a runtime.",
 		"After starting a required local app server and confirming its URL, call `open_preview` so the user can inspect it instead of only printing the URL.",
 	},

@@ -18,7 +18,7 @@ import (
 )
 
 type openPreviewArgs struct {
-	URL   string `json:"url" jsonschema:"description=An absolute workspace HTML path or local HTTP(S) URL to open in Coding's Browser view,minLength=1"`
+	URL   string `json:"url" jsonschema:"description=An HTTP(S) URL or absolute workspace HTML path to open in Coding's Browser view,minLength=1"`
 	Title string `json:"title,omitempty" jsonschema:"description=A short title for the preview"`
 }
 
@@ -33,7 +33,7 @@ type PreviewRequest struct {
 }
 
 // OpenPreview returns a product tool that asks a connected Coding client to
-// display a local web application. The tool does not open a browser itself;
+// display a web page or workspace HTML document. The tool does not open a browser itself;
 // its structured result travels over the session's existing tool event stream.
 func OpenPreview(root string) Tool {
 	def := llm.MustTool[openPreviewArgs]("open_preview", openPreviewText.description)
@@ -70,7 +70,10 @@ func OpenPreview(root string) Tool {
 func resolvePreviewRequest(ctx context.Context, root, raw string) (PreviewRequest, error) {
 	input := strings.TrimSpace(raw)
 	if strings.HasPrefix(strings.ToLower(input), "http://") || strings.HasPrefix(strings.ToLower(input), "https://") {
-		normalized, err := CheckPreview(ctx, input)
+		normalized, err := normalizeWebURL(input)
+		if err == nil && isLocalPreviewURL(normalized) {
+			normalized, err = CheckPreview(ctx, normalized)
+		}
 		return PreviewRequest{URL: normalized}, err
 	}
 
@@ -87,7 +90,7 @@ func resolvePreviewRequest(ctx context.Context, root, raw string) (PreviewReques
 
 func previewInputPath(input string) (string, error) {
 	if input == "" {
-		return "", fmt.Errorf("provide a workspace HTML path or local URL")
+		return "", fmt.Errorf("provide a workspace HTML path or HTTP(S) URL")
 	}
 	if !strings.HasPrefix(strings.ToLower(input), "file:") {
 		if strings.Contains(input, "://") {
@@ -228,16 +231,13 @@ func probePreviewURL(ctx context.Context, address string) error {
 }
 
 func normalizePreviewURL(raw string) (string, error) {
-	parsed, err := url.ParseRequestURI(strings.TrimSpace(raw))
-	if err != nil || parsed.Host == "" {
-		return "", fmt.Errorf("provide a complete local URL such as http://localhost:3000")
+	normalized, err := normalizeWebURL(raw)
+	if err != nil {
+		return "", err
 	}
-	parsed.Scheme = strings.ToLower(parsed.Scheme)
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return "", fmt.Errorf("preview URL must use http or https")
-	}
-	if parsed.User != nil {
-		return "", fmt.Errorf("preview URL cannot include credentials")
+	parsed, err := url.Parse(normalized)
+	if err != nil {
+		return "", fmt.Errorf("invalid preview URL")
 	}
 
 	hostname := strings.ToLower(strings.TrimSuffix(parsed.Hostname(), "."))
@@ -262,4 +262,32 @@ func normalizePreviewURL(raw string) (string, error) {
 		}
 	}
 	return parsed.String(), nil
+}
+
+func normalizeWebURL(raw string) (string, error) {
+	parsed, err := url.ParseRequestURI(strings.TrimSpace(raw))
+	if err != nil || parsed.Host == "" {
+		return "", fmt.Errorf("provide a complete URL such as https://example.com")
+	}
+	parsed.Scheme = strings.ToLower(parsed.Scheme)
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "", fmt.Errorf("preview URL must use http or https")
+	}
+	if parsed.User != nil {
+		return "", fmt.Errorf("preview URL cannot include credentials")
+	}
+	return parsed.String(), nil
+}
+
+func isLocalPreviewURL(raw string) bool {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSuffix(parsed.Hostname(), ".")) {
+	case "localhost", "127.0.0.1", "::1", "0.0.0.0", "::":
+		return true
+	default:
+		return false
+	}
 }

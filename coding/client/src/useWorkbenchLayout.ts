@@ -29,6 +29,8 @@ type UseWorkbenchLayoutOptions = {
   secondaryPreviewOpen: boolean
 }
 
+const WORKBENCH_CLOSE_TRANSITION_MS = 260
+
 export function useWorkbenchLayout({
   enabled,
   activeSessionID,
@@ -61,6 +63,7 @@ export function useWorkbenchLayout({
   }>({})
   const autoCollapsedRef = useRef(false)
   const autoLayoutFrameRef = useRef<number | undefined>(undefined)
+  const closeTransitionTimerRef = useRef<number | undefined>(undefined)
 
   const [open, setOpenState] = useState(false)
   const [previewSessionID, setPreviewSessionID] = useState<string>()
@@ -68,9 +71,18 @@ export function useWorkbenchLayout({
   const [resizing, setResizing] = useState(false)
   const [maximized, setMaximized] = useState(false)
   const [autoLayoutChanging, setAutoLayoutChanging] = useState(false)
+  const [closing, setClosing] = useState(false)
 
   const setOpen = useCallback((nextOpen: boolean) => {
-    if (!nextOpen) setMaximized(false)
+    if (nextOpen) {
+      if (closeTransitionTimerRef.current !== undefined) {
+        window.clearTimeout(closeTransitionTimerRef.current)
+        closeTransitionTimerRef.current = undefined
+      }
+      setClosing(false)
+    } else {
+      setMaximized(false)
+    }
     setOpenState(nextOpen)
   }, [])
 
@@ -82,6 +94,14 @@ export function useWorkbenchLayout({
   const toggle = useCallback(() => {
     autoCollapsedRef.current = false
     if (open) {
+      setClosing(true)
+      if (closeTransitionTimerRef.current !== undefined) {
+        window.clearTimeout(closeTransitionTimerRef.current)
+      }
+      closeTransitionTimerRef.current = window.setTimeout(() => {
+        closeTransitionTimerRef.current = undefined
+        setClosing(false)
+      }, WORKBENCH_CLOSE_TRANSITION_MS)
       setOpen(false)
       return
     }
@@ -104,6 +124,9 @@ export function useWorkbenchLayout({
     return () => {
       if (autoLayoutFrameRef.current !== undefined) {
         cancelAnimationFrame(autoLayoutFrameRef.current)
+      }
+      if (closeTransitionTimerRef.current !== undefined) {
+        window.clearTimeout(closeTransitionTimerRef.current)
       }
     }
   }, [])
@@ -294,6 +317,7 @@ export function useWorkbenchLayout({
     resizing,
     maximized,
     autoLayoutChanging,
+    closing,
     resizeMinimum: Math.round(resizeBounds.minimum),
     resizeMaximum: Math.round(resizeBounds.maximum),
     resizeValue: Math.round(width ?? layoutWidth * DEFAULT_WORKBENCH_RATIO),

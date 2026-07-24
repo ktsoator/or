@@ -1,9 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
-import { CircleAlert, ExternalLink, Globe2, LoaderCircle, RefreshCw } from 'lucide-react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { CircleAlert, LoaderCircle, RefreshCw } from 'lucide-react'
 import { apiURL } from '@/api'
 import { useI18n } from '@/i18n'
 import { isLocalPreviewURL } from '@/lib/browser'
-import { openExternalURL } from '@/lib/desktop'
+import {
+  hasNativeBrowser,
+  hideNativeBrowser,
+  onNativeBrowserState,
+  showNativeBrowser,
+  type NativeBrowserState,
+} from '@/lib/desktop'
 
 type SurfaceStatus = 'idle' | 'loading' | 'ready' | 'failed'
 const previewProbeRequests = new Map<string, Promise<string>>()
@@ -34,120 +40,149 @@ function probeLocalPreview(url: string, navigation: number): Promise<string> {
   return request
 }
 
-function addressHost(address: string): string {
-  try {
-    return new URL(address).host
-  } catch {
-    return address
-  }
-}
-
 export function BrowserSurface({
+  tabID,
   navigation,
   onResolveURL,
   onRetry,
-  title,
+  onState,
   url,
+  visible,
   workspaceFile = false,
 }: {
+  tabID: string
   navigation: number
   onResolveURL: (url: string) => void
   onRetry: () => void
-  title: string
+  onState: (state: NativeBrowserState) => void
   url: string
+  visible: boolean
   workspaceFile?: boolean
 }) {
   const { t } = useI18n()
-  const local = workspaceFile || isLocalPreviewURL(url)
-  const [status, setStatus] = useState<SurfaceStatus>(url && local ? 'loading' : 'idle')
-  const probePassedRef = useRef(false)
-  const frameLoadedRef = useRef(false)
-  const timeoutRef = useRef<number | undefined>(undefined)
+  const surfaceRef = useRef<HTMLDivElement>(null)
   const onResolveURLRef = useRef(onResolveURL)
+  const onStateRef = useRef(onState)
+  const [resolvedURL, setResolvedURL] = useState(
+    workspaceFile || !isLocalPreviewURL(url) ? url : '',
+  )
+  const [status, setStatus] = useState<SurfaceStatus>(url ? 'loading' : 'idle')
+  const [error, setError] = useState('')
+  const nativeAvailable = hasNativeBrowser()
 
   useEffect(() => {
     onResolveURLRef.current = onResolveURL
-  }, [onResolveURL])
+    onStateRef.current = onState
+  }, [onResolveURL, onState])
 
   useEffect(() => {
-    window.clearTimeout(timeoutRef.current)
-    probePassedRef.current = false
-    frameLoadedRef.current = false
-    if (!url || !local) {
+    if (!url) {
+      setResolvedURL('')
       setStatus('idle')
+      setError('')
+      return
+    }
+    if (!nativeAvailable) {
+      setResolvedURL('')
+      setStatus('failed')
+      setError('Native browser is unavailable')
+      return
+    }
+    if (workspaceFile || !isLocalPreviewURL(url)) {
+      setResolvedURL(url)
+      setStatus('loading')
+      setError('')
       return
     }
 
-    setStatus('loading')
     let active = true
-    timeoutRef.current = window.setTimeout(() => {
-      setStatus('failed')
-    }, 6000)
-
-    if (workspaceFile) {
-      probePassedRef.current = true
-      if (frameLoadedRef.current) {
-        window.clearTimeout(timeoutRef.current)
-        setStatus('ready')
-      }
-      return () => {
-        active = false
-        window.clearTimeout(timeoutRef.current)
-      }
-    }
-
+    setResolvedURL('')
+    setStatus('loading')
+    setError('')
     void probeLocalPreview(url, navigation)
-      .then((resolvedURL) => {
+      .then((nextURL) => {
         if (!active) return
-        probePassedRef.current = true
-        if (resolvedURL !== url) onResolveURLRef.current(resolvedURL)
-        if (frameLoadedRef.current) {
-          window.clearTimeout(timeoutRef.current)
-          setStatus('ready')
-        }
+        if (nextURL !== url) onResolveURLRef.current(nextURL)
+        setResolvedURL(nextURL)
       })
       .catch(() => {
         if (!active) return
-        window.clearTimeout(timeoutRef.current)
         setStatus('failed')
+        setError('preview unavailable')
       })
-
     return () => {
       active = false
-      window.clearTimeout(timeoutRef.current)
     }
-  }, [local, navigation, url, workspaceFile])
+  }, [nativeAvailable, navigation, url, workspaceFile])
 
-  if (!url) return <div className="min-h-0 flex-1 bg-white" />
+  useEffect(() => onNativeBrowserState((state) => {
+    if (state.tabID !== tabID) return
+    onStateRef.current(state)
+    if (state.error) {
+      setStatus('failed')
+      setError(state.error)
+      void hideNativeBrowser(tabID)
+      return
+    }
+    setError('')
+    setStatus(state.loading ? 'loading' : 'ready')
+  }), [tabID])
 
-  if (!local) {
-    return (
-      <div
-        className="grid min-h-0 flex-1 place-items-center bg-white px-8 pb-[4vh]"
-        data-testid="external-page"
-      >
-        <div className="flex max-w-[20rem] flex-col items-center text-center">
-          <Globe2 className="size-5 text-stone-400" aria-hidden="true" />
-          <p className="mt-3 max-w-full truncate text-[0.875rem] font-medium text-stone-800">
-            {addressHost(url)}
-          </p>
-          <button
-            className="mt-4 inline-flex h-8 cursor-pointer items-center gap-2 rounded-md border border-stone-200 bg-white px-3 text-[0.8125rem] font-medium text-stone-700 transition-colors hover:bg-stone-50 hover:text-stone-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-400"
-            type="button"
-            onClick={() => openExternalURL(url)}
-          >
-            <ExternalLink className="size-3.5" aria-hidden="true" />
-            {t('preview.openExternal')}
-          </button>
-        </div>
-      </div>
-    )
-  }
+  useLayoutEffect(() => {
+    const surface = surfaceRef.current
+    if (!surface || !nativeAvailable || !visible || !resolvedURL) {
+      void hideNativeBrowser(tabID)
+      return
+    }
+
+    let active = true
+    const sync = () => {
+      if (!active) return
+      const bounds = surface.getBoundingClientRect()
+      if (bounds.width < 1 || bounds.height < 1) {
+        void hideNativeBrowser(tabID)
+        return
+      }
+      void showNativeBrowser({
+        tabID,
+        url: resolvedURL,
+        navigation,
+        workspacePreview: workspaceFile,
+        bounds: {
+          x: bounds.x,
+          y: bounds.y,
+          width: bounds.width,
+          height: bounds.height,
+        },
+      }).catch((reason: unknown) => {
+        if (!active) return
+        setStatus('failed')
+        setError(reason instanceof Error ? reason.message : String(reason))
+        void hideNativeBrowser(tabID)
+      })
+    }
+    const observer = new ResizeObserver(sync)
+    observer.observe(surface)
+    window.addEventListener('resize', sync)
+    sync()
+    return () => {
+      active = false
+      observer.disconnect()
+      window.removeEventListener('resize', sync)
+      void hideNativeBrowser(tabID)
+    }
+  }, [nativeAvailable, navigation, resolvedURL, tabID, visible, workspaceFile])
 
   return (
-    <div className="relative min-h-0 flex-1 bg-white">
+    <div
+      ref={surfaceRef}
+      className="relative min-h-0 flex-1 bg-white"
+      data-testid="native-browser-surface"
+      data-status={status}
+      title={error || undefined}
+    >
       {status === 'loading' && (
-        <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center bg-white">
+        <div className="pointer-events-none absolute inset-0 grid place-items-center bg-white">
           <div className="flex items-center gap-2 text-[0.8125rem] text-stone-400" role="status">
             <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
             {t('preview.loading')}
@@ -155,7 +190,7 @@ export function BrowserSurface({
         </div>
       )}
       {status === 'failed' && (
-        <div className="absolute inset-0 z-10 grid place-items-center bg-white px-8" role="alert">
+        <div className="absolute inset-0 grid place-items-center bg-white px-8" role="alert">
           <div className="flex max-w-[19rem] flex-col items-center text-center">
             <CircleAlert className="size-5 text-stone-400" aria-hidden="true" />
             <p className="mt-3 text-[0.875rem] font-medium text-stone-800">
@@ -175,29 +210,6 @@ export function BrowserSurface({
           </div>
         </div>
       )}
-      <iframe
-        className="h-full w-full border-0 bg-white"
-        data-testid="browser-frame"
-        src={url}
-        title={title}
-        sandbox={
-          workspaceFile
-            ? 'allow-downloads allow-forms allow-modals allow-popups allow-scripts'
-            : 'allow-downloads allow-forms allow-modals allow-popups allow-same-origin allow-scripts'
-        }
-        allow="clipboard-read; clipboard-write"
-        onLoad={() => {
-          frameLoadedRef.current = true
-          if (probePassedRef.current) {
-            window.clearTimeout(timeoutRef.current)
-            setStatus('ready')
-          }
-        }}
-        onError={() => {
-          window.clearTimeout(timeoutRef.current)
-          setStatus('failed')
-        }}
-      />
     </div>
   )
 }

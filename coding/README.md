@@ -8,7 +8,7 @@ packages are product implementation details and are not a public SDK.
 ```text
 coding/
 ├── client/                 React client
-├── desktop/                Wails desktop shell
+├── desktop/                Electron desktop shell
 ├── cmd/coding/             Standalone API entry point
 └── internal/
     ├── app/                Composition root and process startup
@@ -42,29 +42,35 @@ import it. Coding must not depend on `harness`.
 
 ## Desktop
 
-The Wails shell embeds the existing React build and mounts the same HTTP/SSE
-handler at `/api`. Production builds do not open a localhost port.
+Electron supervises a dedicated Go sidecar on a random loopback port. The
+sidecar serves both the React build and `/api`, so browser and desktop clients
+keep the same relative HTTP/SSE contract. Every request requires a per-launch
+HttpOnly session cookie installed by Electron before the first navigation.
 
-Install the pinned Wails v2 CLI once:
-
-```sh
-go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
-```
+The right-side Browser is backed entirely by Electron `WebContentsView`; there
+is no iframe fallback. Public HTTP(S) pages and localhost apps use a persistent
+browser session. Workspace HTML previews use an isolated in-memory session whose
+desktop cookie and Coding API access are restricted to that session's preview
+route. All browser views run sandboxed without Node.js integration, and browser
+permissions are denied by default.
 
 Run the desktop app in development:
 
 ```sh
 cd coding/desktop
-wails dev
+bun install
+bun run dev
 ```
 
-Build the macOS application:
+Build an unpacked application for the current platform:
 
 ```sh
 cd coding/desktop
-wails build
-open build/bin/Coding.app
+bun run package:dir
 ```
+
+Use `bun run package` to create the configured macOS, Windows or Linux
+distributable under `coding/desktop/release`.
 
 The desktop and standalone shells share provider settings, sessions and
 transcripts under `~/.or/coding`. Set `OR_DATA_DIR` to use another location.

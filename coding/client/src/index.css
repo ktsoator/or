@@ -38,76 +38,72 @@
 
 /* The desktop shell extends web content into the macOS title bar. Keep the
    native traffic lights while making the product header the window chrome. */
-.wails-macos .window-drag-region,
-.wails-macos .desktop-titlebar-drag-region {
-  --wails-draggable: drag;
+.desktop-macos .window-titlebar,
+.desktop-macos .window-titlebar-drag-surface {
+  -webkit-app-region: drag;
 }
 
-.wails-macos .window-drag-region button,
-.wails-macos .window-drag-region a,
-.wails-macos .window-drag-region input,
-.wails-macos .window-drag-region textarea,
-.wails-macos .window-drag-region select {
-  --wails-draggable: no-drag;
+/* Native hit testing follows DOM ancestry, not visual z-index. Controls must
+   live inside their titlebar and explicitly subtract their own hit area. */
+.window-titlebar {
+  position: relative;
 }
 
-.wails-macos .app-sidebar-header {
+.desktop-macos .window-titlebar-controls,
+.desktop-macos .window-titlebar-control,
+.desktop-macos .window-titlebar :is(button, a, input, textarea, select) {
+  -webkit-app-region: no-drag;
+}
+
+.desktop-macos .app-sidebar-header {
   height: 5.75rem;
 }
 
-.wails-macos .app-sidebar-header .sidebar-header-action {
+.desktop-macos .app-sidebar-header .sidebar-header-action {
   top: 2.75rem;
 }
 
-.wails-macos .app-sidebar-header .sidebar-search-action {
+.desktop-macos .app-sidebar-header .sidebar-search-action {
   right: 1rem;
 }
 
-.wails-macos .app-sidebar-header .sidebar-collapse-action {
+.desktop-macos .app-sidebar-header .sidebar-collapse-action {
   top: 0.6875rem;
   right: auto;
   left: 5.75rem;
-  display: none;
+  display: grid;
 }
 
-.wails-macos .conversation-header.sidebar-is-collapsed,
-.wails-macos .skills-header.sidebar-is-collapsed {
+.desktop-macos .conversation-header.sidebar-is-collapsed,
+.desktop-macos .skills-header.sidebar-is-collapsed {
   padding-left: 8.5rem;
   border-bottom-color: transparent;
 }
 
-.wails-macos .conversation-header,
-.wails-macos .skills-header {
+.desktop-macos .conversation-header,
+.desktop-macos .skills-header {
   transition: padding-left 180ms cubic-bezier(0.2, 0, 0, 1);
 }
 
-.wails-macos .conversation-title-group {
+.desktop-macos .conversation-title-group {
   transform: translateY(0.1875rem);
 }
 
-.window-sidebar-toggle {
-  display: none;
-}
-
-.wails-macos .desktop-sidebar-toggle {
-  display: none;
-}
-
 @media (min-width: 768px) {
-  .wails-macos .window-sidebar-toggle {
-    position: absolute;
-    top: 0.8125rem;
-    left: 5.875rem;
+  .desktop-macos .desktop-sidebar-toggle {
+    position: fixed;
+    top: 0.6875rem;
+    left: 5.75rem;
     z-index: 70;
     display: grid;
   }
 }
 
-.desktop-titlebar-drag-region {
+.window-titlebar-drag-surface {
   display: none;
 }
 
-.wails-macos .desktop-titlebar-drag-region {
+.desktop-macos .window-titlebar-drag-surface {
   position: absolute;
   inset: 0 0 auto;
   z-index: 30;
@@ -115,7 +111,7 @@
   height: 1.75rem;
 }
 
-.wails-macos .settings-sidebar {
+.desktop-macos .settings-sidebar {
   padding-top: 2.75rem;
 }
 
