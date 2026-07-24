@@ -108,7 +108,7 @@ func (m *Manager) reserveCompact(id string) (*sessionRuntime, error) {
 	if !ok {
 		return nil, os.ErrNotExist
 	}
-	if runtime.transport.HasPendingApproval() || !runtime.running.CompareAndSwap(false, true) {
+	if runtime.awaitingUser() || !runtime.running.CompareAndSwap(false, true) {
 		return nil, ErrSessionActive
 	}
 	runtime.live.Store(true)

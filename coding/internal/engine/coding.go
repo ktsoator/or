@@ -55,6 +55,10 @@ type Options struct {
 	// Browser delivers open_preview commands to the product shell and waits for
 	// a terminal navigation acknowledgement. Nil makes the tool fail closed.
 	Browser tools.BrowserController
+	// Asker puts a multiple-choice question to the user and blocks until they
+	// answer. Nil advertises no question tool at all, so a session with nobody
+	// at the keyboard never sees one it cannot use.
+	Asker tools.Asker
 	// Store persists the transcript and seeds it on construction. Nil disables
 	// persistence.
 	Store transcript.Store
@@ -161,6 +165,11 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		AgentTool: dynamicSkills.Tool(),
 		AccessFor: tools.InternalAccess,
 	})
+	// The question tool needs a surface that can reach the user, which only the
+	// product shell has. A session without one advertises no question tool.
+	if opts.Asker != nil {
+		toolSet = upsertTool(toolSet, tools.AskUserQuestion(opts.Asker))
+	}
 
 	authorizer, err := permission.NewService(cwd, opts.Policy, opts.Approver)
 	if err != nil {

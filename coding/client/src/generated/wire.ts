@@ -24,6 +24,9 @@ export type WireEventType =
   | "done"
   | "sync_required"
   | "title_update"
+  | "question_request"
+  | "question_resolved"
+  | "question_cancelled"
 
 export type DeltaKind =
   | "text"
@@ -148,6 +151,23 @@ export type ContextUsage = {
   measured: boolean
 }
 
+export type QuestionOption = {
+  label: string
+  description: string
+}
+
+export type Question = {
+  question: string
+  header: string
+  options: QuestionOption[]
+  multiSelect?: boolean
+}
+
+export type QuestionAnswer = {
+  question: string
+  values: string[]
+}
+
 export type WireEvent = {
   type: WireEventType
   kind?: DeltaKind
@@ -173,6 +193,7 @@ export type WireEvent = {
   summary?: string
   reason?: string
   disposition?: BrowserDisposition
+  questions?: Question[]
   title?: string
   aiTitle?: string
   customTitle?: string

@@ -33,6 +33,11 @@ type Transport interface {
 	// OpenBrowser delivers one validated agent navigation and waits for the
 	// viewer's product shell to report its terminal result.
 	OpenBrowser(context.Context, tools.BrowserRequest) (tools.BrowserResult, error)
+	// Ask puts the agent's multiple-choice questions to the viewer and blocks
+	// until they answer or the run is cancelled.
+	Ask(context.Context, []tools.Question) ([]tools.Answer, error)
+	// HasPendingQuestion reports a question still waiting on a viewer.
+	HasPendingQuestion() bool
 	// Close releases the delivery link after its session is removed.
 	Close()
 }

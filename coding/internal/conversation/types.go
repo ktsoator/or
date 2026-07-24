@@ -46,6 +46,10 @@ var ErrManagerClosed = errors.New("session: conversation manager is closed")
 // is still waiting for the viewer.
 var ErrApprovalPending = errors.New("session: approval is pending")
 
+// ErrQuestionPending rejects new queued work while the agent's question is
+// still waiting for the viewer to answer it.
+var ErrQuestionPending = errors.New("session: a question is pending")
+
 // ErrSessionNotRunning rejects a queued message after its run has ended.
 var ErrSessionNotRunning = errors.New("session: session is not running")
 
@@ -71,6 +75,7 @@ type Summary struct {
 	UpdatedAt      time.Time              `json:"updatedAt"`
 	Running        bool                   `json:"running"`
 	HasApproval    bool                   `json:"hasApproval"`
+	HasQuestion    bool                   `json:"hasQuestion"`
 	ModelProvider  string                 `json:"modelProvider"`
 	ModelID        string                 `json:"modelId"`
 	ModelName      string                 `json:"modelName"`
@@ -109,6 +114,15 @@ type sessionRuntime struct {
 	// titleGenerating is held only while an attempt is in flight, so a failed
 	// attempt is retried when the next user message enters the session.
 	titleGenerating atomic.Bool
+}
+
+// awaitingUser reports that the session is blocked on its viewer: either a tool
+// permission gate or an agent question is waiting to be answered. The two are
+// the same state as far as the manager is concerned — new work must not start
+// and session settings must not change under the turn that is waiting — so they
+// are asked together rather than checked separately at each call site.
+func (s *sessionRuntime) awaitingUser() bool {
+	return s.transport.HasPendingApproval() || s.transport.HasPendingQuestion()
 }
 
 type Delivery string

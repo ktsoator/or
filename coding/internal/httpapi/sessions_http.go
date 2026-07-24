@@ -16,6 +16,7 @@ import (
 	"github.com/ktsoator/or/coding/internal/conversation"
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/permission"
+	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/workspace"
 	"github.com/ktsoator/or/llm"
 )
@@ -227,6 +228,7 @@ func (s *Server) handleHistory(c *gin.Context) {
 		events = ProjectHistory(snapshot.History)
 		events = append(events, transport.broker.PendingEvents()...)
 		events = append(events, transport.browser.PendingEvents()...)
+		events = append(events, transport.questions.PendingEvents()...)
 		queue = projectQueue(snapshot.Queue)
 		contextUsage = projectContextUsage(snapshot.ContextUsage)
 		running = snapshot.Running
@@ -362,6 +364,9 @@ func (s *Server) handleQueuedMessage(c *gin.Context, delivery conversation.Deliv
 	case errors.Is(err, conversation.ErrApprovalPending):
 		c.JSON(http.StatusConflict, gin.H{"error": "resolve the pending approval before queuing a message"})
 		return
+	case errors.Is(err, conversation.ErrQuestionPending):
+		c.JSON(http.StatusConflict, gin.H{"error": "answer the pending question before queuing a message"})
+		return
 	case errors.Is(err, conversation.ErrImagesUnsupported):
 		c.JSON(http.StatusBadRequest, gin.H{"error": conversation.ErrImagesUnsupported.Error()})
 		return
@@ -416,6 +421,38 @@ func (s *Server) handleApproval(c *gin.Context) {
 	}
 	if !transport.broker.Resolve(id, body.Choice) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "approval request not found"})
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+// handleQuestion delivers the user's answers to a pending agent question.
+func (s *Server) handleQuestion(c *gin.Context) {
+	transport, ok := s.sessionTransport(c)
+	if !ok {
+		return
+	}
+	var body struct {
+		Answers []wireQuestionAnswer `json:"answers"`
+	}
+	id := c.Param("questionID")
+	if err := c.ShouldBindJSON(&body); err != nil || id == "" || len(body.Answers) == 0 {
+		c.Status(http.StatusBadRequest)
+		return
+	}
+	answers := make([]tools.Answer, 0, len(body.Answers))
+	for _, answer := range body.Answers {
+		if strings.TrimSpace(answer.Question) == "" {
+			c.Status(http.StatusBadRequest)
+			return
+		}
+		answers = append(answers, tools.Answer{
+			Question: answer.Question,
+			Values:   answer.Values,
+		})
+	}
+	if !transport.questions.Resolve(id, answers) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "question not found"})
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -495,6 +532,7 @@ func (s *Server) mountSessions(r gin.IRouter) {
 	one.POST("/follow-up", s.handleFollowUp)
 	one.DELETE("/queue/:messageID", s.handleRemoveQueuedMessage)
 	one.POST("/approvals/:approvalID", s.handleApproval)
+	one.POST("/questions/:questionID", s.handleQuestion)
 	one.POST("/browser/:commandID/result", s.handleBrowserResult)
 	one.POST("/browser/inspect/:commandID/result", s.handleBrowserInspectionResult)
 	one.POST("/abort", s.handleAbort)

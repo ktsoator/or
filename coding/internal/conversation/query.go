@@ -125,6 +125,7 @@ func (s *sessionRuntime) summary() Summary {
 		UpdatedAt:      s.record.UpdatedAt,
 		Running:        s.live.Load(),
 		HasApproval:    s.transport.HasPendingApproval(),
+		HasQuestion:    s.transport.HasPendingQuestion(),
 		ModelProvider:  s.record.Provider,
 		ModelID:        s.record.Model,
 		ModelName:      modelName,

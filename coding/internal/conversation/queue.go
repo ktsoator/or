@@ -36,9 +36,16 @@ func (m *Manager) QueueMessage(id string, message QueuedMessage) error {
 		m.mu.RUnlock()
 		return os.ErrNotExist
 	}
+	// Distinguished here, unlike the manager's other guards, because the client
+	// shows this error to the user and telling them to resolve an approval when
+	// a question is on screen sends them looking for the wrong dialog.
 	if runtime.transport.HasPendingApproval() {
 		m.mu.RUnlock()
 		return ErrApprovalPending
+	}
+	if runtime.transport.HasPendingQuestion() {
+		m.mu.RUnlock()
+		return ErrQuestionPending
 	}
 	if len(message.Images) > 0 {
 		model, found := llm.LookupModel(runtime.record.Provider, runtime.record.Model)

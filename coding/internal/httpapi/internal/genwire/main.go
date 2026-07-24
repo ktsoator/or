@@ -38,6 +38,9 @@ var outputNames = map[string]string{
 	"wireUsageCost":               "UsageCost",
 	"wireUsage":                   "Usage",
 	"wireContextUsage":            "ContextUsage",
+	"wireQuestionOption":          "QuestionOption",
+	"wireQuestion":                "Question",
+	"wireQuestionAnswer":          "QuestionAnswer",
 	"wireEvent":                   "WireEvent",
 	"wireHistoryResponse":         "HistoryResponse",
 }
@@ -64,6 +67,9 @@ var outputOrder = []string{
 	"wireUsageCost",
 	"wireUsage",
 	"wireContextUsage",
+	"wireQuestionOption",
+	"wireQuestion",
+	"wireQuestionAnswer",
 	"wireEvent",
 	"wireHistoryResponse",
 }

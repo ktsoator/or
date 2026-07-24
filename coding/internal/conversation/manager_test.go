@@ -30,6 +30,10 @@ func (*testTransport) HasPendingApproval() bool { return false }
 func (*testTransport) OpenBrowser(context.Context, tools.BrowserRequest) (tools.BrowserResult, error) {
 	return tools.BrowserResult{Status: tools.BrowserFailed}, nil
 }
+func (*testTransport) Ask(context.Context, []tools.Question) ([]tools.Answer, error) {
+	return nil, errors.New("no viewer")
+}
+func (*testTransport) HasPendingQuestion() bool { return false }
 
 type recordingTransport struct {
 	events chan Event
@@ -45,6 +49,10 @@ func (*recordingTransport) HasPendingApproval() bool { return false }
 func (*recordingTransport) OpenBrowser(context.Context, tools.BrowserRequest) (tools.BrowserResult, error) {
 	return tools.BrowserResult{Status: tools.BrowserFailed}, nil
 }
+func (*recordingTransport) Ask(context.Context, []tools.Question) ([]tools.Answer, error) {
+	return nil, errors.New("no viewer")
+}
+func (*recordingTransport) HasPendingQuestion() bool { return false }
 
 func TestManagerCreatesAndRestoresProjectConversation(t *testing.T) {
 	dataDir := t.TempDir()

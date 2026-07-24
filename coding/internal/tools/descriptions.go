@@ -152,6 +152,23 @@ Usage:
 	},
 }
 
+var questionText = toolText{
+	description: `Ask the user one or more multiple-choice questions and wait for their answer.
+
+Usage:
+- Use this when the decision is genuinely the user's: a requirement, a preference, or a trade-off between approaches that the code cannot settle.
+- Never ask what you could determine yourself by reading a file or running a command.
+- Ask 1-4 questions in a single call. Batch related questions instead of asking them one at a time.
+- Give each question 2-4 distinct options. Do not add an "other" option; the product surface always offers free-text input alongside your options.
+- When you recommend an option put it first and end its label with "(Recommended)".
+- Set multi_select when the options are not mutually exclusive.
+- header is a short chip label of at most 12 characters shown beside the question.
+- This call blocks until the user answers. A question the user leaves unanswered comes back marked unanswered; never read that as agreement.`,
+	guidelines: []string{
+		"Ask with `ask_user_question` only when the decision is the user's to make; anything the workspace can answer, answer with a tool.",
+	},
+}
+
 var killBashText = toolText{
 	description: `Stop a background shell started by bash with run_in_background, terminating its whole process group.
 

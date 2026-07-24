@@ -31,6 +31,9 @@ const (
 	wireEventDone              wireEventType = "done"
 	wireEventSyncRequired      wireEventType = "sync_required"
 	wireEventTitleUpdate       wireEventType = "title_update"
+	wireEventQuestionRequest   wireEventType = "question_request"
+	wireEventQuestionResolved  wireEventType = "question_resolved"
+	wireEventQuestionCancelled wireEventType = "question_cancelled"
 )
 
 type wireDeltaKind string
@@ -134,6 +137,28 @@ type wireFailureChangePayload struct {
 
 func (wireFailureChangePayload) isWireChange() {}
 
+// wireQuestionOption is one selectable answer offered by the agent. The product
+// surface adds its own free-text choice, so the agent never sends one.
+type wireQuestionOption struct {
+	Label       string `json:"label"`
+	Description string `json:"description"`
+}
+
+// wireQuestion is one multiple-choice question put to the user.
+type wireQuestion struct {
+	Question    string               `json:"question"`
+	Header      string               `json:"header"`
+	Options     []wireQuestionOption `json:"options"`
+	MultiSelect bool                 `json:"multiSelect,omitempty"`
+}
+
+// wireQuestionAnswer is one reply, carrying the labels the user picked or the
+// free text they typed instead.
+type wireQuestionAnswer struct {
+	Question string   `json:"question"`
+	Values   []string `json:"values"`
+}
+
 // wireEvent is the JSON shape streamed to the browser. Fields are populated
 // according to Type; the rest stay zero and are omitted.
 type wireEvent struct {
@@ -173,6 +198,8 @@ type wireEvent struct {
 	Reason  string `json:"reason,omitempty"`
 	// browser_request
 	Disposition wireBrowserDisposition `json:"disposition,omitempty"`
+	// question_request
+	Questions []wireQuestion `json:"questions,omitempty"`
 	// title_update
 	Title       string `json:"title,omitempty"`
 	AITitle     string `json:"aiTitle,omitempty"`
