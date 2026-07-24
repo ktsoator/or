@@ -86,19 +86,21 @@ type Options struct {
 // run completes and are mutually exclusive; a concurrent call returns ErrBusy.
 // Steer, FollowUp, Abort, Subscribe, and Snapshot are safe during a run.
 type Session struct {
-	agent                *agent.Agent
-	store                transcript.Store
-	tools                []tools.Tool
-	toolByName           map[string]tools.Tool
-	authorizer           *permission.Service
-	shells               *tools.BackgroundShells
-	cwd                  string
-	skillRegistry        *skills.DynamicRegistry
-	skillLoader          func() []skills.Skill
-	skillRevision        string
-	pendingSkills        *skills.Registry
-	pendingSkillRevision string
-	modelContext         *modelcontext.Manager
+	agent                  *agent.Agent
+	store                  transcript.Store
+	tools                  []tools.Tool
+	toolByName             map[string]tools.Tool
+	authorizer             *permission.Service
+	shells                 *tools.BackgroundShells
+	cwd                    string
+	skillRegistry          *skills.DynamicRegistry
+	skillLoader            func() []skills.Skill
+	skillRevision          string
+	pendingSkills          *skills.Registry
+	pendingSkillRevision   string
+	contextRevision        string
+	pendingContextRevision string
+	modelContext           *modelcontext.Manager
 
 	maxRetries    int
 	contextWindow int64
@@ -228,9 +230,12 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 			GetAPIKey: opts.GetAPIKey,
 		}
 	}
+	baseRendered, baseRevision := s.buildBaseContext()
+	s.contextRevision = baseRevision
 	s.modelContext = modelcontext.New(
 		nextContextEpoch(entries),
-		s.buildBaseContext(),
+		baseRevision,
+		baseRendered,
 		s.skillRevision,
 		s.buildSkillListing(),
 	)
@@ -344,6 +349,7 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 		return err
 	}
 	s.prepareSkillRefresh()
+	s.prepareContextRefresh()
 	startedAt := time.Now().UTC()
 	runEntryStart := len(s.snapshotTranscript())
 	s.setRunState(ctx, startedAt, runEntryStart)
@@ -421,6 +427,7 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 		}
 		s.modelContext.Commit(prepared)
 		s.commitSkillRefresh(prepared.Pending)
+		s.commitContextRefresh(prepared.Pending)
 		return delegate(ctx, model, prepared.Input, options)
 	}
 }
@@ -720,11 +727,7 @@ func (s *Session) snapshotTranscriptState() ([]transcript.Entry, int) {
 func (s *Session) buildSystemPrompt(instructions string) string {
 	infos := make([]prompt.ToolInfo, len(s.tools))
 	for i, t := range s.tools {
-		infos[i] = prompt.ToolInfo{
-			Name:       t.Name(),
-			Snippet:    t.PromptSnippet,
-			Guidelines: t.Guidelines,
-		}
+		infos[i] = prompt.ToolInfo{Name: t.Name(), Guidelines: t.Guidelines}
 	}
 	return prompt.BuildSystem(prompt.SystemOptions{
 		Instructions:  instructions,
@@ -733,8 +736,13 @@ func (s *Session) buildSystemPrompt(instructions string) string {
 	})
 }
 
-func (s *Session) buildBaseContext() string {
-	return prompt.RenderBaseContext(prompt.LoadContextFiles(s.cwd))
+// buildBaseContext renders the session's environment and instruction files, with
+// the revision that fingerprints them. prepareContextRefresh compares against
+// that revision to decide whether the model's view has gone stale.
+func (s *Session) buildBaseContext() (rendered, revision string) {
+	env := prompt.DetectEnvironment(s.cwd)
+	files := prompt.LoadContextFiles(s.cwd)
+	return prompt.RenderBaseContext(env, files), prompt.ContextRevision(env, files)
 }
 
 func (s *Session) buildSkillListing() string {
@@ -777,6 +785,52 @@ func (s *Session) prepareSkillRefresh() {
 	s.pendingSkills = next
 	s.pendingSkillRevision = nextRevision
 	s.modelContext.StageSkillsUpdate(nextRevision, rendered)
+}
+
+// prepareContextRefresh restages the environment and instruction files when they
+// no longer match what the model has been shown — an edited AGENTS.md, a branch
+// switch, or a session that crossed midnight. The refresh is projected after the
+// canonical messages, so a change costs one bounded block rather than the
+// session's cached request prefix.
+func (s *Session) prepareContextRefresh() {
+	env := prompt.DetectEnvironment(s.cwd)
+	files := prompt.LoadContextFiles(s.cwd)
+	nextRevision := prompt.ContextRevision(env, files)
+
+	if s.pendingContextRevision != "" {
+		switch nextRevision {
+		case s.pendingContextRevision:
+			return
+		case s.contextRevision:
+			// The files reverted before the staged block was ever sent.
+			s.pendingContextRevision = ""
+			s.modelContext.CancelStagedContextUpdate()
+			return
+		}
+	} else if nextRevision == s.contextRevision {
+		return
+	}
+
+	s.pendingContextRevision = nextRevision
+	s.modelContext.StageContextUpdate(
+		nextRevision,
+		prompt.RenderContextUpdate(nextRevision, env, files),
+	)
+}
+
+func (s *Session) commitContextRefresh(attachments []modelcontext.Attachment) {
+	if s.pendingContextRevision == "" {
+		return
+	}
+	for _, attachment := range attachments {
+		if attachment.Kind != modelcontext.ContextUpdate ||
+			attachment.Revision != s.pendingContextRevision {
+			continue
+		}
+		s.contextRevision = s.pendingContextRevision
+		s.pendingContextRevision = ""
+		return
+	}
 }
 
 func (s *Session) commitSkillRefresh(attachments []modelcontext.Attachment) {

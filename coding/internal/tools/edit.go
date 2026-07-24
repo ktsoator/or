@@ -95,9 +95,8 @@ func Edit(root string, ops FileOps, files *FileStateStore) Tool {
 				return resultWith(formatEditResult(in.Path, count, change), change), nil
 			},
 		},
-		AccessFor:     pathAccess(permission.Write),
-		PromptSnippet: editText.snippet,
-		Guidelines:    editText.guidelines,
+		AccessFor:  pathAccess(permission.Write),
+		Guidelines: editText.guidelines,
 	}
 }
 

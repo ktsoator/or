@@ -73,9 +73,8 @@ func InspectBrowser(inspectors ...BrowserInspector) Tool {
 				return browserInspectionToolResult(result), nil
 			},
 		},
-		AccessFor:     InternalAccess,
-		PromptSnippet: inspectBrowserText.snippet,
-		Guidelines:    inspectBrowserText.guidelines,
+		AccessFor:  InternalAccess,
+		Guidelines: inspectBrowserText.guidelines,
 	}
 }
 
