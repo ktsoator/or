@@ -6,6 +6,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -100,6 +101,7 @@ type Session struct {
 	runStartedAt         time.Time
 	runEntryStart        int
 	autoCompactAttempted bool
+	runPersistenceErr    error
 
 	transcriptMu sync.RWMutex
 	entries      []transcript.Entry
@@ -216,7 +218,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		Tools:         tools.AgentTools(toolSet),
 		Messages:      seed,
 		StreamOptions: opts.StreamOptions,
-		StreamFn:      opts.StreamFn,
+		StreamFn:      s.checkpointedStreamFn(opts.StreamFn),
 		GetAPIKey:     opts.GetAPIKey,
 		BeforeToolCall: func(bc agent.BeforeToolCallCtx) (bool, string) {
 			args, _ := bc.Args.(map[string]any)
@@ -299,8 +301,9 @@ func (s *Session) Continue(ctx context.Context) error {
 	return s.run(ctx, s.agent.Continue)
 }
 
-// run serializes a single Prompt or Continue invocation, then persists whatever
-// messages it appended.
+// run serializes a single Prompt or Continue invocation. Model-request prefixes
+// are checkpointed during the run, and the final assistant plus run metadata
+// are flushed when it completes.
 func (s *Session) run(ctx context.Context, fn func(context.Context) error) error {
 	if !s.runMu.TryLock() {
 		return ErrBusy
@@ -338,15 +341,27 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 	defer unsubscribe()
 
 	runErr := fn(ctx)
-	if runErr != nil && !s.trailingContextOverflow() && s.maxRetries > 0 {
+	checkpointErr := s.runPersistenceError()
+	if checkpointErr == nil && runErr != nil && !s.trailingContextOverflow() && s.maxRetries > 0 {
 		runErr = s.withRetry(ctx, runErr)
+		checkpointErr = s.runPersistenceError()
 	}
-	if s.trailingContextOverflow() {
+	if checkpointErr == nil && s.trailingContextOverflow() {
 		recovered, err := s.recoverContextOverflow(ctx, runErr)
 		runErr = err
-		if recovered && runErr != nil && s.maxRetries > 0 {
+		checkpointErr = s.runPersistenceError()
+		if checkpointErr == nil && recovered && runErr != nil && s.maxRetries > 0 {
 			runErr = s.withRetry(ctx, runErr)
+			checkpointErr = s.runPersistenceError()
 		}
+	}
+	if checkpointErr != nil {
+		// A StreamFn setup failure becomes a synthetic assistant error inside the
+		// reusable agent. This error belongs to the persistence layer, not the
+		// conversation, so remove it before the final flush and never feed it into
+		// model retry or context-overflow recovery.
+		s.dropTrailingErrorTurn()
+		runErr = checkpointErr
 	}
 	completedAt := time.Now().UTC()
 	persistErr := s.persistNewRun(ctx, runEntryStart, startedAt, completedAt)
@@ -357,6 +372,41 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 		CompletedAt: completedAt,
 	})
 	return errors.Join(runErr, persistErr)
+}
+
+// checkpointedStreamFn makes the model request boundary the durability
+// boundary. The llm.Context is authoritative here: RunLoop may resume after
+// sending a MessageEnd event before Agent has reduced that event into its live
+// snapshot, while input.Messages already contains the complete request prefix.
+func (s *Session) checkpointedStreamFn(delegate agent.StreamFn) agent.StreamFn {
+	if delegate == nil {
+		delegate = llm.Stream
+	}
+	return func(
+		ctx context.Context,
+		model llm.Model,
+		input llm.Context,
+		options llm.StreamOptions,
+	) (<-chan llm.Event, error) {
+		if err := s.persistModelInput(ctx, input.Messages); err != nil {
+			checkpointErr := fmt.Errorf("coding: persist model request checkpoint: %w", err)
+			s.recordRunPersistenceError(checkpointErr)
+			return nil, checkpointErr
+		}
+		return delegate(ctx, model, input, options)
+	}
+}
+
+// persistModelInput appends the model-facing request prefix before the provider
+// is called. Coding currently uses only standard LLM messages, so adapting the
+// request back to AgentMessage preserves the same transcript representation
+// while avoiding a race on Agent.Snapshot.
+func (s *Session) persistModelInput(ctx context.Context, input []llm.Message) error {
+	messages := make([]agent.AgentMessage, len(input))
+	for index, message := range input {
+		messages[index] = agent.FromLLM(message)
+	}
+	return s.persistMessages(ctx, messages, 0, time.Time{}, time.Time{})
 }
 
 // persistNew appends the messages added since the last persist to the Store. It
@@ -378,11 +428,32 @@ func (s *Session) persistNewMessages(
 	runEntryStart int,
 	startedAt, completedAt time.Time,
 ) error {
-	all := s.agent.Snapshot().Messages
+	return s.persistMessages(
+		ctx,
+		s.agent.Snapshot().Messages,
+		runEntryStart,
+		startedAt,
+		completedAt,
+	)
+}
+
+func (s *Session) persistMessages(
+	ctx context.Context,
+	all []agent.AgentMessage,
+	runEntryStart int,
+	startedAt, completedAt time.Time,
+) error {
 	s.transcriptMu.RLock()
 	persistedLen := s.persistedLen
 	existing := append([]transcript.Entry(nil), s.entries...)
 	s.transcriptMu.RUnlock()
+	if persistedLen > len(all) {
+		return fmt.Errorf(
+			"coding: cannot persist context with %d messages behind durable prefix of %d",
+			len(all),
+			persistedLen,
+		)
+	}
 	var added []agent.AgentMessage
 	if persistedLen < len(all) {
 		added = all[persistedLen:]
@@ -429,6 +500,7 @@ func (s *Session) setRunState(ctx context.Context, startedAt time.Time, entrySta
 	s.runStartedAt = startedAt
 	s.runEntryStart = entryStart
 	s.autoCompactAttempted = false
+	s.runPersistenceErr = nil
 	s.runStateMu.Unlock()
 }
 
@@ -438,7 +510,25 @@ func (s *Session) clearRunState() {
 	s.runStartedAt = time.Time{}
 	s.runEntryStart = 0
 	s.autoCompactAttempted = false
+	s.runPersistenceErr = nil
 	s.runStateMu.Unlock()
+}
+
+func (s *Session) recordRunPersistenceError(err error) {
+	if err == nil {
+		return
+	}
+	s.runStateMu.Lock()
+	if s.runPersistenceErr == nil {
+		s.runPersistenceErr = err
+	}
+	s.runStateMu.Unlock()
+}
+
+func (s *Session) runPersistenceError() error {
+	s.runStateMu.RLock()
+	defer s.runStateMu.RUnlock()
+	return s.runPersistenceErr
 }
 
 func (s *Session) activeRunState() (context.Context, time.Time, int) {
