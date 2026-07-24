@@ -7,6 +7,11 @@ import {
   type Rectangle,
   type Session,
 } from 'electron'
+import {
+  workspacePreviewNavigationAllowed,
+  workspacePreviewPrefix,
+  workspacePreviewRequestAllowed,
+} from './workspacePreviewSecurity'
 
 export type DesktopEndpoint = {
   url: string
@@ -76,6 +81,9 @@ export class NativeBrowserManager {
     const input = parseNavigateInput(value)
     if (this.#destroyed) throw new Error('native browser is destroyed')
     const target = resolveWebURL(input.url, this.#desktop.url)
+    const targetPreviewPrefix = input.kind === 'workspace-preview'
+      ? workspacePreviewPrefix(target, this.#desktop.url)
+      : undefined
     let entry = this.#entries.get(input.tabID)
     if (entry && input.revision < entry.appliedRevision) {
       return this.#state(entry)
@@ -88,7 +96,10 @@ export class NativeBrowserManager {
     }
 
     const operation = this.#beginOperation(input.tabID)
-    if (entry && entry.kind !== input.kind) {
+    if (
+      entry &&
+      (entry.kind !== input.kind || entry.previewPrefix !== targetPreviewPrefix)
+    ) {
       this.#removeEntry(entry)
       entry = undefined
     }
@@ -239,25 +250,23 @@ export class NativeBrowserManager {
     target: URL,
     previewPrefix: string,
   ): Promise<Session> {
-    const digest = createHash('sha256').update(tabID).digest('hex').slice(0, 20)
+    const digest = createHash('sha256')
+      .update(`${tabID}\x00${previewPrefix}`)
+      .digest('hex')
+      .slice(0, 20)
     const browserSession = session.fromPartition(`coding-preview-${digest}`)
     browserSession.setPermissionRequestHandler((_contents, _permission, callback) => {
       callback(false)
     })
     browserSession.webRequest.onBeforeRequest((details, callback) => {
-      const requestURL = safeURL(details.url)
-      const desktopOrigin = new URL(this.#desktop.url).origin
-      if (
-        requestURL?.origin === desktopOrigin &&
-        (
-          !requestURL.pathname.startsWith(previewPrefix) ||
-          (details.method !== 'GET' && details.method !== 'HEAD')
-        )
-      ) {
-        callback({ cancel: true })
-        return
-      }
-      callback({})
+      callback({
+        cancel: !workspacePreviewRequestAllowed(
+          details.url,
+          details.method,
+          this.#desktop.url,
+          previewPrefix,
+        ),
+      })
     })
     await browserSession.cookies.set({
       url: target.href,
@@ -319,6 +328,7 @@ export class NativeBrowserManager {
       send()
     })
     contents.setWindowOpenHandler(({ url }) => {
+      if (entry.kind === 'workspace-preview') return { action: 'deny' }
       const target = safeURL(url)
       if (target && (target.protocol === 'http:' || target.protocol === 'https:')) {
         entry.requestedURL = target.href
@@ -334,18 +344,23 @@ export class NativeBrowserManager {
       return { action: 'deny' }
     })
     contents.on('will-navigate', (event, url) => {
+      if (entry.previewPrefix) {
+        const allowed = workspacePreviewNavigationAllowed(
+          url,
+          this.#desktop.url,
+          entry.previewPrefix,
+        )
+        if (!allowed) {
+          event.preventDefault()
+        } else if (entry.pendingOperation === undefined) {
+          entry.requestedURL = url
+        }
+        return
+      }
       const target = safeURL(url)
       if (!target || (target.protocol !== 'http:' && target.protocol !== 'https:')) {
         event.preventDefault()
         if (target) void openExternalURL(target)
-        return
-      }
-      if (
-        entry.previewPrefix &&
-        target.origin === new URL(this.#desktop.url).origin &&
-        !target.pathname.startsWith(entry.previewPrefix)
-      ) {
-        event.preventDefault()
         return
       }
       if (entry.pendingOperation === undefined) entry.requestedURL = target.href
@@ -487,15 +502,6 @@ function resolveWebURL(value: string, base: string): URL {
     throw new TypeError(`unsupported browser URL protocol: ${target.protocol}`)
   }
   return target
-}
-
-function workspacePreviewPrefix(target: URL, desktopURL: string): string {
-  if (target.origin !== new URL(desktopURL).origin) {
-    throw new TypeError('workspace preview must use the desktop origin')
-  }
-  const match = target.pathname.match(/^\/api\/sessions\/[^/]+\/preview\//)
-  if (!match) throw new TypeError('workspace preview URL is invalid')
-  return match[0]
 }
 
 function clampBounds(bounds: Rectangle, window: BrowserWindow): Rectangle {

@@ -88,6 +88,8 @@ export type PreviewRequest = {
   path?: string
   relativePath?: string
   title?: string
+  grantID?: string
+  previewPath?: string
 }
 
 export type BrowserResult = {

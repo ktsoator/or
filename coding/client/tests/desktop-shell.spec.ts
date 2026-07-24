@@ -355,7 +355,7 @@ async function openDesktopClient(
       return
     }
 
-    if (path === '/api/sessions/test-session/preview/web/index.html' && method === 'GET') {
+    if (path === '/api/sessions/test-session/previews/test-grant/index.html' && method === 'GET') {
       await route.fulfill({
         status: 200,
         contentType: 'text/html',
@@ -363,7 +363,7 @@ async function openDesktopClient(
       })
       return
     }
-    if (path === '/api/sessions/secondary-session/preview/web/index.html' && method === 'GET') {
+    if (path === '/api/sessions/secondary-session/previews/secondary-grant/index.html' && method === 'GET') {
       await route.fulfill({
         status: 200,
         contentType: 'text/html',
@@ -915,6 +915,8 @@ test('a restored right-side preview stays available without taking focus from Ch
         preview: {
           path: '/tmp/secondary-session/web/index.html',
           relativePath: 'web/index.html',
+          grantID: 'secondary-grant',
+          previewPath: 'index.html',
           title: 'Saved preview',
         },
       },
@@ -935,7 +937,7 @@ test('a restored right-side preview stays available without taking focus from Ch
   await previewTab.click()
   await expect.poll(async () =>
     (await nativeBrowserView(page, 'preview:secondary-session'))?.url.endsWith(
-      '/api/sessions/secondary-session/preview/web/index.html',
+      '/api/sessions/secondary-session/previews/secondary-grant/index.html',
     ),
   ).toBe(true)
   expect(await nativeBrowserView(page, 'preview:secondary-session')).toMatchObject({
@@ -969,6 +971,8 @@ test('main and right-side chats keep separate preview tabs and workspace routes'
       preview: {
         path: '/tmp/test-session/web/index.html',
         relativePath: 'web/index.html',
+        grantID: 'main-grant',
+        previewPath: 'index.html',
         title: 'Main preview',
       },
     })
@@ -994,6 +998,8 @@ test('main and right-side chats keep separate preview tabs and workspace routes'
       preview: {
         path: '/tmp/secondary-session/web/index.html',
         relativePath: 'web/index.html',
+        grantID: 'secondary-grant',
+        previewPath: 'index.html',
         title: 'Secondary preview',
       },
     })
@@ -1013,7 +1019,7 @@ test('main and right-side chats keep separate preview tabs and workspace routes'
   )
   await expect.poll(async () =>
     (await nativeBrowserView(page, 'preview:secondary-session'))?.url.endsWith(
-      '/api/sessions/secondary-session/preview/web/index.html',
+      '/api/sessions/secondary-session/previews/secondary-grant/index.html',
     ),
   ).toBe(true)
   expect(await nativeBrowserView(page, 'preview:secondary-session')).toMatchObject({
@@ -1025,7 +1031,7 @@ test('main and right-side chats keep separate preview tabs and workspace routes'
     visible: false,
   })
   expect(
-    requests.filter((request) => request.path.includes('/preview/web/index.html')),
+    requests.filter((request) => request.path.includes('/previews/secondary-grant/index.html')),
   ).toHaveLength(0)
 })
 
@@ -1735,6 +1741,8 @@ test('AI preview opens workspace HTML directly without starting or probing a ser
       preview: {
         path: '/tmp/test-session/web/index.html',
         relativePath: 'web/index.html',
+        grantID: 'test-grant',
+        previewPath: 'index.html',
         title: 'Static page',
       },
     })
@@ -1742,7 +1750,7 @@ test('AI preview opens workspace HTML directly without starting or probing a ser
 
   await expect.poll(async () =>
     (await nativeBrowserView(page, 'preview:test-session'))?.url.endsWith(
-      '/api/sessions/test-session/preview/web/index.html',
+      '/api/sessions/test-session/previews/test-grant/index.html',
     ),
   ).toBe(true)
   const previewView = await nativeBrowserView(page, 'preview:test-session')
@@ -1764,7 +1772,7 @@ test('AI preview opens workspace HTML directly without starting or probing a ser
   expect(
     requests.filter(
       (request) =>
-        request.path === '/api/sessions/test-session/preview/web/index.html',
+        request.path === '/api/sessions/test-session/previews/test-grant/index.html',
     ),
   ).toHaveLength(0)
 

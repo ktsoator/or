@@ -238,6 +238,39 @@ func TestOpenPreviewUsesCommittedRedirectInToolResult(t *testing.T) {
 	}
 }
 
+func TestOpenPreviewPersistsControllerWorkspaceGrant(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "web", "index.html")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("<!doctype html>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := OpenPreview(root, resultBrowser{result: BrowserResult{
+		Status:       BrowserCommitted,
+		CommittedURL: "http://127.0.0.1/api/sessions/session-1/previews/grant/index.html",
+		Preview: PreviewRequest{
+			Path:         path,
+			RelativePath: "web/index.html",
+			GrantID:      "grant",
+			PreviewPath:  "index.html",
+		},
+	}}).Execute(
+		context.Background(),
+		"preview-call",
+		json.RawMessage(`{"url":"web/index.html"}`),
+		func(agent.ToolResult) {},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	details, ok := result.Details.(PreviewRequest)
+	if !ok || details.GrantID != "grant" || details.PreviewPath != "index.html" {
+		t.Fatalf("Details = %#v", result.Details)
+	}
+}
+
 func TestOpenPreviewDoesNotPersistFailedNavigation(t *testing.T) {
 	result, err := OpenPreview(t.TempDir(), resultBrowser{result: BrowserResult{
 		Status: BrowserFailed,

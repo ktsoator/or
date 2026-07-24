@@ -11,6 +11,8 @@ func TestPreviewDetailsRoundTrip(t *testing.T) {
 		Path:         "/workspace/web/index.html",
 		RelativePath: "web/index.html",
 		Title:        "Static page",
+		GrantID:      "preview-grant",
+		PreviewPath:  "index.html",
 	}
 	raw, ok := encodeDetails(want)
 	if !ok {

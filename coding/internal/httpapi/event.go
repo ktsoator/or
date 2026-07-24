@@ -297,6 +297,8 @@ func previewPayload(details any) *wirePreview {
 		Path:         preview.Path,
 		RelativePath: preview.RelativePath,
 		Title:        preview.Title,
+		GrantID:      preview.GrantID,
+		PreviewPath:  preview.PreviewPath,
 	}
 }
 

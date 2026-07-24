@@ -121,6 +121,8 @@ func TestProjectEventIncludesWorkspacePreviewPath(t *testing.T) {
 			Path:         "/workspace/web/index.html",
 			RelativePath: "web/index.html",
 			Title:        "Static page",
+			GrantID:      "preview-grant",
+			PreviewPath:  "index.html",
 		},
 	})
 	if !ok {
@@ -131,7 +133,7 @@ func TestProjectEventIncludesWorkspacePreviewPath(t *testing.T) {
 	if err := json.Unmarshal(data, &event); err != nil {
 		t.Fatal(err)
 	}
-	if event.Preview == nil || event.Preview.Path != "/workspace/web/index.html" || event.Preview.RelativePath != "web/index.html" || event.Preview.Title != "Static page" || event.Preview.URL != "" {
+	if event.Preview == nil || event.Preview.Path != "/workspace/web/index.html" || event.Preview.RelativePath != "web/index.html" || event.Preview.Title != "Static page" || event.Preview.GrantID != "preview-grant" || event.Preview.PreviewPath != "index.html" || event.Preview.URL != "" {
 		t.Fatalf("preview = %#v", event.Preview)
 	}
 }

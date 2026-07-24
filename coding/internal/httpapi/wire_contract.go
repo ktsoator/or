@@ -175,6 +175,8 @@ type wirePreview struct {
 	Path         string `json:"path,omitempty"`
 	RelativePath string `json:"relativePath,omitempty"`
 	Title        string `json:"title,omitempty"`
+	GrantID      string `json:"grantID,omitempty"`
+	PreviewPath  string `json:"previewPath,omitempty"`
 }
 
 type wireBrowserResult struct {

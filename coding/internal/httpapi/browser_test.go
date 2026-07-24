@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -177,6 +178,44 @@ func TestBrowserResultEndpointResolvesSessionCommand(t *testing.T) {
 	router.ServeHTTP(duplicate, duplicateRequest)
 	if duplicate.Code != http.StatusNotFound {
 		t.Fatalf("duplicate response = %d", duplicate.Code)
+	}
+}
+
+func TestSessionTransportGrantsWorkspacePreviewBeforeBroadcast(t *testing.T) {
+	workspace := t.TempDir()
+	entry := writePreviewFile(t, workspace, "web/index.html", "safe")
+	transports := NewSessionTransports()
+	transport := transports.New("session-1").(*sessionTransport)
+	events, _ := transport.hub.add(0)
+	defer transport.hub.remove(events)
+
+	result := make(chan browserCommandResult, 1)
+	go func() {
+		got, err := transport.OpenBrowser(context.Background(), tools.BrowserRequest{
+			Preview:     tools.PreviewRequest{Path: entry, RelativePath: filepath.ToSlash("web/index.html")},
+			Disposition: tools.BrowserReuseAgentTab,
+		})
+		result <- browserCommandResult{result: got, err: err}
+	}()
+	requested := readBrowserEvent(t, events)
+	if requested.Preview == nil || requested.Preview.GrantID == "" || requested.Preview.PreviewPath != "index.html" || requested.Preview.RelativePath != "web/index.html" {
+		t.Fatalf("browser request preview = %#v", requested.Preview)
+	}
+	if !transport.browser.Resolve(requested.ID, tools.BrowserResult{
+		Status:       tools.BrowserCommitted,
+		CommittedURL: "http://127.0.0.1/api/sessions/session-1/previews/" + requested.Preview.GrantID + "/index.html",
+	}) {
+		t.Fatal("browser request was not resolved")
+	}
+	got := <-result
+	if got.err != nil || got.result.Preview.GrantID != requested.Preview.GrantID {
+		t.Fatalf("result = %#v, %v", got.result, got.err)
+	}
+
+	grantID := requested.Preview.GrantID
+	transport.Close()
+	if _, ok := transports.previews.resolve("session-1", grantID); ok {
+		t.Fatal("closing the transport did not revoke its preview grants")
 	}
 }
 

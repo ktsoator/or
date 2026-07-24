@@ -6,6 +6,7 @@
   "author": "Kt <ktsoator@gmail.com>",
   "main": "dist/main.js",
   "scripts": {
+    "test": "bun test src/workspacePreviewSecurity.test.ts",
     "build:main": "tsc -p tsconfig.json",
     "build:sidecar": "node scripts/build-sidecar.mjs",
     "build:client": "bun run --cwd ../client build",

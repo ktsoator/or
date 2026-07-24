@@ -29,13 +29,19 @@ export function isLocalPreviewURL(address: string): boolean {
   }
 }
 
-export function workspacePreviewURL(sessionID: string, path: string): string {
-  const encodedPath = path
+export function workspacePreviewURL(
+  sessionID: string,
+  grantID: string,
+  previewPath: string,
+): string {
+  const encodedPath = previewPath
     .split('/')
     .filter(Boolean)
     .map((segment) => encodeURIComponent(segment))
     .join('/')
-  return apiURL(`/sessions/${encodeURIComponent(sessionID)}/preview/${encodedPath}`)
+  return apiURL(
+    `/sessions/${encodeURIComponent(sessionID)}/previews/${encodeURIComponent(grantID)}/${encodedPath}`,
+  )
 }
 
 export function workspaceFileURL(path: string): string | undefined {

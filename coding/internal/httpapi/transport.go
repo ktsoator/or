@@ -17,11 +17,15 @@ import (
 type SessionTransports struct {
 	mu       sync.RWMutex
 	sessions map[string]*sessionTransport
+	previews *previewGrantStore
 }
 
 // NewSessionTransports returns an empty session transport registry.
 func NewSessionTransports() *SessionTransports {
-	return &SessionTransports{sessions: make(map[string]*sessionTransport)}
+	return &SessionTransports{
+		sessions: make(map[string]*sessionTransport),
+		previews: newPreviewGrantStore(),
+	}
 }
 
 // New creates and registers one conversation transport.
@@ -39,6 +43,7 @@ func (r *SessionTransports) New(sessionID string) conversation.Transport {
 	r.sessions[sessionID] = transport
 	r.mu.Unlock()
 	if previous != nil {
+		r.previews.revokeSession(sessionID)
 		previous.Close()
 	}
 	return transport
@@ -51,12 +56,15 @@ func (r *SessionTransports) get(sessionID string) (*sessionTransport, bool) {
 	return transport, ok
 }
 
-func (r *SessionTransports) remove(sessionID string, transport *sessionTransport) {
+func (r *SessionTransports) remove(sessionID string, transport *sessionTransport) bool {
 	r.mu.Lock()
+	removed := false
 	if r.sessions[sessionID] == transport {
 		delete(r.sessions, sessionID)
+		removed = true
 	}
 	r.mu.Unlock()
+	return removed
 }
 
 // sessionTransport is this package's implementation of conversation.Transport: it
@@ -98,12 +106,23 @@ func (t *sessionTransport) OpenBrowser(
 	ctx context.Context,
 	request tools.BrowserRequest,
 ) (tools.BrowserResult, error) {
-	return t.browser.OpenBrowser(ctx, request)
+	if request.Preview.Path != "" {
+		preview, err := t.owner.previews.issue(t.sessionID, "", request.Preview)
+		if err != nil {
+			return tools.BrowserResult{}, err
+		}
+		request.Preview = preview
+	}
+	result, err := t.browser.OpenBrowser(ctx, request)
+	result.Preview = request.Preview
+	return result, err
 }
 
 func (t *sessionTransport) Close() {
 	t.closeOnce.Do(func() {
-		t.owner.remove(t.sessionID, t)
+		if t.owner.remove(t.sessionID, t) {
+			t.owner.previews.revokeSession(t.sessionID)
+		}
 		t.browser.Close()
 		t.hub.Close()
 	})

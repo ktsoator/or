@@ -125,6 +125,7 @@ func (s *Server) handleDeleteSession(c *gin.Context) {
 	case err != nil:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 	default:
+		s.transports.previews.revokeSession(c.Param("sessionID"))
 		c.Status(http.StatusNoContent)
 	}
 }
@@ -237,6 +238,12 @@ func (s *Server) handleHistory(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
 		return
 	}
+	workspacePath, err := s.conversations.WorkspacePath(c.Param("sessionID"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+		return
+	}
+	reissuePreviewGrants(s.transports.previews, c.Param("sessionID"), workspacePath, events)
 	c.JSON(http.StatusOK, wireHistoryResponse{
 		Events:      events,
 		Queue:       queue,

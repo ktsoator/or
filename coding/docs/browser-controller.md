@@ -337,8 +337,12 @@ to the model.
 - Public pages use the persistent browser session and deny browser permissions
   by default.
 - Workspace previews use an isolated session with a path-limited desktop cookie
-  and restricted Coding API access.
-- Switching between `web` and `workspace-preview` recreates the native entry.
+  and a process-local cryptographic grant scoped to the HTML entry directory.
+- Workspace preview HTTP routes allow only `GET` and `HEAD`, reject hidden and
+  credential-like files, prevent symlink escape, and return a restrictive CSP.
+- Workspace preview sessions block external requests, popups, forms, and
+  navigation outside the active grant. Changing grants recreates the native
+  entry and its isolated Electron session.
 - Browser commands accept only HTTP(S) URLs after product validation.
 - User-owned tabs require an explicit user request before agent control is
   added in a future phase.

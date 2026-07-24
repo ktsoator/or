@@ -31,6 +31,8 @@ type PreviewRequest struct {
 	Path         string
 	RelativePath string
 	Title        string
+	GrantID      string
+	PreviewPath  string
 }
 
 // BrowserDisposition describes where a product shell should apply an agent
@@ -71,6 +73,7 @@ type BrowserResult struct {
 	CommittedURL string
 	Title        string
 	Error        string
+	Preview      PreviewRequest
 }
 
 // BrowserController delivers a navigation command to the product shell and
@@ -119,6 +122,9 @@ func OpenPreview(root string, controllers ...BrowserController) Tool {
 				})
 				if err != nil {
 					return agent.ToolResult{}, err
+				}
+				if result.Preview.Path != "" {
+					preview = result.Preview
 				}
 				return browserToolResult(destination, preview, result), nil
 			},

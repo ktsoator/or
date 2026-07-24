@@ -80,9 +80,8 @@ function previewTarget(
   sessionID?: string,
 ): BrowserNavigationTarget {
   const workspacePath = preview?.path
-  const workspaceRelativePath = preview?.relativePath ?? workspacePath
-  const requestedURL = workspaceRelativePath && sessionID
-    ? workspacePreviewURL(sessionID, workspaceRelativePath)
+  const requestedURL = workspacePath && sessionID && preview.grantID && preview.previewPath
+    ? workspacePreviewURL(sessionID, preview.grantID, preview.previewPath)
     : preview?.url ?? ''
   return {
     requestedURL,
@@ -165,6 +164,8 @@ export function BrowserView({
         preview.revision,
         preview.commandID ?? '',
         preview.url ?? preview.path ?? '',
+        preview.grantID ?? '',
+        preview.previewPath ?? '',
       ].join(':')
     : undefined
   const previewKeyRef = useRef(previewKey)
