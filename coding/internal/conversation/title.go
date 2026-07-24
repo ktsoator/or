@@ -46,7 +46,7 @@ func clampTitle(title string) string {
 
 // displayTitle returns the best available title for this session. Callers must
 // hold Manager.mu.
-func (s *Runtime) displayTitle() string {
+func (s *sessionRuntime) displayTitle() string {
 	if s.record.CustomTitle != "" {
 		return s.record.CustomTitle
 	}
@@ -56,14 +56,14 @@ func (s *Runtime) displayTitle() string {
 	return s.record.Title
 }
 
-// broadcastTitle sends the current title to connected clients. Callers must hold
-// Manager.mu; emit never blocks, so holding it is cheap.
-func (s *Runtime) broadcastTitle() {
-	s.emit(TitleChanged{
+// titleChanged snapshots the current title event. Callers hold Manager.mu so
+// the record cannot change while the payload is built.
+func (s *sessionRuntime) titleChanged() TitleChanged {
+	return TitleChanged{
 		Title:       s.displayTitle(),
 		AITitle:     s.record.AITitle,
 		CustomTitle: s.record.CustomTitle,
-	})
+	}
 }
 
 // maybeGenerateTitle starts background AI title generation as soon as a user
@@ -73,7 +73,7 @@ func (s *Runtime) broadcastTitle() {
 // because a model error or an unparseable reply should not cost the session its
 // title for the lifetime of the process. Runs on the session's event goroutine,
 // so it must not block on the model call.
-func (m *Manager) maybeGenerateTitle(runtime *Runtime, eventPrompt string) {
+func (m *Manager) maybeGenerateTitle(runtime *sessionRuntime, eventPrompt string) {
 	firstPrompt := strings.TrimSpace(eventPrompt)
 	for _, item := range runtime.session.History() {
 		if item.Type == engine.HistoryUser && strings.TrimSpace(item.Text) != "" {
@@ -112,7 +112,7 @@ func (m *Manager) maybeGenerateTitle(runtime *Runtime, eventPrompt string) {
 // reported while the session keeps its prompt-derived title.
 func (m *Manager) generateSessionTitle(
 	ctx context.Context,
-	runtime *Runtime,
+	runtime *sessionRuntime,
 	provider, modelID, firstPrompt string,
 	generate titleGenerator,
 ) error {
@@ -132,17 +132,20 @@ func (m *Manager) generateSessionTitle(
 	}
 
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	current, exists := m.sessions[runtime.record.ID]
 	if m.closed || !exists || current != runtime || runtime.record.CustomTitle != "" {
+		m.mu.Unlock()
 		return nil
 	}
 	runtime.record.AITitle = title
 	if err := m.saveLocked(); err != nil {
 		runtime.record.AITitle = ""
+		m.mu.Unlock()
 		return err
 	}
-	runtime.broadcastTitle()
+	event := runtime.titleChanged()
+	m.mu.Unlock()
+	runtime.emit(event)
 	return nil
 }
 

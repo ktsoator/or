@@ -93,7 +93,7 @@ func TestManagerRunReservationProtectsConversation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !runtime.Running() {
+	if !runtime.live.Load() {
 		t.Fatal("runtime is not exposed as running")
 	}
 	if _, err := manager.reservePrompt(created.ID, "second", nil); !errors.Is(err, engine.ErrBusy) {
@@ -110,7 +110,7 @@ func TestManagerRunReservationProtectsConversation(t *testing.T) {
 	}
 
 	manager.finishRun(created.ID, runtime)
-	if runtime.Running() {
+	if runtime.live.Load() {
 		t.Fatal("runtime is still exposed as running after cleanup")
 	}
 	updated, err := manager.UpdatePermissionMode(created.ID, permission.ModeReadOnly)
@@ -130,7 +130,7 @@ func TestManagerGeneratesTitleBeforeAssistantResponseCompletes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime, ok := manager.Get(created.ID)
+	runtime, ok := manager.runtime(created.ID)
 	if !ok {
 		t.Fatal("created conversation not found")
 	}
@@ -194,7 +194,7 @@ func TestManagerDeleteRemovesScratchWorkspaceAndSessionFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime, ok := manager.Get(created.ID)
+	runtime, ok := manager.runtime(created.ID)
 	if !ok {
 		t.Fatal("created conversation not found")
 	}
@@ -254,7 +254,7 @@ func TestManagerDeleteRestoresFilesWhenIndexWriteFails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime, ok := manager.Get(created.ID)
+	runtime, ok := manager.runtime(created.ID)
 	if !ok {
 		t.Fatal("created conversation not found")
 	}
@@ -271,7 +271,7 @@ func TestManagerDeleteRestoresFilesWhenIndexWriteFails(t *testing.T) {
 	if err := manager.Delete(created.ID); err == nil {
 		t.Fatal("Delete succeeded with a directory blocking the index temp file")
 	}
-	if _, ok := manager.Get(created.ID); !ok {
+	if _, ok := manager.runtime(created.ID); !ok {
 		t.Fatal("conversation was not restored after failed delete")
 	}
 	if transport.closed.Load() {
@@ -304,7 +304,7 @@ func TestManagerPermissionModeRollsBackWhenIndexWriteFails(t *testing.T) {
 	if _, err := manager.UpdatePermissionMode(created.ID, permission.ModeAutoEdit); err == nil {
 		t.Fatal("UpdatePermissionMode succeeded with a directory blocking the index temp file")
 	}
-	runtime, ok := manager.Get(created.ID)
+	runtime, ok := manager.runtime(created.ID)
 	if !ok {
 		t.Fatal("conversation missing after failed permission update")
 	}
@@ -321,7 +321,7 @@ func TestManagerCloseIsIdempotentAndRejectsNewWork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime, ok := manager.Get(created.ID)
+	runtime, ok := manager.runtime(created.ID)
 	if !ok {
 		t.Fatal("created conversation not found")
 	}

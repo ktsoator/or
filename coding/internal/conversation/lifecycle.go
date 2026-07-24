@@ -223,9 +223,9 @@ func (m *Manager) UpdatePermissionMode(id string, mode permission.Mode) (Summary
 func (m *Manager) Rename(id, customTitle string) (Summary, error) {
 	customTitle = clampTitle(customTitle)
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	runtime, ok := m.sessions[id]
 	if !ok {
+		m.mu.Unlock()
 		return Summary{}, os.ErrNotExist
 	}
 
@@ -234,8 +234,12 @@ func (m *Manager) Rename(id, customTitle string) (Summary, error) {
 	runtime.record.UpdatedAt = time.Now().UTC()
 	if err := m.saveLocked(); err != nil {
 		runtime.record.CustomTitle = previousCustomTitle
+		m.mu.Unlock()
 		return Summary{}, err
 	}
-	runtime.broadcastTitle()
-	return runtime.summary(), nil
+	summary := runtime.summary()
+	event := runtime.titleChanged()
+	m.mu.Unlock()
+	runtime.emit(event)
+	return summary, nil
 }

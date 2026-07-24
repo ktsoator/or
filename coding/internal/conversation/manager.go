@@ -31,7 +31,7 @@ type Manager struct {
 	generateTitle titleGenerator
 
 	mu        sync.RWMutex
-	sessions  map[string]*Runtime
+	sessions  map[string]*sessionRuntime
 	usage     *usage.Store
 	closed    bool
 	tasks     sync.WaitGroup
@@ -59,7 +59,7 @@ func NewManager(ctx context.Context, opts Options) (*Manager, error) {
 		workspaces:    opts.Workspaces,
 		newTransport:  opts.NewTransport,
 		generateTitle: defaultTitleGenerator,
-		sessions:      make(map[string]*Runtime),
+		sessions:      make(map[string]*sessionRuntime),
 		usage:         opts.Usage,
 	}
 
@@ -96,7 +96,7 @@ func (m *Manager) Close() {
 	m.closeOnce.Do(func() {
 		m.mu.Lock()
 		m.closed = true
-		runtimes := make([]*Runtime, 0, len(m.sessions))
+		runtimes := make([]*sessionRuntime, 0, len(m.sessions))
 		for _, runtime := range m.sessions {
 			runtimes = append(runtimes, runtime)
 		}
@@ -119,7 +119,7 @@ func (m *Manager) closeSessions() {
 	}
 }
 
-func (m *Manager) build(record record) (*Runtime, error) {
+func (m *Manager) build(record record) (*sessionRuntime, error) {
 	if record.Scope != ScopeChat && record.Scope != ScopeProject {
 		return nil, fmt.Errorf("session: invalid session scope %q", record.Scope)
 	}
@@ -168,7 +168,7 @@ func (m *Manager) build(record record) (*Runtime, error) {
 		transport.Close()
 		return nil, err
 	}
-	runtime := &Runtime{record: record, session: session, transport: transport}
+	runtime := &sessionRuntime{record: record, session: session, transport: transport}
 	session.Subscribe(func(ev engine.Event) {
 		m.handleSessionEvent(record.ID, runtime, ev)
 	})
@@ -184,7 +184,7 @@ func (m *Manager) build(record record) (*Runtime, error) {
 	return runtime, nil
 }
 
-func (s *Runtime) stop() {
+func (s *sessionRuntime) stop() {
 	s.running.Store(false)
 	s.live.Store(false)
 	s.session.Abort()
@@ -192,13 +192,13 @@ func (s *Runtime) stop() {
 	s.session.ClearQueuedMessages()
 }
 
-func (s *Runtime) close() {
+func (s *sessionRuntime) close() {
 	s.stop()
 	s.session.Close()
 	s.transport.Close()
 }
 
-func (m *Manager) handleSessionEvent(sessionID string, runtime *Runtime, ev engine.Event) {
+func (m *Manager) handleSessionEvent(sessionID string, runtime *sessionRuntime, ev engine.Event) {
 	if ev.Type == engine.MessageCompleted || ev.Type == engine.CompactionCompleted {
 		// Usage accounting must not interrupt a successful model run. The
 		// transcript remains available for idempotent startup backfill if an

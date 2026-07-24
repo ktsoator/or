@@ -50,23 +50,26 @@ func (m *Manager) reservePrompt(
 	id string,
 	prompt string,
 	images []llm.ImageContent,
-) (*Runtime, error) {
+) (*sessionRuntime, error) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	if m.closed {
+		m.mu.Unlock()
 		return nil, ErrManagerClosed
 	}
 	runtime, ok := m.sessions[id]
 	if !ok {
+		m.mu.Unlock()
 		return nil, os.ErrNotExist
 	}
 	if len(images) > 0 {
 		model, found := llm.LookupModel(runtime.record.Provider, runtime.record.Model)
 		if !found || !slices.Contains(model.Input, llm.Image) {
+			m.mu.Unlock()
 			return nil, ErrImagesUnsupported
 		}
 	}
 	if !runtime.running.CompareAndSwap(false, true) {
+		m.mu.Unlock()
 		return nil, engine.ErrBusy
 	}
 	runtime.live.Store(true)
@@ -84,15 +87,18 @@ func (m *Manager) reservePrompt(
 		runtime.record = previous
 		runtime.running.Store(false)
 		runtime.live.Store(false)
+		m.mu.Unlock()
 		return nil, err
 	}
 	m.tasks.Add(1)
+	event := runtime.titleChanged()
+	m.mu.Unlock()
 	// Broadcast title change so the client updates immediately.
-	runtime.broadcastTitle()
+	runtime.emit(event)
 	return runtime, nil
 }
 
-func (m *Manager) reserveCompact(id string) (*Runtime, error) {
+func (m *Manager) reserveCompact(id string) (*sessionRuntime, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.closed {
@@ -120,7 +126,7 @@ func (m *Manager) reserveCompact(id string) (*Runtime, error) {
 
 // finishRun clears live activity, records when the session last finished, and
 // drops queued messages that the run did not consume.
-func (m *Manager) finishRun(id string, runtime *Runtime) {
+func (m *Manager) finishRun(id string, runtime *sessionRuntime) {
 	m.mu.Lock()
 	if current, ok := m.sessions[id]; ok && current == runtime {
 		runtime.running.Store(false)

@@ -1,6 +1,8 @@
 package conversation
 
 import (
+	"errors"
+	"os"
 	"testing"
 
 	"github.com/ktsoator/or/coding/internal/engine"
@@ -21,25 +23,25 @@ func TestHandleSessionEventConsumesPendingByQueueHandle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime, ok := manager.Get(created.ID)
+	runtime, ok := manager.runtime(created.ID)
 	if !ok {
 		t.Fatal("created conversation not found")
 	}
 
 	runtime.running.Store(true)
-	if !runtime.Queue(QueuedMessage{
+	if err := manager.QueueMessage(created.ID, QueuedMessage{
 		ID:       "followup",
 		Delivery: DeliveryFollowUp,
 		Text:     "same content",
-	}) {
-		t.Fatal("follow-up was not queued")
+	}); err != nil {
+		t.Fatalf("queue follow-up: %v", err)
 	}
-	if !runtime.Queue(QueuedMessage{
+	if err := manager.QueueMessage(created.ID, QueuedMessage{
 		ID:       "steer",
 		Delivery: DeliverySteer,
 		Text:     "same content",
-	}) {
-		t.Fatal("steer was not queued")
+	}); err != nil {
+		t.Fatalf("queue steer: %v", err)
 	}
 
 	runtime.pendingMu.Lock()
@@ -67,5 +69,55 @@ func TestHandleSessionEventConsumesPendingByQueueHandle(t *testing.T) {
 	defer runtime.pendingMu.Unlock()
 	if len(runtime.pending) != 1 || runtime.pending[0].ID != "followup" {
 		t.Fatalf("pending messages = %#v, want only follow-up", runtime.pending)
+	}
+}
+
+func TestManagerQueueCommandsOwnRuntimeValidation(t *testing.T) {
+	manager := newTestManager(t, t.TempDir())
+	model, thinking := testCatalogModel(t)
+	created, err := manager.Create(
+		"Queue commands",
+		t.TempDir(),
+		ScopeProject,
+		model,
+		thinking,
+		permission.ModeAsk,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	message := QueuedMessage{
+		ID:       "queued",
+		Delivery: DeliveryFollowUp,
+		Text:     "next",
+	}
+	if err := manager.QueueMessage(created.ID, message); !errors.Is(err, ErrSessionNotRunning) {
+		t.Fatalf("idle QueueMessage error = %v, want ErrSessionNotRunning", err)
+	}
+
+	runtime, ok := manager.runtime(created.ID)
+	if !ok {
+		t.Fatal("created conversation not found")
+	}
+	runtime.running.Store(true)
+	if err := manager.QueueMessage(created.ID, message); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.DequeueMessage(created.ID, "missing"); !errors.Is(err, ErrQueuedMessageNotFound) {
+		t.Fatalf("missing DequeueMessage error = %v, want ErrQueuedMessageNotFound", err)
+	}
+	if err := manager.DequeueMessage(created.ID, message.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	snapshot, err := manager.Snapshot(created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Queue) != 0 {
+		t.Fatalf("snapshot queue = %#v, want empty", snapshot.Queue)
+	}
+	if _, err := manager.Snapshot("missing"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("missing Snapshot error = %v, want os.ErrNotExist", err)
 	}
 }

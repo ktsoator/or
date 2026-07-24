@@ -42,8 +42,22 @@ var ErrInvalidPermissionMode = errors.New("session: invalid permission mode")
 // ErrManagerClosed rejects new work after product shutdown has started.
 var ErrManagerClosed = errors.New("session: conversation manager is closed")
 
+// ErrApprovalPending rejects new queued work while a tool permission decision
+// is still waiting for the viewer.
+var ErrApprovalPending = errors.New("session: approval is pending")
+
+// ErrSessionNotRunning rejects a queued message after its run has ended.
+var ErrSessionNotRunning = errors.New("session: session is not running")
+
+// ErrQueuedMessageNotFound reports an unknown browser-facing queue ID.
+var ErrQueuedMessageNotFound = errors.New("session: queued message not found")
+
+// ErrQueuedMessageInFlight reports a message that already left the agent queue
+// and can no longer be withdrawn.
+var ErrQueuedMessageInFlight = errors.New("session: queued message is already being processed")
+
 // Summary is the browser-facing metadata for one independent coding
-// conversation. Runtime-only state is sampled when the list is requested.
+// conversation. Live state is sampled when the list is requested.
 type Summary struct {
 	ID             string                 `json:"id"`
 	Title          string                 `json:"title"`
@@ -82,7 +96,7 @@ type record struct {
 	PermissionMode string    `json:"permissionMode,omitempty"`
 }
 
-type Runtime struct {
+type sessionRuntime struct {
 	record    record
 	session   *engine.Session
 	transport Transport
@@ -90,7 +104,7 @@ type Runtime struct {
 	live      atomic.Bool // state exposed to clients; clears before done is published
 
 	pendingMu sync.Mutex
-	pending   []QueuedMessage
+	pending   []pendingMessage
 
 	// titleGenerating is held only while an attempt is in flight, so a failed
 	// attempt is retried when the next user message enters the session.

@@ -37,12 +37,13 @@ func (s *Server) handlePreviewCheck(c *gin.Context) {
 }
 
 func (s *Server) handleWorkspacePreview(c *gin.Context) {
-	runtime, ok := s.runtime(c)
-	if !ok {
+	workspacePath, err := s.conversations.WorkspacePath(c.Param("sessionID"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
 		return
 	}
 	path := strings.TrimPrefix(c.Param("path"), "/")
-	if err := serveWorkspacePreview(c.Writer, c.Request, runtime.WorkspacePath(), path); err != nil {
+	if err := serveWorkspacePreview(c.Writer, c.Request, workspacePath, path); err != nil {
 		http.NotFound(c.Writer, c.Request)
 	}
 }

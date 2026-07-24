@@ -192,14 +192,6 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 	c.JSON(http.StatusCreated, summary)
 }
 
-func (s *Server) runtime(c *gin.Context) (*conversation.Runtime, bool) {
-	runtime, ok := s.conversations.Get(c.Param("sessionID"))
-	if !ok {
-		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
-	}
-	return runtime, ok
-}
-
 func (s *Server) sessionTransport(c *gin.Context) (*sessionTransport, bool) {
 	transport, ok := s.transports.get(c.Param("sessionID"))
 	if !ok {
@@ -212,10 +204,6 @@ func (s *Server) sessionTransport(c *gin.Context) (*sessionTransport, bool) {
 // or refreshed browser can rebuild the conversation before consuming new SSE
 // events.
 func (s *Server) handleHistory(c *gin.Context) {
-	runtime, ok := s.runtime(c)
-	if !ok {
-		return
-	}
 	c.Header("Cache-Control", "no-store")
 	transport, ok := s.sessionTransport(c)
 	if !ok {
@@ -225,13 +213,23 @@ func (s *Server) handleHistory(c *gin.Context) {
 	var queue []wireEvent
 	var contextUsage wireContextUsage
 	var running bool
+	var snapshotErr error
 	eventSeq := transport.hub.snapshot(func() {
-		events = ProjectHistory(runtime.History())
+		var snapshot conversation.Snapshot
+		snapshot, snapshotErr = s.conversations.Snapshot(c.Param("sessionID"))
+		if snapshotErr != nil {
+			return
+		}
+		events = ProjectHistory(snapshot.History)
 		events = append(events, transport.broker.PendingEvents()...)
-		queue = projectQueue(runtime.PendingEvents())
-		contextUsage = projectContextUsage(runtime.ContextUsage())
-		running = runtime.Running()
+		queue = projectQueue(snapshot.Queue)
+		contextUsage = projectContextUsage(snapshot.ContextUsage)
+		running = snapshot.Running
 	})
+	if snapshotErr != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"events":   events,
 		"queue":    queue,
@@ -244,10 +242,6 @@ func (s *Server) handleHistory(c *gin.Context) {
 // handleEvents streams run events to one browser over Server-Sent Events until
 // the request is cancelled.
 func (s *Server) handleEvents(c *gin.Context) {
-	_, ok := s.runtime(c)
-	if !ok {
-		return
-	}
 	transport, ok := s.sessionTransport(c)
 	if !ok {
 		return
@@ -325,20 +319,8 @@ func (s *Server) handleFollowUp(c *gin.Context) {
 }
 
 func (s *Server) handleQueuedMessage(c *gin.Context, delivery conversation.Delivery) {
-	runtime, ok := s.runtime(c)
-	if !ok {
-		return
-	}
 	body, images, ok := bindMessageRequest(c)
 	if !ok {
-		return
-	}
-	if runtime.HasPendingApproval() {
-		c.JSON(http.StatusConflict, gin.H{"error": "resolve the pending approval before queuing a message"})
-		return
-	}
-	if len(images) > 0 && !runtime.SupportsImages() {
-		c.JSON(http.StatusBadRequest, gin.H{"error": conversation.ErrImagesUnsupported.Error()})
 		return
 	}
 	id := strings.TrimSpace(body.ID)
@@ -355,30 +337,46 @@ func (s *Server) handleQueuedMessage(c *gin.Context, delivery conversation.Deliv
 		Text:     body.Text,
 		Images:   images,
 	}
-	if !runtime.Queue(message) {
+	err := s.conversations.QueueMessage(c.Param("sessionID"), message)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+		return
+	case errors.Is(err, conversation.ErrApprovalPending):
+		c.JSON(http.StatusConflict, gin.H{"error": "resolve the pending approval before queuing a message"})
+		return
+	case errors.Is(err, conversation.ErrImagesUnsupported):
+		c.JSON(http.StatusBadRequest, gin.H{"error": conversation.ErrImagesUnsupported.Error()})
+		return
+	case errors.Is(err, conversation.ErrSessionNotRunning):
 		c.JSON(http.StatusConflict, gin.H{"error": "the session is no longer running"})
+		return
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusAccepted, gin.H{"id": id})
 }
 
 func (s *Server) handleRemoveQueuedMessage(c *gin.Context) {
-	runtime, ok := s.runtime(c)
-	if !ok {
-		return
-	}
 	id := strings.TrimSpace(c.Param("messageID"))
 	if id == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "message id is required"})
 		return
 	}
-	found, removed := runtime.Dequeue(id)
-	if !found {
+	err := s.conversations.DequeueMessage(c.Param("sessionID"), id)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+		return
+	case errors.Is(err, conversation.ErrQueuedMessageNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": "queued message not found"})
 		return
-	}
-	if !removed {
+	case errors.Is(err, conversation.ErrQueuedMessageInFlight):
 		c.JSON(http.StatusConflict, gin.H{"error": "queued message is already being processed"})
+		return
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -386,10 +384,6 @@ func (s *Server) handleRemoveQueuedMessage(c *gin.Context) {
 
 // handleApproval resolves a pending permission request.
 func (s *Server) handleApproval(c *gin.Context) {
-	_, ok := s.runtime(c)
-	if !ok {
-		return
-	}
 	transport, ok := s.sessionTransport(c)
 	if !ok {
 		return
@@ -412,11 +406,13 @@ func (s *Server) handleApproval(c *gin.Context) {
 
 // handleAbort cancels the current run.
 func (s *Server) handleAbort(c *gin.Context) {
-	runtime, ok := s.runtime(c)
-	if !ok {
+	if err := s.conversations.Abort(c.Param("sessionID")); errors.Is(err, os.ErrNotExist) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+		return
+	} else if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	runtime.Abort()
 	c.Status(http.StatusNoContent)
 }
 

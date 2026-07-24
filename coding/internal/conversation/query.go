@@ -1,8 +1,8 @@
 package conversation
 
 import (
+	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 
 	"github.com/ktsoator/or/coding/internal/engine"
@@ -10,7 +10,57 @@ import (
 	"github.com/ktsoator/or/llm"
 )
 
-func (m *Manager) Get(id string) (*Runtime, bool) {
+// Snapshot is the complete client-readable state of one conversation.
+type Snapshot struct {
+	History      []engine.HistoryItem
+	Queue        []Event
+	ContextUsage engine.ContextUsage
+	Running      bool
+}
+
+// Snapshot returns the current client-readable state without exposing the
+// runtime that owns the engine session.
+func (m *Manager) Snapshot(id string) (Snapshot, error) {
+	m.mu.RLock()
+	runtime, ok := m.sessions[id]
+	m.mu.RUnlock()
+	if !ok {
+		return Snapshot{}, os.ErrNotExist
+	}
+	return Snapshot{
+		History:      runtime.session.History(),
+		Queue:        runtime.pendingEvents(),
+		ContextUsage: runtime.session.ContextUsage(),
+		Running:      runtime.live.Load(),
+	}, nil
+}
+
+// WorkspacePath returns the tool root owned by one conversation.
+func (m *Manager) WorkspacePath(id string) (string, error) {
+	m.mu.RLock()
+	runtime, ok := m.sessions[id]
+	m.mu.RUnlock()
+	if !ok {
+		return "", os.ErrNotExist
+	}
+	return runtime.session.Cwd(), nil
+}
+
+// Abort cancels the active run, if any.
+func (m *Manager) Abort(id string) error {
+	m.mu.RLock()
+	runtime, ok := m.sessions[id]
+	m.mu.RUnlock()
+	if !ok {
+		return os.ErrNotExist
+	}
+	runtime.session.Abort()
+	return nil
+}
+
+// runtime returns the package-owned runtime for internal coordination and
+// white-box tests. It is intentionally not exposed to product adapters.
+func (m *Manager) runtime(id string) (*sessionRuntime, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	runtime, ok := m.sessions[id]
@@ -47,7 +97,7 @@ func (m *Manager) List() []Summary {
 	return out
 }
 
-func (s *Runtime) summary() Summary {
+func (s *sessionRuntime) summary() Summary {
 	modelName := s.record.Model
 	if model, ok := llm.LookupModel(s.record.Provider, s.record.Model); ok && model.Name != "" {
 		modelName = model.Name
@@ -72,29 +122,3 @@ func (s *Runtime) summary() Summary {
 		PermissionMode: permission.NormalizeMode(permission.Mode(s.record.PermissionMode)),
 	}
 }
-
-// History returns the displayable transcript without exposing the engine
-// session that owns it.
-func (s *Runtime) History() []engine.HistoryItem { return s.session.History() }
-
-// ContextUsage returns the current context-window estimate.
-func (s *Runtime) ContextUsage() engine.ContextUsage { return s.session.ContextUsage() }
-
-// WorkspacePath returns the root used by this conversation's tools.
-func (s *Runtime) WorkspacePath() string { return s.session.Cwd() }
-
-// SupportsImages reports whether the active model accepts image input.
-func (s *Runtime) SupportsImages() bool {
-	return slices.Contains(s.session.Snapshot().Model.Input, llm.Image)
-}
-
-// Abort cancels the active run, if any.
-func (s *Runtime) Abort() { s.session.Abort() }
-
-// Running reports the live state exposed to clients. It clears before the
-// terminal event is published, while the internal reservation remains held
-// until the manager finishes its cleanup.
-func (s *Runtime) Running() bool { return s.live.Load() }
-
-// HasPendingApproval reports a permission gate still waiting on an answer.
-func (s *Runtime) HasPendingApproval() bool { return s.transport.HasPendingApproval() }
