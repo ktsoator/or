@@ -47,6 +47,7 @@ const projectContextProtocol = "## Project context protocol\n" +
 
 const skillProtocol = "## Skills\n" +
 	"- Available skills are announced in product-generated context.\n" +
+	"- A later `skills_update` block replaces every earlier skill listing; use only its current names.\n" +
 	"- When the task matches a listed skill, call the `skill` tool before acting and follow the loaded instructions.\n" +
 	"- Never guess a skill name that was not listed."
 

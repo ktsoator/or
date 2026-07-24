@@ -41,7 +41,9 @@ func newEngineSession(
 		Policy:        permission.PolicyForMode(cfg.PermissionMode),
 		Approver:      transport,
 		Browser:       transport,
-		Skills:        loadSkills(cfg.WorkspacePath),
+		SkillLoader: func() []skills.Skill {
+			return loadSkills(cfg.WorkspacePath)
+		},
 	})
 }
 

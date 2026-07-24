@@ -60,7 +60,8 @@ func TestSessionProjectsBaseContextOutsideStableSystemPrompt(t *testing.T) {
 		}
 	}
 	for _, dynamic := range []string{
-		`<or-context kind="session">`,
+		`<or-context kind="base">`,
+		`<or-context kind="skill_listing">`,
 		"Follow the workspace rule.",
 		"<name>review</name>",
 	} {
@@ -75,38 +76,51 @@ func TestSessionProjectsBaseContextOutsideStableSystemPrompt(t *testing.T) {
 	if captured.SystemPrompt != system {
 		t.Fatalf("provider system prompt changed:\n%s", captured.SystemPrompt)
 	}
-	if len(captured.Messages) != 2 {
-		t.Fatalf("provider messages = %d, want hidden context and user", len(captured.Messages))
+	if len(captured.Messages) != 3 {
+		t.Fatalf("provider messages = %d, want base, skill listing, and user", len(captured.Messages))
 	}
 	base := llmUserText(t, captured.Messages[0])
 	for _, want := range []string{
-		`<or-context kind="session">`,
+		`<or-context kind="base">`,
 		"Follow the workspace rule.",
-		"<name>review</name>",
-		"<description>Review changes before completion</description>",
 	} {
 		if !strings.Contains(base, want) {
 			t.Errorf("Base Context missing %q:\n%s", want, base)
 		}
 	}
-	if got := llmUserText(t, captured.Messages[1]); got != "question" {
+	listing := llmUserText(t, captured.Messages[1])
+	for _, want := range []string{
+		`<or-context kind="skill_listing"`,
+		"<name>review</name>",
+		"<description>Review changes before completion</description>",
+	} {
+		if !strings.Contains(listing, want) {
+			t.Errorf("skill listing missing %q:\n%s", want, listing)
+		}
+	}
+	if got := llmUserText(t, captured.Messages[2]); got != "question" {
 		t.Fatalf("canonical user = %q, want question", got)
 	}
 
 	entries, batches, _ := store.snapshot()
-	if len(entries) != 4 {
-		t.Fatalf("durable entries = %d, want context, user, assistant, run", len(entries))
+	if len(entries) != 5 {
+		t.Fatalf("durable entries = %d, want two contexts, user, assistant, run", len(entries))
 	}
 	if entries[0].Type != transcript.ContextEntry || entries[0].Context == nil {
 		t.Fatalf("first durable entry = %#v, want hidden context", entries[0])
 	}
 	if entries[0].Context.Epoch != 1 ||
-		entries[0].Context.Kind != "session" ||
+		entries[0].Context.Kind != "base" ||
 		entries[0].Context.Placement != "prefix" {
 		t.Fatalf("context metadata = %#v", entries[0].Context)
 	}
-	if len(batches) != 2 || len(batches[0]) != 2 || len(batches[1]) != 2 {
-		t.Fatalf("append batch sizes = %v, want [2 2]", batchSizes(batches))
+	if entries[1].Type != transcript.ContextEntry ||
+		entries[1].Context == nil ||
+		entries[1].Context.Kind != "skill_listing" {
+		t.Fatalf("second durable entry = %#v, want skill listing", entries[1])
+	}
+	if len(batches) != 2 || len(batches[0]) != 3 || len(batches[1]) != 2 {
+		t.Fatalf("append batch sizes = %v, want [3 2]", batchSizes(batches))
 	}
 	history := session.History()
 	for _, item := range history {

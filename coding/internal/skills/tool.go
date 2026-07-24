@@ -13,7 +13,7 @@ import (
 // ToolName is the advertised name of the skill-loading tool.
 const ToolName = "skill"
 
-const toolDescription = "Load a skill's full instructions on demand. The system prompt lists the " +
+const toolDescription = "Load a skill's full instructions on demand. Product context announces the " +
 	"available skills by name and description; when the current task matches one, call this tool " +
 	"with that skill's name BEFORE acting, then follow the instructions it returns. Only names from " +
 	"the listing are valid — never guess. Pass any extra task detail via the optional arguments field."
@@ -28,6 +28,16 @@ type skillCallArgs struct {
 // should advertise it as read-only. On an unknown name it returns an error
 // naming the valid skills, so the model corrects rather than guesses.
 func (r *Registry) Tool() agent.AgentTool {
+	return newTool(r.Lookup, r.names)
+}
+
+// newTool builds the stable skill-tool schema around snapshot-aware lookup
+// functions. Registry and DynamicRegistry share this implementation so changing
+// the active registry never changes the provider-visible tool definition.
+func newTool(
+	lookup func(string) (Skill, bool),
+	names func() []string,
+) agent.AgentTool {
 	return agent.AgentTool{
 		Definition: llm.MustTool[skillCallArgs](ToolName, toolDescription),
 		Label:      "Skill",
@@ -37,9 +47,9 @@ func (r *Registry) Tool() agent.AgentTool {
 				return agent.ToolResult{}, err
 			}
 			name := strings.TrimSpace(in.Name)
-			s, ok := r.Lookup(name)
+			s, ok := lookup(name)
 			if !ok {
-				msg := unknownSkillMessage(name, r.names())
+				msg := unknownSkillMessage(name, names())
 				return textResult(msg), fmt.Errorf("%s", msg)
 			}
 			return textResult(formatLoadedSkill(s, in.Arguments)), nil

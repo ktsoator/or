@@ -40,10 +40,14 @@ type Options struct {
 	// Tools is the tool set. Nil uses tools.CodingTools rooted at Cwd, backed by
 	// tools.LocalOps.
 	Tools []tools.Tool
-	// Skills are file-backed skills advertised to the model and loadable on
-	// demand via the skill tool. Empty disables skills, and the tool is omitted.
-	// Load them with skills.Load and pass the result here.
+	// Skills is the initial immutable skill snapshot. The stable skill tool is
+	// present even when this slice is empty.
 	Skills []skills.Skill
+	// SkillLoader refreshes the resolved skill snapshot once at session
+	// construction and once before every top-level Prompt or Continue. Nil keeps
+	// Skills static. The loader is deliberately not called for provider retries,
+	// tool-loop turns, or context-overflow recovery.
+	SkillLoader func() []skills.Skill
 	// Policy classifies resolved tool access. Nil uses permission.DefaultPolicy.
 	Policy permission.Policy
 	// Approver obtains decisions for calls classified as Ask. Nil denies them.
@@ -82,15 +86,19 @@ type Options struct {
 // run completes and are mutually exclusive; a concurrent call returns ErrBusy.
 // Steer, FollowUp, Abort, Subscribe, and Snapshot are safe during a run.
 type Session struct {
-	agent        *agent.Agent
-	store        transcript.Store
-	tools        []tools.Tool
-	toolByName   map[string]tools.Tool
-	authorizer   *permission.Service
-	shells       *tools.BackgroundShells
-	cwd          string
-	skills       []skills.Skill
-	modelContext *modelcontext.Manager
+	agent                *agent.Agent
+	store                transcript.Store
+	tools                []tools.Tool
+	toolByName           map[string]tools.Tool
+	authorizer           *permission.Service
+	shells               *tools.BackgroundShells
+	cwd                  string
+	skillRegistry        *skills.DynamicRegistry
+	skillLoader          func() []skills.Skill
+	skillRevision        string
+	pendingSkills        *skills.Registry
+	pendingSkillRevision string
+	modelContext         *modelcontext.Manager
 
 	maxRetries    int
 	contextWindow int64
@@ -139,12 +147,18 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		toolSet, shells = tools.CodingToolsWithShells(cwd, tools.LocalOps{}, opts.Browser)
 	}
 
-	// A skill tool is added only when skills are configured. Loading already
-	// discovered skill text is internal session access and needs no approval.
-	if len(opts.Skills) > 0 {
-		reg := skills.NewRegistry(opts.Skills)
-		toolSet = append(toolSet, tools.Tool{AgentTool: reg.Tool(), AccessFor: tools.InternalAccess})
+	initialSkills := opts.Skills
+	if opts.SkillLoader != nil {
+		initialSkills = opts.SkillLoader()
 	}
+	initialRegistry := skills.NewRegistry(initialSkills)
+	dynamicSkills := skills.NewDynamicRegistry(initialRegistry)
+	// The tool schema and closure have session lifetime even when no skill is
+	// currently installed. Only the immutable registry behind the closure moves.
+	toolSet = upsertTool(toolSet, tools.Tool{
+		AgentTool: dynamicSkills.Tool(),
+		AccessFor: tools.InternalAccess,
+	})
 
 	authorizer, err := permission.NewService(cwd, opts.Policy, opts.Approver)
 	if err != nil {
@@ -195,7 +209,9 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		authorizer:     authorizer,
 		shells:         shells,
 		cwd:            cwd,
-		skills:         opts.Skills,
+		skillRegistry:  dynamicSkills,
+		skillLoader:    opts.SkillLoader,
+		skillRevision:  initialRegistry.Revision(),
 		maxRetries:     maxRetries,
 		contextWindow:  opts.Model.ContextWindow,
 		compactor:      opts.Compactor,
@@ -214,7 +230,9 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	}
 	s.modelContext = modelcontext.New(
 		nextContextEpoch(entries),
-		s.buildSessionContext(),
+		s.buildBaseContext(),
+		s.skillRevision,
+		s.buildSkillListing(),
 	)
 
 	agentOpts := agent.Options{
@@ -325,6 +343,7 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 	if err := s.persistNew(ctx); err != nil {
 		return err
 	}
+	s.prepareSkillRefresh()
 	startedAt := time.Now().UTC()
 	runEntryStart := len(s.snapshotTranscript())
 	s.setRunState(ctx, startedAt, runEntryStart)
@@ -401,6 +420,7 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 			return nil, checkpointErr
 		}
 		s.modelContext.Commit(prepared)
+		s.commitSkillRefresh(prepared.Pending)
 		return delegate(ctx, model, prepared.Input, options)
 	}
 }
@@ -713,11 +733,67 @@ func (s *Session) buildSystemPrompt(instructions string) string {
 	})
 }
 
-func (s *Session) buildSessionContext() string {
-	return prompt.RenderSessionContext(prompt.SessionContextOptions{
-		ContextFiles: prompt.LoadContextFiles(s.cwd),
-		Skills:       skillInfos(s.skills),
-	})
+func (s *Session) buildBaseContext() string {
+	return prompt.RenderBaseContext(prompt.LoadContextFiles(s.cwd))
+}
+
+func (s *Session) buildSkillListing() string {
+	return prompt.RenderSkillListing(
+		s.skillRevision,
+		skillInfos(s.skillRegistry.List()),
+	)
+}
+
+// prepareSkillRefresh stages one immutable snapshot for the next request. The
+// live tool registry is not replaced here; modelStreamFn publishes it only after
+// the matching hidden update and canonical request prefix are durable.
+func (s *Session) prepareSkillRefresh() {
+	if s.skillLoader == nil {
+		return
+	}
+	next := skills.NewRegistry(s.skillLoader())
+	nextRevision := next.Revision()
+
+	if s.pendingSkills != nil {
+		switch nextRevision {
+		case s.pendingSkillRevision:
+			return
+		case s.skillRevision:
+			s.pendingSkills = nil
+			s.pendingSkillRevision = ""
+			s.modelContext.CancelStagedSkillsUpdate()
+			return
+		}
+	} else if nextRevision == s.skillRevision {
+		return
+	}
+
+	delta := skills.Diff(s.skillRegistry.Snapshot(), next)
+	rendered := prompt.RenderSkillsUpdate(
+		nextRevision,
+		skillInfos(next.List()),
+		promptSkillDelta(delta),
+	)
+	s.pendingSkills = next
+	s.pendingSkillRevision = nextRevision
+	s.modelContext.StageSkillsUpdate(nextRevision, rendered)
+}
+
+func (s *Session) commitSkillRefresh(attachments []modelcontext.Attachment) {
+	if s.pendingSkills == nil {
+		return
+	}
+	for _, attachment := range attachments {
+		if attachment.Kind != modelcontext.SkillsUpdate ||
+			attachment.Revision != s.pendingSkillRevision {
+			continue
+		}
+		s.skillRegistry.Replace(s.pendingSkills)
+		s.skillRevision = s.pendingSkillRevision
+		s.pendingSkills = nil
+		s.pendingSkillRevision = ""
+		return
+	}
 }
 
 func nextContextEpoch(entries []transcript.Entry) uint64 {
@@ -742,6 +818,25 @@ func skillInfos(skills []skills.Skill) []prompt.SkillInfo {
 		infos[i] = prompt.SkillInfo{Name: sk.Name, Description: sk.Description}
 	}
 	return infos
+}
+
+func promptSkillDelta(delta skills.Delta) prompt.SkillsDelta {
+	return prompt.SkillsDelta{
+		Added:   skillInfos(delta.Added),
+		Updated: skillInfos(delta.Updated),
+		Removed: append([]string(nil), delta.Removed...),
+	}
+}
+
+func upsertTool(toolSet []tools.Tool, builtIn tools.Tool) []tools.Tool {
+	result := append([]tools.Tool(nil), toolSet...)
+	for index := range result {
+		if result[index].Name() == builtIn.Name() {
+			result[index] = builtIn
+			return result
+		}
+	}
+	return append(result, builtIn)
 }
 
 // toolsByName indexes the tool set by advertised name for access description.

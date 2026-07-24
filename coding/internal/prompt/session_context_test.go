@@ -5,13 +5,14 @@ import (
 	"testing"
 )
 
-func TestRenderSessionContextIncludesSkills(t *testing.T) {
-	out := RenderSessionContext(SessionContextOptions{
-		Skills: []SkillInfo{
-			{Name: "review", Description: "Use when reviewing a diff"},
-			{Name: "commit", Description: "Use when committing changes"},
-		},
+func TestRenderSkillListingIncludesSkills(t *testing.T) {
+	out := RenderSkillListing("revision-1", []SkillInfo{
+		{Name: "review", Description: "Use when reviewing a diff"},
+		{Name: "commit", Description: "Use when committing changes"},
 	})
+	if !strings.Contains(out, `kind="skill_listing" revision="revision-1"`) {
+		t.Fatalf("missing listing metadata:\n%s", out)
+	}
 	if !strings.Contains(out, "<available-skills>") {
 		t.Fatalf("missing skills section:\n%s", out)
 	}
@@ -28,13 +29,14 @@ func TestRenderSessionContextIncludesSkills(t *testing.T) {
 	}
 }
 
-func TestRenderSessionContextIncludesInstructionFilesInInputOrder(t *testing.T) {
-	out := RenderSessionContext(SessionContextOptions{
-		ContextFiles: []ContextFile{
-			{Path: "/repo/AGENTS.md", Content: "outer", Scope: ScopeProject},
-			{Path: "/repo/service/AGENTS.md", Content: "inner", Scope: ScopeNested},
-		},
+func TestRenderBaseContextIncludesInstructionFilesInInputOrder(t *testing.T) {
+	out := RenderBaseContext([]ContextFile{
+		{Path: "/repo/AGENTS.md", Content: "outer", Scope: ScopeProject},
+		{Path: "/repo/service/AGENTS.md", Content: "inner", Scope: ScopeNested},
 	})
+	if !strings.Contains(out, `kind="base"`) {
+		t.Fatalf("missing base metadata:\n%s", out)
+	}
 	if !strings.Contains(out, `scope="project" path="/repo/AGENTS.md"`) {
 		t.Fatalf("missing project instruction file:\n%s", out)
 	}
@@ -46,21 +48,17 @@ func TestRenderSessionContextIncludesInstructionFilesInInputOrder(t *testing.T) 
 	}
 }
 
-func TestRenderSessionContextEmptyWhenNoUsableResources(t *testing.T) {
-	out := RenderSessionContext(SessionContextOptions{
-		ContextFiles: []ContextFile{{Path: "/repo/AGENTS.md", Content: " \n"}},
-		Skills:       []SkillInfo{{Name: "  ", Description: "ignored"}},
-	})
-	if out != "" {
-		t.Errorf("empty context = %q, want empty", out)
+func TestRenderInitialContextEmptyWhenNoUsableResources(t *testing.T) {
+	base := RenderBaseContext([]ContextFile{{Path: "/repo/AGENTS.md", Content: " \n"}})
+	listing := RenderSkillListing("revision", []SkillInfo{{Name: "  ", Description: "ignored"}})
+	if base != "" || listing != "" {
+		t.Errorf("empty contexts = %q and %q, want empty", base, listing)
 	}
 }
 
-func TestRenderSessionContextTruncatesSkillDescription(t *testing.T) {
+func TestRenderSkillListingTruncatesDescription(t *testing.T) {
 	long := strings.Repeat("x", maxSkillDescChars+50)
-	out := RenderSessionContext(SessionContextOptions{
-		Skills: []SkillInfo{{Name: "big", Description: long}},
-	})
+	out := RenderSkillListing("revision", []SkillInfo{{Name: "big", Description: long}})
 	// The entry line is truncated to the cap (with an ellipsis) rather than
 	// emitting the full description.
 	if strings.Contains(out, long) {
@@ -71,42 +69,88 @@ func TestRenderSessionContextTruncatesSkillDescription(t *testing.T) {
 	}
 }
 
-func TestRenderSessionContextEscapesMetadata(t *testing.T) {
-	out := RenderSessionContext(SessionContextOptions{
-		ContextFiles: []ContextFile{{
-			Path:    `/repo/"quoted"&file`,
-			Content: "instructions",
-		}},
-		Skills: []SkillInfo{{
-			Name:        "review&check",
-			Description: "Use <carefully>",
-		}},
-	})
-	for _, want := range []string{
-		`path="/repo/&#34;quoted&#34;&amp;file"`,
-		"<name>review&amp;check</name>",
-		"<description>Use &lt;carefully&gt;</description>",
+func TestRenderContextEscapesMetadata(t *testing.T) {
+	base := RenderBaseContext([]ContextFile{{
+		Path:    `/repo/"quoted"&file`,
+		Content: "instructions",
+	}})
+	listing := RenderSkillListing("revision&one", []SkillInfo{{
+		Name:        "review&check",
+		Description: "Use <carefully>",
+	}})
+	for _, test := range []struct {
+		output string
+		want   string
+	}{
+		{base, `path="/repo/&#34;quoted&#34;&amp;file"`},
+		{listing, `revision="revision&amp;one"`},
+		{listing, "<name>review&amp;check</name>"},
+		{listing, "<description>Use &lt;carefully&gt;</description>"},
 	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("missing escaped value %q:\n%s", want, out)
+		if !strings.Contains(test.output, test.want) {
+			t.Errorf("missing escaped value %q:\n%s", test.want, test.output)
 		}
 	}
 }
 
-func TestRenderSessionContextIsDeterministic(t *testing.T) {
-	opts := SessionContextOptions{
-		ContextFiles: []ContextFile{{
-			Path: "/repo/AGENTS.md", Content: "instructions\n", Scope: ScopeProject,
-		}},
-		Skills: []SkillInfo{
-			{Name: "zeta", Description: "last"},
-			{Name: "alpha", Description: "first"},
+func TestRenderSkillsUpdateIncludesDeltaAndCompleteCurrentState(t *testing.T) {
+	out := RenderSkillsUpdate(
+		"revision-2",
+		[]SkillInfo{
+			{Name: "added", Description: "new skill"},
+			{Name: "updated", Description: "new description"},
 		},
+		SkillsDelta{
+			Added:   []SkillInfo{{Name: "added", Description: "new skill"}},
+			Updated: []SkillInfo{{Name: "updated", Description: "new description"}},
+			Removed: []string{"removed"},
+		},
+	)
+	for _, want := range []string{
+		`kind="skills_update" revision="revision-2"`,
+		"<added>",
+		"<updated>",
+		"<removed>",
+		"<name>removed</name>",
+		"<available-skills>",
+		"<name>added</name>",
+		"<name>updated</name>",
+		"replaces every earlier skill listing",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("skills update missing %q:\n%s", want, out)
+		}
 	}
-	first := RenderSessionContext(opts)
+}
+
+func TestRenderSkillsUpdateCanRemoveLastSkill(t *testing.T) {
+	out := RenderSkillsUpdate(
+		"empty",
+		nil,
+		SkillsDelta{Removed: []string{"last"}},
+	)
+	if !strings.Contains(out, `<available-skills none="true" />`) ||
+		!strings.Contains(out, "<name>last</name>") {
+		t.Fatalf("last-skill removal is not explicit:\n%s", out)
+	}
+}
+
+func TestContextRenderingIsDeterministic(t *testing.T) {
+	files := []ContextFile{{
+		Path: "/repo/AGENTS.md", Content: "instructions\n", Scope: ScopeProject,
+	}}
+	skills := []SkillInfo{
+		{Name: "zeta", Description: "last"},
+		{Name: "alpha", Description: "first"},
+	}
+	firstBase := RenderBaseContext(files)
+	firstListing := RenderSkillListing("revision", skills)
 	for range 10 {
-		if got := RenderSessionContext(opts); got != first {
-			t.Fatalf("render changed:\nfirst:\n%s\nnext:\n%s", first, got)
+		if got := RenderBaseContext(files); got != firstBase {
+			t.Fatalf("base render changed:\nfirst:\n%s\nnext:\n%s", firstBase, got)
+		}
+		if got := RenderSkillListing("revision", skills); got != firstListing {
+			t.Fatalf("listing render changed:\nfirst:\n%s\nnext:\n%s", firstListing, got)
 		}
 	}
 }
