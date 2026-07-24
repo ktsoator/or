@@ -16,6 +16,9 @@ type Snapshot struct {
 	Queue        []Event
 	ContextUsage engine.ContextUsage
 	Running      bool
+	Title        string
+	AITitle      string
+	CustomTitle  string
 }
 
 // Snapshot returns the current client-readable state without exposing the
@@ -23,6 +26,10 @@ type Snapshot struct {
 func (m *Manager) Snapshot(id string) (Snapshot, error) {
 	m.mu.RLock()
 	runtime, ok := m.sessions[id]
+	var title TitleChanged
+	if ok {
+		title = runtime.titleChanged()
+	}
 	m.mu.RUnlock()
 	if !ok {
 		return Snapshot{}, os.ErrNotExist
@@ -32,6 +39,9 @@ func (m *Manager) Snapshot(id string) (Snapshot, error) {
 		Queue:        runtime.pendingEvents(),
 		ContextUsage: runtime.session.ContextUsage(),
 		Running:      runtime.live.Load(),
+		Title:        title.Title,
+		AITitle:      title.AITitle,
+		CustomTitle:  title.CustomTitle,
 	}, nil
 }
 

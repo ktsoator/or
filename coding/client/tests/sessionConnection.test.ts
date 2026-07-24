@@ -5,7 +5,18 @@ import {
   type SessionConnectionHandlers,
   type SessionEventSource,
 } from '../src/sessionConnection'
-import type { ConnectionStatus, HistoryResponse, ThreadSnapshot, WireEvent } from '../src/types'
+import {
+  createSessionStoreState,
+  sessionStoreReducer,
+  type SessionStoreState,
+} from '../src/sessionStore'
+import type {
+  ConnectionStatus,
+  HistoryResponse,
+  SessionSummary,
+  ThreadSnapshot,
+  WireEvent,
+} from '../src/types'
 
 class TestEventSource implements SessionEventSource {
   onopen: ((event: Event) => void) | null = null
@@ -72,7 +83,28 @@ function history(overrides: Partial<HistoryResponse> = {}): HistoryResponse {
     },
     running: false,
     eventSeq: 0,
+    title: 'New session',
     ...overrides,
+  }
+}
+
+function session(id: string): SessionSummary {
+  return {
+    id,
+    title: 'Original prompt title',
+    workspacePath: `/tmp/${id}`,
+    workspaceName: id,
+    scope: 'chat',
+    workspaceKind: 'scratch',
+    createdAt: '2026-07-23T11:00:00.000Z',
+    updatedAt: '2026-07-23T12:00:00.000Z',
+    running: false,
+    hasApproval: false,
+    modelProvider: 'openai',
+    modelId: 'test-model',
+    modelName: 'Test model',
+    thinkingLevel: 'medium',
+    permissionMode: 'ask',
   }
 }
 
@@ -85,6 +117,51 @@ async function waitFor(check: () => boolean, message: string) {
 }
 
 describe('startSessionConnection', () => {
+  test('restores an AI title completed before the SSE stream opens', async () => {
+    const sessionID = 'session-1'
+    const sources: TestEventSource[] = []
+    let state: SessionStoreState = {
+      ...createSessionStoreState(),
+      sessions: [session(sessionID)],
+    }
+    let snapshotApplied = false
+    const restored = history({
+      title: 'Inspect parser behavior',
+      aiTitle: 'Inspect parser behavior',
+      eventSeq: 8,
+    })
+    const handlers: SessionConnectionHandlers = {
+      onStatus: () => undefined,
+      onWire: (id, event) => {
+        state = sessionStoreReducer(state, { t: 'sessionWire', sessionID: id, event })
+      },
+      onSnapshot: (id, snapshot) => {
+        state = sessionStoreReducer(state, { t: 'sessionSnapshot', sessionID: id, history: snapshot })
+        snapshotApplied = true
+      },
+    }
+    const dependencies: SessionConnectionDependencies = {
+      request: async () => Response.json(restored),
+      openEvents: (url) => {
+        expect(snapshotApplied).toBe(true)
+        const source = new TestEventSource(url)
+        sources.push(source)
+        return source
+      },
+    }
+
+    const stop = startSessionConnection(sessionID, handlers, dependencies)
+    await waitFor(() => sources.length === 1, 'event stream was not opened')
+
+    expect(state.sessions[0]).toMatchObject({
+      title: 'Inspect parser behavior',
+      aiTitle: 'Inspect parser behavior',
+    })
+    expect(sources[0]?.url).toBe('/api/sessions/session-1/events?after=8')
+
+    stop()
+  })
+
   test('restores history before connecting from the snapshot sequence', async () => {
     const recorded = records()
     const sources: TestEventSource[] = []

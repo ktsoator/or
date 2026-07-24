@@ -197,9 +197,17 @@ export function sessionStoreReducer(
               : pending,
         false,
       )
+      const titlePatch = action.history.title === undefined
+        ? {}
+        : {
+            title: action.history.title,
+            aiTitle: action.history.aiTitle,
+            customTitle: action.history.customTitle,
+          }
       return patchSession(state, action.sessionID, {
         running: action.history.running,
         hasApproval,
+        ...titlePatch,
       })
     }
 

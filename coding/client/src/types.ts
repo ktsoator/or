@@ -16,7 +16,12 @@ export type PreviewState = PreviewRequest & {
 
 // UI snapshots also cover a local degraded state when history cannot be read.
 export type ThreadSnapshot = Pick<HistoryResponse, 'events' | 'running'> &
-  Partial<Pick<HistoryResponse, 'queue' | 'context' | 'eventSeq'>>
+  Partial<
+    Pick<
+      HistoryResponse,
+      'queue' | 'context' | 'eventSeq' | 'title' | 'aiTitle' | 'customTitle'
+    >
+  >
 
 // Thread items are the declarative model the UI renders, derived from the wire
 // event stream by the reducer.

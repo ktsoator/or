@@ -141,4 +141,7 @@ export type HistoryResponse = {
   context: ContextUsage
   running: boolean
   eventSeq: number
+  title: string
+  aiTitle?: string
+  customTitle?: string
 }

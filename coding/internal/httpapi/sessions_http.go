@@ -213,6 +213,9 @@ func (s *Server) handleHistory(c *gin.Context) {
 	var queue []wireEvent
 	var contextUsage wireContextUsage
 	var running bool
+	var title string
+	var aiTitle string
+	var customTitle string
 	var snapshotErr error
 	eventSeq := transport.hub.snapshot(func() {
 		var snapshot conversation.Snapshot
@@ -225,17 +228,23 @@ func (s *Server) handleHistory(c *gin.Context) {
 		queue = projectQueue(snapshot.Queue)
 		contextUsage = projectContextUsage(snapshot.ContextUsage)
 		running = snapshot.Running
+		title = snapshot.Title
+		aiTitle = snapshot.AITitle
+		customTitle = snapshot.CustomTitle
 	})
 	if snapshotErr != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
 		return
 	}
 	c.JSON(http.StatusOK, wireHistoryResponse{
-		Events:   events,
-		Queue:    queue,
-		Context:  contextUsage,
-		Running:  running,
-		EventSeq: eventSeq,
+		Events:      events,
+		Queue:       queue,
+		Context:     contextUsage,
+		Running:     running,
+		EventSeq:    eventSeq,
+		Title:       title,
+		AITitle:     aiTitle,
+		CustomTitle: customTitle,
 	})
 }
 

@@ -183,9 +183,12 @@ type wireContextUsage struct {
 }
 
 type wireHistoryResponse struct {
-	Events   []wireEvent      `json:"events"`
-	Queue    []wireEvent      `json:"queue"`
-	Context  wireContextUsage `json:"context"`
-	Running  bool             `json:"running"`
-	EventSeq uint64           `json:"eventSeq"`
+	Events      []wireEvent      `json:"events"`
+	Queue       []wireEvent      `json:"queue"`
+	Context     wireContextUsage `json:"context"`
+	Running     bool             `json:"running"`
+	EventSeq    uint64           `json:"eventSeq"`
+	Title       string           `json:"title"`
+	AITitle     string           `json:"aiTitle,omitempty"`
+	CustomTitle string           `json:"customTitle,omitempty"`
 }
