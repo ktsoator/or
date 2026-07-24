@@ -1,12 +1,9 @@
 import {
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
   type CSSProperties,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
 } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
@@ -52,55 +49,13 @@ import { SkillsPage } from './components/SkillsPage'
 import { WorkspacePickerDialog } from './components/WorkspacePickerDialog'
 import { WorkbenchPanel } from './components/WorkbenchPanel'
 import { useI18n } from './i18n'
-
-const DEFAULT_SIDEBAR_WIDTH = 240
-const MIN_SIDEBAR_WIDTH = 206
-const MAX_SIDEBAR_WIDTH = 338
-const DEFAULT_WORKBENCH_RATIO = 0.48
-const MIN_WORKBENCH_WIDTH = 300
-const MIN_CHAT_WIDTH = 360
-const MAX_WORKBENCH_RATIO = 0.68
-const AUTO_COLLAPSE_CHAT_WIDTH = 520
-const AUTO_COLLAPSE_RESET_WIDTH = 560
-const PINNED_SESSIONS_KEY = 'coding.pinned-session-ids'
-
-function clampSidebarWidth(width: number) {
-  return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width))
-}
-
-function workbenchWidthBounds(layoutWidth: number) {
-  const minimum = Math.min(MIN_WORKBENCH_WIDTH, layoutWidth)
-  const maximum = Math.max(
-    minimum,
-    Math.min(layoutWidth * MAX_WORKBENCH_RATIO, layoutWidth - MIN_CHAT_WIDTH),
-  )
-  return { minimum, maximum }
-}
-
-function clampWorkbenchWidth(width: number, layoutWidth: number) {
-  const { minimum, maximum } = workbenchWidthBounds(layoutWidth)
-  return Math.min(maximum, Math.max(minimum, width))
-}
+import { useSidebarLayout } from './useSidebarLayout'
+import { useWorkbenchLayout } from './useWorkbenchLayout'
 
 function wheelDeltaInPixels(event: WheelEvent, pageHeight: number) {
   if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) return event.deltaY * 16
   if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) return event.deltaY * pageHeight
   return event.deltaY
-}
-
-function readPinnedSessionIDs(): string[] {
-  try {
-    const value = JSON.parse(localStorage.getItem(PINNED_SESSIONS_KEY) ?? '[]')
-    return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []
-  } catch {
-    return []
-  }
-}
-
-function pinnedFirst(items: SessionSummary[], pinned: Set<string>): SessionSummary[] {
-  return [...items].sort(
-    (left, right) => Number(pinned.has(right.id)) - Number(pinned.has(left.id)),
-  )
 }
 
 export default function App() {
@@ -147,49 +102,7 @@ export default function App() {
   const logRef = useRef<HTMLDivElement>(null)
   const followLatestRef = useRef(true)
   const previousSessionIDRef = useRef<string | undefined>(undefined)
-  const sidebarResizeRef = useRef<
-    | {
-        pointerID: number
-        startX: number
-        startWidth: number
-      }
-    | undefined
-  >(undefined)
-  const workbenchLayoutRef = useRef<HTMLDivElement>(null)
-  const workbenchViewportRef = useRef<HTMLElement>(null)
-  const workbenchResizeRef = useRef<
-    | {
-        pointerID: number
-        startX: number
-        startWidth: number
-      }
-    | undefined
-  >(undefined)
-  const workbenchWidthRef = useRef<number | undefined>(undefined)
-  const workbenchPreferredWidthRef = useRef<number | undefined>(undefined)
-  const workbenchConstrainedRef = useRef(false)
-  const workbenchOpenRef = useRef(false)
-  const workbenchMaximizedRef = useRef(false)
-  const workbenchResizingRef = useRef(false)
-  const setWorkbenchOpenRef = useRef<(open: boolean) => void>(() => {})
-  const previousPreviewKeysRef = useRef<{
-    primary?: string
-    secondary?: string
-  }>({})
-  const workbenchAutoCollapsedRef = useRef(false)
-  const workbenchAutoLayoutFrameRef = useRef<number | undefined>(undefined)
-  const [mobileSessionsOpen, setMobileSessionsOpen] = useState(false)
-  const [workbenchOpen, setWorkbenchOpenState] = useState(false)
-  const [workbenchPreviewSessionID, setWorkbenchPreviewSessionID] = useState<string>()
   const [workbenchCreateError, setWorkbenchCreateError] = useState('')
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH)
-  const [sidebarResizing, setSidebarResizing] = useState(false)
-  const [workbenchWidth, setWorkbenchWidth] = useState<number>()
-  const [workbenchResizing, setWorkbenchResizing] = useState(false)
-  const [workbenchMaximized, setWorkbenchMaximized] = useState(false)
-  const [workbenchConstrained, setWorkbenchConstrained] = useState(false)
-  const [workbenchAutoLayoutChanging, setWorkbenchAutoLayoutChanging] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<SessionSummary>()
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
@@ -204,36 +117,57 @@ export default function App() {
   const [skillsOpen, setSkillsOpen] = useState(false)
   const [workspacePickerOpen, setWorkspacePickerOpen] = useState(false)
   const [selectedWorkspacePath, setSelectedWorkspacePath] = useState<string>()
-  const [pinnedSessionIDs, setPinnedSessionIDs] = useState(readPinnedSessionIDs)
-  const pinnedSessionIDSet = useMemo(() => new Set(pinnedSessionIDs), [pinnedSessionIDs])
+  const {
+    mobileSessionsOpen,
+    collapsed: sidebarCollapsed,
+    width: sidebarWidth,
+    resizing: sidebarResizing,
+    pinnedSessionIDSet,
+    chatSessions,
+    workspaceGroups,
+    minimumWidth: sidebarMinimumWidth,
+    maximumWidth: sidebarMaximumWidth,
+    toggleSidebar,
+    expandSidebar,
+    openMobileSessions,
+    closeMobileSessions,
+    togglePinnedSession,
+    removePinnedSession,
+    startResize: startSidebarResize,
+    resize: resizeSidebar,
+    stopResize: stopSidebarResize,
+    resizeWithKeyboard: resizeSidebarWithKeyboard,
+  } = useSidebarLayout(sessions, workspaces)
+  const {
+    layoutRef: workbenchLayoutRef,
+    viewportRef: workbenchViewportRef,
+    open: workbenchOpen,
+    previewSessionID: workbenchPreviewSessionID,
+    expandedWidth: workbenchExpandedWidth,
+    resizing: workbenchResizing,
+    maximized: workbenchMaximized,
+    autoLayoutChanging: workbenchAutoLayoutChanging,
+    resizeMinimum: workbenchResizeMinimum,
+    resizeMaximum: workbenchResizeMaximum,
+    resizeValue: workbenchResizeValue,
+    toggle: toggleWorkbench,
+    showSession: showSessionInWorkbench,
+    toggleMaximized: toggleWorkbenchMaximized,
+    startResize: startWorkbenchResize,
+    resize: resizeWorkbench,
+    stopResize: stopWorkbenchResize,
+    resizeWithKeyboard: resizeWorkbenchWithKeyboard,
+  } = useWorkbenchLayout({
+    enabled: !settingsOpen && !skillsOpen,
+    activeSessionID,
+    activeDraftID: draft?.id,
+    primaryPreviewRevision: preview?.revision,
+    primaryPreviewOpen: previewOpen,
+    secondarySessionID: secondaryThread?.session.id,
+    secondaryPreviewRevision: secondaryThread?.preview?.revision,
+    secondaryPreviewOpen: secondaryThread?.previewOpen ?? false,
+  })
 
-  const workspaceGroups = useMemo(() => {
-    const groups = new Map<
-      string,
-      { path: string; name: string; sessions: SessionSummary[] }
-    >()
-    for (const workspace of workspaces) {
-      groups.set(workspace.path, {
-        path: workspace.path,
-        name: workspace.name,
-        sessions: [],
-      })
-    }
-    for (const session of sessions) {
-      if (session.scope !== 'project') continue
-      const path = session.workspacePath || ''
-      const existing = groups.get(path)
-      if (existing) existing.sessions.push(session)
-    }
-    return [...groups.values()].map((group) => ({
-      ...group,
-      sessions: pinnedFirst(group.sessions, pinnedSessionIDSet),
-    }))
-  }, [pinnedSessionIDSet, sessions, workspaces])
-  const chatSessions = useMemo(
-    () => pinnedFirst(sessions.filter((session) => session.scope === 'chat'), pinnedSessionIDSet),
-    [pinnedSessionIDSet, sessions],
-  )
   const workspacePickerPath =
     selectedWorkspacePath || draft?.workspacePath || activeSession?.workspacePath || workspaceGroups[0]?.path
   const workbenchPreview =
@@ -250,31 +184,6 @@ export default function App() {
     : secondaryThread && workbenchPreviewOwnerID === secondaryThread.session.id
       ? secondaryThread.previewOpen
       : false
-  const setWorkbenchOpen = (open: boolean) => {
-    if (!open) setWorkbenchMaximized(false)
-    setWorkbenchOpenState(open)
-  }
-
-  workbenchWidthRef.current = workbenchWidth
-  workbenchOpenRef.current = workbenchOpen
-  workbenchMaximizedRef.current = workbenchMaximized
-  workbenchResizingRef.current = workbenchResizing
-  setWorkbenchOpenRef.current = setWorkbenchOpen
-
-  const toggleWorkbench = () => {
-    workbenchAutoCollapsedRef.current = false
-    if (workbenchOpen) {
-      setWorkbenchOpen(false)
-      return
-    }
-    if (workbenchConstrainedRef.current) setWorkbenchMaximized(true)
-    setWorkbenchOpen(true)
-  }
-
-  useEffect(() => {
-    localStorage.setItem(PINNED_SESSIONS_KEY, JSON.stringify(pinnedSessionIDs))
-  }, [pinnedSessionIDs])
-
   useEffect(() => {
     if (
       secondarySessionID &&
@@ -284,18 +193,6 @@ export default function App() {
       setSecondarySessionID(undefined)
     }
   }, [loading, secondarySessionID, sessions])
-
-  useEffect(() => {
-    return () => {
-      if (workbenchAutoLayoutFrameRef.current !== undefined) {
-        cancelAnimationFrame(workbenchAutoLayoutFrameRef.current)
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    workbenchAutoCollapsedRef.current = false
-  }, [activeSessionID, draft?.id])
 
   useEffect(() => {
     if (draft || selectedWorkspacePath) return
@@ -318,110 +215,6 @@ export default function App() {
     window.addEventListener('keydown', handleSettingsShortcut)
     return () => window.removeEventListener('keydown', handleSettingsShortcut)
   }, [settingsOpen])
-
-  useEffect(() => {
-    if (!sidebarResizing && !workbenchResizing) return
-    const previousCursor = document.body.style.cursor
-    const previousUserSelect = document.body.style.userSelect
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
-    return () => {
-      document.body.style.cursor = previousCursor
-      document.body.style.userSelect = previousUserSelect
-    }
-  }, [sidebarResizing, workbenchResizing])
-
-  useLayoutEffect(() => {
-    const layout = workbenchLayoutRef.current
-    if (!layout) return
-
-    const setWorkbenchOpenForLayout = (open: boolean) => {
-      setWorkbenchAutoLayoutChanging(true)
-      setWorkbenchOpenRef.current(open)
-      if (workbenchAutoLayoutFrameRef.current !== undefined) {
-        cancelAnimationFrame(workbenchAutoLayoutFrameRef.current)
-      }
-      workbenchAutoLayoutFrameRef.current = requestAnimationFrame(() => {
-        workbenchAutoLayoutFrameRef.current = requestAnimationFrame(() => {
-          workbenchAutoLayoutFrameRef.current = undefined
-          setWorkbenchAutoLayoutChanging(false)
-        })
-      })
-    }
-
-    const keepWidthInBounds = () => {
-      const layoutWidth = layout.getBoundingClientRect().width
-      if (layoutWidth <= 0) return
-      const currentWidth = workbenchWidthRef.current
-      const preferredWidth =
-        workbenchPreferredWidthRef.current ?? layoutWidth * DEFAULT_WORKBENCH_RATIO
-      workbenchPreferredWidthRef.current = preferredWidth
-      const nextWidth = clampWorkbenchWidth(
-        preferredWidth,
-        layoutWidth,
-      )
-      if (currentWidth === undefined || Math.abs(currentWidth - nextWidth) >= 0.5) {
-        workbenchWidthRef.current = nextWidth
-        setWorkbenchWidth(nextWidth)
-      }
-
-      const availableChatWidth = layoutWidth - nextWidth
-      const wasConstrained = workbenchConstrainedRef.current
-      const nextConstrained = wasConstrained
-        ? availableChatWidth < AUTO_COLLAPSE_RESET_WIDTH
-        : availableChatWidth < AUTO_COLLAPSE_CHAT_WIDTH
-      if (nextConstrained === wasConstrained) return
-
-      workbenchConstrainedRef.current = nextConstrained
-      setWorkbenchConstrained(nextConstrained)
-      if (
-        nextConstrained &&
-        workbenchOpenRef.current &&
-        !workbenchMaximizedRef.current &&
-        !workbenchResizingRef.current
-      ) {
-        // The native window is already animating its size. Snap the grid closed
-        // so the old workbench width cannot temporarily squeeze Chat to zero.
-        workbenchAutoCollapsedRef.current = true
-        setWorkbenchOpenForLayout(false)
-      } else if (!nextConstrained && workbenchAutoCollapsedRef.current) {
-        workbenchAutoCollapsedRef.current = false
-        setWorkbenchOpenForLayout(true)
-      }
-    }
-
-    keepWidthInBounds()
-    const observer = new ResizeObserver(keepWidthInBounds)
-    observer.observe(layout)
-    return () => observer.disconnect()
-  }, [settingsOpen, skillsOpen])
-
-  useLayoutEffect(() => {
-    const primaryKey = preview && previewOpen
-      ? `${activeSessionID ?? 'draft'}:${preview.revision}`
-      : undefined
-    const secondaryKey = secondaryThread?.preview && secondaryThread.previewOpen
-      ? `${secondaryThread.session.id}:${secondaryThread.preview.revision}`
-      : undefined
-    let changedSessionID: string | undefined
-    if (primaryKey && primaryKey !== previousPreviewKeysRef.current.primary) {
-      changedSessionID = activeSessionID
-    }
-    if (secondaryKey && secondaryKey !== previousPreviewKeysRef.current.secondary) {
-      changedSessionID = secondaryThread?.session.id
-    }
-    previousPreviewKeysRef.current = {
-      primary: primaryKey,
-      secondary: secondaryKey,
-    }
-    if (!changedSessionID) return
-    setWorkbenchPreviewSessionID(changedSessionID)
-    workbenchAutoCollapsedRef.current = false
-    if (!workbenchOpen) setWorkbenchOpen(true)
-    if (workbenchConstrained || workbenchConstrainedRef.current) {
-      setWorkbenchMaximized(true)
-    }
-  }, [activeSessionID, preview, previewOpen, secondaryThread, workbenchConstrained, workbenchOpen])
 
   useLayoutEffect(() => {
     const el = logRef.current
@@ -467,121 +260,6 @@ export default function App() {
     return () => transcript.removeEventListener('wheel', routeWheelToCode, { capture: true })
   }, [])
 
-  const toggleSidebar = () => {
-    if (mobileSessionsOpen) {
-      setMobileSessionsOpen(false)
-      return
-    }
-    setSidebarCollapsed((collapsed) => !collapsed)
-  }
-
-  const startSidebarResize = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (sidebarCollapsed) return
-    event.preventDefault()
-    sidebarResizeRef.current = {
-      pointerID: event.pointerId,
-      startX: event.clientX,
-      startWidth: sidebarWidth,
-    }
-    event.currentTarget.setPointerCapture(event.pointerId)
-    setSidebarResizing(true)
-  }
-
-  const resizeSidebar = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const resize = sidebarResizeRef.current
-    if (!resize || resize.pointerID !== event.pointerId) return
-    setSidebarWidth(clampSidebarWidth(resize.startWidth + event.clientX - resize.startX))
-  }
-
-  const stopSidebarResize = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const resize = sidebarResizeRef.current
-    if (!resize || resize.pointerID !== event.pointerId) return
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-    sidebarResizeRef.current = undefined
-    setSidebarResizing(false)
-  }
-
-  const resizeSidebarWithKeyboard = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    let nextWidth: number | undefined
-    if (event.key === 'ArrowLeft') nextWidth = sidebarWidth - 8
-    if (event.key === 'ArrowRight') nextWidth = sidebarWidth + 8
-    if (event.key === 'Home') nextWidth = MIN_SIDEBAR_WIDTH
-    if (event.key === 'End') nextWidth = MAX_SIDEBAR_WIDTH
-    if (nextWidth === undefined) return
-    event.preventDefault()
-    setSidebarWidth(clampSidebarWidth(nextWidth))
-  }
-
-  const getWorkbenchLayoutWidth = () =>
-    workbenchLayoutRef.current?.getBoundingClientRect().width ??
-    MIN_WORKBENCH_WIDTH + MIN_CHAT_WIDTH
-
-  const setUserWorkbenchWidth = (width: number) => {
-    workbenchPreferredWidthRef.current = width
-    workbenchWidthRef.current = width
-    setWorkbenchWidth(width)
-  }
-
-  const startWorkbenchResize = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!workbenchOpen) return
-    event.preventDefault()
-    const layoutWidth = getWorkbenchLayoutWidth()
-    const startWidth = clampWorkbenchWidth(
-      workbenchViewportRef.current?.getBoundingClientRect().width ??
-        workbenchWidth ??
-        layoutWidth * DEFAULT_WORKBENCH_RATIO,
-      layoutWidth,
-    )
-    workbenchResizeRef.current = {
-      pointerID: event.pointerId,
-      startX: event.clientX,
-      startWidth,
-    }
-    setUserWorkbenchWidth(startWidth)
-    event.currentTarget.setPointerCapture(event.pointerId)
-    setWorkbenchResizing(true)
-  }
-
-  const resizeWorkbench = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const resize = workbenchResizeRef.current
-    if (!resize || resize.pointerID !== event.pointerId) return
-    setUserWorkbenchWidth(
-      clampWorkbenchWidth(
-        resize.startWidth + resize.startX - event.clientX,
-        getWorkbenchLayoutWidth(),
-      ),
-    )
-  }
-
-  const stopWorkbenchResize = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const resize = workbenchResizeRef.current
-    if (!resize || resize.pointerID !== event.pointerId) return
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-    workbenchResizeRef.current = undefined
-    setWorkbenchResizing(false)
-  }
-
-  const resizeWorkbenchWithKeyboard = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    const layoutWidth = getWorkbenchLayoutWidth()
-    const { minimum, maximum } = workbenchWidthBounds(layoutWidth)
-    const currentWidth =
-      workbenchViewportRef.current?.getBoundingClientRect().width ??
-      workbenchWidth ??
-      layoutWidth * DEFAULT_WORKBENCH_RATIO
-    let nextWidth: number | undefined
-    if (event.key === 'ArrowLeft') nextWidth = currentWidth + 16
-    if (event.key === 'ArrowRight') nextWidth = currentWidth - 16
-    if (event.key === 'Home') nextWidth = minimum
-    if (event.key === 'End') nextWidth = maximum
-    if (nextWidth === undefined) return
-    event.preventDefault()
-    setUserWorkbenchWidth(clampWorkbenchWidth(nextWidth, layoutWidth))
-  }
-
   const trackScrollPosition = () => {
     const el = logRef.current
     if (!el) return
@@ -592,18 +270,15 @@ export default function App() {
     const session = sessions.find((candidate) => candidate.id === id)
     if (session) setSelectedWorkspacePath(session.scope === 'project' ? session.workspacePath : undefined)
     selectSession(id)
-    setMobileSessionsOpen(false)
+    closeMobileSessions()
   }
 
   const openSessionInWorkbench = (id: string) => {
     if (!sessions.some((session) => session.id === id)) return
     setWorkbenchCreateError('')
     setSecondarySessionID(id)
-    setWorkbenchPreviewSessionID(id)
-    workbenchAutoCollapsedRef.current = false
-    if (workbenchConstrainedRef.current) setWorkbenchMaximized(true)
-    setWorkbenchOpen(true)
-    setMobileSessionsOpen(false)
+    showSessionInWorkbench(id)
+    closeMobileSessions()
   }
 
   const createSessionInWorkbench = async () => {
@@ -611,10 +286,7 @@ export default function App() {
     try {
       const created = await createChatSession()
       setSecondarySessionID(created.id)
-      setWorkbenchPreviewSessionID(created.id)
-      workbenchAutoCollapsedRef.current = false
-      if (workbenchConstrainedRef.current) setWorkbenchMaximized(true)
-      setWorkbenchOpen(true)
+      showSessionInWorkbench(created.id)
     } catch (error) {
       setWorkbenchCreateError(
         error instanceof Error ? error.message : t('workbench.createChatFailed'),
@@ -625,7 +297,7 @@ export default function App() {
   const addSession = (workspacePath?: string, projectScoped = false) => {
     setSelectedWorkspacePath(projectScoped ? workspacePath : undefined)
     startDraft(workspacePath, projectScoped)
-    setMobileSessionsOpen(false)
+    closeMobileSessions()
   }
 
   const requestDelete = (session: SessionSummary) => {
@@ -636,12 +308,6 @@ export default function App() {
   const requestRemoveWorkspace = (path: string, name: string) => {
     setRemoveWorkspaceError('')
     setRemoveWorkspaceTarget({ path, name })
-  }
-
-  const togglePinnedSession = (id: string) => {
-    setPinnedSessionIDs((current) =>
-      current.includes(id) ? current.filter((sessionID) => sessionID !== id) : [...current, id],
-    )
   }
 
   // Rejections propagate so the inline editor stays open with the typed text.
@@ -656,9 +322,9 @@ export default function App() {
     try {
       await deleteSession(deleteTarget.id)
       if (secondarySessionID === deleteTarget.id) setSecondarySessionID(undefined)
-      setPinnedSessionIDs((current) => current.filter((id) => id !== deleteTarget.id))
+      removePinnedSession(deleteTarget.id)
       setDeleteTarget(undefined)
-      setMobileSessionsOpen(false)
+      closeMobileSessions()
     } catch (error) {
       setDeleteError(error instanceof Error ? error.message : t('app.couldNotDelete'))
     } finally {
@@ -681,7 +347,7 @@ export default function App() {
       }
       if (selectedWorkspacePath === target.path) setSelectedWorkspacePath(undefined)
       setRemoveWorkspaceTarget(undefined)
-      setMobileSessionsOpen(false)
+      closeMobileSessions()
     } catch (error) {
       setRemoveWorkspaceError(
         error instanceof Error ? error.message : t('workspace.removeFailed'),
@@ -696,7 +362,7 @@ export default function App() {
     updateDraftWorkspace(workspace.path, true)
     setSelectedWorkspacePath(workspace.path)
     setWorkspacePickerOpen(false)
-    setMobileSessionsOpen(false)
+    closeMobileSessions()
   }
 
   const browseWorkspaceFolders = async () => {
@@ -791,7 +457,7 @@ export default function App() {
           className="fixed inset-0 z-40 bg-stone-950/15 backdrop-blur-[1px] md:hidden"
           type="button"
           aria-label={t('app.closeSessions')}
-          onClick={() => setMobileSessionsOpen(false)}
+          onClick={closeMobileSessions}
         />
       )}
       <button
@@ -1029,8 +695,8 @@ export default function App() {
             role="separator"
             aria-label={t('app.resizeSidebar')}
             aria-orientation="vertical"
-            aria-valuemin={MIN_SIDEBAR_WIDTH}
-            aria-valuemax={MAX_SIDEBAR_WIDTH}
+            aria-valuemin={sidebarMinimumWidth}
+            aria-valuemax={sidebarMaximumWidth}
             aria-valuenow={sidebarWidth}
             tabIndex={0}
             onPointerDown={startSidebarResize}
@@ -1055,7 +721,7 @@ export default function App() {
         <SkillsPage
           onBack={() => setSkillsOpen(false)}
           sidebarCollapsed={sidebarCollapsed}
-          onExpandSidebar={() => setSidebarCollapsed(false)}
+          onExpandSidebar={expandSidebar}
           workspacePath={activeSession?.workspacePath}
           workspaceName={activeSession?.workspaceName}
         />
@@ -1071,9 +737,7 @@ export default function App() {
         data-testid="workbench-layout"
         style={
           {
-            '--workbench-expanded-width': workbenchWidth === undefined
-              ? `${DEFAULT_WORKBENCH_RATIO * 100}cqw`
-              : `${workbenchWidth}px`,
+            '--workbench-expanded-width': workbenchExpandedWidth,
             '--workbench-width': workbenchOpen
               ? 'var(--workbench-expanded-width)'
               : '0px',
@@ -1103,7 +767,7 @@ export default function App() {
                 type="button"
                 title={t('app.expandSidebar')}
                 aria-label={t('app.expandSidebar')}
-                onClick={() => setSidebarCollapsed(false)}
+                onClick={expandSidebar}
               >
                 <PanelLeft className="size-4" aria-hidden="true" />
               </button>
@@ -1112,10 +776,7 @@ export default function App() {
               className="-ml-1 grid size-7 shrink-0 place-items-center rounded-md text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-900 md:hidden"
               type="button"
               title={t('app.sessions')}
-              onClick={() => {
-                setSidebarCollapsed(false)
-                setMobileSessionsOpen(true)
-              }}
+              onClick={openMobileSessions}
             >
               <PanelLeft className="size-4" aria-hidden="true" />
               <span className="sr-only">{t('app.openSessions')}</span>
@@ -1219,11 +880,9 @@ export default function App() {
             role="separator"
             aria-label={t('workbench.resize')}
             aria-orientation="vertical"
-            aria-valuemin={Math.round(workbenchWidthBounds(getWorkbenchLayoutWidth()).minimum)}
-            aria-valuemax={Math.round(workbenchWidthBounds(getWorkbenchLayoutWidth()).maximum)}
-            aria-valuenow={Math.round(
-              workbenchWidth ?? getWorkbenchLayoutWidth() * DEFAULT_WORKBENCH_RATIO,
-            )}
+            aria-valuemin={workbenchResizeMinimum}
+            aria-valuemax={workbenchResizeMaximum}
+            aria-valuenow={workbenchResizeValue}
             tabIndex={0}
             onPointerDown={startWorkbenchResize}
             onPointerMove={resizeWorkbench}
@@ -1258,7 +917,7 @@ export default function App() {
             setSettingsSection('models')
             setSettingsOpen(true)
           }}
-          onToggleMaximized={() => setWorkbenchMaximized((current) => !current)}
+          onToggleMaximized={toggleWorkbenchMaximized}
         />
       </aside>
       </div>

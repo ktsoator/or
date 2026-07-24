@@ -106,22 +106,22 @@ func projectSessionEvent(event conversation.Event) ([]byte, bool) {
 	switch e := event.(type) {
 	case conversation.MessageAccepted:
 		out = wireEvent{
-			Type:     "user_message",
+			Type:     wireEventUserMessage,
 			ID:       e.ID,
 			Text:     e.Text,
 			Images:   projectImages(e.Images),
-			Delivery: string(e.Delivery),
+			Delivery: projectDeliveryMode(e.Delivery),
 			Queued:   e.Queued,
 		}
 	case conversation.MessageDequeued:
-		out = wireEvent{Type: "queue_removed", ID: e.ID}
+		out = wireEvent{Type: wireEventQueueRemoved, ID: e.ID}
 	case conversation.MessageCancelled:
-		out = wireEvent{Type: "queue_cancelled", ID: e.ID}
+		out = wireEvent{Type: wireEventQueueCancelled, ID: e.ID}
 	case conversation.RunFailed:
-		out = wireEvent{Type: "error", Text: e.Text}
+		out = wireEvent{Type: wireEventError, Text: e.Text}
 	case conversation.TitleChanged:
 		out = wireEvent{
-			Type:        "title_update",
+			Type:        wireEventTitleUpdate,
 			Title:       e.Title,
 			AITitle:     e.AITitle,
 			CustomTitle: e.CustomTitle,
@@ -139,14 +139,25 @@ func projectQueue(events []conversation.Event) []wireEvent {
 	for _, event := range events {
 		if accepted, ok := event.(conversation.MessageAccepted); ok {
 			out = append(out, wireEvent{
-				Type:     "user_message",
+				Type:     wireEventUserMessage,
 				ID:       accepted.ID,
 				Text:     accepted.Text,
 				Images:   projectImages(accepted.Images),
-				Delivery: string(accepted.Delivery),
+				Delivery: projectDeliveryMode(accepted.Delivery),
 				Queued:   accepted.Queued,
 			})
 		}
 	}
 	return out
+}
+
+func projectDeliveryMode(delivery conversation.Delivery) wireDeliveryMode {
+	switch delivery {
+	case conversation.DeliverySteer:
+		return wireDeliverySteer
+	case conversation.DeliveryFollowUp:
+		return wireDeliveryFollowUp
+	default:
+		return wireDeliveryMode(delivery)
+	}
 }

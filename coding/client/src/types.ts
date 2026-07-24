@@ -1,106 +1,25 @@
-// Wire types mirror the JSON the Go API emits over SSE (/api/events) and the
-// history snapshot (/api/history). Keep these in sync with coding/internal/httpapi.
+import type {
+  Change,
+  DeliveryMode,
+  HistoryResponse,
+  MessageImage,
+  PreviewRequest,
+  Usage,
+} from './generated/wire'
 
-export type Hunk = {
-  oldStart: number
-  oldLines: number
-  newStart: number
-  newLines: number
-  lines: string[]
-}
-
-export type FileChangePayload = {
-  changeType: 'file'
-  path: string
-  op: 'create' | 'update'
-  additions: number
-  deletions: number
-  bytes: number
-  hunks: Hunk[]
-}
-
-export type FailureChangePayload = {
-  changeType: 'failure'
-  path: string
-  reason: string
-  detail: string
-}
-
-export type Change = FileChangePayload | FailureChangePayload
-
-export type PreviewRequest = {
-  url?: string
-  path?: string
-  relativePath?: string
-  title?: string
-}
+// The HTTP/SSE DTOs are generated from coding/internal/httpapi/wire_contract.go.
+export type * from './generated/wire'
 
 export type PreviewState = PreviewRequest & {
   revision: number
 }
 
-export type WireEvent = {
-  type:
-    | 'user_message'
-    | 'run_start'
-    | 'delta'
-    | 'tool_input_start'
-    | 'tool_input_delta'
-    | 'tool_input_end'
-    | 'tool_start'
-    | 'tool_end'
-    | 'message_end'
-    | 'turn_discard'
-    | 'compaction_start'
-    | 'compaction_end'
-    | 'approval_request'
-    | 'approval_resolved'
-    | 'approval_cancelled'
-    | 'queue_cancelled'
-    | 'queue_removed'
-    | 'error'
-    | 'done'
-    | 'sync_required'
-    | 'title_update'
-  kind?: 'text' | 'thinking'
-  delta?: string
-  tool?: string
-  args?: unknown
-  result?: string
-  toolContentIndex?: number
-  bytes?: number
-  change?: Change
-  preview?: PreviewRequest
-  isError?: boolean
-  text?: string
-  images?: MessageImage[]
-  delivery?: DeliveryMode
-  queued?: boolean
-  finalResponse?: boolean
-  usage?: Usage
-  provider?: string
-  model?: string
-  modelName?: string
-  id?: string
-  summary?: string
-  reason?: string
-  title?: string
-  aiTitle?: string
-  customTitle?: string
-  startedAt?: string
-  completedAt?: string
-  durationMs?: number
-}
+// UI snapshots also cover a local degraded state when history cannot be read.
+export type ThreadSnapshot = Pick<HistoryResponse, 'events' | 'running'> &
+  Partial<Pick<HistoryResponse, 'queue' | 'context' | 'eventSeq'>>
 
 // Thread items are the declarative model the UI renders, derived from the wire
 // event stream by the reducer.
-export type MessageImage = {
-  data: string
-  mimeType: string
-}
-
-export type DeliveryMode = 'steer' | 'followup'
-
 export type PendingImage = MessageImage & {
   id: string
   name: string
@@ -113,23 +32,6 @@ export type QueuedMessage = {
   images: MessageImage[]
   delivery: DeliveryMode
   status: 'queued' | 'removing' | 'failed'
-}
-
-export type UsageCost = {
-  input: number
-  output: number
-  cacheRead: number
-  cacheWrite: number
-  total: number
-}
-
-export type Usage = {
-  input: number
-  output: number
-  cacheRead: number
-  cacheWrite: number
-  totalTokens: number
-  cost: UsageCost
 }
 
 export type UsageTotals = Usage & {
@@ -319,25 +221,9 @@ export type DirectoryListing = {
   directories: DirectoryEntry[]
 }
 
-export type ContextUsage = {
-  provider: string
-  model: string
-  usedTokens: number
-  contextWindow: number
-  measured: boolean
-}
-
 export type CompactionResult = {
   summary: string
   firstKeptEntryId: string
   tokensBefore: number
   tokensAfter: number
-}
-
-export type HistoryResponse = {
-  events: WireEvent[]
-  queue?: WireEvent[]
-  context?: ContextUsage
-  running: boolean
-  eventSeq?: number
 }

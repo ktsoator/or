@@ -2,12 +2,20 @@ import {
   useCallback,
   useEffect,
   useReducer,
-  useRef,
   useState,
-  type Dispatch,
-  type SetStateAction,
 } from 'react'
-import { APIError, apiURL } from './api'
+import { APIError, apiURL, sessionURL } from './api'
+import { sessionCommands } from './sessionCommands'
+import { useSessionConnection } from './sessionConnection'
+import { threadsReducer } from './sessionReducer'
+import {
+  createSessionDraft,
+  createSessionStoreState,
+  resolveSessionDraft,
+  sessionStoreReducer,
+  type ModelDefaults,
+  type SessionDraft,
+} from './sessionStore'
 import type {
   ApprovalChoice,
   ApprovalItem,
@@ -15,7 +23,6 @@ import type {
   ConnectionStatus,
   ContextUsage,
   DeliveryMode,
-  HistoryResponse,
   Item,
   ModelCatalogResponse,
   ModelOption,
@@ -24,850 +31,13 @@ import type {
   MessageImage,
   QueuedMessage,
   SessionSummary,
+  ThreadSnapshot,
   WorkspaceSummary,
   ThinkingLevel,
-  Usage,
   WireEvent,
 } from './types'
 
-type ThreadState = {
-  items: Item[]
-  queue: QueuedMessage[]
-  responseUsage: Usage
-  contextUsage?: ContextUsage
-  preview?: PreviewState
-  previewOpen: boolean
-  running: boolean
-  autoCompacting: boolean
-  status: ConnectionStatus
-  seq: number
-  loaded: boolean
-}
-
-type ThreadsState = Record<string, ThreadState>
-
-type Action =
-  | { t: 'reset'; sessionID: string; history: HistoryResponse }
-  | { t: 'wire'; sessionID: string; ev: WireEvent }
-  | { t: 'status'; sessionID: string; status: ConnectionStatus }
-  | { t: 'running'; sessionID: string; running: boolean }
-  | {
-      t: 'sendUser'
-      sessionID: string
-      id: string
-      text: string
-      images: MessageImage[]
-      startedAt: string
-      delivery?: DeliveryMode
-    }
-  | { t: 'queueFailed'; sessionID: string; id: string }
-  | { t: 'queueStatus'; sessionID: string; id: string; status: 'queued' | 'removing' }
-  | { t: 'queueRemove'; sessionID: string; id: string }
-  | {
-      t: 'contextInvalidate'
-      sessionID: string
-      provider: string
-      model: string
-      contextWindow: number
-    }
-  | { t: 'resolveApproval'; sessionID: string; id: string }
-  | { t: 'forget'; sessionID: string }
-
-const emptyUsage = (): Usage => ({
-  input: 0,
-  output: 0,
-  cacheRead: 0,
-  cacheWrite: 0,
-  totalTokens: 0,
-  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-})
-
-const emptyThread = (): ThreadState => ({
-  items: [],
-  queue: [],
-  responseUsage: emptyUsage(),
-  contextUsage: undefined,
-  preview: undefined,
-  previewOpen: false,
-  running: false,
-  autoCompacting: false,
-  status: 'connecting',
-  seq: 0,
-  loaded: false,
-})
-
-function lastIndex(items: Item[], pred: (it: Item) => boolean): number {
-  for (let i = items.length - 1; i >= 0; i--) if (pred(items[i])) return i
-  return -1
-}
-
-function replaceAt(items: Item[], index: number, next: Item): Item[] {
-  const copy = items.slice()
-  copy[index] = next
-  return copy
-}
-
-function threadsReducer(state: ThreadsState, action: Action): ThreadsState {
-  if (action.t === 'forget') {
-    const next = { ...state }
-    delete next[action.sessionID]
-    return next
-  }
-  const current = state[action.sessionID] ?? emptyThread()
-  let next = current
-
-  switch (action.t) {
-    case 'reset': {
-      next = {
-        ...emptyThread(),
-        status: current.status,
-        running: action.history.running,
-        loaded: true,
-      }
-      for (const ev of action.history.events) next = reduceWire(next, ev)
-      for (const ev of action.history.queue ?? []) next = reduceWire(next, ev)
-      const restoredPreview = next.preview
-      next = {
-        ...next,
-        contextUsage: action.history.context,
-        preview: restoredPreview ?? current.preview,
-        // History makes the last preview available as a tab, but only a live
-        // open_preview event should bring the workbench forward.
-        previewOpen: Boolean(current.previewOpen && (restoredPreview || current.preview)),
-        running: action.history.running,
-        items: action.history.running ? next.items : completeOpenRun(next.items),
-      }
-      break
-    }
-    case 'status':
-      if (current.status === action.status) return state
-      next = { ...current, status: action.status }
-      break
-    case 'running':
-      if (current.running === action.running) return state
-      next = {
-        ...current,
-        running: action.running,
-        autoCompacting: action.running ? current.autoCompacting : false,
-        items: action.running ? current.items : completeOpenRun(current.items),
-      }
-      break
-    case 'sendUser':
-      next = action.delivery
-        ? {
-            ...current,
-            running: true,
-            queue: [
-              ...current.queue,
-              {
-                id: action.id,
-                text: action.text,
-                images: action.images,
-                delivery: action.delivery,
-                status: 'queued',
-              },
-            ],
-          }
-        : {
-            ...current,
-            seq: current.seq + 1,
-            running: true,
-            items: [
-              ...current.items,
-              {
-                kind: 'user',
-                id: action.id,
-                text: action.text,
-                images: action.images,
-                sentAt: action.startedAt,
-                deliveryStatus: 'sending',
-              },
-              {
-                kind: 'run',
-                id: `run-${action.id}`,
-                startedAt: action.startedAt,
-              },
-            ],
-          }
-      break
-    case 'queueFailed':
-      next = {
-        ...current,
-        queue: current.queue.map((message) =>
-          message.id === action.id ? { ...message, status: 'failed' } : message,
-        ),
-        items: current.items.map((item) =>
-          item.kind === 'user' && item.id === action.id
-            ? { ...item, deliveryStatus: 'failed' }
-            : item,
-        ),
-      }
-      break
-    case 'queueStatus':
-      next = {
-        ...current,
-        queue: current.queue.map((message) =>
-          message.id === action.id ? { ...message, status: action.status } : message,
-        ),
-      }
-      break
-    case 'queueRemove':
-      next = {
-        ...current,
-        queue: current.queue.filter((message) => message.id !== action.id),
-      }
-      break
-    case 'contextInvalidate':
-      next = {
-        ...current,
-        contextUsage: {
-          provider: action.provider,
-          model: action.model,
-          usedTokens: 0,
-          contextWindow: action.contextWindow,
-          measured: false,
-        },
-      }
-      break
-    case 'resolveApproval':
-      next = {
-        ...current,
-        items: current.items.filter(
-          (item) => !(item.kind === 'approval' && item.id === action.id),
-        ),
-      }
-      break
-    case 'wire':
-      next = reduceWire(current, action.ev)
-      break
-  }
-
-  return { ...state, [action.sessionID]: next }
-}
-
-function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
-  let items = state.items
-  let queue = state.queue
-  let responseUsage = state.responseUsage
-  let contextUsage = state.contextUsage
-  let preview = state.preview
-  let previewOpen = state.previewOpen
-  let running = state.running
-  let autoCompacting = state.autoCompacting
-  let seq = state.seq
-  const nextId = () => `i-${seq++}`
-
-  const closeAssistant = () => {
-    items = items.map((it) => (it.kind === 'assistant' && it.open ? { ...it, open: false } : it))
-  }
-  const completeThinking = () => {
-    items = items.map((it) =>
-      it.kind === 'thinking' && it.streaming ? { ...it, streaming: false } : it,
-    )
-  }
-  const removePreparingTools = () => {
-    items = items.filter((it) => it.kind !== 'tool' || it.status !== 'preparing')
-  }
-  const completeRun = (durationMs?: number, startedAt?: string) => {
-    let idx = startedAt
-      ? lastIndex(items, (item) => item.kind === 'run' && item.startedAt === startedAt)
-      : -1
-    if (idx < 0) {
-      idx = lastIndex(items, (item) => item.kind === 'run' && item.durationMs === undefined)
-    }
-    if (idx < 0) return
-    const run = items[idx] as Extract<Item, { kind: 'run' }>
-    if (durationMs === undefined && run.durationMs !== undefined) return
-    items = replaceAt(items, idx, {
-      ...run,
-      durationMs:
-        durationMs === undefined
-          ? elapsedSince(run.startedAt)
-          : Math.max(durationMs, elapsedSince(run.startedAt)),
-    })
-  }
-
-  switch (ev.type) {
-    case 'run_start': {
-      const exactIndex = ev.startedAt
-        ? lastIndex(items, (it) => it.kind === 'run' && it.startedAt === ev.startedAt)
-        : -1
-      const idx =
-        exactIndex >= 0
-          ? exactIndex
-          : lastIndex(items, (it) => it.kind === 'run' && it.durationMs === undefined)
-      if (idx >= 0) {
-        const run = items[idx] as Extract<Item, { kind: 'run' }>
-        items = replaceAt(items, idx, {
-          ...run,
-          startedAt: ev.startedAt ?? run.startedAt,
-          durationMs: ev.durationMs ?? run.durationMs,
-        })
-      } else {
-        const run = {
-          kind: 'run' as const,
-          id: ev.id ?? nextId(),
-          startedAt: ev.startedAt ?? new Date().toISOString(),
-          durationMs: ev.durationMs,
-        }
-        items = [...items, run]
-      }
-      const projectedRunIndex = idx >= 0 ? idx : items.length - 1
-      const projectedRun = items[projectedRunIndex]
-      const precedingItem = items[projectedRunIndex - 1]
-      if (projectedRun.kind === 'run' && precedingItem?.kind === 'user' && !precedingItem.sentAt) {
-        items = replaceAt(items, projectedRunIndex - 1, {
-          ...precedingItem,
-          sentAt: projectedRun.startedAt,
-        })
-      }
-      if (projectedRun.kind === 'run' && projectedRun.durationMs === undefined) running = true
-      break
-    }
-
-    case 'user_message':
-      {
-        const text = ev.text ?? ''
-        const images = ev.images ?? []
-        if (ev.queued && ev.delivery) {
-          let queueIndex = ev.id ? queue.findIndex((message) => message.id === ev.id) : -1
-          if (queueIndex < 0) {
-            queueIndex = queue.findIndex((message) =>
-              sameUserMessage(message.text, message.images, text, images),
-            )
-          }
-          const message: QueuedMessage = {
-            id: ev.id ?? `queued-${nextId()}`,
-            text,
-            images,
-            delivery: ev.delivery,
-            status: 'queued',
-          }
-          queue =
-            queueIndex >= 0
-              ? replaceQueueAt(queue, queueIndex, message)
-              : [...queue, message]
-          break
-        }
-
-        let queueIndex = ev.id ? queue.findIndex((message) => message.id === ev.id) : -1
-        if (queueIndex < 0) {
-          queueIndex = queue.findIndex((message) =>
-            sameUserMessage(message.text, message.images, text, images),
-          )
-        }
-        if (queueIndex >= 0) queue = queue.filter((_, index) => index !== queueIndex)
-
-        let idx = ev.id
-          ? items.findIndex((item) => item.kind === 'user' && item.id === ev.id)
-          : -1
-        if (idx < 0) {
-          idx = items.findIndex(
-            (item) =>
-              item.kind === 'user' &&
-              item.deliveryStatus === 'sending' &&
-              sameUserMessage(item.text, item.images, text, images),
-          )
-        }
-        if (idx < 0) {
-          const runIndex = lastIndex(items, (item) => item.kind === 'run')
-          const candidate = items[runIndex - 1]
-          if (
-            candidate?.kind === 'user' &&
-            sameUserMessage(candidate.text, candidate.images, text, images)
-          ) {
-            idx = runIndex - 1
-          }
-        }
-        const openRunIndex = lastIndex(
-          items,
-          (item) => item.kind === 'run' && item.durationMs === undefined,
-        )
-        const existingItem = idx >= 0 ? items[idx] : undefined
-        const existingUser = existingItem?.kind === 'user' ? existingItem : undefined
-        const openRun = openRunIndex >= 0 ? items[openRunIndex] : undefined
-        const user = {
-          kind: 'user' as const,
-          id: ev.id ?? (idx >= 0 ? items[idx].id : nextId()),
-          text,
-          images,
-          sentAt:
-            existingUser?.sentAt ?? (openRun?.kind === 'run' ? openRun.startedAt : undefined),
-        }
-        if (idx >= 0) {
-          items = replaceAt(items, idx, user)
-        } else {
-          items =
-            openRunIndex >= 0 && !ev.delivery
-              ? [...items.slice(0, openRunIndex), user, ...items.slice(openRunIndex)]
-              : [...items, user]
-        }
-      }
-      break
-
-    case 'queue_cancelled':
-      if (ev.id) {
-        queue = queue.map((message) =>
-          message.id === ev.id ? { ...message, status: 'failed' } : message,
-        )
-      }
-      break
-
-    case 'queue_removed':
-      if (ev.id) queue = queue.filter((message) => message.id !== ev.id)
-      break
-
-    case 'delta':
-      if (ev.kind === 'thinking') {
-        const idx = lastIndex(items, (it) => it.kind === 'thinking' && it.streaming)
-        if (idx >= 0) {
-          const cur = items[idx] as Extract<Item, { kind: 'thinking' }>
-          items = replaceAt(items, idx, { ...cur, text: cur.text + (ev.delta ?? '') })
-        } else {
-          items = [
-            ...items,
-            { kind: 'thinking', id: nextId(), text: ev.delta ?? '', streaming: true },
-          ]
-        }
-      } else {
-        completeThinking()
-        const idx = lastIndex(items, (it) => it.kind === 'assistant' && it.open)
-        if (idx >= 0) {
-          const cur = items[idx] as Extract<Item, { kind: 'assistant' }>
-          items = replaceAt(items, idx, {
-            ...cur,
-            markdown: cur.markdown + (ev.delta ?? ''),
-          })
-        } else {
-          items = [
-            ...items,
-            {
-              kind: 'assistant',
-              id: nextId(),
-              markdown: ev.delta ?? '',
-              open: true,
-              complete: false,
-            },
-          ]
-        }
-      }
-      break
-
-    case 'tool_input_start': {
-      closeAssistant()
-      completeThinking()
-      let idx = ev.id ? lastIndex(items, (it) => it.kind === 'tool' && it.id === ev.id) : -1
-      if (idx < 0 && ev.toolContentIndex !== undefined) {
-        idx = lastIndex(
-          items,
-          (it) =>
-            it.kind === 'tool' &&
-            it.status === 'preparing' &&
-            it.toolContentIndex === ev.toolContentIndex,
-        )
-      }
-      if (idx < 0) {
-        items = [
-          ...items,
-          {
-            kind: 'tool',
-            id: ev.id ?? nextId(),
-            name: ev.tool ?? 'tool',
-            args: undefined,
-            status: 'preparing',
-            toolContentIndex: ev.toolContentIndex,
-            generatedBytes: 0,
-          },
-        ]
-      }
-      break
-    }
-
-    case 'tool_input_delta': {
-      let idx = ev.id ? lastIndex(items, (it) => it.kind === 'tool' && it.id === ev.id) : -1
-      if (idx < 0 && ev.toolContentIndex !== undefined) {
-        idx = lastIndex(
-          items,
-          (it) =>
-            it.kind === 'tool' &&
-            it.status === 'preparing' &&
-            it.toolContentIndex === ev.toolContentIndex,
-        )
-      }
-      if (idx >= 0) {
-        const cur = items[idx] as Extract<Item, { kind: 'tool' }>
-        items = replaceAt(items, idx, {
-          ...cur,
-          id: ev.id ?? cur.id,
-          name: ev.tool || cur.name,
-          generatedBytes: (cur.generatedBytes ?? 0) + (ev.bytes ?? 0),
-        })
-      } else {
-        items = [
-          ...items,
-          {
-            kind: 'tool',
-            id: ev.id ?? nextId(),
-            name: ev.tool ?? 'tool',
-            args: undefined,
-            status: 'preparing',
-            toolContentIndex: ev.toolContentIndex,
-            generatedBytes: ev.bytes ?? 0,
-          },
-        ]
-      }
-      break
-    }
-
-    case 'tool_input_end': {
-      let idx = ev.id ? lastIndex(items, (it) => it.kind === 'tool' && it.id === ev.id) : -1
-      if (idx < 0 && ev.toolContentIndex !== undefined) {
-        idx = lastIndex(
-          items,
-          (it) =>
-            it.kind === 'tool' &&
-            it.status === 'preparing' &&
-            it.toolContentIndex === ev.toolContentIndex,
-        )
-      }
-      const patch = {
-        name: ev.tool ?? 'tool',
-        args: ev.args,
-        status: 'preparing' as const,
-        toolContentIndex: ev.toolContentIndex,
-      }
-      if (idx >= 0) {
-        const cur = items[idx] as Extract<Item, { kind: 'tool' }>
-        items = replaceAt(items, idx, {
-          ...cur,
-          ...patch,
-          id: ev.id ?? cur.id,
-          name: ev.tool || cur.name,
-        })
-      } else {
-        items = [
-          ...items,
-          { kind: 'tool', id: ev.id ?? nextId(), generatedBytes: 0, ...patch },
-        ]
-      }
-      break
-    }
-
-    case 'tool_start': {
-      closeAssistant()
-      completeThinking()
-      let idx = ev.id ? lastIndex(items, (it) => it.kind === 'tool' && it.id === ev.id) : -1
-      if (idx < 0) {
-        idx = lastIndex(
-          items,
-          (it) =>
-            it.kind === 'tool' &&
-            it.status === 'preparing' &&
-            (!ev.tool || it.name === ev.tool),
-        )
-      }
-      if (idx >= 0) {
-        const cur = items[idx] as Extract<Item, { kind: 'tool' }>
-        items = replaceAt(items, idx, {
-          ...cur,
-          id: ev.id ?? cur.id,
-          name: ev.tool || cur.name,
-          args: ev.args ?? cur.args,
-          status: 'running',
-        })
-      } else {
-        items = [
-          ...items,
-          {
-            kind: 'tool',
-            id: ev.id ?? nextId(),
-            name: ev.tool ?? 'tool',
-            args: ev.args,
-            status: 'running',
-          },
-        ]
-      }
-      break
-    }
-
-    case 'tool_end': {
-      let idx = ev.id ? lastIndex(items, (it) => it.kind === 'tool' && it.id === ev.id) : -1
-      if (idx < 0) {
-        idx = lastIndex(
-          items,
-          (it) =>
-            it.kind === 'tool' &&
-            (it.status === 'running' || it.status === 'preparing') &&
-            (!ev.tool || it.name === ev.tool),
-        )
-      }
-      const patch = {
-        status: (ev.isError ? 'error' : 'complete') as 'error' | 'complete',
-        result: ev.result,
-        change: ev.change,
-      }
-      if (idx >= 0) {
-        const cur = items[idx] as Extract<Item, { kind: 'tool' }>
-        items = replaceAt(items, idx, { ...cur, ...patch })
-      } else {
-        items = [
-          ...items,
-          { kind: 'tool', id: ev.id ?? nextId(), name: ev.tool ?? 'tool', args: undefined, ...patch },
-        ]
-      }
-      if (ev.preview?.url || ev.preview?.path) {
-        preview = {
-          ...ev.preview,
-          revision: (preview?.revision ?? 0) + 1,
-        }
-        previewOpen = true
-      } else if (ev.change?.changeType === 'file' && preview?.path) {
-        preview = {
-          ...preview,
-          revision: preview.revision + 1,
-        }
-      }
-      break
-    }
-
-    case 'message_end':
-      completeThinking()
-      responseUsage = mergeUsage(responseUsage, ev.usage)
-      if (ev.usage) {
-        const usedTokens = usageTokens(ev.usage)
-        if (usedTokens > 0) {
-          contextUsage = {
-            provider: contextUsage?.provider ?? '',
-            model: contextUsage?.model ?? '',
-            usedTokens,
-            contextWindow: contextUsage?.contextWindow ?? 0,
-            measured: true,
-          }
-        }
-      }
-      {
-        let idx = lastIndex(items, (it) => it.kind === 'assistant' && it.open)
-        if (idx < 0 && ev.text) {
-          const runIndex = lastIndex(items, (item) => item.kind === 'run')
-          const matchingAssistant = lastIndex(
-            items,
-            (item) => item.kind === 'assistant' && item.markdown === ev.text,
-          )
-          if (matchingAssistant > runIndex && matchingAssistant === items.length - 1) {
-            idx = matchingAssistant
-          }
-        }
-        if (ev.text) {
-          if (idx >= 0) {
-            const cur = items[idx] as Extract<Item, { kind: 'assistant' }>
-            items = replaceAt(items, idx, { ...cur, markdown: ev.text, open: false })
-          } else {
-            idx = items.length
-            items = [
-              ...items,
-              {
-                kind: 'assistant',
-                id: nextId(),
-                markdown: ev.text,
-                open: false,
-                complete: false,
-              },
-            ]
-          }
-        } else if (idx >= 0) {
-          const cur = items[idx] as Extract<Item, { kind: 'assistant' }>
-          items = replaceAt(items, idx, { ...cur, open: false })
-        }
-
-        if (ev.finalResponse && idx >= 0) {
-          const cur = items[idx] as Extract<Item, { kind: 'assistant' }>
-          items = replaceAt(items, idx, {
-            ...cur,
-            open: false,
-            complete: true,
-            usage: hasUsage(responseUsage) ? responseUsage : undefined,
-            provider: ev.provider,
-            model: ev.model,
-            modelName: ev.modelName,
-            completedAt: ev.completedAt,
-          })
-          responseUsage = emptyUsage()
-        }
-      }
-      break
-
-    case 'approval_request': {
-      completeThinking()
-      running = true
-      const id = ev.id ?? nextId()
-      const idx = lastIndex(items, (it) => it.kind === 'approval' && it.id === id)
-      const approval: ApprovalItem = {
-        kind: 'approval',
-        id,
-        summary: ev.summary ?? '',
-        reason: ev.reason ?? '',
-      }
-      items = idx >= 0 ? replaceAt(items, idx, approval) : [...items, approval]
-      break
-    }
-
-    case 'approval_resolved':
-    case 'approval_cancelled':
-      if (ev.id) items = items.filter((item) => !(item.kind === 'approval' && item.id === ev.id))
-      break
-
-    case 'turn_discard': {
-      removePreparingTools()
-      const assistantIndex = lastIndex(items, (item) => item.kind === 'assistant')
-      const boundaryIndex = lastIndex(
-        items,
-        (item) => item.kind === 'user' || item.kind === 'run' || item.kind === 'tool',
-      )
-      if (assistantIndex > boundaryIndex) {
-        const assistant = items[assistantIndex]
-        if (assistant.kind === 'assistant' && assistant.usage) {
-          responseUsage = mergeUsage(responseUsage, assistant.usage)
-        }
-        let start = assistantIndex
-        while (start > 0 && items[start - 1].kind === 'thinking') start--
-        items = [...items.slice(0, start), ...items.slice(assistantIndex + 1)]
-      } else {
-        let end = items.length
-        while (end > boundaryIndex + 1 && items[end - 1].kind === 'thinking') end--
-        if (end < items.length) items = items.slice(0, end)
-      }
-      break
-    }
-
-    case 'compaction_start':
-      autoCompacting = true
-      break
-
-    case 'compaction_end':
-      autoCompacting = false
-      if (!ev.isError && contextUsage) {
-        contextUsage = { ...contextUsage, usedTokens: 0, measured: false }
-      }
-      break
-
-    case 'error':
-      removePreparingTools()
-      completeRun(ev.durationMs, ev.startedAt)
-      items = [...items, { kind: 'error', id: nextId(), text: ev.text ?? '' }]
-      running = false
-      autoCompacting = false
-      closeAssistant()
-      completeThinking()
-      responseUsage = emptyUsage()
-      break
-
-    case 'done':
-      removePreparingTools()
-      completeRun(ev.durationMs, ev.startedAt)
-      running = false
-      autoCompacting = false
-      closeAssistant()
-      completeThinking()
-      responseUsage = emptyUsage()
-      break
-  }
-
-  return {
-    ...state,
-    items,
-    queue,
-    responseUsage,
-    contextUsage,
-    preview,
-    previewOpen,
-    running,
-    autoCompacting,
-    seq,
-  }
-}
-
-function elapsedSince(startedAt: string): number {
-  const start = new Date(startedAt).getTime()
-  return Number.isFinite(start) ? Math.max(0, Date.now() - start) : 0
-}
-
-function completeOpenRun(items: Item[]): Item[] {
-  const index = lastIndex(items, (item) => item.kind === 'run' && item.durationMs === undefined)
-  if (index < 0) return items
-  const run = items[index] as Extract<Item, { kind: 'run' }>
-  return replaceAt(items, index, { ...run, durationMs: elapsedSince(run.startedAt) })
-}
-
-function replaceQueueAt(
-  queue: QueuedMessage[],
-  index: number,
-  next: QueuedMessage,
-): QueuedMessage[] {
-  const copy = queue.slice()
-  copy[index] = next
-  return copy
-}
-
-function sameUserMessage(
-  leftText: string,
-  leftImages: MessageImage[],
-  rightText: string,
-  rightImages: MessageImage[],
-): boolean {
-  if (leftText !== rightText || leftImages.length !== rightImages.length) return false
-  return leftImages.every(
-    (image, index) =>
-      image.mimeType === rightImages[index]?.mimeType && image.data === rightImages[index]?.data,
-  )
-}
-
-function mergeUsage(current: Usage, next?: Usage): Usage {
-  if (!next) return current
-  return {
-    input: current.input + next.input,
-    output: current.output + next.output,
-    cacheRead: current.cacheRead + next.cacheRead,
-    cacheWrite: current.cacheWrite + next.cacheWrite,
-    totalTokens:
-      current.totalTokens +
-      (next.totalTokens || next.input + next.output + next.cacheRead + next.cacheWrite),
-    cost: {
-      input: current.cost.input + next.cost.input,
-      output: current.cost.output + next.cost.output,
-      cacheRead: current.cost.cacheRead + next.cost.cacheRead,
-      cacheWrite: current.cost.cacheWrite + next.cost.cacheWrite,
-      total: current.cost.total + next.cost.total,
-    },
-  }
-}
-
-function usageTokens(usage: Usage): number {
-  return (
-    usage.totalTokens ||
-    usage.input + usage.output + usage.cacheRead + usage.cacheWrite
-  )
-}
-
-function hasUsage(usage: Usage): boolean {
-  return (
-    usage.input !== 0 ||
-    usage.output !== 0 ||
-    usage.cacheRead !== 0 ||
-    usage.cacheWrite !== 0 ||
-    usage.totalTokens !== 0 ||
-    usage.cost.total !== 0
-  )
-}
-
-function sessionURL(id: string, path: string): string {
-  return apiURL(`/sessions/${encodeURIComponent(id)}${path}`)
-}
-
-function promptTitle(text: string): string {
-  const compact = text.trim().replace(/\s+/g, ' ')
-  const runes = [...compact]
-  return runes.length > 42 ? `${runes.slice(0, 42).join('').trim()}…` : compact
-}
+export type { SessionDraft } from './sessionStore'
 
 export type Session = {
   sessions: SessionSummary[]
@@ -931,235 +101,15 @@ export type SessionThread = {
   compactContext: () => Promise<CompactionResult>
 }
 
-export type SessionDraft = {
-  id: string
-  workspacePath?: string
-  projectScoped: boolean
-  modelProvider?: string
-  modelID?: string
-  thinkingLevel?: ThinkingLevel
-  permissionMode: PermissionMode
-}
-
-type DraftSubmission = {
-  sessionID: string
-  text: string
-  images: MessageImage[]
-}
-
-type ModelDefaults = {
-  provider: string
-  model: string
-  thinkingLevel: ThinkingLevel
-}
-
 const selectedSessionKey = 'or-coding-active-session'
-
-function newSessionDraft(
-  workspacePath?: string,
-  projectScoped = false,
-  base?: SessionSummary,
-  models: ModelOption[] = [],
-  defaults?: ModelDefaults,
-): SessionDraft {
-  // Only the configured default is used. Falling back to whichever model the
-  // catalog happens to list first would start a session on a model nobody
-  // chose, while the settings page still reports the default as unset — and the
-  // server deliberately leaves it unset until someone picks one.
-  const fallback = models.find(
-    (model) => model.provider === defaults?.provider && model.id === defaults?.model,
-  )
-  const fallbackThinking =
-    (fallback?.provider === defaults?.provider && fallback?.id === defaults?.model
-      ? defaults?.thinkingLevel
-      : undefined) ??
-    fallback?.thinkingLevels.find((level) => level === 'medium') ??
-    fallback?.thinkingLevels.find((level) => level !== 'off') ??
-    fallback?.thinkingLevels[0]
-  return {
-    id: crypto.randomUUID(),
-    workspacePath,
-    projectScoped,
-    modelProvider: base?.modelProvider ?? fallback?.provider,
-    modelID: base?.modelId ?? fallback?.id,
-    thinkingLevel: base?.thinkingLevel ?? fallbackThinking,
-    permissionMode: base?.permissionMode ?? 'ask',
-  }
-}
-
-function resolveSessionDraft(
-  draft: SessionDraft,
-  models: ModelOption[],
-  defaults?: ModelDefaults,
-): SessionDraft {
-  if (draft.modelProvider && draft.modelID && draft.thinkingLevel) return draft
-  return {
-    ...newSessionDraft(draft.workspacePath, draft.projectScoped, undefined, models, defaults),
-    id: draft.id,
-    permissionMode: draft.permissionMode,
-  }
-}
-
-function useSessionConnection(
-  sessionID: string | undefined,
-  dispatch: Dispatch<Action>,
-  setSessions: Dispatch<SetStateAction<SessionSummary[]>>,
-  setPrimaryStatus?: Dispatch<SetStateAction<ConnectionStatus>>,
-) {
-  useEffect(() => {
-    if (!sessionID) return
-    const observedSessionID = sessionID
-    let active = true
-    let es: EventSource | null = null
-    let syncing = false
-    const controller = new AbortController()
-    dispatch({ t: 'status', sessionID: observedSessionID, status: 'connecting' })
-
-    const applyWire = (wire: WireEvent) => {
-      dispatch({ t: 'wire', sessionID: observedSessionID, ev: wire })
-      if (wire.type === 'approval_request') {
-        setSessions((current) =>
-          current.map((session) =>
-            session.id === observedSessionID
-              ? { ...session, running: true, hasApproval: true }
-              : session,
-          ),
-        )
-      } else if (wire.type === 'approval_resolved' || wire.type === 'approval_cancelled') {
-        setSessions((current) =>
-          current.map((session) =>
-            session.id === observedSessionID ? { ...session, hasApproval: false } : session,
-          ),
-        )
-      } else if (wire.type === 'done' || wire.type === 'error') {
-        setSessions((current) =>
-          current.map((session) =>
-            session.id === observedSessionID ? { ...session, running: false } : session,
-          ),
-        )
-      } else if (wire.type === 'title_update') {
-        setSessions((current) =>
-          current.map((session) =>
-            session.id === observedSessionID
-              ? {
-                  ...session,
-                  title: wire.title ?? session.title,
-                  aiTitle: wire.aiTitle,
-                  customTitle: wire.customTitle,
-                }
-              : session,
-          ),
-        )
-      }
-    }
-
-    const closeEvents = () => {
-      es?.close()
-      es = null
-    }
-
-    function connect(after: number) {
-      if (!active) return
-      closeEvents()
-      const eventsPath = after > 0 ? `/events?after=${encodeURIComponent(after)}` : '/events'
-      const source = new EventSource(sessionURL(observedSessionID, eventsPath))
-      es = source
-      source.onopen = () => {
-        if (es !== source) return
-        dispatch({ t: 'status', sessionID: observedSessionID, status: 'ready' })
-        setPrimaryStatus?.('ready')
-      }
-      source.onerror = () => {
-        if (es !== source) return
-        dispatch({ t: 'status', sessionID: observedSessionID, status: 'disconnected' })
-        setPrimaryStatus?.('disconnected')
-      }
-      source.onmessage = (event) => {
-        if (es !== source) return
-        try {
-          const wire = JSON.parse(event.data) as WireEvent
-          if (wire.type === 'sync_required') {
-            void restoreHistory(false)
-            return
-          }
-          applyWire(wire)
-        } catch {
-          applyWire({
-            type: 'error',
-            text: 'Received an invalid server event.',
-          })
-        }
-      }
-    }
-
-    async function restoreHistory(initial: boolean) {
-      if (!active || syncing) return
-      syncing = true
-      closeEvents()
-      dispatch({ t: 'status', sessionID: observedSessionID, status: 'connecting' })
-      try {
-        const response = await fetch(sessionURL(observedSessionID, '/history'), {
-          cache: 'no-store',
-          signal: controller.signal,
-        })
-        if (!response.ok) throw new Error(`history request failed (${response.status})`)
-        const history = (await response.json()) as HistoryResponse
-        if (!active) return
-        dispatch({ t: 'reset', sessionID: observedSessionID, history })
-        const hasApproval = history.events.reduce(
-          (pending, event) =>
-            event.type === 'approval_request'
-              ? true
-              : event.type === 'approval_resolved' || event.type === 'approval_cancelled'
-                ? false
-                : pending,
-          false,
-        )
-        setSessions((current) =>
-          current.map((session) =>
-            session.id === observedSessionID
-              ? { ...session, running: history.running, hasApproval }
-              : session,
-          ),
-        )
-        connect(history.eventSeq ?? 0)
-      } catch (error: unknown) {
-        if (!active || (error instanceof DOMException && error.name === 'AbortError')) return
-        dispatch({ t: 'status', sessionID: observedSessionID, status: 'disconnected' })
-        setPrimaryStatus?.('disconnected')
-        if (initial) {
-          dispatch({
-            t: 'reset',
-            sessionID: observedSessionID,
-            history: {
-              running: false,
-              events: [{ type: 'error', text: 'History could not be restored.' }],
-            },
-          })
-          connect(0)
-        }
-      } finally {
-        syncing = false
-      }
-    }
-
-    void restoreHistory(true)
-
-    return () => {
-      active = false
-      controller.abort()
-      closeEvents()
-    }
-  }, [dispatch, sessionID, setPrimaryStatus, setSessions])
-}
 
 export function useSession(secondarySessionID?: string): Session {
   const [threads, dispatch] = useReducer(threadsReducer, {})
-  const [sessions, setSessions] = useState<SessionSummary[]>([])
-  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([])
-  const [draft, setDraft] = useState<SessionDraft>()
-  const [pendingDraftSend, setPendingDraftSend] = useState<DraftSubmission>()
-  const [activeSessionID, setActiveSessionID] = useState<string>()
+  const [sessionStore, dispatchSessionStore] = useReducer(
+    sessionStoreReducer,
+    createSessionStoreState(),
+  )
+  const { sessions, workspaces, draft, pendingDraftSend, activeSessionID } = sessionStore
   const [initializing, setInitializing] = useState(true)
   const [creating, setCreating] = useState(false)
   const [updatingSettings, setUpdatingSettings] = useState(false)
@@ -1167,8 +117,31 @@ export function useSession(secondarySessionID?: string): Session {
   const [models, setModels] = useState<ModelOption[]>([])
   const [modelDefaults, setModelDefaults] = useState<ModelDefaults>()
   const [serviceStatus, setServiceStatus] = useState<ConnectionStatus>('connecting')
-  const deletedSessionIDs = useRef(new Set<string>())
-  const draftRef = useRef<SessionDraft | undefined>(undefined)
+
+  const applySessionWire = useCallback((sessionID: string, wire: WireEvent) => {
+    dispatch({ t: 'wire', sessionID, ev: wire })
+    dispatchSessionStore({ t: 'sessionWire', sessionID, event: wire })
+  }, [])
+
+  const applySessionSnapshot = useCallback((sessionID: string, history: ThreadSnapshot) => {
+    dispatch({ t: 'reset', sessionID, history })
+    dispatchSessionStore({ t: 'sessionSnapshot', sessionID, history })
+  }, [])
+
+  const applySessionStatus = useCallback(
+    (sessionID: string, status: ConnectionStatus) => {
+      dispatch({ t: 'status', sessionID, status })
+    },
+    [],
+  )
+
+  const applyPrimarySessionStatus = useCallback(
+    (sessionID: string, status: ConnectionStatus) => {
+      dispatch({ t: 'status', sessionID, status })
+      if (status !== 'connecting') setServiceStatus(status)
+    },
+    [],
+  )
 
   const loadModels = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -1201,36 +174,20 @@ export function useSession(secondarySessionID?: string): Session {
     const response = await fetch(apiURL('/sessions'), { cache: 'no-store', signal })
     if (!response.ok) throw new Error(`session list failed (${response.status})`)
     const received = (await response.json()) as SessionSummary[]
-    const next = received.filter((session) => !deletedSessionIDs.current.has(session.id))
-    if (next.length === 0 && !draftRef.current) {
-      const initialDraft = newSessionDraft()
-      draftRef.current = initialDraft
-      setDraft(initialDraft)
-    }
-    setSessions((current) =>
-      next.map((remote) => {
-        const local = current.find((session) => session.id === remote.id)
-        if (!local) return remote
-        return new Date(local.updatedAt).getTime() > new Date(remote.updatedAt).getTime()
-          ? local
-          : remote
-      }),
-    )
-    setActiveSessionID((current) => {
-      if (draftRef.current) return undefined
-      if (current && next.some((session) => session.id === current)) return current
-      const stored = localStorage.getItem(selectedSessionKey)
-      if (stored && next.some((session) => session.id === stored)) return stored
-      return next[0]?.id
+    dispatchSessionStore({
+      t: 'sessionsLoaded',
+      sessions: received,
+      storedSessionID: localStorage.getItem(selectedSessionKey) ?? undefined,
+      emptyDraft: createSessionDraft(),
     })
-    return next
+    return received
   }, [])
 
   const refreshWorkspaces = useCallback(async (signal?: AbortSignal) => {
     const response = await fetch(apiURL('/workspaces'), { cache: 'no-store', signal })
     if (!response.ok) throw new Error(`workspace list failed (${response.status})`)
     const received = (await response.json()) as WorkspaceSummary[]
-    setWorkspaces(received)
+    dispatchSessionStore({ t: 'workspacesLoaded', workspaces: received })
     return received
   }, [])
 
@@ -1277,49 +234,44 @@ export function useSession(secondarySessionID?: string): Session {
     if (activeSessionID) localStorage.setItem(selectedSessionKey, activeSessionID)
   }, [activeSessionID])
 
-  useSessionConnection(activeSessionID, dispatch, setSessions, setServiceStatus)
+  useSessionConnection(activeSessionID, {
+    onWire: applySessionWire,
+    onSnapshot: applySessionSnapshot,
+    onStatus: applyPrimarySessionStatus,
+  })
   useSessionConnection(
     secondarySessionID && secondarySessionID !== activeSessionID
       ? secondarySessionID
       : undefined,
-    dispatch,
-    setSessions,
+    {
+      onWire: applySessionWire,
+      onSnapshot: applySessionSnapshot,
+      onStatus: applySessionStatus,
+    },
   )
 
   const activeSession = sessions.find((session) => session.id === activeSessionID)
   const effectiveDraft = draft ? resolveSessionDraft(draft, models, modelDefaults) : undefined
 
   const selectSession = (id: string) => {
-    if (!sessions.some((session) => session.id === id)) return
-    draftRef.current = undefined
-    setDraft(undefined)
-    setActiveSessionID(id)
+    dispatchSessionStore({ t: 'sessionSelected', sessionID: id })
   }
 
   const startDraft = (workspacePath?: string, projectScoped = false) => {
-    const next = newSessionDraft(
-      workspacePath,
-      projectScoped,
-      undefined,
-      models,
-      modelDefaults,
-    )
-    draftRef.current = next
-    setDraft(next)
-    setPendingDraftSend(undefined)
-    setActiveSessionID(undefined)
+    dispatchSessionStore({
+      t: 'draftStarted',
+      draft: createSessionDraft(
+        workspacePath,
+        projectScoped,
+        undefined,
+        models,
+        modelDefaults,
+      ),
+    })
   }
 
   const updateDraftWorkspace = (workspacePath?: string, projectScoped = false) => {
-    const current = draftRef.current
-    if (!current) return
-    const next = {
-      ...current,
-      workspacePath: projectScoped ? workspacePath : undefined,
-      projectScoped,
-    }
-    draftRef.current = next
-    setDraft(next)
+    dispatchSessionStore({ t: 'draftWorkspaceUpdated', workspacePath, projectScoped })
   }
 
   const registerWorkspace = async (path: string) => {
@@ -1339,10 +291,7 @@ export function useSession(secondarySessionID?: string): Session {
       throw new Error(message)
     }
     const workspace = (await response.json()) as WorkspaceSummary
-    setWorkspaces((current) => [
-      workspace,
-      ...current.filter((candidate) => candidate.path !== workspace.path),
-    ])
+    dispatchSessionStore({ t: 'workspaceUpserted', workspace })
     return workspace
   }
 
@@ -1361,7 +310,7 @@ export function useSession(secondarySessionID?: string): Session {
       }
       throw new Error(message)
     }
-    setWorkspaces((current) => current.filter((workspace) => workspace.path !== path))
+    dispatchSessionStore({ t: 'workspaceRemoved', path })
   }
 
   const createSessionRecord = async (
@@ -1396,27 +345,13 @@ export function useSession(secondarySessionID?: string): Session {
       throw new Error(message)
     }
     const created = (await response.json()) as SessionSummary
-    setSessions((current) => [created, ...current.filter((session) => session.id !== created.id)])
-    if (created.scope === 'project') {
-      setWorkspaces((current) => {
-        if (current.some((workspace) => workspace.path === created.workspacePath)) return current
-        return [
-          {
-            path: created.workspacePath,
-            name: created.workspaceName,
-            addedAt: created.createdAt,
-          },
-          ...current,
-        ]
-      })
-    }
-    if (select) setActiveSessionID(created.id)
+    dispatchSessionStore({ t: 'sessionCreated', session: created, select })
     return created
   }
 
   const createChatSession = async () => {
     if (creating) throw new Error('session creation is already in progress')
-    const settings = effectiveDraft ?? newSessionDraft(
+    const settings = effectiveDraft ?? createSessionDraft(
       undefined,
       false,
       activeSession,
@@ -1455,10 +390,8 @@ export function useSession(secondarySessionID?: string): Session {
       throw new Error(message)
     }
 
-    deletedSessionIDs.current.add(id)
     dispatch({ t: 'forget', sessionID: id })
-    setSessions((current) => current.filter((session) => session.id !== id))
-    setActiveSessionID((current) => (current === id ? undefined : current))
+    dispatchSessionStore({ t: 'sessionDeleted', sessionID: id })
     await refreshSessions()
   }
 
@@ -1479,9 +412,7 @@ export function useSession(secondarySessionID?: string): Session {
       throw new Error(message)
     }
     const updated = (await response.json()) as SessionSummary
-    setSessions((current) =>
-      current.map((session) => (session.id === updated.id ? updated : session)),
-    )
+    dispatchSessionStore({ t: 'sessionUpdated', session: updated, front: false })
     return updated
   }
 
@@ -1520,10 +451,7 @@ export function useSession(secondarySessionID?: string): Session {
     try {
       const updated = await patchSessionSettings(sessionID, provider, model, thinkingLevel)
       const previous = sessions.find((session) => session.id === sessionID)
-      setSessions((current) => [
-        updated,
-        ...current.filter((session) => session.id !== updated.id),
-      ])
+      dispatchSessionStore({ t: 'sessionUpdated', session: updated, front: true })
       if (
         previous &&
         (previous.modelProvider !== updated.modelProvider || previous.modelId !== updated.modelId)
@@ -1551,10 +479,13 @@ export function useSession(secondarySessionID?: string): Session {
     model: string,
     thinkingLevel: ThinkingLevel,
   ) => {
-    if (draftRef.current) {
-      const next = { ...draftRef.current, modelProvider: provider, modelID: model, thinkingLevel }
-      draftRef.current = next
-      setDraft(next)
+    if (draft) {
+      dispatchSessionStore({
+        t: 'draftModelUpdated',
+        provider,
+        model,
+        thinkingLevel,
+      })
       return
     }
     if (!activeSessionID) return
@@ -1581,20 +512,15 @@ export function useSession(secondarySessionID?: string): Session {
         throw new Error(message)
       }
       const updated = (await response.json()) as SessionSummary
-      setSessions((current) => [
-        updated,
-        ...current.filter((session) => session.id !== updated.id),
-      ])
+      dispatchSessionStore({ t: 'sessionUpdated', session: updated, front: true })
     } finally {
       setUpdatingSettings(false)
     }
   }
 
   const updatePermissionMode = async (mode: PermissionMode) => {
-    if (draftRef.current) {
-      const next = { ...draftRef.current, permissionMode: mode }
-      draftRef.current = next
-      setDraft(next)
+    if (draft) {
+      dispatchSessionStore({ t: 'draftPermissionUpdated', permissionMode: mode })
       return
     }
     if (!activeSessionID) return
@@ -1656,6 +582,38 @@ export function useSession(secondarySessionID?: string): Session {
   const thread = activeSessionID ? threads[activeSessionID] : undefined
   const activeSessionRunning = activeSession?.running
 
+  const startSessionPrompt = useCallback(
+    (sessionID: string, id: string, text: string, images: MessageImage[]) => {
+      dispatch({
+        t: 'sendUser',
+        sessionID,
+        id,
+        text,
+        images,
+        startedAt: new Date().toISOString(),
+      })
+      dispatchSessionStore({
+        t: 'sessionPromptStarted',
+        sessionID,
+        text,
+        updatedAt: new Date().toISOString(),
+      })
+      void sessionCommands.sendPrompt(sessionID, { text, images }).catch((error: unknown) => {
+        dispatch({ t: 'queueFailed', sessionID, id })
+        dispatch({
+          t: 'wire',
+          sessionID,
+          ev: {
+            type: 'error',
+            text: error instanceof Error ? error.message : 'Prompt request failed.',
+          },
+        })
+        void refreshSessions().catch(() => undefined)
+      })
+    },
+    [refreshSessions],
+  )
+
   useEffect(() => {
     if (!activeSessionID || activeSessionRunning === undefined || !thread?.loaded) return
     dispatch({
@@ -1675,52 +633,10 @@ export function useSession(secondarySessionID?: string): Session {
       return
     }
     const submission = pendingDraftSend
-    setPendingDraftSend(undefined)
+    dispatchSessionStore({ t: 'draftSendConsumed', sessionID: submission.sessionID })
     const id = `local-${submission.sessionID}-${crypto.randomUUID()}`
-    dispatch({
-      t: 'sendUser',
-      sessionID: submission.sessionID,
-      id,
-      text: submission.text,
-      images: submission.images,
-      startedAt: new Date().toISOString(),
-    })
-    setSessions((current) =>
-      current.map((session) =>
-        session.id === submission.sessionID
-          ? {
-              ...session,
-              title:
-                session.title === 'New session'
-                  ? promptTitle(submission.text || 'Image')
-                  : session.title,
-              running: true,
-              updatedAt: new Date().toISOString(),
-            }
-          : session,
-      ),
-    )
-    void fetch(sessionURL(submission.sessionID, '/prompt'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: submission.text, images: submission.images }),
-    })
-      .then((response) => {
-        if (!response.ok) throw new Error(`prompt request failed (${response.status})`)
-      })
-      .catch((error: unknown) => {
-        dispatch({ t: 'queueFailed', sessionID: submission.sessionID, id })
-        dispatch({
-          t: 'wire',
-          sessionID: submission.sessionID,
-          ev: {
-            type: 'error',
-            text: error instanceof Error ? error.message : 'Prompt request failed.',
-          },
-        })
-        void refreshSessions().catch(() => undefined)
-      })
-  }, [activeSessionID, pendingDraftSend, refreshSessions, thread?.loaded, thread?.status])
+    startSessionPrompt(submission.sessionID, id, submission.text, submission.images)
+  }, [activeSessionID, pendingDraftSend, startSessionPrompt, thread?.loaded, thread?.status])
 
   const sendToSession = async (
     sessionID: string,
@@ -1735,34 +651,20 @@ export function useSession(secondarySessionID?: string): Session {
     if (queued && !delivery) return false
     if (!queued && delivery) return false
     const id = `local-${sessionID}-${crypto.randomUUID()}`
-    dispatch({
-      t: 'sendUser',
-      sessionID,
-      id,
-      text: trimmed,
-      images,
-      startedAt: new Date().toISOString(),
-      delivery,
-    })
 
     if (queued) {
-      const endpoint = delivery === 'followup' ? '/follow-up' : '/steer'
-      void fetch(sessionURL(sessionID, endpoint), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, text: trimmed, images }),
+      if (!delivery) return false
+      dispatch({
+        t: 'sendUser',
+        sessionID,
+        id,
+        text: trimmed,
+        images,
+        startedAt: new Date().toISOString(),
+        delivery,
       })
-        .then(async (response) => {
-          if (response.ok) return
-          let message = `queue request failed (${response.status})`
-          try {
-            const body = (await response.json()) as { error?: string }
-            if (body.error) message = body.error
-          } catch {
-            // Keep the status-based fallback when the response has no JSON body.
-          }
-          throw new Error(message)
-        })
+      void sessionCommands
+        .enqueueMessage(sessionID, delivery, { id, text: trimmed, images })
         .catch(() => {
           dispatch({ t: 'queueFailed', sessionID, id })
           void refreshSessions().catch(() => undefined)
@@ -1770,36 +672,7 @@ export function useSession(secondarySessionID?: string): Session {
       return true
     }
 
-    setSessions((current) =>
-      current.map((session) =>
-        session.id === sessionID
-          ? {
-              ...session,
-              title:
-                session.title === 'New session' ? promptTitle(trimmed || 'Image') : session.title,
-              running: true,
-              updatedAt: new Date().toISOString(),
-            }
-          : session,
-      ),
-    )
-    void fetch(sessionURL(sessionID, '/prompt'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: trimmed, images }),
-    })
-      .then((response) => {
-        if (!response.ok) throw new Error(`prompt request failed (${response.status})`)
-      })
-      .catch((error: unknown) => {
-        dispatch({ t: 'queueFailed', sessionID, id })
-        dispatch({
-          t: 'wire',
-          sessionID,
-          ev: { type: 'error', text: error instanceof Error ? error.message : 'Prompt request failed.' },
-        })
-        void refreshSessions().catch(() => undefined)
-      })
+    startSessionPrompt(sessionID, id, trimmed, images)
     return true
   }
 
@@ -1832,9 +705,10 @@ export function useSession(secondarySessionID?: string): Session {
           thinkingLevel,
           permissionMode,
         )
-        draftRef.current = undefined
-        setDraft(undefined)
-        setPendingDraftSend({ sessionID: created.id, text: trimmed, images })
+        dispatchSessionStore({
+          t: 'draftSendQueued',
+          submission: { sessionID: created.id, text: trimmed, images },
+        })
         return true
       } finally {
         setCreating(false)
@@ -1845,7 +719,7 @@ export function useSession(secondarySessionID?: string): Session {
   }
 
   const stopSession = (sessionID: string) => {
-    void fetch(sessionURL(sessionID, '/abort'), { method: 'POST' })
+    void sessionCommands.abortRun(sessionID).catch(() => undefined)
   }
 
   const stop = () => {
@@ -1863,21 +737,13 @@ export function useSession(secondarySessionID?: string): Session {
     }
 
     dispatch({ t: 'queueStatus', sessionID, id, status: 'removing' })
-    const response = await fetch(sessionURL(sessionID, `/queue/${encodeURIComponent(id)}`), {
-      method: 'DELETE',
-    })
-    if (!response.ok) {
+    try {
+      await sessionCommands.removeQueuedMessage(sessionID, id)
+      dispatch({ t: 'queueRemove', sessionID, id })
+    } catch (error) {
       dispatch({ t: 'queueStatus', sessionID, id, status: 'queued' })
-      let message = `remove queued message failed (${response.status})`
-      try {
-        const body = (await response.json()) as { error?: string }
-        if (body.error) message = body.error
-      } catch {
-        // Keep the status-based fallback when the response has no JSON body.
-      }
-      throw new Error(message)
+      throw error
     }
-    dispatch({ t: 'queueRemove', sessionID, id })
   }
 
   const removeQueuedMessage = async (id: string) => {
@@ -1889,18 +755,9 @@ export function useSession(secondarySessionID?: string): Session {
     id: string,
     choice: ApprovalChoice,
   ) => {
-    const response = await fetch(sessionURL(sessionID, `/approvals/${encodeURIComponent(id)}`), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ choice }),
-    })
-    if (!response.ok) throw new Error('request failed')
+    await sessionCommands.resolveApproval(sessionID, id, choice)
     dispatch({ t: 'resolveApproval', sessionID, id })
-    setSessions((current) =>
-      current.map((session) =>
-        session.id === sessionID ? { ...session, hasApproval: false } : session,
-      ),
-    )
+    dispatchSessionStore({ t: 'sessionApprovalResolved', sessionID })
   }
 
   const resolveApproval = async (id: string, choice: ApprovalChoice) => {

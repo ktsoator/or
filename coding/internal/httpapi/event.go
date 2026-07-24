@@ -16,90 +16,6 @@ import (
 	"github.com/ktsoator/or/llm"
 )
 
-// wireEvent is the JSON shape streamed to the browser. Fields are populated
-// according to Type; the rest stay zero and are omitted.
-type wireEvent struct {
-	Type string `json:"type"`
-	// delta events
-	Kind  string `json:"kind,omitempty"`  // "text" or "thinking"
-	Delta string `json:"delta,omitempty"` // incremental content
-	// tool events (ID correlates tool_start with tool_end)
-	Tool   string `json:"tool,omitempty"`
-	Args   any    `json:"args,omitempty"`
-	Result string `json:"result,omitempty"`
-	// ToolContentIndex correlates tool argument events before every provider has
-	// supplied a stable tool-call ID. Bytes is the size of one argument delta.
-	ToolContentIndex *int `json:"toolContentIndex,omitempty"`
-	Bytes            int  `json:"bytes,omitempty"`
-	// Change is the structured file-change result (tools.FileChange) or failure
-	// (tools.MutationFailure), when the tool produced one, for rich rendering.
-	Change  any          `json:"change,omitempty"`
-	Preview *wirePreview `json:"preview,omitempty"`
-	IsError bool         `json:"isError,omitempty"`
-	// message_end fallback text (used when nothing streamed)
-	Text   string      `json:"text,omitempty"`
-	Images []wireImage `json:"images,omitempty"`
-	Usage  *wireUsage  `json:"usage,omitempty"`
-	Final  bool        `json:"finalResponse,omitempty"`
-	// Completed-response metadata. ModelName is the stable catalog display name;
-	// Provider and Model keep the exact identity available to other clients.
-	Provider  string `json:"provider,omitempty"`
-	Model     string `json:"model,omitempty"`
-	ModelName string `json:"modelName,omitempty"`
-	// queued-message metadata
-	Delivery string `json:"delivery,omitempty"`
-	Queued   bool   `json:"queued,omitempty"`
-	// approval_request
-	ID      string `json:"id,omitempty"`
-	Summary string `json:"summary,omitempty"`
-	Reason  string `json:"reason,omitempty"`
-	// title_update
-	Title       string `json:"title,omitempty"`
-	AITitle     string `json:"aiTitle,omitempty"`
-	CustomTitle string `json:"customTitle,omitempty"`
-	// run timing
-	StartedAt   string `json:"startedAt,omitempty"`
-	CompletedAt string `json:"completedAt,omitempty"`
-	DurationMS  *int64 `json:"durationMs,omitempty"`
-}
-
-type wireImage struct {
-	Data     string `json:"data"`
-	MIMEType string `json:"mimeType"`
-}
-
-type wirePreview struct {
-	URL          string `json:"url,omitempty"`
-	Path         string `json:"path,omitempty"`
-	RelativePath string `json:"relativePath,omitempty"`
-	Title        string `json:"title,omitempty"`
-}
-
-type wireUsage struct {
-	Input       int64         `json:"input"`
-	Output      int64         `json:"output"`
-	CacheRead   int64         `json:"cacheRead"`
-	CacheWrite  int64         `json:"cacheWrite"`
-	TotalTokens int64         `json:"totalTokens"`
-	Cost        wireUsageCost `json:"cost"`
-}
-
-type wireUsageCost struct {
-	Input      float64 `json:"input"`
-	Output     float64 `json:"output"`
-	CacheRead  float64 `json:"cacheRead"`
-	CacheWrite float64 `json:"cacheWrite"`
-	Total      float64 `json:"total"`
-}
-
-type wireContextUsage struct {
-	Provider      string `json:"provider"`
-	Model         string `json:"model"`
-	UsedTokens    int64  `json:"usedTokens"`
-	ContextWindow int64  `json:"contextWindow"`
-	Measured      bool   `json:"measured"`
-}
-
 func projectContextUsage(usage engine.ContextUsage) wireContextUsage {
 	return wireContextUsage{
 		Provider:      usage.Provider,
@@ -115,35 +31,35 @@ func ProjectEvent(ev engine.Event) ([]byte, bool) {
 	var out wireEvent
 	switch ev.Type {
 	case engine.RunStarted:
-		out = wireEvent{Type: "run_start", StartedAt: formatEventTime(ev.StartedAt)}
+		out = wireEvent{Type: wireEventRunStart, StartedAt: formatEventTime(ev.StartedAt)}
 
 	case engine.UserMessageCompleted:
-		out = wireEvent{Type: "user_message", Text: ev.Text, Images: projectImages(ev.Images)}
+		out = wireEvent{Type: wireEventUserMessage, Text: ev.Text, Images: projectImages(ev.Images)}
 
 	case engine.TextDelta:
-		out = wireEvent{Type: "delta", Kind: "text", Delta: ev.Delta}
+		out = wireEvent{Type: wireEventDelta, Kind: wireDeltaText, Delta: ev.Delta}
 
 	case engine.ThinkingDelta:
-		out = wireEvent{Type: "delta", Kind: "thinking", Delta: ev.Delta}
+		out = wireEvent{Type: wireEventDelta, Kind: wireDeltaThinking, Delta: ev.Delta}
 
 	case engine.ToolInputStarted:
-		out = wireEvent{Type: "tool_input_start", ID: ev.ToolCallID, Tool: ev.ToolName, ToolContentIndex: intPointer(ev.ToolContentIndex)}
+		out = wireEvent{Type: wireEventToolInputStart, ID: ev.ToolCallID, Tool: ev.ToolName, ToolContentIndex: intPointer(ev.ToolContentIndex)}
 
 	case engine.ToolInputDelta:
-		out = wireEvent{Type: "tool_input_delta", ID: ev.ToolCallID, Tool: ev.ToolName, ToolContentIndex: intPointer(ev.ToolContentIndex), Bytes: ev.ToolInputBytes}
+		out = wireEvent{Type: wireEventToolInputDelta, ID: ev.ToolCallID, Tool: ev.ToolName, ToolContentIndex: intPointer(ev.ToolContentIndex), Bytes: ev.ToolInputBytes}
 
 	case engine.ToolInputCompleted:
-		out = wireEvent{Type: "tool_input_end", ID: ev.ToolCallID, Tool: ev.ToolName, Args: ev.ToolArgs, ToolContentIndex: intPointer(ev.ToolContentIndex)}
+		out = wireEvent{Type: wireEventToolInputEnd, ID: ev.ToolCallID, Tool: ev.ToolName, Args: ev.ToolArgs, ToolContentIndex: intPointer(ev.ToolContentIndex)}
 
 	case engine.ToolStarted:
-		out = wireEvent{Type: "tool_start", ID: ev.ToolCallID, Tool: ev.ToolName, Args: ev.ToolArgs}
+		out = wireEvent{Type: wireEventToolStart, ID: ev.ToolCallID, Tool: ev.ToolName, Args: ev.ToolArgs}
 
 	case engine.ToolFinished:
-		out = wireEvent{Type: "tool_end", ID: ev.ToolCallID, Tool: ev.ToolName, Result: wireToolResult(ev.ToolName, ev.ToolResult), Change: fileChangePayload(ev.ToolDetails), Preview: previewPayload(ev.ToolDetails), IsError: ev.IsError}
+		out = wireEvent{Type: wireEventToolEnd, ID: ev.ToolCallID, Tool: ev.ToolName, Result: wireToolResult(ev.ToolName, ev.ToolResult), Change: fileChangePayload(ev.ToolDetails), Preview: previewPayload(ev.ToolDetails), IsError: ev.IsError}
 
 	case engine.MessageCompleted:
 		out = wireEvent{
-			Type:        "message_end",
+			Type:        wireEventMessageEnd,
 			Text:        ev.Text,
 			Usage:       projectUsage(ev.Usage),
 			Final:       ev.FinalResponse,
@@ -154,29 +70,29 @@ func ProjectEvent(ev engine.Event) ([]byte, bool) {
 		}
 
 	case engine.TurnDiscarded:
-		out = wireEvent{Type: "turn_discard"}
+		out = wireEvent{Type: wireEventTurnDiscard}
 
 	case engine.CompactionStarted:
 		if !ev.Automatic {
 			return nil, false
 		}
-		out = wireEvent{Type: "compaction_start"}
+		out = wireEvent{Type: wireEventCompactionStart}
 
 	case engine.CompactionCompleted:
 		if !ev.Automatic {
 			return nil, false
 		}
-		out = wireEvent{Type: "compaction_end"}
+		out = wireEvent{Type: wireEventCompactionEnd}
 
 	case engine.CompactionFailed:
 		if !ev.Automatic {
 			return nil, false
 		}
-		out = wireEvent{Type: "compaction_end", IsError: true, Text: ev.Error}
+		out = wireEvent{Type: wireEventCompactionEnd, IsError: true, Text: ev.Error}
 
 	case engine.RunCompleted:
 		out = wireEvent{
-			Type:       "done",
+			Type:       wireEventDone,
 			Usage:      projectUsage(ev.Usage),
 			StartedAt:  formatEventTime(ev.StartedAt),
 			DurationMS: elapsedMilliseconds(ev.StartedAt, ev.CompletedAt),
@@ -205,17 +121,17 @@ func ProjectHistory(items []engine.HistoryItem) []wireEvent {
 		switch item.Type {
 		case engine.HistoryRun:
 			out = append(out, wireEvent{
-				Type:       "run_start",
+				Type:       wireEventRunStart,
 				StartedAt:  formatEventTime(item.StartedAt),
 				DurationMS: elapsedMilliseconds(item.StartedAt, item.CompletedAt),
 			})
 
 		case engine.HistoryUser:
-			out = append(out, wireEvent{Type: "user_message", Text: item.Text, Images: projectImages(item.Images)})
+			out = append(out, wireEvent{Type: wireEventUserMessage, Text: item.Text, Images: projectImages(item.Images)})
 
 		case engine.HistoryAssistant:
 			out = append(out, wireEvent{
-				Type:        "message_end",
+				Type:        wireEventMessageEnd,
 				Text:        item.Text,
 				Final:       item.FinalResponse,
 				Provider:    item.Provider,
@@ -225,11 +141,11 @@ func ProjectHistory(items []engine.HistoryItem) []wireEvent {
 			})
 
 		case engine.HistoryThinking:
-			out = append(out, wireEvent{Type: "delta", Kind: "thinking", Delta: item.Text})
+			out = append(out, wireEvent{Type: wireEventDelta, Kind: wireDeltaThinking, Delta: item.Text})
 
 		case engine.HistoryToolCall:
 			out = append(out, wireEvent{
-				Type: "tool_start",
+				Type: wireEventToolStart,
 				ID:   item.ToolCallID,
 				Tool: item.ToolName,
 				Args: item.ToolArgs,
@@ -237,7 +153,7 @@ func ProjectHistory(items []engine.HistoryItem) []wireEvent {
 
 		case engine.HistoryToolResult:
 			out = append(out, wireEvent{
-				Type:    "tool_end",
+				Type:    wireEventToolEnd,
 				ID:      item.ToolCallID,
 				Tool:    item.ToolName,
 				Result:  wireToolResult(item.ToolName, item.ToolResult),
@@ -248,10 +164,10 @@ func ProjectHistory(items []engine.HistoryItem) []wireEvent {
 
 		case engine.HistoryUsage:
 			for index := len(out) - 1; index >= 0; index-- {
-				if out[index].Type == "user_message" {
+				if out[index].Type == wireEventUserMessage {
 					break
 				}
-				if out[index].Type == "message_end" && out[index].Final {
+				if out[index].Type == wireEventMessageEnd && out[index].Final {
 					out[index].Usage = projectUsage(item.Usage)
 					break
 				}
@@ -326,37 +242,48 @@ func wireToolResult(tool, result string) string {
 // fileChangePayload converts a tool's structured Details into the browser wire
 // shape, tagged so the client can tell a successful change from a failure.
 // It returns nil for tools that produced no structured result.
-func fileChangePayload(details any) any {
+func fileChangePayload(details any) wireChange {
 	switch d := details.(type) {
 	case tools.FileChange:
-		hunks := make([]map[string]any, len(d.Hunks))
+		hunks := make([]wireHunk, len(d.Hunks))
 		for i, h := range d.Hunks {
-			hunks[i] = map[string]any{
-				"oldStart": h.OldStart,
-				"oldLines": h.OldLines,
-				"newStart": h.NewStart,
-				"newLines": h.NewLines,
-				"lines":    h.Lines,
+			hunks[i] = wireHunk{
+				OldStart: h.OldStart,
+				OldLines: h.OldLines,
+				NewStart: h.NewStart,
+				NewLines: h.NewLines,
+				Lines:    h.Lines,
 			}
 		}
-		return map[string]any{
-			"changeType": "file",
-			"path":       d.Path,
-			"op":         string(d.Kind),
-			"additions":  d.Additions,
-			"deletions":  d.Deletions,
-			"bytes":      d.Bytes,
-			"hunks":      hunks,
+		return wireFileChangePayload{
+			ChangeType: wireChangeFile,
+			Path:       d.Path,
+			Operation:  projectFileOperation(d.Kind),
+			Additions:  d.Additions,
+			Deletions:  d.Deletions,
+			Bytes:      d.Bytes,
+			Hunks:      hunks,
 		}
 	case tools.MutationFailure:
-		return map[string]any{
-			"changeType": "failure",
-			"path":       d.Path,
-			"reason":     d.Reason,
-			"detail":     d.Detail,
+		return wireFailureChangePayload{
+			ChangeType: wireChangeFailure,
+			Path:       d.Path,
+			Reason:     d.Reason,
+			Detail:     d.Detail,
 		}
 	default:
 		return nil
+	}
+}
+
+func projectFileOperation(kind tools.ChangeKind) wireFileOperation {
+	switch kind {
+	case tools.ChangeCreate:
+		return wireFileCreate
+	case tools.ChangeUpdate:
+		return wireFileUpdate
+	default:
+		return wireFileOperation(kind)
 	}
 }
 

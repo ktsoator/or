@@ -7,6 +7,10 @@ export function apiURL(path: string): string {
   return `${apiOrigin}/api${normalized}`
 }
 
+export function sessionURL(id: string, path: string): string {
+  return apiURL(`/sessions/${encodeURIComponent(id)}${path}`)
+}
+
 export class APIError extends Error {
   readonly code?: string
 

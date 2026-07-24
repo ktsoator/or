@@ -44,7 +44,7 @@ func (b *ApprovalBroker) Decide(ctx context.Context, req permission.ApprovalRequ
 	b.pending[id] = pendingApproval{response: ch, summary: summary, reason: req.Reason}
 	b.mu.Unlock()
 
-	b.broadcast(wireEvent{Type: "approval_request", ID: id, Summary: summary, Reason: req.Reason})
+	b.broadcast(wireEvent{Type: wireEventApprovalRequest, ID: id, Summary: summary, Reason: req.Reason})
 
 	select {
 	case response := <-ch:
@@ -66,7 +66,7 @@ func (b *ApprovalBroker) PendingEvents() []wireEvent {
 	events := make([]wireEvent, 0, len(b.pending))
 	for id, pending := range b.pending {
 		events = append(events, wireEvent{
-			Type:    "approval_request",
+			Type:    wireEventApprovalRequest,
 			ID:      id,
 			Summary: pending.summary,
 			Reason:  pending.reason,
@@ -91,7 +91,7 @@ func (b *ApprovalBroker) Resolve(id string, choice permission.ApprovalChoice) bo
 	}
 	b.mu.Unlock()
 	if ok {
-		b.broadcast(wireEvent{Type: "approval_resolved", ID: id})
+		b.broadcast(wireEvent{Type: wireEventApprovalResolved, ID: id})
 	}
 	return ok
 }
@@ -104,7 +104,7 @@ func (b *ApprovalBroker) cancel(id string) bool {
 	}
 	b.mu.Unlock()
 	if ok {
-		b.broadcast(wireEvent{Type: "approval_cancelled", ID: id})
+		b.broadcast(wireEvent{Type: wireEventApprovalCancelled, ID: id})
 	}
 	return ok
 }

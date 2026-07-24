@@ -230,12 +230,12 @@ func (s *Server) handleHistory(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"events":   events,
-		"queue":    queue,
-		"context":  contextUsage,
-		"running":  running,
-		"eventSeq": eventSeq,
+	c.JSON(http.StatusOK, wireHistoryResponse{
+		Events:   events,
+		Queue:    queue,
+		Context:  contextUsage,
+		Running:  running,
+		EventSeq: eventSeq,
 	})
 }
 
@@ -257,7 +257,7 @@ func (s *Server) handleEvents(c *gin.Context) {
 	}
 	ch, syncRequired := transport.hub.add(after)
 	if syncRequired {
-		data, _ := json.Marshal(wireEvent{Type: "sync_required"})
+		data, _ := json.Marshal(wireEvent{Type: wireEventSyncRequired})
 		_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
 		w.Flush()
 		return

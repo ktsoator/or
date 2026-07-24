@@ -136,6 +136,47 @@ func TestProjectEventIncludesWorkspacePreviewPath(t *testing.T) {
 	}
 }
 
+func TestProjectEventIncludesStructuredFileChange(t *testing.T) {
+	data, ok := ProjectEvent(engine.Event{
+		Type:       engine.ToolFinished,
+		ToolCallID: "write-call",
+		ToolName:   "write",
+		ToolDetails: tools.FileChange{
+			Path:      "main.go",
+			Kind:      tools.ChangeUpdate,
+			Additions: 2,
+			Deletions: 1,
+			Bytes:     42,
+			Hunks: []tools.Hunk{{
+				OldStart: 3,
+				OldLines: 1,
+				NewStart: 3,
+				NewLines: 2,
+				Lines:    []string{"-old", "+new", "+line"},
+			}},
+		},
+	})
+	if !ok {
+		t.Fatal("file change event was not projected")
+	}
+
+	var event struct {
+		Change wireFileChangePayload `json:"change"`
+	}
+	if err := json.Unmarshal(data, &event); err != nil {
+		t.Fatal(err)
+	}
+	if event.Change.ChangeType != wireChangeFile || event.Change.Operation != wireFileUpdate {
+		t.Fatalf("change = %#v", event.Change)
+	}
+	if event.Change.Path != "main.go" || event.Change.Additions != 2 || event.Change.Deletions != 1 || event.Change.Bytes != 42 {
+		t.Fatalf("change = %#v", event.Change)
+	}
+	if len(event.Change.Hunks) != 1 || len(event.Change.Hunks[0].Lines) != 3 {
+		t.Fatalf("hunks = %#v", event.Change.Hunks)
+	}
+}
+
 func TestProjectHistoryRestoresPreviewRequest(t *testing.T) {
 	events := ProjectHistory([]engine.HistoryItem{{
 		Type:       engine.HistoryToolResult,
