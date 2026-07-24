@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "bun test tests/sessionReducer.test.ts tests/sessionConnection.test.ts tests/sessionCommands.test.ts tests/sessionStore.test.ts tests/workbenchLayout.test.ts tests/sidebarLayout.test.ts",
+    "test": "bun test tests/sessionReducer.test.ts tests/sessionConnection.test.ts tests/sessionCommands.test.ts tests/sessionStore.test.ts tests/workbenchLayout.test.ts tests/sidebarLayout.test.ts tests/browserTabs.test.ts",
     "test:ui": "playwright test"
   },
   "dependencies": {

@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import {
+  useEffect,
+  useReducer,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react'
 import {
   ArrowLeft,
   ArrowRight,
@@ -16,6 +23,14 @@ import {
 import { DropdownMenu } from 'radix-ui'
 import type { ModelOption, PreviewState, WorkspaceSummary } from '@/types'
 import type { SessionThread } from '@/useSession'
+import {
+  agentBrowserTabID,
+  browserTabNavigationURL,
+  browserTabsReducer,
+  createBrowserTab,
+  type BrowserNavigationTarget,
+  type BrowserTab,
+} from '@/browserTabs'
 import {
   normalizeBrowserAddress,
   workspaceFileURL,
@@ -42,47 +57,21 @@ function addressTitle(url: string): string {
   }
 }
 
-type BrowserTab = {
-  id: string
-  kind: 'preview' | 'manual'
-  title?: string
-  url: string
-  address: string
-  navigation: number
-  invalidAddress: boolean
-  workspacePath?: string
-  loading: boolean
-  canGoBack: boolean
-  canGoForward: boolean
-  error?: string
-}
-
-function previewTabID(sessionID?: string): string {
-  return `preview:${sessionID ?? 'unknown'}`
-}
-
-function createBrowserTab(
-  id: string,
-  preview?: PreviewState,
+function previewTarget(
+  preview: PreviewState,
   sessionID?: string,
-): BrowserTab {
+): BrowserNavigationTarget {
   const workspacePath = preview?.path
   const workspaceRelativePath = preview?.relativePath ?? workspacePath
-  const url = workspaceRelativePath && sessionID
+  const requestedURL = workspaceRelativePath && sessionID
     ? workspacePreviewURL(sessionID, workspaceRelativePath)
     : preview?.url ?? ''
   return {
-    id,
-    kind: preview ? 'preview' : 'manual',
+    requestedURL,
+    addressDraft: workspacePath ?? preview.url ?? '',
+    kind: workspacePath ? 'workspace-preview' : 'web',
     title: preview?.title,
-    url,
-    address: workspacePath ?? preview?.url ?? '',
-    navigation: 0,
-    invalidAddress: false,
     workspacePath,
-    loading: false,
-    canGoBack: false,
-    canGoForward: false,
   }
 }
 
@@ -122,13 +111,17 @@ export function BrowserView({
   const { t } = useI18n()
   const initialTabRef = useRef<BrowserTab | undefined>(undefined)
   if (!initialTabRef.current && (preview || !conversation)) {
-    initialTabRef.current = createBrowserTab(
-      preview ? previewTabID(sessionID) : 'tab-1',
-      preview,
-      sessionID,
-    )
+    initialTabRef.current = preview
+      ? createBrowserTab({
+        id: agentBrowserTabID(sessionID),
+        owner: 'agent',
+        sessionID: sessionID ?? 'unknown',
+        target: previewTarget(preview, sessionID),
+      })
+      : createBrowserTab({ id: 'tab-1', owner: 'user' })
   }
-  const [tabs, setTabs] = useState<BrowserTab[]>(
+  const [tabs, dispatchTabs] = useReducer(
+    browserTabsReducer,
     initialTabRef.current ? [initialTabRef.current] : [],
   )
   const [activeTabID, setActiveTabID] = useState(
@@ -145,18 +138,15 @@ export function BrowserView({
   const conversationTabID = conversation ? `conversation:${conversation.session.id}` : undefined
   const conversationActive = activeTabID === conversationTabID
   const activeTab = tabs.find((tab) => tab.id === activeTabID) ?? tabs[0]
-  const activeExternalURL = activeTab
-    ? activeTab.workspacePath
-      ? workspaceFileURL(activeTab.workspacePath)
-      : activeTab.url
+  const activeDesired = activeTab?.desired
+  const activeObserved = activeTab?.observed
+  const activeNavigationURL = activeTab ? browserTabNavigationURL(activeTab) : ''
+  const activeExternalURL = activeDesired
+    ? activeDesired.workspacePath
+      ? workspaceFileURL(activeDesired.workspacePath)
+      : activeNavigationURL
     : ''
   const nativeBrowser = hasNativeBrowser()
-
-  const updateTab = (tabID: string, values: Partial<BrowserTab>) => {
-    setTabs((current) =>
-      current.map((tab) => (tab.id === tabID ? { ...tab, ...values } : tab)),
-    )
-  }
 
   useEffect(() => {
     const previous = previousConversationTabIDRef.current
@@ -177,61 +167,53 @@ export function BrowserView({
     if (!preview?.url && !preview?.path) return
     if (previewKeyRef.current === previewKey) return
     previewKeyRef.current = previewKey
-    const source = createBrowserTab(previewTabID(sessionID), preview, sessionID)
-    setTabs((current) => {
-      const existing = current.find((tab) => tab.id === source.id)
-      if (!existing) return [...current, source]
-      return current.map((tab) =>
-        tab.id === existing.id
-          ? {
-              ...tab,
-              title: preview.title,
-              url: source.url,
-              address: source.address,
-              workspacePath: source.workspacePath,
-              navigation: tab.navigation + 1,
-              invalidAddress: false,
-            }
-          : tab,
-      )
+    const tabID = agentBrowserTabID(sessionID)
+    dispatchTabs({
+      t: 'agent_navigate',
+      tabID,
+      sessionID: sessionID ?? 'unknown',
+      target: previewTarget(preview, sessionID),
     })
-    if (activatePreview) setActiveTabID(source.id)
+    if (activatePreview) setActiveTabID(tabID)
   }, [activatePreview, preview, previewKey, sessionID])
 
   const reload = () => {
-    if (!activeTab?.url) return
-    updateTab(activeTab.id, {
-      navigation: activeTab.navigation + 1,
-    })
+    if (!activeDesired?.requestedURL || !activeTab) return
+    dispatchTabs({ t: 'reload', tabID: activeTab.id })
   }
 
   const navigate = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!activeTab) return
-    if (activeTab.workspacePath && activeTab.address === activeTab.workspacePath) {
+    if (
+      activeDesired?.workspacePath &&
+      activeTab.addressDraft === activeDesired.workspacePath
+    ) {
       reload()
       return
     }
-    const next = normalizeBrowserAddress(activeTab.address)
+    const next = normalizeBrowserAddress(activeTab.addressDraft)
     if (!next) {
-      updateTab(activeTab.id, { invalidAddress: true })
+      dispatchTabs({ t: 'reject_address', tabID: activeTab.id })
       return
     }
-    updateTab(activeTab.id, {
-      title: undefined,
-      address: next,
-      url: next,
-      workspacePath: undefined,
-      invalidAddress: false,
-      navigation: activeTab.navigation + 1,
+    dispatchTabs({
+      t: 'submit_navigation',
+      tabID: activeTab.id,
+      source: 'address',
+      target: {
+        requestedURL: next,
+        addressDraft: next,
+        kind: 'web',
+      },
     })
   }
 
   const newTab = () => {
     tabSequenceRef.current += 1
-    const tab = createBrowserTab(`tab-${tabSequenceRef.current}`)
-    setTabs((current) => [...current, tab])
-    setActiveTabID(tab.id)
+    const tabID = `tab-${tabSequenceRef.current}`
+    dispatchTabs({ t: 'create_user_tab', tabID })
+    setActiveTabID(tabID)
   }
 
   const closeTab = (tabID: string) => {
@@ -242,7 +224,7 @@ export function BrowserView({
     }
     const closingIndex = tabs.findIndex((tab) => tab.id === tabID)
     const remaining = tabs.filter((tab) => tab.id !== tabID)
-    setTabs(remaining)
+    dispatchTabs({ t: 'close_tab', tabID })
     if (tabID === activeTabID) {
       const next = remaining[Math.min(closingIndex, remaining.length - 1)]
       setActiveTabID(next?.id ?? conversationTabID ?? '')
@@ -265,10 +247,12 @@ export function BrowserView({
           aria-label={t('workbench.tabs')}
         >
           {tabs.map((tab) => {
+            const desired = tab.desired
             const title =
-              tab.title ||
-              tab.workspacePath?.split('/').at(-1) ||
-              addressTitle(tab.url) ||
+              tab.observed.title ||
+              desired?.title ||
+              desired?.workspacePath?.split('/').at(-1) ||
+              addressTitle(tab.observed.committedURL || desired?.requestedURL || '') ||
               t('preview.newTab')
             const active = !conversationActive && tab.id === activeTab?.id
             return (
@@ -291,7 +275,7 @@ export function BrowserView({
                   title={title}
                   onClick={() => setActiveTabID(tab.id)}
                 >
-                  {tab.workspacePath ? (
+                  {desired?.kind === 'workspace-preview' ? (
                     <FileCode2 className="size-3.5 shrink-0 text-stone-400" aria-hidden="true" />
                   ) : (
                     <Globe2 className="size-3.5 shrink-0 text-stone-400" aria-hidden="true" />
@@ -379,7 +363,7 @@ export function BrowserView({
               type="button"
               title={t('preview.back')}
               aria-label={t('preview.back')}
-              disabled={!nativeBrowser || !activeTab.canGoBack}
+              disabled={!nativeBrowser || !activeObserved?.canGoBack}
               onClick={() => void goBackNativeBrowser(activeTab.id)}
             >
               <ArrowLeft className="size-4" aria-hidden="true" />
@@ -389,7 +373,7 @@ export function BrowserView({
               type="button"
               title={t('preview.forward')}
               aria-label={t('preview.forward')}
-              disabled={!nativeBrowser || !activeTab.canGoForward}
+              disabled={!nativeBrowser || !activeObserved?.canGoForward}
               onClick={() => void goForwardNativeBrowser(activeTab.id)}
             >
               <ArrowRight className="size-4" aria-hidden="true" />
@@ -399,13 +383,14 @@ export function BrowserView({
               type="button"
               title={t('preview.refresh')}
               aria-label={t('preview.refresh')}
-              disabled={
-                !nativeBrowser || !activeTab.url
-              }
+              disabled={!nativeBrowser || !activeDesired?.requestedURL}
               onClick={reload}
             >
               <RefreshCw
-                className={cn('size-3.5', activeTab.loading && 'animate-spin')}
+                className={cn(
+                  'size-3.5',
+                  activeObserved?.status === 'navigating' && 'animate-spin',
+                )}
                 aria-hidden="true"
               />
             </button>
@@ -415,14 +400,15 @@ export function BrowserView({
                   'h-7 w-full rounded-lg border border-stone-200 bg-stone-50 px-2.5 font-mono text-[0.75rem] text-stone-700 outline-none placeholder:text-center placeholder:font-sans placeholder:text-stone-400 focus:border-stone-300 focus:bg-white focus:placeholder:text-left',
                   activeTab.invalidAddress && 'border-red-300 bg-red-50/50',
                 )}
-                value={activeTab.address}
+                value={activeTab.addressDraft}
                 aria-label={t('preview.address')}
                 placeholder={t('preview.enterURL')}
                 spellCheck={false}
                 onChange={(event) => {
-                  updateTab(activeTab.id, {
+                  dispatchTabs({
+                    t: 'edit_address',
+                    tabID: activeTab.id,
                     address: event.target.value,
-                    invalidAddress: false,
                   })
                 }}
               />
@@ -444,22 +430,31 @@ export function BrowserView({
           <BrowserSurface
             key={activeTab.id}
             tabID={activeTab.id}
-            navigation={activeTab.navigation}
-            url={activeTab.url}
+            navigation={activeDesired?.revision ?? 0}
+            url={activeNavigationURL}
             visible={open}
-            workspaceFile={Boolean(activeTab.workspacePath)}
-            onResolveURL={(url) => updateTab(activeTab.id, { address: url, url })}
+            workspaceFile={activeDesired?.kind === 'workspace-preview'}
+            onResolveURL={(url) => {
+              if (!activeDesired) return
+              dispatchTabs({
+                t: 'resolve_navigation',
+                tabID: activeTab.id,
+                revision: activeDesired.revision,
+                url,
+              })
+            }}
             onRetry={reload}
             onState={(state: NativeBrowserState) => {
-              updateTab(activeTab.id, {
-                title: state.title || activeTab.title,
-                loading: state.loading,
+              dispatchTabs({
+                t: 'native_state_received',
+                tabID: activeTab.id,
+                appliedRevision: activeDesired?.revision ?? -1,
+                committedURL: state.url,
+                title: state.title,
+                status: state.error ? 'failed' : state.loading ? 'navigating' : 'ready',
                 canGoBack: state.canGoBack,
                 canGoForward: state.canGoForward,
                 error: state.error,
-                ...(activeTab.workspacePath || !state.url
-                  ? {}
-                  : { address: state.url, url: state.url }),
               })
             }}
           />
