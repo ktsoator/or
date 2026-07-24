@@ -200,6 +200,14 @@ func (s *Server) runtime(c *gin.Context) (*conversation.Runtime, bool) {
 	return runtime, ok
 }
 
+func (s *Server) sessionTransport(c *gin.Context) (*sessionTransport, bool) {
+	transport, ok := s.transports.get(c.Param("sessionID"))
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+	}
+	return transport, ok
+}
+
 // handleHistory returns the current displayable transcript so a newly opened
 // or refreshed browser can rebuild the conversation before consuming new SSE
 // events.
@@ -209,7 +217,10 @@ func (s *Server) handleHistory(c *gin.Context) {
 		return
 	}
 	c.Header("Cache-Control", "no-store")
-	transport := transportOf(runtime)
+	transport, ok := s.sessionTransport(c)
+	if !ok {
+		return
+	}
 	var events []wireEvent
 	var queue []wireEvent
 	var contextUsage wireContextUsage
@@ -233,7 +244,11 @@ func (s *Server) handleHistory(c *gin.Context) {
 // handleEvents streams run events to one browser over Server-Sent Events until
 // the request is cancelled.
 func (s *Server) handleEvents(c *gin.Context) {
-	runtime, ok := s.runtime(c)
+	_, ok := s.runtime(c)
+	if !ok {
+		return
+	}
+	transport, ok := s.sessionTransport(c)
 	if !ok {
 		return
 	}
@@ -246,14 +261,14 @@ func (s *Server) handleEvents(c *gin.Context) {
 	if lastEventID, err := strconv.ParseUint(strings.TrimSpace(c.GetHeader("Last-Event-ID")), 10, 64); err == nil && lastEventID > after {
 		after = lastEventID
 	}
-	ch, syncRequired := transportOf(runtime).hub.add(after)
+	ch, syncRequired := transport.hub.add(after)
 	if syncRequired {
 		data, _ := json.Marshal(wireEvent{Type: "sync_required"})
 		_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
 		w.Flush()
 		return
 	}
-	defer transportOf(runtime).hub.remove(ch)
+	defer transport.hub.remove(ch)
 
 	// Send a comment immediately so development and production proxies forward
 	// the response headers instead of buffering an otherwise empty stream.
@@ -371,7 +386,11 @@ func (s *Server) handleRemoveQueuedMessage(c *gin.Context) {
 
 // handleApproval resolves a pending permission request.
 func (s *Server) handleApproval(c *gin.Context) {
-	runtime, ok := s.runtime(c)
+	_, ok := s.runtime(c)
+	if !ok {
+		return
+	}
+	transport, ok := s.sessionTransport(c)
 	if !ok {
 		return
 	}
@@ -384,7 +403,7 @@ func (s *Server) handleApproval(c *gin.Context) {
 		c.Status(http.StatusBadRequest)
 		return
 	}
-	if !transportOf(runtime).broker.Resolve(id, body.Choice) {
+	if !transport.broker.Resolve(id, body.Choice) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "approval request not found"})
 		return
 	}

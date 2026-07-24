@@ -13,6 +13,7 @@ type Hub struct {
 	sequence uint64
 	events   []hubFrame
 	clients  map[chan hubFrame]struct{}
+	closed   bool
 }
 
 type hubFrame struct {
@@ -32,6 +33,9 @@ func NewHub() *Hub {
 func (h *Hub) Broadcast(data []byte) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.closed {
+		return
+	}
 	h.sequence++
 	frame := hubFrame{sequence: h.sequence, data: append([]byte(nil), data...)}
 	h.events = append(h.events, frame)
@@ -55,6 +59,11 @@ func (h *Hub) Broadcast(data []byte) {
 func (h *Hub) add(after uint64) (chan hubFrame, bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.closed {
+		ch := make(chan hubFrame)
+		close(ch)
+		return ch, false
+	}
 	if after > h.sequence {
 		after = 0
 	}
@@ -83,6 +92,22 @@ func (h *Hub) remove(ch chan hubFrame) {
 		delete(h.clients, ch)
 		close(ch)
 	}
+	h.mu.Unlock()
+}
+
+// Close disconnects every viewer and rejects later broadcasts or subscribers.
+func (h *Hub) Close() {
+	h.mu.Lock()
+	if h.closed {
+		h.mu.Unlock()
+		return
+	}
+	h.closed = true
+	for ch := range h.clients {
+		delete(h.clients, ch)
+		close(ch)
+	}
+	h.events = nil
 	h.mu.Unlock()
 }
 

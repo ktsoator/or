@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,10 +17,11 @@ import (
 	"github.com/ktsoator/or/llm"
 )
 
-type testTransport struct{}
+type testTransport struct{ closed atomic.Bool }
 
 func (*testTransport) Publish(Event)             {}
 func (*testTransport) PublishAgent(engine.Event) {}
+func (t *testTransport) Close()                  { t.closed.Store(true) }
 func (*testTransport) Decide(context.Context, permission.ApprovalRequest) (permission.ApprovalResponse, error) {
 	return permission.ApprovalResponse{Choice: permission.Reject}, nil
 }
@@ -31,6 +33,7 @@ type recordingTransport struct {
 
 func (t *recordingTransport) Publish(event Event)     { t.events <- event }
 func (*recordingTransport) PublishAgent(engine.Event) {}
+func (*recordingTransport) Close()                    {}
 func (*recordingTransport) Decide(context.Context, permission.ApprovalRequest) (permission.ApprovalResponse, error) {
 	return permission.ApprovalResponse{Choice: permission.Reject}, nil
 }
@@ -195,6 +198,7 @@ func TestManagerDeleteRemovesScratchWorkspaceAndSessionFiles(t *testing.T) {
 	if !ok {
 		t.Fatal("created conversation not found")
 	}
+	transport := runtime.transport.(*testTransport)
 	transcriptPath := runtime.record.Transcript
 	detailsPath := detailsFile(transcriptPath)
 	if err := os.WriteFile(transcriptPath, []byte("transcript"), 0o600); err != nil {
@@ -215,7 +219,31 @@ func TestManagerDeleteRemovesScratchWorkspaceAndSessionFiles(t *testing.T) {
 	if len(manager.List()) != 0 {
 		t.Fatalf("conversations after delete = %+v", manager.List())
 	}
+	if !transport.closed.Load() {
+		t.Fatal("deleted conversation transport was not closed")
+	}
 	assertIndexDoesNotContain(t, manager.indexPath, created.ID)
+}
+
+func TestManagerClosesTransportWhenCreateRollsBack(t *testing.T) {
+	dataDir := t.TempDir()
+	model, thinking := testCatalogModel(t)
+	var createdTransports []*testTransport
+	manager := newTestManagerWithTransport(t, dataDir, func(string) Transport {
+		transport := &testTransport{}
+		createdTransports = append(createdTransports, transport)
+		return transport
+	})
+	if err := os.Mkdir(manager.indexPath+".tmp", 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := manager.Create("Rollback", t.TempDir(), ScopeProject, model, thinking, permission.ModeAsk); err == nil {
+		t.Fatal("Create succeeded with a directory blocking the index temp file")
+	}
+	if len(createdTransports) != 1 || !createdTransports[0].closed.Load() {
+		t.Fatalf("rolled-back transports = %d, closed = %v", len(createdTransports), len(createdTransports) == 1 && createdTransports[0].closed.Load())
+	}
 }
 
 func TestManagerDeleteRestoresFilesWhenIndexWriteFails(t *testing.T) {
@@ -230,6 +258,7 @@ func TestManagerDeleteRestoresFilesWhenIndexWriteFails(t *testing.T) {
 	if !ok {
 		t.Fatal("created conversation not found")
 	}
+	transport := runtime.transport.(*testTransport)
 	transcriptPath := runtime.record.Transcript
 	if err := os.WriteFile(transcriptPath, []byte("transcript"), 0o600); err != nil {
 		t.Fatal(err)
@@ -244,6 +273,9 @@ func TestManagerDeleteRestoresFilesWhenIndexWriteFails(t *testing.T) {
 	}
 	if _, ok := manager.Get(created.ID); !ok {
 		t.Fatal("conversation was not restored after failed delete")
+	}
+	if transport.closed.Load() {
+		t.Fatal("failed delete closed the restored conversation transport")
 	}
 	if _, err := os.Stat(transcriptPath); err != nil {
 		t.Fatalf("transcript was not restored: %v", err)
@@ -289,10 +321,18 @@ func TestManagerCloseIsIdempotentAndRejectsNewWork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	runtime, ok := manager.Get(created.ID)
+	if !ok {
+		t.Fatal("created conversation not found")
+	}
+	transport := runtime.transport.(*testTransport)
 
 	manager.Close()
 	manager.Close()
 
+	if !transport.closed.Load() {
+		t.Fatal("manager close did not close the conversation transport")
+	}
 	if err := manager.StartPrompt(created.ID, "after shutdown"); !errors.Is(err, ErrManagerClosed) {
 		t.Fatalf("StartPrompt error = %v, want ErrManagerClosed", err)
 	}
@@ -302,6 +342,17 @@ func TestManagerCloseIsIdempotentAndRejectsNewWork(t *testing.T) {
 }
 
 func newTestManager(t *testing.T, dataDir string) *Manager {
+	t.Helper()
+	return newTestManagerWithTransport(t, dataDir, func(string) Transport {
+		return &testTransport{}
+	})
+}
+
+func newTestManagerWithTransport(
+	t *testing.T,
+	dataDir string,
+	newTransport NewTransport,
+) *Manager {
 	t.Helper()
 	home := filepath.Join(dataDir, "home")
 	if err := os.MkdirAll(home, 0o700); err != nil {
@@ -320,7 +371,7 @@ func newTestManager(t *testing.T, dataDir string) *Manager {
 		DataDir:      dataDir,
 		Usage:        ledger,
 		Workspaces:   workspaces,
-		NewTransport: func(string) Transport { return &testTransport{} },
+		NewTransport: newTransport,
 	})
 	if err != nil {
 		t.Fatal(err)

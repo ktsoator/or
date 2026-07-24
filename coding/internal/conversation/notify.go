@@ -29,10 +29,12 @@ type Transport interface {
 	Decide(context.Context, permission.ApprovalRequest) (permission.ApprovalResponse, error)
 	// HasPendingApproval reports a gate still waiting on a viewer.
 	HasPendingApproval() bool
+	// Close releases the delivery link after its session is removed.
+	Close()
 }
 
 // NewTransport builds the delivery link for one session. Manager calls it once
-// per session, at construction, and hands back the result via Runtime.Transport.
+// per session and owns closing the returned transport.
 type NewTransport func(sessionID string) Transport
 
 // MessageAccepted reports a user message the server has taken responsibility
@@ -68,10 +70,6 @@ func (MessageDequeued) Event()  {}
 func (MessageCancelled) Event() {}
 func (RunFailed) Event()        {}
 func (TitleChanged) Event()     {}
-
-// Transport returns this session's delivery link, for a caller that needs to
-// reach the concrete implementation it supplied.
-func (s *Runtime) Transport() Transport { return s.transport }
 
 // emit hands one state change to the transport. It must not block: a session
 // raising an event is often mid-run.

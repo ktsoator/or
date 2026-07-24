@@ -93,6 +93,7 @@ func (m *Manager) Create(
 	m.sessions[id] = runtime
 	if err := m.saveLocked(); err != nil {
 		delete(m.sessions, id)
+		runtime.close()
 		if workspaceAdded {
 			m.workspaces.Discard(workspacePath)
 		}
@@ -140,7 +141,7 @@ func (m *Manager) Delete(id string) error {
 	m.mu.Unlock()
 
 	// Stop any background shells the session started before its files go away.
-	runtime.session.Close()
+	runtime.close()
 
 	for _, path := range staged {
 		_ = removeStagedPath(path.staged)

@@ -65,3 +65,26 @@ func TestHubRequiresSyncWhenReplayWindowHasExpired(t *testing.T) {
 		t.Fatal("sync-required connection unexpectedly registered a client")
 	}
 }
+
+func TestHubCloseDisconnectsAndRejectsLaterWork(t *testing.T) {
+	hub := NewHub()
+	ch, syncRequired := hub.add(0)
+	if syncRequired {
+		t.Fatal("unexpected sync requirement")
+	}
+
+	hub.Close()
+	hub.Close()
+	hub.Broadcast([]byte(`{"type":"after-close"}`))
+
+	if _, ok := <-ch; ok {
+		t.Fatal("existing client was not disconnected")
+	}
+	next, syncRequired := hub.add(0)
+	if syncRequired {
+		t.Fatal("closed hub unexpectedly requested a history sync")
+	}
+	if _, ok := <-next; ok {
+		t.Fatal("closed hub accepted a new client")
+	}
+}

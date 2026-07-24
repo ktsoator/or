@@ -24,6 +24,7 @@ func init() {
 // for the store they need and never through another component to find it.
 type Server struct {
 	conversations *conversation.Manager
+	transports    *SessionTransports
 	ledger        *usage.Store
 	workspaces    *workspace.Registry
 	registry      *llm.ProviderRegistry
@@ -37,6 +38,7 @@ type Server struct {
 // services.
 type Options struct {
 	Conversations *conversation.Manager
+	Transports    *SessionTransports
 	Ledger        *usage.Store
 	Workspaces    *workspace.Registry
 	Registry      *llm.ProviderRegistry
@@ -49,6 +51,7 @@ type Options struct {
 func NewServer(opts Options) *Server {
 	return &Server{
 		conversations: opts.Conversations,
+		transports:    opts.Transports,
 		ledger:        opts.Ledger,
 		workspaces:    opts.Workspaces,
 		registry:      opts.Registry,

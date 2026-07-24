@@ -3,33 +3,73 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"sync"
 
 	"github.com/ktsoator/or/coding/internal/conversation"
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/permission"
 )
 
+// SessionTransports owns the HTTP delivery links created for conversations.
+// The conversation manager controls each link's lifetime through Transport.Close;
+// handlers only look up an existing link by session ID.
+type SessionTransports struct {
+	mu       sync.RWMutex
+	sessions map[string]*sessionTransport
+}
+
+// NewSessionTransports returns an empty session transport registry.
+func NewSessionTransports() *SessionTransports {
+	return &SessionTransports{sessions: make(map[string]*sessionTransport)}
+}
+
+// New creates and registers one conversation transport.
+func (r *SessionTransports) New(sessionID string) conversation.Transport {
+	hub := NewHub()
+	transport := &sessionTransport{
+		sessionID: sessionID,
+		owner:     r,
+		hub:       hub,
+		broker:    NewApprovalBroker(hub),
+	}
+	r.mu.Lock()
+	previous := r.sessions[sessionID]
+	r.sessions[sessionID] = transport
+	r.mu.Unlock()
+	if previous != nil {
+		previous.Close()
+	}
+	return transport
+}
+
+func (r *SessionTransports) get(sessionID string) (*sessionTransport, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	transport, ok := r.sessions[sessionID]
+	return transport, ok
+}
+
+func (r *SessionTransports) remove(sessionID string, transport *sessionTransport) {
+	r.mu.Lock()
+	if r.sessions[sessionID] == transport {
+		delete(r.sessions, sessionID)
+	}
+	r.mu.Unlock()
+}
+
 // sessionTransport is this package's implementation of conversation.Transport: it
 // projects what a session raises onto the SSE wire and fans it out, and it
 // answers permission gates by asking the browser.
 //
-// The conversation package holds it as an interface, so a handler that needs the
-// SSE plumbing asserts back to this type. That is safe because this package is
-// the only thing that ever builds one, and it keeps the session model from
-// having to describe channels or byte frames it does not care about.
+// The conversation package holds it as an interface while SessionTransports
+// keeps the concrete delivery state on the HTTP side.
 type sessionTransport struct {
-	hub    *Hub
-	broker *ApprovalBroker
+	sessionID string
+	owner     *SessionTransports
+	hub       *Hub
+	broker    *ApprovalBroker
+	closeOnce sync.Once
 }
-
-func newSessionTransport() *sessionTransport {
-	hub := NewHub()
-	return &sessionTransport{hub: hub, broker: NewApprovalBroker(hub)}
-}
-
-// NewSessionTransport creates the HTTP delivery link attached to one
-// conversation by the application composition root.
-func NewSessionTransport() conversation.Transport { return newSessionTransport() }
 
 func (t *sessionTransport) Publish(event conversation.Event) {
 	if data, ok := projectSessionEvent(event); ok {
@@ -51,9 +91,11 @@ func (t *sessionTransport) HasPendingApproval() bool {
 	return t.broker.HasPending()
 }
 
-// transportOf returns the delivery link this package attached to a conversation.
-func transportOf(runtime *conversation.Runtime) *sessionTransport {
-	return runtime.Transport().(*sessionTransport)
+func (t *sessionTransport) Close() {
+	t.closeOnce.Do(func() {
+		t.owner.remove(t.sessionID, t)
+		t.hub.Close()
+	})
 }
 
 // projectSessionEvent maps a session state change to the HTTP wire protocol.

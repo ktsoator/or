@@ -42,13 +42,12 @@ func New(ctx context.Context, cfg config.Config) (*Runtime, error) {
 		cancel()
 		return nil, err
 	}
+	transports := httpapi.NewSessionTransports()
 	manager, err := conversation.NewManager(ctx, conversation.Options{
-		DataDir:    cfg.DataDir,
-		Usage:      ledger,
-		Workspaces: workspaces,
-		NewTransport: func(string) conversation.Transport {
-			return httpapi.NewSessionTransport()
-		},
+		DataDir:      cfg.DataDir,
+		Usage:        ledger,
+		Workspaces:   workspaces,
+		NewTransport: transports.New,
 	})
 	if err != nil {
 		cancel()
@@ -66,6 +65,7 @@ func New(ctx context.Context, cfg config.Config) (*Runtime, error) {
 
 	server := httpapi.NewServer(httpapi.Options{
 		Conversations: manager,
+		Transports:    transports,
 		Ledger:        ledger,
 		Workspaces:    workspaces,
 		Registry:      registry,

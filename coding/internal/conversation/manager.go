@@ -104,29 +104,22 @@ func (m *Manager) Close() {
 
 		m.cancel()
 		for _, runtime := range runtimes {
-			runtime.running.Store(false)
-			runtime.live.Store(false)
-			runtime.session.Abort()
-			runtime.cancelPending()
-			runtime.session.ClearQueuedMessages()
+			runtime.stop()
 		}
 		m.tasks.Wait()
 		for _, runtime := range runtimes {
-			runtime.session.Close()
+			runtime.close()
 		}
 	})
 }
 
 func (m *Manager) closeSessions() {
 	for _, runtime := range m.sessions {
-		runtime.session.Abort()
-		runtime.session.ClearQueuedMessages()
-		runtime.session.Close()
+		runtime.close()
 	}
 }
 
 func (m *Manager) build(record record) (*Runtime, error) {
-	transport := m.newTransport(record.ID)
 	if record.Scope != ScopeChat && record.Scope != ScopeProject {
 		return nil, fmt.Errorf("session: invalid session scope %q", record.Scope)
 	}
@@ -163,6 +156,7 @@ func (m *Manager) build(record record) (*Runtime, error) {
 	record.Thinking = string(thinking)
 	permissionMode := permission.NormalizeMode(permission.Mode(record.PermissionMode))
 	record.PermissionMode = string(permissionMode)
+	transport := m.newTransport(record.ID)
 	session, err := newEngineSession(m.ctx, engineSessionConfig{
 		WorkspacePath:  workspacePath,
 		TranscriptPath: record.Transcript,
@@ -171,6 +165,7 @@ func (m *Manager) build(record record) (*Runtime, error) {
 		PermissionMode: permissionMode,
 	}, transport)
 	if err != nil {
+		transport.Close()
 		return nil, err
 	}
 	runtime := &Runtime{record: record, session: session, transport: transport}
@@ -187,6 +182,20 @@ func (m *Manager) build(record record) (*Runtime, error) {
 		}
 	}
 	return runtime, nil
+}
+
+func (s *Runtime) stop() {
+	s.running.Store(false)
+	s.live.Store(false)
+	s.session.Abort()
+	s.cancelPending()
+	s.session.ClearQueuedMessages()
+}
+
+func (s *Runtime) close() {
+	s.stop()
+	s.session.Close()
+	s.transport.Close()
 }
 
 func (m *Manager) handleSessionEvent(sessionID string, runtime *Runtime, ev engine.Event) {
