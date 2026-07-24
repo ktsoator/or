@@ -262,6 +262,8 @@ const en = {
   'question.title': 'Input needed',
   'question.otherPlaceholder': 'Something else…',
   'question.submit': 'Send answer',
+  'question.next': 'Next question',
+  'question.back': 'Previous question',
   'question.couldNotSend': 'Could not send answer',
 
   'permission.choose': 'How should actions be approved?',
@@ -747,6 +749,8 @@ const zh: Record<TranslationKey, string> = {
   'question.title': '需要你决定',
   'question.otherPlaceholder': '其他…',
   'question.submit': '发送回答',
+  'question.next': '下一题',
+  'question.back': '上一题',
   'question.couldNotSend': '回答发送失败',
 
   'permission.choose': '如何处理操作权限',

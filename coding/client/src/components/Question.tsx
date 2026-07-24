@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowUp, Check, LoaderCircle } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ArrowUp, Check, LoaderCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { QuestionAnswer, QuestionItem } from '@/types'
 import { useI18n } from '@/i18n'
@@ -35,53 +35,62 @@ export function Question({
   const [selections, setSelections] = useState<Selection[]>(() =>
     item.questions.map(() => emptySelection()),
   )
+  // Questions are asked one at a time. The agent still receives every answer in
+  // a single reply, so stepping is purely how this surface paces the form.
+  const [step, setStep] = useState(0)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
-  const select = (index: number, label: string, multiSelect: boolean) => {
+  const total = item.questions.length
+  const question = item.questions[step]
+  const selection = selections[step]
+  const last = step === total - 1
+  const answered = answerValues(selection).length > 0
+  const allAnswered = selections.every((entry) => answerValues(entry).length > 0)
+
+  const select = (label: string) => {
     setSelections((current) =>
-      current.map((selection, i) => {
-        if (i !== index) return selection
-        if (!multiSelect) return { ...selection, labels: [label] }
+      current.map((entry, index) => {
+        if (index !== step) return entry
+        if (!question.multiSelect) return { ...entry, labels: [label] }
         return {
-          ...selection,
-          labels: selection.labels.includes(label)
-            ? selection.labels.filter((existing) => existing !== label)
-            : [...selection.labels, label],
+          ...entry,
+          labels: entry.labels.includes(label)
+            ? entry.labels.filter((existing) => existing !== label)
+            : [...entry.labels, label],
         }
       }),
     )
+    // A single-select answer is complete the moment it is picked, so move on.
+    // The final question never advances on its own: submitting is deliberate.
+    if (!question.multiSelect && !last) setStep((current) => current + 1)
   }
 
-  const setOther = (index: number, value: string) => {
+  const setOther = (value: string) => {
     setSelections((current) =>
-      current.map((selection, i) =>
-        i === index
+      current.map((entry, index) =>
+        index === step
           ? {
-              ...selection,
+              ...entry,
               other: value,
-              labels: selection.labels.includes(OTHER)
-                ? selection.labels
-                : [...selection.labels, OTHER],
+              labels: entry.labels.includes(OTHER) ? entry.labels : [...entry.labels, OTHER],
             }
-          : selection,
+          : entry,
       ),
     )
   }
 
-  // Every question must carry a value: a half-filled form would reach the agent
-  // as an unanswered question, which it is told to treat as no answer at all.
-  const complete = selections.every((selection) => answerValues(selection).length > 0)
-
   const submit = async () => {
-    if (!complete || busy) return
+    // Every question must carry a value: a half-filled form would reach the
+    // agent as an unanswered question, which it treats as no answer at all.
+    if (!allAnswered || busy) return
     setBusy(true)
     setError('')
     try {
       await onResolve(
         item.id,
-        item.questions.map((question, index) => ({
-          question: question.question,
+        item.questions.map((entry, index) => ({
+          question: entry.question,
           values: answerValues(selections[index]),
         })),
       )
@@ -91,120 +100,137 @@ export function Question({
     }
   }
 
+  const advance = () => {
+    if (last) return void submit()
+    if (answered) setStep((current) => current + 1)
+  }
+
+  const indicator = (checked: boolean) => (
+    <span
+      className={cn(
+        'grid size-4 shrink-0 place-items-center border transition-colors',
+        question.multiSelect ? 'rounded-[4px]' : 'rounded-full',
+        checked ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-300 bg-white',
+      )}
+      aria-hidden="true"
+    >
+      {checked && <Check className="size-2.5" strokeWidth={3} />}
+    </span>
+  )
+
+  const primary = (
+    <button
+      type="button"
+      disabled={(last ? !allAnswered : !answered) || busy}
+      onClick={advance}
+      aria-label={last ? t('question.submit') : t('question.next')}
+      className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-full bg-black text-white transition-colors hover:bg-stone-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400 disabled:cursor-not-allowed disabled:opacity-25"
+    >
+      {busy ? (
+        <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
+      ) : last ? (
+        <ArrowUp className="size-3.5" aria-hidden="true" />
+      ) : (
+        <ArrowRight className="size-3.5" aria-hidden="true" />
+      )}
+    </button>
+  )
+
   return (
     <section
       className="animate-[fade-in_160ms_ease-out] overflow-hidden rounded-[28px] border border-stone-200 bg-white [container-type:inline-size]"
       aria-live="polite"
       aria-busy={busy}
     >
-      {item.questions.map((question, index) => {
-        const selection = selections[index]
-        return (
-          <fieldset
-            key={question.question}
-            className={cn('min-w-0', index > 0 && 'border-t border-stone-200/80')}
-          >
-            <legend
-              className={cn(
-                'flex w-full flex-wrap items-baseline gap-2 px-3.5 pb-2',
-                index > 0 ? 'pt-4' : 'pt-3',
-              )}
+      <fieldset key={question.question} className="min-w-0">
+        <legend className="flex w-full flex-wrap items-baseline gap-2 px-3.5 pt-3 pb-2">
+          <span className="rounded bg-stone-100 px-1.5 py-0.5 font-mono text-[0.6875rem] leading-4 text-stone-500">
+            {question.header}
+          </span>
+          <span className="text-[0.875rem] leading-5 font-medium text-stone-900">
+            {question.question}
+          </span>
+        </legend>
+
+        {question.options.map((option) => {
+          const selected = selection.labels.includes(option.label)
+          return (
+            <button
+              key={option.label}
+              type="button"
+              disabled={busy}
+              aria-pressed={selected}
+              onClick={() => select(option.label)}
+              className="flex w-full cursor-pointer items-start gap-2.5 border-t border-stone-200/70 px-3.5 py-2.5 text-left transition-colors hover:bg-stone-50 focus-visible:bg-stone-50 focus-visible:outline-none disabled:cursor-wait disabled:opacity-60"
             >
-              <span className="rounded bg-stone-100 px-1.5 py-0.5 font-mono text-[0.6875rem] leading-4 text-stone-500">
-                {question.header}
-              </span>
-              <span className="text-[0.875rem] leading-5 font-medium text-stone-900">
-                {question.question}
-              </span>
-            </legend>
-
-            {question.options.map((option) => {
-              const selected = selection.labels.includes(option.label)
-              return (
-                <button
-                  key={option.label}
-                  type="button"
-                  disabled={busy}
-                  aria-pressed={selected}
-                  onClick={() => select(index, option.label, Boolean(question.multiSelect))}
-                  className="flex w-full cursor-pointer items-start gap-2.5 border-t border-stone-200/70 px-3.5 py-2.5 text-left transition-colors hover:bg-stone-50 focus-visible:bg-stone-50 focus-visible:outline-none disabled:cursor-wait disabled:opacity-60"
-                >
-                  <span
-                    className={cn(
-                      'mt-[0.1875rem] grid size-4 shrink-0 place-items-center border transition-colors',
-                      question.multiSelect ? 'rounded-[4px]' : 'rounded-full',
-                      selected
-                        ? 'border-stone-900 bg-stone-900 text-white'
-                        : 'border-stone-300 bg-white',
-                    )}
-                    aria-hidden="true"
-                  >
-                    {selected && <Check className="size-2.5" strokeWidth={3} />}
-                  </span>
-                  <span className="min-w-0">
-                    <span
-                      className={cn(
-                        'block text-[0.8125rem] leading-5',
-                        selected ? 'font-medium text-stone-900' : 'text-stone-800',
-                      )}
-                    >
-                      {option.label}
-                    </span>
-                    {option.description && (
-                      <span className="block text-[0.78125rem] leading-5 text-stone-500">
-                        {option.description}
-                      </span>
-                    )}
-                  </span>
-                </button>
-              )
-            })}
-
-            <div className="flex items-center gap-2.5 border-t border-stone-200/70 px-3.5">
-              <span
-                className={cn(
-                  'grid size-4 shrink-0 place-items-center border transition-colors',
-                  question.multiSelect ? 'rounded-[4px]' : 'rounded-full',
-                  selection.labels.includes(OTHER) && selection.other.trim()
-                    ? 'border-stone-900 bg-stone-900 text-white'
-                    : 'border-stone-300 bg-white',
-                )}
-                aria-hidden="true"
-              >
-                {selection.labels.includes(OTHER) && selection.other.trim() && (
-                  <Check className="size-2.5" strokeWidth={3} />
-                )}
-              </span>
-              <input
-                type="text"
-                disabled={busy}
-                value={selection.other}
-                placeholder={t('question.otherPlaceholder')}
-                aria-label={t('question.otherPlaceholder')}
-                onChange={(event) => setOther(index, event.target.value)}
-                className="w-full min-w-0 border-0 bg-transparent py-2.5 text-[0.8125rem] leading-5 text-stone-900 outline-none placeholder:text-stone-400 disabled:cursor-wait disabled:opacity-60"
-              />
-              {index === item.questions.length - 1 && (
-                <button
-                  type="button"
-                  disabled={!complete || busy}
-                  onClick={() => void submit()}
-                  aria-label={t('question.submit')}
-                  className="my-1.5 grid size-8 shrink-0 cursor-pointer place-items-center rounded-full bg-black text-white transition-colors hover:bg-stone-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400 disabled:cursor-not-allowed disabled:opacity-25"
-                >
-                  {busy ? (
-                    <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
-                  ) : (
-                    <ArrowUp className="size-3.5" aria-hidden="true" />
+              <span className="mt-[0.1875rem]">{indicator(selected)}</span>
+              <span className="min-w-0">
+                <span
+                  className={cn(
+                    'block text-[0.8125rem] leading-5',
+                    selected ? 'font-medium text-stone-900' : 'text-stone-800',
                   )}
-                </button>
-              )}
-            </div>
-          </fieldset>
-        )
-      })}
+                >
+                  {option.label}
+                </span>
+                {option.description && (
+                  <span className="block text-[0.78125rem] leading-5 text-stone-500">
+                    {option.description}
+                  </span>
+                )}
+              </span>
+            </button>
+          )
+        })}
 
-      {error && (
+        <div className="flex items-center gap-2.5 border-t border-stone-200/70 px-3.5">
+          {indicator(selection.labels.includes(OTHER) && Boolean(selection.other.trim()))}
+          <input
+            type="text"
+            disabled={busy}
+            value={selection.other}
+            placeholder={t('question.otherPlaceholder')}
+            aria-label={t('question.otherPlaceholder')}
+            onChange={(event) => setOther(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                advance()
+              }
+            }}
+            className="w-full min-w-0 border-0 bg-transparent py-2.5 text-[0.8125rem] leading-5 text-stone-900 outline-none placeholder:text-stone-400 disabled:cursor-wait disabled:opacity-60"
+          />
+          {total === 1 && <span className="my-1.5">{primary}</span>}
+        </div>
+      </fieldset>
+
+      {total > 1 && (
+        <div className="flex items-center gap-2 border-t border-stone-200/80 px-3.5 py-2">
+          <button
+            type="button"
+            disabled={step === 0 || busy}
+            onClick={() => setStep((current) => Math.max(0, current - 1))}
+            aria-label={t('question.back')}
+            className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-full text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400 disabled:cursor-not-allowed disabled:opacity-25"
+          >
+            <ArrowLeft className="size-3.5" aria-hidden="true" />
+          </button>
+          <span className="font-mono text-[0.6875rem] leading-4 text-stone-400 tabular-nums">
+            {step + 1}/{total}
+          </span>
+          {error && (
+            <span
+              className="min-w-0 flex-1 truncate text-[0.75rem] leading-4 text-red-600"
+              role="alert"
+            >
+              {error}
+            </span>
+          )}
+          <span className={cn('ml-auto', error && 'ml-0')}>{primary}</span>
+        </div>
+      )}
+
+      {total === 1 && error && (
         <div
           className="border-t border-stone-200/80 px-3.5 py-2 text-[0.75rem] leading-4 text-red-600"
           role="alert"
