@@ -77,6 +77,7 @@ export default function App() {
     browserInspections,
     previewOpen,
     approval,
+    question,
     running,
     autoCompacting,
     loading,
@@ -101,6 +102,7 @@ export default function App() {
     removeQueuedMessage,
     stop,
     resolveApproval,
+    resolveQuestion,
     handleBrowserCommand,
     handleBrowserInspection,
     secondaryThread,
@@ -417,6 +419,7 @@ export default function App() {
       connected={status === 'ready' && !creating}
       running={running}
       approval={approval}
+      question={question}
       queuedMessages={queuedMessages}
       contextUsage={contextUsage}
       centered={centered}
@@ -434,6 +437,7 @@ export default function App() {
       onRemoveQueued={removeQueuedMessage}
       onStop={stop}
       onResolve={resolveApproval}
+      onResolveQuestion={resolveQuestion}
       onSelectProject={(path) => {
         updateDraftWorkspace(path, Boolean(path))
         setSelectedWorkspacePath(path)

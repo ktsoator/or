@@ -5,6 +5,8 @@ import { isAPIError } from '@/api'
 import type {
   ApprovalChoice,
   ApprovalItem,
+  QuestionAnswer,
+  QuestionItem,
   ContextUsage,
   DeliveryMode,
   MessageImage,
@@ -17,6 +19,7 @@ import type {
 } from '@/types'
 import { cn } from '@/lib/utils'
 import { Approval } from './Approval'
+import { Question } from './Question'
 import { ModelSettingsMenu } from './ModelSettingsMenu'
 import { PermissionModeMenu } from './PermissionModeMenu'
 import { ProjectPicker } from './ProjectPicker'
@@ -26,6 +29,7 @@ export function Composer({
   connected,
   running,
   approval,
+  question,
   queuedMessages,
   contextUsage,
   centered = false,
@@ -43,6 +47,7 @@ export function Composer({
   onRemoveQueued,
   onStop,
   onResolve,
+  onResolveQuestion,
   onSelectProject,
   onBrowseProjects,
   onConfigureModel,
@@ -53,6 +58,7 @@ export function Composer({
   connected: boolean
   running: boolean
   approval?: ApprovalItem
+  question?: QuestionItem
   queuedMessages: QueuedMessage[]
   contextUsage?: ContextUsage
   centered?: boolean
@@ -70,6 +76,7 @@ export function Composer({
   onRemoveQueued: (id: string) => Promise<void>
   onStop: () => void
   onResolve: (id: string, choice: ApprovalChoice) => Promise<void>
+  onResolveQuestion: (id: string, answers: QuestionAnswer[]) => Promise<void>
   onSelectProject: (path?: string) => void
   onBrowseProjects: () => void
   onConfigureModel: () => void
@@ -95,9 +102,13 @@ export function Composer({
   const [images, setImages] = useState<PendingImage[]>([])
   const [delivery, setDelivery] = useState<DeliveryMode>('steer')
   const awaitingApproval = Boolean(approval)
+  const awaitingQuestion = Boolean(question)
+  // A question blocks the composer exactly as an approval does: the run is
+  // parked inside a tool call until the user answers it.
+  const awaitingUser = awaitingApproval || awaitingQuestion
   const modelConfigured = Boolean(modelProvider && modelID && thinkingLevel)
   const inputDisabled =
-    awaitingApproval || !connected || updatingSettings || compacting || !modelConfigured
+    awaitingUser || !connected || updatingSettings || compacting || !modelConfigured
   const settingsDisabled = running || inputDisabled
   const supportsImages = Boolean(
     models.find((model) => model.provider === modelProvider && model.id === modelID)
@@ -274,9 +285,12 @@ export function Composer({
           <PendingQueue messages={queuedMessages} onRemove={(id) => void removeQueued(id)} />
         )}
         {approval && <Approval key={approval.id} item={approval} onResolve={onResolve} />}
+        {question && (
+          <Question key={question.id} item={question} onResolve={onResolveQuestion} />
+        )}
 
         <div
-          hidden={awaitingApproval}
+          hidden={awaitingUser}
           className={cn(
             'rounded-[28px] border border-stone-200 bg-white [container-type:inline-size]',
             !centered &&
@@ -348,7 +362,9 @@ export function Composer({
                 disabled={inputDisabled}
                 className="block max-h-[15rem] min-h-8 w-full min-w-0 resize-none overflow-y-auto border-0 bg-transparent px-1 py-1.5 text-[var(--chat-font-size)] leading-6 text-stone-900 outline-none placeholder:text-stone-400 disabled:cursor-not-allowed disabled:bg-transparent"
                 placeholder={
-                  awaitingApproval
+                  awaitingQuestion
+                    ? t('composer.answerQuestionPlaceholder')
+                    : awaitingApproval
                     ? t('composer.resolveApprovalPlaceholder')
                     : compacting
                       ? t('composer.compactingContext')

@@ -112,6 +112,46 @@ describe('sessionStoreReducer', () => {
     expect(state.sessions[0]).toMatchObject({ running: false, hasApproval: false })
   })
 
+  test('tracks a pending question the same way it tracks a pending approval', () => {
+    let state: SessionStoreState = {
+      ...createSessionStoreState(),
+      sessions: [session('session-1')],
+    }
+    state = reduce(
+      [
+        {
+          t: 'sessionWire',
+          sessionID: 'session-1',
+          event: { type: 'question_request', id: 'question-1' },
+        },
+      ],
+      state,
+    )
+    expect(state.sessions[0]).toMatchObject({ running: true, hasQuestion: true })
+
+    state = reduce(
+      [{ t: 'sessionQuestionResolved', sessionID: 'session-1' }],
+      state,
+    )
+    expect(state.sessions[0]).toMatchObject({ hasQuestion: false })
+
+    // A reconnect rebuilds the flag from the restored event log.
+    state = reduce(
+      [
+        {
+          t: 'sessionSnapshot',
+          sessionID: 'session-1',
+          history: {
+            running: true,
+            events: [{ type: 'question_request', id: 'question-2' }],
+          },
+        },
+      ],
+      state,
+    )
+    expect(state.sessions[0]).toMatchObject({ hasQuestion: true })
+  })
+
   test('updates draft settings and transfers first send to the created session', () => {
     const draft = createSessionDraft(undefined, false, undefined, [], undefined, 'draft-1')
     const state = reduce([

@@ -62,6 +62,9 @@ describe('sessionCommands', () => {
     await commands.abortRun('session / one')
     await commands.removeQueuedMessage('session / one', 'queue / one')
     await commands.resolveApproval('session / one', 'approval / one', 'allow_once')
+    await commands.resolveQuestion('session / one', 'question / one', [
+      { question: 'Which cache?', values: ['Redis'] },
+    ])
     await commands.reportBrowserResult('session / one', 'browser / one', {
       status: 'committed',
       requestedURL: 'https://example.com/start',
@@ -81,6 +84,7 @@ describe('sessionCommands', () => {
       ['/api/sessions/session%20%2F%20one/abort', 'POST'],
       ['/api/sessions/session%20%2F%20one/queue/queue%20%2F%20one', 'DELETE'],
       ['/api/sessions/session%20%2F%20one/approvals/approval%20%2F%20one', 'POST'],
+      ['/api/sessions/session%20%2F%20one/questions/question%20%2F%20one', 'POST'],
       ['/api/sessions/session%20%2F%20one/browser/browser%20%2F%20one/result', 'POST'],
       [
         '/api/sessions/session%20%2F%20one/browser/inspect/inspection%20%2F%20one/result',
@@ -89,11 +93,14 @@ describe('sessionCommands', () => {
     ])
     expect(jsonBody(calls[2])).toEqual({ choice: 'allow_once' })
     expect(jsonBody(calls[3])).toEqual({
+      answers: [{ question: 'Which cache?', values: ['Redis'] }],
+    })
+    expect(jsonBody(calls[4])).toEqual({
       status: 'committed',
       requestedURL: 'https://example.com/start',
       committedURL: 'https://example.com/final',
     })
-    expect(jsonBody(calls[4])).toEqual({
+    expect(jsonBody(calls[5])).toEqual({
       status: 'completed',
       url: 'https://example.com/final',
       title: 'Example',
