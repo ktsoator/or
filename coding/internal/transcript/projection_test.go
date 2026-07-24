@@ -51,6 +51,31 @@ func TestBuildContextUsesLatestCompactionAndKeepsOriginalMessages(t *testing.T) 
 	}
 }
 
+func TestBuildContextOmitsProductContextEntries(t *testing.T) {
+	contextEntry := NewContext(ContextAttachment{
+		AttachmentID: "session:1:abc",
+		Epoch:        1,
+		Kind:         "session",
+		Placement:    "prefix",
+		Revision:     "abc",
+		Rendered:     "<or-context>internal</or-context>",
+	})
+	user := NewMessage(agent.UserMessage("visible user"))
+	entries := []Entry{contextEntry, user}
+
+	projected, err := BuildContext(entries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(projected) != 1 || messageText(t, projected[0]) != "visible user" {
+		t.Fatalf("projected context = %#v", projected)
+	}
+	full := Messages(entries)
+	if len(full) != 1 || messageText(t, full[0]) != "visible user" {
+		t.Fatalf("full messages = %#v", full)
+	}
+}
+
 func linearMessages(messages ...agent.AgentMessage) []Entry {
 	entries := make([]Entry, 0, len(messages))
 	for _, message := range messages {

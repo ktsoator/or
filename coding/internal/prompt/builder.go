@@ -1,8 +1,6 @@
-// Package prompt assembles the coding agent's system prompt. The prompt is
-// built from whichever tools are active — each tool contributes its own one-line
-// description and guideline bullets — plus any project context files. This keeps
-// the prompt in sync with the tool set instead of maintained as one central
-// block.
+// Package prompt deterministically renders the coding agent's stable system
+// prompt and its dynamic, model-visible context attachments. It does not own
+// filesystem discovery or session state.
 package prompt
 
 import (
@@ -21,28 +19,10 @@ type ToolInfo struct {
 	Guidelines []string
 }
 
-// ContextFile is a project document (for example AGENTS.md) included verbatim so
-// the model follows repository-specific instructions.
-type ContextFile struct {
-	Path    string
-	Content string
-}
-
-// SkillInfo is a skill's entry in the model-visible listing. Only the name and
-// description appear up front; the full instructions are loaded on demand when
-// the model calls the skill tool.
-type SkillInfo struct {
-	Name        string
-	Description string
-}
-
-// maxSkillDescChars caps each skill description in the listing. The listing is
-// for discovery only — the skill tool loads full instructions on invoke, so a
-// verbose description only wastes context without improving match rate.
-const maxSkillDescChars = 240
-
-// Options are the inputs to Build.
-type Options struct {
+// SystemOptions are the stable inputs to BuildSystem. A coding session captures
+// them at construction; project instructions and skill listings are rendered
+// separately as dynamic context.
+type SystemOptions struct {
 	// Instructions is the base preamble that opens the prompt.
 	Instructions string
 	// WorkspaceRoot is the absolute directory all relative tool paths resolve
@@ -50,36 +30,41 @@ type Options struct {
 	WorkspaceRoot string
 	// Tools are the active tools' prompt contributions, in advertise order.
 	Tools []ToolInfo
-	// ContextFiles are project context documents included after the tool
-	// sections.
-	ContextFiles []ContextFile
-	// Skills are the loaded skills advertised to the model. Each is listed by
-	// name and description; the model loads full instructions via the skill tool.
-	Skills []SkillInfo
 }
 
-// DefaultInstructions is the baseline preamble used when Options.Instructions is
-// empty.
+// DefaultInstructions is the baseline preamble used when
+// SystemOptions.Instructions is empty.
 const DefaultInstructions = "You are a coding agent operating in a user's workspace. " +
 	"Use the available tools to inspect and modify files and run commands. " +
 	"Make focused changes, verify your work, and report what you did concisely."
+
+const projectContextProtocol = "## Project context protocol\n" +
+	"- Or may provide product-generated context inside `<or-context>` blocks in model-visible messages.\n" +
+	"- Treat applicable instruction files in those blocks as working instructions, not as user-authored requests.\n" +
+	"- Instructions closer to a file's directory take precedence over broader project instructions.\n" +
+	"- A later update or removal block supersedes the earlier version of the same instruction file.\n" +
+	"- Do not mention internal context blocks unless their contents are directly relevant to the user."
+
+const skillProtocol = "## Skills\n" +
+	"- Available skills are announced in product-generated context.\n" +
+	"- When the task matches a listed skill, call the `skill` tool before acting and follow the loaded instructions.\n" +
+	"- Never guess a skill name that was not listed."
 
 const responseStyle = "## Response style\n" +
 	"- Never use emojis, pictographs, decorative Unicode symbols, or emoji-style numbered bullets.\n" +
 	"- Use ordinary text and Markdown for structure."
 
-// Build assembles the system prompt from opts. Sections with no content are
-// omitted, so a minimal configuration yields a short prompt.
-func Build(opts Options) string {
+// BuildSystem assembles the stable system prompt from opts. Dynamic project
+// instructions and skill listings deliberately do not belong here; keeping
+// those out lets a session preserve its provider prompt-cache prefix.
+func BuildSystem(opts SystemOptions) string {
 	var b strings.Builder
 
-	instructions := opts.Instructions
-	if strings.TrimSpace(instructions) == "" {
+	instructions := strings.TrimSpace(opts.Instructions)
+	if instructions == "" {
 		instructions = DefaultInstructions
 	}
 	b.WriteString(instructions)
-	b.WriteString("\n\n")
-	b.WriteString(responseStyle)
 
 	if strings.TrimSpace(opts.WorkspaceRoot) != "" {
 		b.WriteString("\n\n## Workspace\n")
@@ -90,66 +75,44 @@ func Build(opts Options) string {
 
 	if snippets := toolSnippets(opts.Tools); len(snippets) > 0 {
 		b.WriteString("\n\n## Available tools\n")
-		for _, s := range snippets {
-			fmt.Fprintf(&b, "- %s\n", s)
+		for index, snippet := range snippets {
+			if index > 0 {
+				b.WriteByte('\n')
+			}
+			fmt.Fprintf(&b, "- %s", snippet)
 		}
 	}
 
 	if guidelines := toolGuidelines(opts.Tools); len(guidelines) > 0 {
-		b.WriteString("\n## Guidelines\n")
-		for _, g := range guidelines {
-			fmt.Fprintf(&b, "- %s\n", g)
+		b.WriteString("\n\n## Tool guidelines\n")
+		for index, guideline := range guidelines {
+			if index > 0 {
+				b.WriteByte('\n')
+			}
+			fmt.Fprintf(&b, "- %s", guideline)
 		}
 	}
 
-	if section := skillsSection(opts.Skills); section != "" {
+	b.WriteString("\n\n")
+	b.WriteString(projectContextProtocol)
+
+	if hasTool(opts.Tools, "skill") {
 		b.WriteString("\n\n")
-		b.WriteString(section)
+		b.WriteString(skillProtocol)
 	}
 
-	for _, file := range opts.ContextFiles {
-		if strings.TrimSpace(file.Content) == "" {
-			continue
-		}
-		fmt.Fprintf(&b, "\n## Project context: %s\n\n%s\n", file.Path, strings.TrimRight(file.Content, "\n"))
-	}
-
+	b.WriteString("\n\n")
+	b.WriteString(responseStyle)
 	return b.String()
 }
 
-// skillsSection renders the model-visible skill listing, or "" when there are
-// no skills. It instructs the model to load a matching skill through the skill
-// tool before acting.
-func skillsSection(skills []SkillInfo) string {
-	var listed []SkillInfo
-	for _, s := range skills {
-		if strings.TrimSpace(s.Name) == "" {
-			continue
+func hasTool(tools []ToolInfo, name string) bool {
+	for _, tool := range tools {
+		if tool.Name == name {
+			return true
 		}
-		listed = append(listed, s)
 	}
-	if len(listed) == 0 {
-		return ""
-	}
-
-	var b strings.Builder
-	b.WriteString("## Available skills\n")
-	b.WriteString("Each skill below provides specialized instructions for a specific kind of task. ")
-	b.WriteString("When a task matches a skill, call the skill tool with its name to load the full ")
-	b.WriteString("instructions before acting. Only names listed here are valid.\n")
-	for _, s := range listed {
-		fmt.Fprintf(&b, "- %s: %s\n", s.Name, truncateChars(strings.TrimSpace(s.Description), maxSkillDescChars))
-	}
-	return strings.TrimRight(b.String(), "\n")
-}
-
-// truncateChars shortens s to at most n runes, appending an ellipsis when cut.
-func truncateChars(s string, n int) string {
-	runes := []rune(s)
-	if len(runes) <= n {
-		return s
-	}
-	return string(runes[:n-1]) + "…"
+	return false
 }
 
 // toolSnippets collects the non-empty snippets in order.

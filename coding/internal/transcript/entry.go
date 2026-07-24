@@ -20,6 +20,7 @@ type EntryType string
 
 const (
 	MessageEntry    EntryType = "message"
+	ContextEntry    EntryType = "context"
 	CompactionEntry EntryType = "compaction"
 	RunEntry        EntryType = "run"
 )
@@ -38,8 +39,23 @@ type Entry struct {
 	Timestamp  time.Time
 	Type       EntryType
 	Message    agent.AgentMessage
+	Context    *ContextAttachment
 	Compaction *Compaction
 	Run        *Run
+}
+
+// ContextAttachment records one product-generated model-context block without
+// representing it as a user-authored conversation message. Epoch increments
+// when a session process rebuilds its context snapshot. Placement describes how
+// the model-input projector positions the rendered block.
+type ContextAttachment struct {
+	AttachmentID string `json:"attachmentId"`
+	Epoch        uint64 `json:"epoch"`
+	Kind         string `json:"kind"`
+	Placement    string `json:"placement"`
+	Path         string `json:"path,omitempty"`
+	Revision     string `json:"revision"`
+	Rendered     string `json:"rendered"`
 }
 
 // Run records the wall-clock interval for one agent invocation. FirstEntryID
@@ -75,6 +91,15 @@ func NewMessage(message agent.AgentMessage) Entry {
 		Timestamp: time.Now().UTC(),
 		Type:      MessageEntry,
 		Message:   message,
+	}
+}
+
+func NewContext(context ContextAttachment) Entry {
+	return Entry{
+		ID:        NewID(),
+		Timestamp: time.Now().UTC(),
+		Type:      ContextEntry,
+		Context:   &context,
 	}
 }
 
@@ -117,21 +142,33 @@ func (e Entry) Validate() error {
 	}
 	switch e.Type {
 	case MessageEntry:
-		if e.Message == nil || e.Compaction != nil || e.Run != nil {
+		if e.Message == nil || e.Context != nil || e.Compaction != nil || e.Run != nil {
 			return fmt.Errorf("transcript: message entry %s has invalid payload", e.ID)
 		}
 		if _, ok := agent.ToLLM(e.Message); !ok {
 			return fmt.Errorf("transcript: cannot persist custom message %T", e.Message)
 		}
+	case ContextEntry:
+		if e.Message != nil || e.Context == nil || e.Compaction != nil || e.Run != nil {
+			return fmt.Errorf("transcript: context entry %s has invalid payload", e.ID)
+		}
+		if e.Context.AttachmentID == "" ||
+			e.Context.Epoch == 0 ||
+			e.Context.Kind == "" ||
+			e.Context.Placement == "" ||
+			e.Context.Revision == "" ||
+			e.Context.Rendered == "" {
+			return fmt.Errorf("transcript: context entry %s is incomplete", e.ID)
+		}
 	case CompactionEntry:
-		if e.Message != nil || e.Compaction == nil || e.Run != nil {
+		if e.Message != nil || e.Context != nil || e.Compaction == nil || e.Run != nil {
 			return fmt.Errorf("transcript: compaction entry %s has invalid payload", e.ID)
 		}
 		if e.Compaction.Summary == "" || e.Compaction.FirstKeptEntryID == "" {
 			return fmt.Errorf("transcript: compaction entry %s is incomplete", e.ID)
 		}
 	case RunEntry:
-		if e.Message != nil || e.Compaction != nil || e.Run == nil {
+		if e.Message != nil || e.Context != nil || e.Compaction != nil || e.Run == nil {
 			return fmt.Errorf("transcript: run entry %s has invalid payload", e.ID)
 		}
 		if e.Run.StartedAt.IsZero() || e.Run.CompletedAt.IsZero() {
@@ -151,15 +188,16 @@ func (e Entry) MarshalJSON() ([]byte, error) {
 		return nil, err
 	}
 	wire := struct {
-		ID         string          `json:"id"`
-		Timestamp  time.Time       `json:"timestamp"`
-		Type       EntryType       `json:"type"`
-		Message    json.RawMessage `json:"message,omitempty"`
-		Compaction *Compaction     `json:"compaction,omitempty"`
-		Run        *Run            `json:"run,omitempty"`
+		ID         string             `json:"id"`
+		Timestamp  time.Time          `json:"timestamp"`
+		Type       EntryType          `json:"type"`
+		Message    json.RawMessage    `json:"message,omitempty"`
+		Context    *ContextAttachment `json:"context,omitempty"`
+		Compaction *Compaction        `json:"compaction,omitempty"`
+		Run        *Run               `json:"run,omitempty"`
 	}{
 		ID: e.ID, Timestamp: e.Timestamp, Type: e.Type,
-		Compaction: e.Compaction, Run: e.Run,
+		Context: e.Context, Compaction: e.Compaction, Run: e.Run,
 	}
 	if e.Message != nil {
 		message, _ := agent.ToLLM(e.Message)
@@ -177,19 +215,20 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 		return errors.New("transcript: decode into nil entry")
 	}
 	wire := struct {
-		ID         string          `json:"id"`
-		Timestamp  time.Time       `json:"timestamp"`
-		Type       EntryType       `json:"type"`
-		Message    json.RawMessage `json:"message"`
-		Compaction *Compaction     `json:"compaction"`
-		Run        *Run            `json:"run"`
+		ID         string             `json:"id"`
+		Timestamp  time.Time          `json:"timestamp"`
+		Type       EntryType          `json:"type"`
+		Message    json.RawMessage    `json:"message"`
+		Context    *ContextAttachment `json:"context"`
+		Compaction *Compaction        `json:"compaction"`
+		Run        *Run               `json:"run"`
 	}{}
 	if err := json.Unmarshal(data, &wire); err != nil {
 		return err
 	}
 	decoded := Entry{
 		ID: wire.ID, Timestamp: wire.Timestamp,
-		Type: wire.Type, Compaction: wire.Compaction, Run: wire.Run,
+		Type: wire.Type, Context: wire.Context, Compaction: wire.Compaction, Run: wire.Run,
 	}
 	if len(wire.Message) > 0 && string(wire.Message) != "null" {
 		message, err := llm.UnmarshalMessage(wire.Message)

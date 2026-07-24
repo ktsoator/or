@@ -14,6 +14,7 @@ import (
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/compaction"
+	"github.com/ktsoator/or/coding/internal/modelcontext"
 	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/coding/internal/prompt"
 	"github.com/ktsoator/or/coding/internal/skills"
@@ -81,14 +82,15 @@ type Options struct {
 // run completes and are mutually exclusive; a concurrent call returns ErrBusy.
 // Steer, FollowUp, Abort, Subscribe, and Snapshot are safe during a run.
 type Session struct {
-	agent      *agent.Agent
-	store      transcript.Store
-	tools      []tools.Tool
-	toolByName map[string]tools.Tool
-	authorizer *permission.Service
-	shells     *tools.BackgroundShells
-	cwd        string
-	skills     []skills.Skill
+	agent        *agent.Agent
+	store        transcript.Store
+	tools        []tools.Tool
+	toolByName   map[string]tools.Tool
+	authorizer   *permission.Service
+	shells       *tools.BackgroundShells
+	cwd          string
+	skills       []skills.Skill
+	modelContext *modelcontext.Manager
 
 	maxRetries    int
 	contextWindow int64
@@ -210,6 +212,10 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 			GetAPIKey: opts.GetAPIKey,
 		}
 	}
+	s.modelContext = modelcontext.New(
+		nextContextEpoch(entries),
+		s.buildSessionContext(),
+	)
 
 	agentOpts := agent.Options{
 		SystemPrompt:  s.buildSystemPrompt(opts.Instructions),
@@ -218,7 +224,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		Tools:         tools.AgentTools(toolSet),
 		Messages:      seed,
 		StreamOptions: opts.StreamOptions,
-		StreamFn:      s.checkpointedStreamFn(opts.StreamFn),
+		StreamFn:      s.modelStreamFn(opts.StreamFn),
 		GetAPIKey:     opts.GetAPIKey,
 		BeforeToolCall: func(bc agent.BeforeToolCallCtx) (bool, string) {
 			args, _ := bc.Args.(map[string]any)
@@ -374,11 +380,11 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 	return errors.Join(runErr, persistErr)
 }
 
-// checkpointedStreamFn makes the model request boundary the durability
-// boundary. The llm.Context is authoritative here: RunLoop may resume after
-// sending a MessageEnd event before Agent has reduced that event into its live
-// snapshot, while input.Messages already contains the complete request prefix.
-func (s *Session) checkpointedStreamFn(delegate agent.StreamFn) agent.StreamFn {
+// modelStreamFn is the product's model-request boundary. It projects hidden
+// product context into a detached provider input, checkpoints the canonical
+// messages and any newly emitted context attachments, then reaches the
+// provider. A persistence failure prevents both context commit and provider I/O.
+func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 	if delegate == nil {
 		delegate = llm.Stream
 	}
@@ -388,25 +394,50 @@ func (s *Session) checkpointedStreamFn(delegate agent.StreamFn) agent.StreamFn {
 		input llm.Context,
 		options llm.StreamOptions,
 	) (<-chan llm.Event, error) {
-		if err := s.persistModelInput(ctx, input.Messages); err != nil {
+		prepared := s.modelContext.PrepareStep(input)
+		if err := s.persistModelInput(ctx, input.Messages, prepared.Pending); err != nil {
 			checkpointErr := fmt.Errorf("coding: persist model request checkpoint: %w", err)
 			s.recordRunPersistenceError(checkpointErr)
 			return nil, checkpointErr
 		}
-		return delegate(ctx, model, input, options)
+		s.modelContext.Commit(prepared)
+		return delegate(ctx, model, prepared.Input, options)
 	}
 }
 
-// persistModelInput appends the model-facing request prefix before the provider
-// is called. Coding currently uses only standard LLM messages, so adapting the
-// request back to AgentMessage preserves the same transcript representation
-// while avoiding a race on Agent.Snapshot.
-func (s *Session) persistModelInput(ctx context.Context, input []llm.Message) error {
+// persistModelInput appends the canonical request prefix and any new hidden
+// attachments before the provider is called. input is authoritative here:
+// RunLoop may emit MessageEnd before Agent has reduced that event into its live
+// snapshot, while input already contains the complete canonical prefix.
+func (s *Session) persistModelInput(
+	ctx context.Context,
+	input []llm.Message,
+	attachments []modelcontext.Attachment,
+) error {
 	messages := make([]agent.AgentMessage, len(input))
 	for index, message := range input {
 		messages[index] = agent.FromLLM(message)
 	}
-	return s.persistMessages(ctx, messages, 0, time.Time{}, time.Time{})
+	contextEntries := make([]transcript.Entry, len(attachments))
+	for index, attachment := range attachments {
+		contextEntries[index] = transcript.NewContext(transcript.ContextAttachment{
+			AttachmentID: attachment.ID,
+			Epoch:        attachment.Epoch,
+			Kind:         string(attachment.Kind),
+			Placement:    string(attachment.Placement),
+			Path:         attachment.Path,
+			Revision:     attachment.Revision,
+			Rendered:     attachment.Rendered,
+		})
+	}
+	return s.persistMessages(
+		ctx,
+		messages,
+		contextEntries,
+		0,
+		time.Time{},
+		time.Time{},
+	)
 }
 
 // persistNew appends the messages added since the last persist to the Store. It
@@ -431,6 +462,7 @@ func (s *Session) persistNewMessages(
 	return s.persistMessages(
 		ctx,
 		s.agent.Snapshot().Messages,
+		nil,
 		runEntryStart,
 		startedAt,
 		completedAt,
@@ -440,6 +472,7 @@ func (s *Session) persistNewMessages(
 func (s *Session) persistMessages(
 	ctx context.Context,
 	all []agent.AgentMessage,
+	contextEntries []transcript.Entry,
 	runEntryStart int,
 	startedAt, completedAt time.Time,
 ) error {
@@ -458,7 +491,8 @@ func (s *Session) persistMessages(
 	if persistedLen < len(all) {
 		added = all[persistedLen:]
 	}
-	entries := make([]transcript.Entry, 0, len(added)+1)
+	entries := make([]transcript.Entry, 0, len(contextEntries)+len(added)+1)
+	entries = append(entries, contextEntries...)
 	for _, message := range added {
 		entries = append(entries, transcript.NewMessage(message))
 	}
@@ -660,8 +694,9 @@ func (s *Session) snapshotTranscriptState() ([]transcript.Entry, int) {
 	return append([]transcript.Entry(nil), s.entries...), s.persistedLen
 }
 
-// buildSystemPrompt assembles the coding system prompt from the active tools'
-// self-descriptions and the workspace's project context files.
+// buildSystemPrompt assembles only the stable coding prompt. Project
+// instructions and skill listings are projected by modelContext at the request
+// boundary and never become part of the Agent's canonical system prompt.
 func (s *Session) buildSystemPrompt(instructions string) string {
 	infos := make([]prompt.ToolInfo, len(s.tools))
 	for i, t := range s.tools {
@@ -671,13 +706,30 @@ func (s *Session) buildSystemPrompt(instructions string) string {
 			Guidelines: t.Guidelines,
 		}
 	}
-	return prompt.Build(prompt.Options{
+	return prompt.BuildSystem(prompt.SystemOptions{
 		Instructions:  instructions,
 		WorkspaceRoot: s.cwd,
 		Tools:         infos,
-		ContextFiles:  prompt.LoadContextFiles(s.cwd),
-		Skills:        skillInfos(s.skills),
 	})
+}
+
+func (s *Session) buildSessionContext() string {
+	return prompt.RenderSessionContext(prompt.SessionContextOptions{
+		ContextFiles: prompt.LoadContextFiles(s.cwd),
+		Skills:       skillInfos(s.skills),
+	})
+}
+
+func nextContextEpoch(entries []transcript.Entry) uint64 {
+	var latest uint64
+	for _, entry := range entries {
+		if entry.Type == transcript.ContextEntry &&
+			entry.Context != nil &&
+			entry.Context.Epoch > latest {
+			latest = entry.Context.Epoch
+		}
+	}
+	return latest + 1
 }
 
 // skillInfos projects loaded skills into the prompt's listing entries.

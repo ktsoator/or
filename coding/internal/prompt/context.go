@@ -49,7 +49,7 @@ func readContextFile(dir string) (ContextFile, bool) {
 		if err != nil {
 			continue
 		}
-		return ContextFile{Path: path, Content: string(data)}, true
+		return ContextFile{Path: path, Content: string(data), Scope: ScopeProject}, true
 	}
 	return ContextFile{}, false
 }
