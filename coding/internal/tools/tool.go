@@ -50,7 +50,11 @@ func CodingTools(root string, ops Ops) []Tool {
 // CodingToolsWithShells is CodingTools plus the BackgroundShells manager backing
 // the bash run_in_background workflow, so the caller can Shutdown any long-lived
 // processes when the session ends.
-func CodingToolsWithShells(root string, ops Ops) ([]Tool, *BackgroundShells) {
+func CodingToolsWithShells(
+	root string,
+	ops Ops,
+	browserControllers ...BrowserController,
+) ([]Tool, *BackgroundShells) {
 	files := NewFileStateStore()
 	shells := NewBackgroundShells()
 	return []Tool{
@@ -62,7 +66,7 @@ func CodingToolsWithShells(root string, ops Ops) ([]Tool, *BackgroundShells) {
 		Write(root, ops, files),
 		Bash(root, ops, shells),
 		BashOutput(shells),
-		OpenPreview(root),
+		OpenPreview(root, browserControllers...),
 		KillBash(shells),
 	}, shells
 }

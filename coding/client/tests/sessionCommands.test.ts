@@ -56,19 +56,30 @@ describe('sessionCommands', () => {
     expect(calls.map(jsonBody)).toEqual([input, input])
   })
 
-  test('encodes resource IDs for abort, queue removal, and approval', async () => {
+  test('encodes resource IDs for abort, queue removal, approval, and browser results', async () => {
     const { calls, commands } = recordingRequest()
 
     await commands.abortRun('session / one')
     await commands.removeQueuedMessage('session / one', 'queue / one')
     await commands.resolveApproval('session / one', 'approval / one', 'allow_once')
+    await commands.reportBrowserResult('session / one', 'browser / one', {
+      status: 'committed',
+      requestedURL: 'https://example.com/start',
+      committedURL: 'https://example.com/final',
+    })
 
     expect(calls.map((call) => [call.url, call.init.method])).toEqual([
       ['/api/sessions/session%20%2F%20one/abort', 'POST'],
       ['/api/sessions/session%20%2F%20one/queue/queue%20%2F%20one', 'DELETE'],
       ['/api/sessions/session%20%2F%20one/approvals/approval%20%2F%20one', 'POST'],
+      ['/api/sessions/session%20%2F%20one/browser/browser%20%2F%20one/result', 'POST'],
     ])
     expect(jsonBody(calls[2])).toEqual({ choice: 'allow_once' })
+    expect(jsonBody(calls[3])).toEqual({
+      status: 'committed',
+      requestedURL: 'https://example.com/start',
+      committedURL: 'https://example.com/final',
+    })
   })
 
   test('decodes structured API errors', async () => {

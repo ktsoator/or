@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useReducer,
   useRef,
@@ -21,10 +22,17 @@ import {
   X,
 } from 'lucide-react'
 import { DropdownMenu } from 'radix-ui'
-import type { ModelOption, PreviewState, WorkspaceSummary } from '@/types'
+import { isAPIError } from '@/api'
+import type {
+  BrowserCommandState,
+  ModelOption,
+  PreviewState,
+  WorkspaceSummary,
+} from '@/types'
 import type { SessionThread } from '@/useSession'
 import {
   agentBrowserTabID,
+  browserCommandTabID,
   browserTabNavigationURL,
   browserTabsReducer,
   createBrowserTab,
@@ -46,6 +54,7 @@ import {
 } from '@/lib/desktop'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
+import { sessionCommands } from '@/sessionCommands'
 import { BrowserSurface } from './BrowserSurface'
 import { ConversationView } from './ConversationView'
 
@@ -54,6 +63,15 @@ function addressTitle(url: string): string {
     return new URL(url).host
   } catch {
     return ''
+  }
+}
+
+function absoluteHTTPURL(value: string): string | undefined {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : undefined
+  } catch {
+    return undefined
   }
 }
 
@@ -72,11 +90,13 @@ function previewTarget(
     kind: workspacePath ? 'workspace-preview' : 'web',
     title: preview?.title,
     workspacePath,
+    commandID: preview.commandID,
   }
 }
 
 export function BrowserView({
   preview,
+  browserCommands,
   sessionID,
   activatePreview,
   conversation,
@@ -85,6 +105,7 @@ export function BrowserView({
   workspaces,
   onCloseTab,
   onCloseConversation,
+  onBrowserCommandHandled,
   onCreateConversation,
   onConfigureModel,
   maximized,
@@ -93,6 +114,7 @@ export function BrowserView({
   toggleControl,
 }: {
   preview?: PreviewState
+  browserCommands: BrowserCommandState[]
   sessionID?: string
   activatePreview: boolean
   conversation?: SessionThread
@@ -101,6 +123,7 @@ export function BrowserView({
   workspaces: WorkspaceSummary[]
   onCloseTab: () => void
   onCloseConversation: () => void
+  onBrowserCommandHandled: (sessionID: string, commandID: string) => void
   onCreateConversation: () => void
   onConfigureModel: () => void
   maximized: boolean
@@ -110,7 +133,11 @@ export function BrowserView({
 }) {
   const { t } = useI18n()
   const initialTabRef = useRef<BrowserTab | undefined>(undefined)
-  if (!initialTabRef.current && (preview || !conversation)) {
+  if (
+    !initialTabRef.current &&
+    browserCommands.length === 0 &&
+    (preview || !conversation)
+  ) {
     initialTabRef.current = preview
       ? createBrowserTab({
         id: agentBrowserTabID(sessionID),
@@ -132,8 +159,18 @@ export function BrowserView({
         : initialTabRef.current?.id ?? '',
   )
   const tabSequenceRef = useRef(initialTabRef.current && !preview ? 1 : 0)
-  const previewKey = preview ? `${sessionID ?? 'unknown'}:${preview.revision}` : undefined
+  const previewKey = preview
+    ? [
+        sessionID ?? 'unknown',
+        preview.revision,
+        preview.commandID ?? '',
+        preview.url ?? preview.path ?? '',
+      ].join(':')
+    : undefined
   const previewKeyRef = useRef(previewKey)
+  const processedCommandsRef = useRef(new Set<string>())
+  const reportingCommandsRef = useRef(new Set<string>())
+  const reportedCommandsRef = useRef(new Set<string>())
   const previousConversationTabIDRef = useRef<string | undefined>(undefined)
   const conversationTabID = conversation ? `conversation:${conversation.session.id}` : undefined
   const conversationActive = activeTabID === conversationTabID
@@ -147,6 +184,39 @@ export function BrowserView({
       : activeNavigationURL
     : ''
   const nativeBrowser = hasNativeBrowser()
+
+  const reportBrowserResult = useCallback(async (
+    commandSessionID: string | undefined,
+    commandID: string,
+    result: Parameters<typeof sessionCommands.reportBrowserResult>[2],
+  ): Promise<void> => {
+    const reportKey = `${commandSessionID ?? 'unknown'}:${commandID}`
+    if (
+      !commandSessionID ||
+      reportingCommandsRef.current.has(reportKey) ||
+      reportedCommandsRef.current.has(reportKey)
+    ) return
+    reportingCommandsRef.current.add(reportKey)
+    try {
+      for (const delay of [0, 250, 1000]) {
+        if (delay > 0) await new Promise((resolve) => window.setTimeout(resolve, delay))
+        try {
+          await sessionCommands.reportBrowserResult(commandSessionID, commandID, result)
+          reportedCommandsRef.current.add(reportKey)
+          onBrowserCommandHandled(commandSessionID, commandID)
+          return
+        } catch (error) {
+          if (isAPIError(error, 'browser_command_not_found')) {
+            reportedCommandsRef.current.add(reportKey)
+            onBrowserCommandHandled(commandSessionID, commandID)
+            return
+          }
+        }
+      }
+    } finally {
+      reportingCommandsRef.current.delete(reportKey)
+    }
+  }, [onBrowserCommandHandled])
 
   useEffect(() => {
     const previous = previousConversationTabIDRef.current
@@ -164,7 +234,50 @@ export function BrowserView({
   }, [activeTabID, conversationTabID, onCloseTab, tabs])
 
   useEffect(() => {
-    if (!preview?.url && !preview?.path) return
+    const command = browserCommands.find(
+      (candidate) =>
+        !processedCommandsRef.current.has(
+          `${sessionID ?? 'unknown'}:${candidate.commandID}`,
+        ),
+    )
+    if (!command) return
+    processedCommandsRef.current.add(`${sessionID ?? 'unknown'}:${command.commandID}`)
+
+    const tabID = browserCommandTabID(
+      sessionID,
+      command.commandID,
+      command.disposition,
+    )
+    const existing = tabs.find((tab) => tab.id === tabID)
+    if (
+      command.disposition === 'reuse_agent_tab' &&
+      existing?.desired?.commandID &&
+      existing.desired.commandID !== command.commandID &&
+      existing.observed.status !== 'ready' &&
+      existing.observed.status !== 'failed'
+    ) {
+      void reportBrowserResult(existing.sessionID, existing.desired.commandID, {
+        status: 'cancelled',
+        requestedURL: absoluteHTTPURL(existing.desired.requestedURL),
+        committedURL: absoluteHTTPURL(existing.observed.committedURL),
+      })
+    }
+    dispatchTabs({
+      t: 'agent_navigate',
+      tabID,
+      sessionID: sessionID ?? 'unknown',
+      target: previewTarget(command, sessionID),
+    })
+    if (
+      command.disposition === 'new_foreground_tab' ||
+      (command.disposition === 'reuse_agent_tab' && activatePreview)
+    ) {
+      setActiveTabID(tabID)
+    }
+  }, [activatePreview, browserCommands, reportBrowserResult, sessionID, tabs])
+
+  useEffect(() => {
+    if ((!preview?.url && !preview?.path) || preview.commandID || preview.disposition) return
     if (previewKeyRef.current === previewKey) return
     previewKeyRef.current = previewKey
     const tabID = agentBrowserTabID(sessionID)
@@ -217,6 +330,18 @@ export function BrowserView({
   }
 
   const closeTab = (tabID: string) => {
+    const closing = tabs.find((tab) => tab.id === tabID)
+    if (
+      closing?.desired?.commandID &&
+      closing.observed.status !== 'ready' &&
+      closing.observed.status !== 'failed'
+    ) {
+      void reportBrowserResult(closing.sessionID, closing.desired.commandID, {
+        status: 'cancelled',
+        requestedURL: absoluteHTTPURL(closing.desired.requestedURL),
+        committedURL: absoluteHTTPURL(closing.observed.committedURL),
+      })
+    }
     void closeNativeBrowser(tabID)
     if (tabs.length === 1 && !conversation) {
       onCloseTab()
@@ -348,15 +473,21 @@ export function BrowserView({
         />
       </div>
 
-      {conversationActive && conversation ? (
+      {conversationActive && conversation && (
         <ConversationView
           thread={conversation}
           models={models}
           workspaces={workspaces}
           onConfigureModel={onConfigureModel}
         />
-      ) : activeTab ? (
-        <>
+      )}
+      {activeTab && (
+        <div
+          className={cn(
+            'min-h-0 flex-1 flex-col',
+            conversationActive ? 'hidden' : 'flex',
+          )}
+        >
           <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-stone-200 bg-white px-2.5">
             <button
               className="grid size-7 cursor-pointer place-items-center rounded-md text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-900 focus-visible:outline-2 focus-visible:outline-stone-400 disabled:cursor-default disabled:text-stone-300 disabled:hover:bg-transparent"
@@ -427,39 +558,69 @@ export function BrowserView({
             </button>
           </div>
 
-          <BrowserSurface
-            key={activeTab.id}
-            tabID={activeTab.id}
-            navigation={activeDesired?.revision ?? 0}
-            url={activeDesired?.requestedURL ?? ''}
-            visible={open}
-            workspaceFile={activeDesired?.kind === 'workspace-preview'}
-            onResolveURL={(url) => {
-              if (!activeDesired) return
-              dispatchTabs({
-                t: 'resolve_navigation',
-                tabID: activeTab.id,
-                revision: activeDesired.revision,
-                url,
-              })
-            }}
-            onRetry={reload}
-            onState={(state: NativeBrowserState) => {
-              dispatchTabs({
-                t: 'native_state_received',
-                tabID: activeTab.id,
-                appliedRevision: state.appliedRevision,
-                committedURL: state.committedURL,
-                title: state.title,
-                status: state.status,
-                canGoBack: state.canGoBack,
-                canGoForward: state.canGoForward,
-                error: state.error,
-              })
-            }}
-          />
-        </>
-      ) : null}
+          <div className="relative min-h-0 flex-1 bg-white">
+            {tabs.map((tab) => {
+              const desired = tab.desired
+              const active = tab.id === activeTab.id
+              return (
+                <div
+                  key={tab.id}
+                  className={cn(
+                    'absolute inset-0 flex',
+                    active ? 'visible' : 'invisible pointer-events-none',
+                  )}
+                  aria-hidden={!active}
+                >
+                  <BrowserSurface
+                    active={active}
+                    tabID={tab.id}
+                    navigation={desired?.revision ?? 0}
+                    url={desired?.requestedURL ?? ''}
+                    visible={open && active && !conversationActive}
+                    workspaceFile={desired?.kind === 'workspace-preview'}
+                    onResolveURL={(url) => {
+                      if (!desired) return
+                      dispatchTabs({
+                        t: 'resolve_navigation',
+                        tabID: tab.id,
+                        revision: desired.revision,
+                        url,
+                      })
+                    }}
+                    onRetry={() => dispatchTabs({ t: 'reload', tabID: tab.id })}
+                    onState={(state: NativeBrowserState) => {
+                      dispatchTabs({
+                        t: 'native_state_received',
+                        tabID: tab.id,
+                        appliedRevision: state.appliedRevision,
+                        committedURL: state.committedURL,
+                        title: state.title,
+                        status: state.status,
+                        canGoBack: state.canGoBack,
+                        canGoForward: state.canGoForward,
+                        error: state.error,
+                      })
+                      if (
+                        desired?.commandID &&
+                        state.appliedRevision === desired.revision &&
+                        state.status !== 'navigating'
+                      ) {
+                        void reportBrowserResult(tab.sessionID, desired.commandID, {
+                          status: state.status === 'ready' ? 'committed' : 'failed',
+                          requestedURL: absoluteHTTPURL(state.requestedURL),
+                          committedURL: absoluteHTTPURL(state.committedURL),
+                          title: state.title || undefined,
+                          error: state.error,
+                        })
+                      }
+                    }}
+                  />
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </section>
   )
 }

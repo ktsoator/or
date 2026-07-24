@@ -46,6 +46,9 @@ type Options struct {
 	Policy permission.Policy
 	// Approver obtains decisions for calls classified as Ask. Nil denies them.
 	Approver permission.Approver
+	// Browser delivers open_preview commands to the product shell and waits for
+	// a terminal navigation acknowledgement. Nil makes the tool fail closed.
+	Browser tools.BrowserController
 	// Store persists the transcript and seeds it on construction. Nil disables
 	// persistence.
 	Store transcript.Store
@@ -129,7 +132,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	toolSet := opts.Tools
 	var shells *tools.BackgroundShells
 	if toolSet == nil {
-		toolSet, shells = tools.CodingToolsWithShells(cwd, tools.LocalOps{})
+		toolSet, shells = tools.CodingToolsWithShells(cwd, tools.LocalOps{}, opts.Browser)
 	}
 
 	// A skill tool is added only when skills are configured. Loading already

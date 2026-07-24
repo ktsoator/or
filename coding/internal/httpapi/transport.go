@@ -8,6 +8,7 @@ import (
 	"github.com/ktsoator/or/coding/internal/conversation"
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/permission"
+	"github.com/ktsoator/or/coding/internal/tools"
 )
 
 // SessionTransports owns the HTTP delivery links created for conversations.
@@ -31,6 +32,7 @@ func (r *SessionTransports) New(sessionID string) conversation.Transport {
 		owner:     r,
 		hub:       hub,
 		broker:    NewApprovalBroker(hub),
+		browser:   NewBrowserBroker(hub),
 	}
 	r.mu.Lock()
 	previous := r.sessions[sessionID]
@@ -68,6 +70,7 @@ type sessionTransport struct {
 	owner     *SessionTransports
 	hub       *Hub
 	broker    *ApprovalBroker
+	browser   *BrowserBroker
 	closeOnce sync.Once
 }
 
@@ -91,9 +94,17 @@ func (t *sessionTransport) HasPendingApproval() bool {
 	return t.broker.HasPending()
 }
 
+func (t *sessionTransport) OpenBrowser(
+	ctx context.Context,
+	request tools.BrowserRequest,
+) (tools.BrowserResult, error) {
+	return t.browser.OpenBrowser(ctx, request)
+}
+
 func (t *sessionTransport) Close() {
 	t.closeOnce.Do(func() {
 		t.owner.remove(t.sessionID, t)
+		t.browser.Close()
 		t.hub.Close()
 	})
 }

@@ -25,6 +25,25 @@ type ResolvedNavigation = {
 
 const previewProbeRequests = new Map<string, Promise<string>>()
 
+function failedBrowserState(
+  tabID: string,
+  revision: number,
+  requestedURL: string,
+  error: string,
+): NativeBrowserState {
+  return {
+    tabID,
+    appliedRevision: revision,
+    requestedURL,
+    committedURL: '',
+    title: '',
+    status: 'failed',
+    canGoBack: false,
+    canGoForward: false,
+    error,
+  }
+}
+
 function probeLocalPreview(url: string, revision: number): Promise<string> {
   const key = `${revision}:${url}`
   const pending = previewProbeRequests.get(key)
@@ -101,6 +120,9 @@ export function useNativeBrowserController({
       setResolved(undefined)
       setStatus('failed')
       setError('Native browser is unavailable')
+      onStateRef.current(
+        failedBrowserState(tabID, revision, url, 'Native browser is unavailable'),
+      )
       return
     }
     if (issuedRevisionRef.current === revision) return
@@ -127,11 +149,12 @@ export function useNativeBrowserController({
         if (!active || revisionRef.current !== revision) return
         setStatus('failed')
         setError('preview unavailable')
+        onStateRef.current(failedBrowserState(tabID, revision, url, 'preview unavailable'))
       })
     return () => {
       active = false
     }
-  }, [kind, nativeAvailable, revision, url])
+  }, [kind, nativeAvailable, revision, tabID, url])
 
   useEffect(() => {
     if (!resolved || resolved.revision !== revision || !nativeAvailable) return
@@ -153,8 +176,10 @@ export function useNativeBrowserController({
       })
       .catch((reason: unknown) => {
         if (revisionRef.current !== revision) return
+        const message = reason instanceof Error ? reason.message : String(reason)
         setStatus('failed')
-        setError(reason instanceof Error ? reason.message : String(reason))
+        setError(message)
+        onStateRef.current(failedBrowserState(tabID, revision, resolved.url, message))
       })
   }, [nativeAvailable, resolved, revision, tabID])
 

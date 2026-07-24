@@ -30,7 +30,7 @@ type engineSessionConfig struct {
 func newEngineSession(
 	ctx context.Context,
 	cfg engineSessionConfig,
-	approver permission.Approver,
+	transport Transport,
 ) (*engine.Session, error) {
 	return engine.New(ctx, engine.Options{
 		Model:         cfg.Model,
@@ -39,7 +39,8 @@ func newEngineSession(
 		Store:         transcript.NewJSONL(cfg.TranscriptPath),
 		DetailsStore:  transcript.NewJSONLDetails(detailsFile(cfg.TranscriptPath)),
 		Policy:        permission.PolicyForMode(cfg.PermissionMode),
-		Approver:      approver,
+		Approver:      transport,
+		Browser:       transport,
 		Skills:        loadSkills(cfg.WorkspacePath),
 	})
 }

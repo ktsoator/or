@@ -5,6 +5,7 @@ import (
 
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/permission"
+	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -29,6 +30,9 @@ type Transport interface {
 	Decide(context.Context, permission.ApprovalRequest) (permission.ApprovalResponse, error)
 	// HasPendingApproval reports a gate still waiting on a viewer.
 	HasPendingApproval() bool
+	// OpenBrowser delivers one validated agent navigation and waits for the
+	// viewer's product shell to report its terminal result.
+	OpenBrowser(context.Context, tools.BrowserRequest) (tools.BrowserResult, error)
 	// Close releases the delivery link after its session is removed.
 	Close()
 }

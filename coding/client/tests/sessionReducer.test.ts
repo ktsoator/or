@@ -226,6 +226,111 @@ describe('threadsReducer event sequences', () => {
     expect(thread(state).running).toBe(true)
   })
 
+  test('opens a pending browser command and keeps tool completion navigation-idempotent', () => {
+    const state = reduce([
+      {
+        t: 'wire',
+        sessionID,
+        ev: {
+          type: 'browser_request',
+          id: 'browser-1',
+          disposition: 'reuse_agent_tab',
+          preview: { url: 'https://example.com/start', title: 'Example' },
+        },
+      },
+      {
+        t: 'wire',
+        sessionID,
+        ev: {
+          type: 'tool_end',
+          id: 'preview-call',
+          tool: 'open_preview',
+          result: 'Opened preview at https://example.com/final',
+          preview: { url: 'https://example.com/start', title: 'Example' },
+        },
+      },
+    ])
+
+    expect(thread(state).preview).toEqual({
+      url: 'https://example.com/start',
+      title: 'Example',
+      commandID: 'browser-1',
+      disposition: 'reuse_agent_tab',
+      revision: 1,
+    })
+    expect(thread(state).browserCommands).toEqual([thread(state).preview])
+    expect(thread(state).previewOpen).toBe(true)
+  })
+
+  test('restores a pending browser request as an active preview after reconnect', () => {
+    const state = reduce([
+      {
+        t: 'reset',
+        sessionID,
+        history: {
+          running: true,
+          events: [
+            {
+              type: 'browser_request',
+              id: 'browser-pending',
+              disposition: 'reuse_agent_tab',
+              preview: { url: 'https://example.com/' },
+            },
+          ],
+        },
+      },
+    ])
+
+    expect(thread(state).preview).toEqual({
+      url: 'https://example.com/',
+      commandID: 'browser-pending',
+      disposition: 'reuse_agent_tab',
+      revision: 1,
+    })
+    expect(thread(state).browserCommands).toEqual([thread(state).preview])
+    expect(thread(state).previewOpen).toBe(true)
+  })
+
+  test('restores multiple pending tab commands and keeps a background request hidden', () => {
+    let state = reduce([
+      {
+        t: 'reset',
+        sessionID,
+        history: {
+          running: true,
+          events: [
+            {
+              type: 'browser_request',
+              id: 'browser-foreground',
+              disposition: 'new_foreground_tab',
+              preview: { url: 'https://github.com/' },
+            },
+            {
+              type: 'browser_request',
+              id: 'browser-background',
+              disposition: 'new_background_tab',
+              preview: { url: 'https://www.google.com/' },
+            },
+          ],
+        },
+      },
+    ])
+
+    expect(thread(state).browserCommands.map((command) => command.commandID)).toEqual([
+      'browser-foreground',
+      'browser-background',
+    ])
+    expect(thread(state).previewOpen).toBe(false)
+
+    state = reduce(
+      [{ t: 'browserCommandHandled', sessionID, id: 'browser-foreground' }],
+      state,
+    )
+    expect(thread(state).browserCommands.map((command) => command.commandID)).toEqual([
+      'browser-background',
+    ])
+  })
+
   test('rebuilds history after disconnect and finalizes an idle open run', () => {
     const state = reduce([
       { t: 'status', sessionID, status: 'disconnected' },

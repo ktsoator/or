@@ -1,5 +1,10 @@
 import { APIError, sessionURL } from './api'
-import type { ApprovalChoice, DeliveryMode, MessageImage } from './types'
+import type {
+  ApprovalChoice,
+  BrowserResult,
+  DeliveryMode,
+  MessageImage,
+} from './types'
 
 export type PromptInput = {
   text: string
@@ -22,6 +27,7 @@ export type SessionCommands = {
   abortRun: (sessionID: string) => Promise<void>
   removeQueuedMessage: (sessionID: string, id: string) => Promise<void>
   resolveApproval: (sessionID: string, id: string, choice: ApprovalChoice) => Promise<void>
+  reportBrowserResult: (sessionID: string, id: string, result: BrowserResult) => Promise<void>
 }
 
 type ErrorBody = {
@@ -102,6 +108,14 @@ export function createSessionCommands(
         sessionURL(sessionID, `/approvals/${encodeURIComponent(id)}`),
         jsonRequest('POST', { choice }),
         () => 'request failed',
+      ),
+
+    reportBrowserResult: (sessionID, id, result) =>
+      requestOK(
+        request,
+        sessionURL(sessionID, `/browser/${encodeURIComponent(id)}/result`),
+        jsonRequest('POST', result),
+        (status) => `browser result request failed (${status})`,
       ),
   }
 }

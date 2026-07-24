@@ -12,6 +12,7 @@ import (
 
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/permission"
+	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/usage"
 	"github.com/ktsoator/or/coding/internal/workspace"
 	"github.com/ktsoator/or/llm"
@@ -26,6 +27,9 @@ func (*testTransport) Decide(context.Context, permission.ApprovalRequest) (permi
 	return permission.ApprovalResponse{Choice: permission.Reject}, nil
 }
 func (*testTransport) HasPendingApproval() bool { return false }
+func (*testTransport) OpenBrowser(context.Context, tools.BrowserRequest) (tools.BrowserResult, error) {
+	return tools.BrowserResult{Status: tools.BrowserFailed}, nil
+}
 
 type recordingTransport struct {
 	events chan Event
@@ -38,6 +42,9 @@ func (*recordingTransport) Decide(context.Context, permission.ApprovalRequest) (
 	return permission.ApprovalResponse{Choice: permission.Reject}, nil
 }
 func (*recordingTransport) HasPendingApproval() bool { return false }
+func (*recordingTransport) OpenBrowser(context.Context, tools.BrowserRequest) (tools.BrowserResult, error) {
+	return tools.BrowserResult{Status: tools.BrowserFailed}, nil
+}
 
 func TestManagerCreatesAndRestoresProjectConversation(t *testing.T) {
 	dataDir := t.TempDir()

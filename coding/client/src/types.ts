@@ -1,4 +1,5 @@
 import type {
+  BrowserDisposition,
   Change,
   DeliveryMode,
   HistoryResponse,
@@ -12,6 +13,14 @@ export type * from './generated/wire'
 
 export type PreviewState = PreviewRequest & {
   revision: number
+  commandID?: string
+  disposition?: BrowserDisposition
+}
+
+export type BrowserCommandState = PreviewRequest & {
+  revision: number
+  commandID: string
+  disposition: BrowserDisposition
 }
 
 // UI snapshots also cover a local degraded state when history cannot be read.

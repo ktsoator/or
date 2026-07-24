@@ -16,6 +16,74 @@ import (
 	"github.com/ktsoator/or/llm"
 )
 
+type committingBrowser struct{}
+
+func (committingBrowser) OpenBrowser(
+	_ context.Context,
+	request BrowserRequest,
+) (BrowserResult, error) {
+	committed := request.Preview.URL
+	if committed == "" {
+		committed = request.Preview.Path
+	}
+	return BrowserResult{
+		Status:       BrowserCommitted,
+		RequestedURL: committed,
+		CommittedURL: committed,
+	}, nil
+}
+
+type resultBrowser struct{ result BrowserResult }
+
+func (b resultBrowser) OpenBrowser(context.Context, BrowserRequest) (BrowserResult, error) {
+	return b.result, nil
+}
+
+type recordingBrowser struct {
+	request BrowserRequest
+}
+
+func (b *recordingBrowser) OpenBrowser(
+	_ context.Context,
+	request BrowserRequest,
+) (BrowserResult, error) {
+	b.request = request
+	return BrowserResult{
+		Status:       BrowserCommitted,
+		RequestedURL: request.Preview.URL,
+		CommittedURL: request.Preview.URL,
+	}, nil
+}
+
+func TestOpenPreviewPassesTabDisposition(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want BrowserDisposition
+	}{
+		{name: "default", raw: `{"url":"https://example.com"}`, want: BrowserReuseAgentTab},
+		{name: "foreground", raw: `{"url":"https://example.com","disposition":"new_foreground_tab"}`, want: BrowserNewForegroundTab},
+		{name: "background", raw: `{"url":"https://example.com","disposition":"new_background_tab"}`, want: BrowserNewBackgroundTab},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			browser := &recordingBrowser{}
+			_, err := OpenPreview(t.TempDir(), browser).Execute(
+				context.Background(),
+				"preview-call",
+				json.RawMessage(test.raw),
+				func(agent.ToolResult) {},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if browser.request.Disposition != test.want {
+				t.Fatalf("Disposition = %q, want %q", browser.request.Disposition, test.want)
+			}
+		})
+	}
+}
+
 func TestOpenPreviewReturnsStructuredLocalURL(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
 		response.WriteHeader(http.StatusNoContent)
@@ -147,6 +215,51 @@ func TestOpenPreviewAcceptsExternalURLWithoutProbingIt(t *testing.T) {
 	}
 }
 
+func TestOpenPreviewUsesCommittedRedirectInToolResult(t *testing.T) {
+	result, err := OpenPreview(t.TempDir(), resultBrowser{result: BrowserResult{
+		Status:       BrowserCommitted,
+		RequestedURL: "https://example.com/start",
+		CommittedURL: "https://example.com/final",
+	}}).Execute(
+		context.Background(),
+		"preview-call",
+		json.RawMessage(`{"url":"https://example.com/start"}`),
+		func(agent.ToolResult) {},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text, ok := result.Content[0].(*llm.TextContent)
+	if !ok || !strings.Contains(text.Text, "https://example.com/final") {
+		t.Fatalf("result = %#v", result.Content)
+	}
+	if _, ok := result.Details.(PreviewRequest); !ok {
+		t.Fatalf("Details = %#v, want PreviewRequest", result.Details)
+	}
+}
+
+func TestOpenPreviewDoesNotPersistFailedNavigation(t *testing.T) {
+	result, err := OpenPreview(t.TempDir(), resultBrowser{result: BrowserResult{
+		Status: BrowserFailed,
+		Error:  "ERR_NAME_NOT_RESOLVED",
+	}}).Execute(
+		context.Background(),
+		"preview-call",
+		json.RawMessage(`{"url":"https://unavailable.invalid"}`),
+		func(agent.ToolResult) {},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text, ok := result.Content[0].(*llm.TextContent)
+	if !ok || !strings.Contains(text.Text, "ERR_NAME_NOT_RESOLVED") {
+		t.Fatalf("result = %#v", result.Content)
+	}
+	if result.Details != nil {
+		t.Fatalf("Details = %#v, want nil", result.Details)
+	}
+}
+
 func TestCheckPreviewStillRejectsExternalURL(t *testing.T) {
 	_, err := CheckPreview(context.Background(), "https://example.com")
 	if err == nil || !strings.Contains(err.Error(), "localhost") {
@@ -161,7 +274,7 @@ func executePreview(t *testing.T, input string) (agent.ToolResult, error) {
 
 func executePreviewIn(t *testing.T, root, input string) (agent.ToolResult, error) {
 	t.Helper()
-	return OpenPreview(root).Execute(
+	return OpenPreview(root, committingBrowser{}).Execute(
 		context.Background(),
 		"preview-call",
 		json.RawMessage(input),

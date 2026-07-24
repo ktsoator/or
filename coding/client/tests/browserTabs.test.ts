@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  browserCommandTabID,
   browserTabsReducer,
   browserTabNavigationURL,
   createBrowserTab,
@@ -49,6 +50,18 @@ function nativeState(
 }
 
 describe('browser tabs reducer', () => {
+  test('uses a stable session tab for reuse and a stable command tab for new tabs', () => {
+    expect(browserCommandTabID('session-1', 'command-1', 'reuse_agent_tab')).toBe(
+      'preview:session-1',
+    )
+    expect(browserCommandTabID('session-1', 'command-1', 'new_foreground_tab')).toBe(
+      'preview:session-1:command:command-1',
+    )
+    expect(browserCommandTabID('session-1', 'command-1', 'new_background_tab')).toBe(
+      'preview:session-1:command:command-1',
+    )
+  })
+
   test('commits the first agent navigation', () => {
     let tabs = navigate([agentTab()], 'https://github.com/')
     expect(tabs[0]?.desired?.revision).toBe(1)

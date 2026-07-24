@@ -72,6 +72,7 @@ export default function App() {
     queuedMessages,
     contextUsage,
     preview,
+    browserCommands,
     previewOpen,
     approval,
     running,
@@ -98,6 +99,7 @@ export default function App() {
     removeQueuedMessage,
     stop,
     resolveApproval,
+    handleBrowserCommand,
     secondaryThread,
   } = useSession(secondarySessionID)
   const logRef = useRef<HTMLDivElement>(null)
@@ -181,6 +183,12 @@ export default function App() {
   const workbenchPreviewOwnerID = workbenchPreview
     ? workbenchPreviewSessionID ?? activeSessionID
     : undefined
+  const workbenchBrowserCommands =
+    secondaryThread && workbenchPreviewOwnerID === secondaryThread.session.id
+      ? secondaryThread.browserCommands
+      : workbenchPreviewOwnerID === activeSessionID
+        ? browserCommands
+        : []
   const activateWorkbenchPreview = workbenchPreviewOwnerID === activeSessionID
     ? previewOpen
     : secondaryThread && workbenchPreviewOwnerID === secondaryThread.session.id
@@ -893,6 +901,7 @@ export default function App() {
           <WorkbenchPanel
             open={workbenchOpen}
             preview={workbenchPreview}
+            browserCommands={workbenchBrowserCommands}
             sessionID={workbenchPreviewOwnerID}
             activatePreview={activateWorkbenchPreview}
             conversation={secondaryThread}
@@ -904,6 +913,8 @@ export default function App() {
             onCreateConversation={() => void createSessionInWorkbench()}
             onDismissCreationError={() => setWorkbenchCreateError('')}
             onCloseConversation={() => setSecondarySessionID(undefined)}
+            onBrowserCommandHandled={(sessionID, commandID) =>
+              handleBrowserCommand(sessionID, commandID)}
             onConfigureModel={() => {
               setSettingsSection('models')
               setSettingsOpen(true)

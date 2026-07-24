@@ -1366,6 +1366,182 @@ test('AI preview tool opens a public website inside the native Browser', async (
   ).toBeUndefined()
 })
 
+test('AI browser request reports the committed Electron navigation exactly once', async ({
+  page,
+}) => {
+  const requests = await openDesktopClient(page, { existingSession: true })
+  await expect.poll(() =>
+    page.evaluate(
+      () =>
+        (window as Window & { __eventSources?: unknown[] }).__eventSources?.length ?? 0,
+    ),
+  ).toBeGreaterThan(0)
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'browser_request',
+      id: 'browser-command-1',
+      disposition: 'reuse_agent_tab',
+      preview: { url: 'https://github.com', title: 'GitHub' },
+    })
+  })
+
+  await expect.poll(async () =>
+    (await nativeBrowserView(page, 'preview:test-session'))?.url,
+  ).toBe('https://github.com/')
+  await expect.poll(() =>
+    requests.filter(
+      (request) =>
+        request.path ===
+        '/api/sessions/test-session/browser/browser-command-1/result',
+    ).length,
+  ).toBe(1)
+  const resultRequest = requests.find(
+    (request) =>
+      request.path === '/api/sessions/test-session/browser/browser-command-1/result',
+  )
+  expect(resultRequest).toMatchObject({
+    method: 'POST',
+    body: {
+      status: 'committed',
+      requestedURL: 'https://github.com/',
+      committedURL: 'https://github.com/',
+    },
+  })
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'tool_end',
+      id: 'preview-call-1',
+      tool: 'open_preview',
+      result: 'Opened preview at https://github.com/',
+      preview: { url: 'https://github.com', title: 'GitHub' },
+    })
+  })
+  await page.waitForTimeout(50)
+  expect(await nativeBrowserView(page, 'preview:test-session')).toMatchObject({
+    navigateCalls: 1,
+  })
+})
+
+test('AI browser restores and acknowledges a pending history command', async ({ page }) => {
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    historyEvents: [
+      {
+        type: 'browser_request',
+        id: 'restored-browser-command',
+        disposition: 'reuse_agent_tab',
+        preview: { url: 'https://example.com/restored', title: 'Restored' },
+      },
+    ],
+  })
+
+  await expect.poll(async () =>
+    (await nativeBrowserView(page, 'preview:test-session'))?.url,
+  ).toBe('https://example.com/restored')
+  await expect.poll(() =>
+    requests.filter(
+      (request) =>
+        request.path ===
+        '/api/sessions/test-session/browser/restored-browser-command/result',
+    ).length,
+  ).toBe(1)
+  await expect(page.getByRole('tab', { name: 'Restored' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+})
+
+test('AI browser opens foreground and background tabs without replacing the Agent tab', async ({
+  page,
+}) => {
+  const requests = await openDesktopClient(page, { existingSession: true })
+  await expect.poll(() =>
+    page.evaluate(
+      () =>
+        (window as Window & { __eventSources?: unknown[] }).__eventSources?.length ?? 0,
+    ),
+  ).toBeGreaterThan(0)
+
+  const emitBrowserRequest = async (
+    id: string,
+    disposition: 'reuse_agent_tab' | 'new_foreground_tab' | 'new_background_tab',
+    url: string,
+    title: string,
+  ) => {
+    await page.evaluate(
+      ({ id, disposition, url, title }) => {
+        const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+        emit?.({
+          type: 'browser_request',
+          id,
+          disposition,
+          preview: { url, title },
+        })
+      },
+      { id, disposition, url, title },
+    )
+  }
+
+  await emitBrowserRequest(
+    'browser-reuse',
+    'reuse_agent_tab',
+    'https://github.com',
+    'GitHub',
+  )
+  await expect.poll(async () =>
+    (await nativeBrowserView(page, 'preview:test-session'))?.url,
+  ).toBe('https://github.com/')
+
+  await emitBrowserRequest(
+    'browser-foreground',
+    'new_foreground_tab',
+    'https://www.bilibili.com',
+    'Bilibili',
+  )
+  const foregroundTabID = 'preview:test-session:command:browser-foreground'
+  await expect.poll(async () =>
+    (await nativeBrowserView(page, foregroundTabID))?.url,
+  ).toBe('https://www.bilibili.com/')
+  await expect(page.getByRole('tab', { name: 'Bilibili' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  await expect.poll(async () =>
+    (await nativeBrowserView(page, 'preview:test-session'))?.visible,
+  ).toBe(false)
+
+  await emitBrowserRequest(
+    'browser-background',
+    'new_background_tab',
+    'https://www.google.com',
+    'Google',
+  )
+  const backgroundTabID = 'preview:test-session:command:browser-background'
+  await expect.poll(async () =>
+    (await nativeBrowserView(page, backgroundTabID))?.url,
+  ).toBe('https://www.google.com/')
+  await expect(page.getByRole('tab', { name: 'Bilibili' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  expect(await nativeBrowserView(page, backgroundTabID)).toMatchObject({ visible: false })
+  expect(await nativeBrowserView(page, foregroundTabID)).toMatchObject({ visible: true })
+  expect(await nativeBrowserView(page, 'preview:test-session')).toMatchObject({
+    url: 'https://github.com/',
+  })
+
+  await expect.poll(() =>
+    requests.filter((request) =>
+      request.path.startsWith('/api/sessions/test-session/browser/browser-') &&
+      request.path.endsWith('/result'),
+    ).length,
+  ).toBe(3)
+})
+
 test('AI browser keeps the latest revision across stale state and viewport changes', async ({
   page,
 }) => {

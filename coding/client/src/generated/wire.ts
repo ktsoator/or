@@ -16,6 +16,7 @@ export type WireEventType =
   | "approval_request"
   | "approval_resolved"
   | "approval_cancelled"
+  | "browser_request"
   | "queue_cancelled"
   | "queue_removed"
   | "error"
@@ -30,6 +31,17 @@ export type DeltaKind =
 export type DeliveryMode =
   | "steer"
   | "followup"
+
+export type BrowserDisposition =
+  | "reuse_agent_tab"
+  | "new_foreground_tab"
+  | "new_background_tab"
+
+export type BrowserResultStatus =
+  | "committed"
+  | "failed"
+  | "cancelled"
+  | "timeout"
 
 export type FileChangeType = "file"
 
@@ -76,6 +88,14 @@ export type PreviewRequest = {
   path?: string
   relativePath?: string
   title?: string
+}
+
+export type BrowserResult = {
+  status: BrowserResultStatus
+  requestedURL?: string
+  committedURL?: string
+  title?: string
+  error?: string
 }
 
 export type UsageCost = {
@@ -127,6 +147,7 @@ export type WireEvent = {
   id?: string
   summary?: string
   reason?: string
+  disposition?: BrowserDisposition
   title?: string
   aiTitle?: string
   customTitle?: string

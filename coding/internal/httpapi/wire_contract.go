@@ -23,6 +23,7 @@ const (
 	wireEventApprovalRequest   wireEventType = "approval_request"
 	wireEventApprovalResolved  wireEventType = "approval_resolved"
 	wireEventApprovalCancelled wireEventType = "approval_cancelled"
+	wireEventBrowserRequest    wireEventType = "browser_request"
 	wireEventQueueCancelled    wireEventType = "queue_cancelled"
 	wireEventQueueRemoved      wireEventType = "queue_removed"
 	wireEventError             wireEventType = "error"
@@ -43,6 +44,23 @@ type wireDeliveryMode string
 const (
 	wireDeliverySteer    wireDeliveryMode = "steer"
 	wireDeliveryFollowUp wireDeliveryMode = "followup"
+)
+
+type wireBrowserDisposition string
+
+const (
+	wireBrowserReuseAgentTab    wireBrowserDisposition = "reuse_agent_tab"
+	wireBrowserNewForegroundTab wireBrowserDisposition = "new_foreground_tab"
+	wireBrowserNewBackgroundTab wireBrowserDisposition = "new_background_tab"
+)
+
+type wireBrowserResultStatus string
+
+const (
+	wireBrowserCommitted wireBrowserResultStatus = "committed"
+	wireBrowserFailed    wireBrowserResultStatus = "failed"
+	wireBrowserCancelled wireBrowserResultStatus = "cancelled"
+	wireBrowserTimeout   wireBrowserResultStatus = "timeout"
 )
 
 type wireFileChangeType string
@@ -135,6 +153,8 @@ type wireEvent struct {
 	ID      string `json:"id,omitempty"`
 	Summary string `json:"summary,omitempty"`
 	Reason  string `json:"reason,omitempty"`
+	// browser_request
+	Disposition wireBrowserDisposition `json:"disposition,omitempty"`
 	// title_update
 	Title       string `json:"title,omitempty"`
 	AITitle     string `json:"aiTitle,omitempty"`
@@ -155,6 +175,14 @@ type wirePreview struct {
 	Path         string `json:"path,omitempty"`
 	RelativePath string `json:"relativePath,omitempty"`
 	Title        string `json:"title,omitempty"`
+}
+
+type wireBrowserResult struct {
+	Status       wireBrowserResultStatus `json:"status"`
+	RequestedURL string                  `json:"requestedURL,omitempty"`
+	CommittedURL string                  `json:"committedURL,omitempty"`
+	Title        string                  `json:"title,omitempty"`
+	Error        string                  `json:"error,omitempty"`
 }
 
 type wireUsage struct {

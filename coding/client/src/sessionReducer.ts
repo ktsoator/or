@@ -1,5 +1,6 @@
 import type {
   ApprovalItem,
+  BrowserCommandState,
   ConnectionStatus,
   ContextUsage,
   DeliveryMode,
@@ -18,6 +19,7 @@ export type ThreadState = {
   responseUsage: Usage
   contextUsage?: ContextUsage
   preview?: PreviewState
+  browserCommands: BrowserCommandState[]
   previewOpen: boolean
   running: boolean
   autoCompacting: boolean
@@ -53,6 +55,7 @@ export type ThreadAction =
       contextWindow: number
     }
   | { t: 'resolveApproval'; sessionID: string; id: string }
+  | { t: 'browserCommandHandled'; sessionID: string; id: string }
   | { t: 'forget'; sessionID: string }
 
 const emptyUsage = (): Usage => ({
@@ -70,6 +73,7 @@ export const createThreadState = (): ThreadState => ({
   responseUsage: emptyUsage(),
   contextUsage: undefined,
   preview: undefined,
+  browserCommands: [],
   previewOpen: false,
   running: false,
   autoCompacting: false,
@@ -115,7 +119,9 @@ export function threadsReducer(state: ThreadsState, action: ThreadAction): Threa
         preview: restoredPreview ?? current.preview,
         // History makes the last preview available as a tab, but only a live
         // open_preview event should bring the workbench forward.
-        previewOpen: Boolean(current.previewOpen && (restoredPreview || current.preview)),
+        previewOpen: restoredPreview?.commandID
+          ? restoredPreview.disposition !== 'new_background_tab'
+          : Boolean(current.previewOpen && (restoredPreview || current.preview)),
         running: action.history.running,
         items: action.history.running ? next.items : completeOpenRun(next.items),
       }
@@ -219,6 +225,14 @@ export function threadsReducer(state: ThreadsState, action: ThreadAction): Threa
         ),
       }
       break
+    case 'browserCommandHandled':
+      next = {
+        ...current,
+        browserCommands: current.browserCommands.filter(
+          (command) => command.commandID !== action.id,
+        ),
+      }
+      break
     case 'wire':
       next = reduceWire(current, action.ev)
       break
@@ -233,6 +247,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
   let responseUsage = state.responseUsage
   let contextUsage = state.contextUsage
   let preview = state.preview
+  let browserCommands = state.browserCommands
   let previewOpen = state.previewOpen
   let running = state.running
   let autoCompacting = state.autoCompacting
@@ -598,16 +613,49 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
         ]
       }
       if (ev.preview?.url || ev.preview?.path) {
-        preview = {
-          ...ev.preview,
-          revision: (preview?.revision ?? 0) + 1,
-        }
-        previewOpen = true
+        const sameTarget =
+          preview?.url === ev.preview.url &&
+          preview?.path === ev.preview.path &&
+          preview?.relativePath === ev.preview.relativePath
+        const pendingCommand = preview?.commandID
+          ? browserCommands.some((command) => command.commandID === preview?.commandID)
+          : false
+        preview = sameTarget && preview?.commandID
+          ? pendingCommand
+            ? { ...ev.preview, ...preview }
+            : {
+                ...ev.preview,
+                disposition: preview.disposition,
+                revision: preview.revision,
+              }
+          : { ...ev.preview, revision: (preview?.revision ?? 0) + 1 }
+        previewOpen = preview.disposition !== 'new_background_tab'
       } else if (ev.change?.changeType === 'file' && preview?.path) {
         preview = {
           ...preview,
           revision: preview.revision + 1,
         }
+      }
+      break
+    }
+
+    case 'browser_request': {
+      if (ev.id && (ev.preview?.url || ev.preview?.path)) {
+        const existing = browserCommands.find((command) => command.commandID === ev.id)
+        const revision = existing?.revision ?? (preview?.revision ?? 0) + 1
+        const command: BrowserCommandState = {
+          ...ev.preview,
+          commandID: ev.id,
+          disposition: ev.disposition ?? 'reuse_agent_tab',
+          revision,
+        }
+        browserCommands = existing
+          ? browserCommands.map((current) =>
+              current.commandID === command.commandID ? command : current,
+            )
+          : [...browserCommands, command]
+        preview = command
+        previewOpen = command.disposition !== 'new_background_tab'
       }
       break
     }
@@ -761,6 +809,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
     responseUsage,
     contextUsage,
     preview,
+    browserCommands,
     previewOpen,
     running,
     autoCompacting,

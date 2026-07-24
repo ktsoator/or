@@ -18,8 +18,9 @@ import (
 )
 
 type openPreviewArgs struct {
-	URL   string `json:"url" jsonschema:"description=An HTTP(S) URL or absolute workspace HTML path to open in Coding's Browser view,minLength=1"`
-	Title string `json:"title,omitempty" jsonschema:"description=A short title for the preview"`
+	URL         string             `json:"url" jsonschema:"description=An HTTP(S) URL or absolute workspace HTML path to open in Coding's Browser view,minLength=1"`
+	Title       string             `json:"title,omitempty" jsonschema:"description=A short title for the preview"`
+	Disposition BrowserDisposition `json:"disposition,omitempty" jsonschema:"description=Where to open the page. Reuse the session Agent tab unless the user explicitly asks for a new or background tab,enum=reuse_agent_tab,enum=new_foreground_tab,enum=new_background_tab"`
 }
 
 // PreviewRequest is the structured UI intent emitted by open_preview. Product
@@ -32,10 +33,60 @@ type PreviewRequest struct {
 	Title        string
 }
 
+// BrowserDisposition describes where a product shell should apply an agent
+// navigation request. Reuse is the default; new tabs require an explicit user
+// request surfaced by the model.
+type BrowserDisposition string
+
+const (
+	BrowserReuseAgentTab    BrowserDisposition = "reuse_agent_tab"
+	BrowserNewForegroundTab BrowserDisposition = "new_foreground_tab"
+	BrowserNewBackgroundTab BrowserDisposition = "new_background_tab"
+)
+
+// BrowserResultStatus is a terminal browser-command outcome. A controller must
+// return exactly one terminal result for each accepted request.
+type BrowserResultStatus string
+
+const (
+	BrowserCommitted BrowserResultStatus = "committed"
+	BrowserFailed    BrowserResultStatus = "failed"
+	BrowserCancelled BrowserResultStatus = "cancelled"
+	BrowserTimeout   BrowserResultStatus = "timeout"
+)
+
+// BrowserRequest is the validated navigation intent handed to the product
+// transport. It contains no Electron view or renderer state.
+type BrowserRequest struct {
+	Preview     PreviewRequest
+	Disposition BrowserDisposition
+}
+
+// BrowserResult is the product shell's terminal acknowledgement. RequestedURL
+// and CommittedURL remain separate so redirects are visible to the model.
+type BrowserResult struct {
+	ID           string
+	Status       BrowserResultStatus
+	RequestedURL string
+	CommittedURL string
+	Title        string
+	Error        string
+}
+
+// BrowserController delivers a navigation command to the product shell and
+// waits for its terminal acknowledgement.
+type BrowserController interface {
+	OpenBrowser(context.Context, BrowserRequest) (BrowserResult, error)
+}
+
 // OpenPreview returns a product tool that asks a connected Coding client to
-// display a web page or workspace HTML document. The tool does not open a browser itself;
-// its structured result travels over the session's existing tool event stream.
-func OpenPreview(root string) Tool {
+// display a web page or workspace HTML document. The tool does not claim
+// success until the configured browser controller acknowledges the navigation.
+func OpenPreview(root string, controllers ...BrowserController) Tool {
+	var controller BrowserController
+	if len(controllers) > 0 {
+		controller = controllers[0]
+	}
 	def := llm.MustTool[openPreviewArgs]("open_preview", openPreviewText.description)
 	return Tool{
 		AgentTool: agent.AgentTool{
@@ -55,15 +106,60 @@ func OpenPreview(root string) Tool {
 				if preview.Path != "" {
 					destination = preview.Path
 				}
-				return resultWith(
-					fmt.Sprintf("Opened preview at %s", destination),
-					preview,
-				), nil
+				if controller == nil {
+					return textResult("Could not open preview: browser confirmation is unavailable"), nil
+				}
+				disposition, err := normalizeBrowserDisposition(in.Disposition)
+				if err != nil {
+					return textResult(fmt.Sprintf("Could not open preview: %v", err)), nil
+				}
+				result, err := controller.OpenBrowser(ctx, BrowserRequest{
+					Preview:     preview,
+					Disposition: disposition,
+				})
+				if err != nil {
+					return agent.ToolResult{}, err
+				}
+				return browserToolResult(destination, preview, result), nil
 			},
 		},
 		AccessFor:     previewAccess,
 		PromptSnippet: openPreviewText.snippet,
 		Guidelines:    openPreviewText.guidelines,
+	}
+}
+
+func normalizeBrowserDisposition(disposition BrowserDisposition) (BrowserDisposition, error) {
+	switch disposition {
+	case "", BrowserReuseAgentTab:
+		return BrowserReuseAgentTab, nil
+	case BrowserNewForegroundTab, BrowserNewBackgroundTab:
+		return disposition, nil
+	default:
+		return "", fmt.Errorf("browser disposition is invalid")
+	}
+}
+
+func browserToolResult(destination string, preview PreviewRequest, result BrowserResult) agent.ToolResult {
+	switch result.Status {
+	case BrowserCommitted:
+		committed := strings.TrimSpace(result.CommittedURL)
+		if committed == "" {
+			committed = destination
+		}
+		return resultWith(fmt.Sprintf("Opened preview at %s", committed), preview)
+	case BrowserFailed:
+		detail := strings.TrimSpace(result.Error)
+		if detail == "" {
+			detail = "navigation failed"
+		}
+		return textResult(fmt.Sprintf("Could not open preview at %s: %s", destination, detail))
+	case BrowserTimeout:
+		return textResult("The browser did not confirm the navigation")
+	case BrowserCancelled:
+		return textResult("The browser navigation was cancelled")
+	default:
+		return textResult("Could not open preview: browser returned an invalid result")
 	}
 }
 

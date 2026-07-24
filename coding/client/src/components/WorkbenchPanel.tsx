@@ -1,6 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { CircleAlert, PanelTopDashed, X } from 'lucide-react'
-import type { ModelOption, PreviewState, WorkspaceSummary } from '@/types'
+import type {
+  BrowserCommandState,
+  ModelOption,
+  PreviewState,
+  WorkspaceSummary,
+} from '@/types'
 import type { SessionThread } from '@/useSession'
 import { cn } from '@/lib/utils'
 import { BrowserView, WorkbenchHeaderActions } from './BrowserView'
@@ -11,6 +16,7 @@ type WorkbenchMode = 'launcher' | 'browser'
 export function WorkbenchPanel({
   open,
   preview,
+  browserCommands,
   sessionID,
   activatePreview,
   conversation,
@@ -22,12 +28,14 @@ export function WorkbenchPanel({
   onCreateConversation,
   onDismissCreationError,
   onCloseConversation,
+  onBrowserCommandHandled,
   onConfigureModel,
   onToggleMaximized,
   toggleControl,
 }: {
   open: boolean
   preview?: PreviewState
+  browserCommands: BrowserCommandState[]
   sessionID?: string
   activatePreview: boolean
   conversation?: SessionThread
@@ -39,6 +47,7 @@ export function WorkbenchPanel({
   onCreateConversation: () => void
   onDismissCreationError: () => void
   onCloseConversation: () => void
+  onBrowserCommandHandled: (sessionID: string, commandID: string) => void
   onConfigureModel: () => void
   onToggleMaximized: () => void
   toggleControl?: ReactNode
@@ -67,6 +76,7 @@ export function WorkbenchPanel({
       {mode === 'browser' ? (
         <BrowserView
           preview={preview}
+          browserCommands={browserCommands}
           sessionID={sessionID}
           activatePreview={activatePreview}
           conversation={conversation}
@@ -75,6 +85,7 @@ export function WorkbenchPanel({
           workspaces={workspaces}
           onCloseTab={() => setMode('launcher')}
           onCloseConversation={onCloseConversation}
+          onBrowserCommandHandled={onBrowserCommandHandled}
           onConfigureModel={onConfigureModel}
           onCreateConversation={onCreateConversation}
           open={open}

@@ -225,6 +225,7 @@ func (s *Server) handleHistory(c *gin.Context) {
 		}
 		events = ProjectHistory(snapshot.History)
 		events = append(events, transport.broker.PendingEvents()...)
+		events = append(events, transport.browser.PendingEvents()...)
 		queue = projectQueue(snapshot.Queue)
 		contextUsage = projectContextUsage(snapshot.ContextUsage)
 		running = snapshot.Running
@@ -487,6 +488,7 @@ func (s *Server) mountSessions(r gin.IRouter) {
 	one.POST("/follow-up", s.handleFollowUp)
 	one.DELETE("/queue/:messageID", s.handleRemoveQueuedMessage)
 	one.POST("/approvals/:approvalID", s.handleApproval)
+	one.POST("/browser/:commandID/result", s.handleBrowserResult)
 	one.POST("/abort", s.handleAbort)
 	one.POST("/compact", s.handleCompact)
 }

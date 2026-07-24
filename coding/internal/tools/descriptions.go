@@ -135,12 +135,14 @@ Usage:
 - For an application that requires a runtime or dev server, url must be a complete http or https URL on localhost, 127.0.0.1, ::1, or a wildcard loopback listener such as 0.0.0.0.
 - Start required long-lived development servers with bash run_in_background, then use bash_output to confirm the server is running before opening its URL.
 - Use this when the user asks to open a website or when a web interface is ready for inspection. Do not call it for API servers or test runners.
-- title is optional and should be a short name for the page.`,
+- title is optional and should be a short name for the page.
+- disposition defaults to reuse_agent_tab. Use new_foreground_tab only when the user asks for a new tab, and new_background_tab only when the user explicitly asks to open it in the background.`,
 	snippet: "open_preview — open a website, workspace HTML file, or local web app in Coding's Browser view",
 	guidelines: []string{
 		"When the user asks to open a public website, pass its complete HTTP(S) URL to `open_preview`.",
 		"Preview static HTML by passing its absolute workspace path to `open_preview`; do not start a server unless the app requires a runtime.",
 		"After starting a required local app server and confirming its URL, call `open_preview` so the user can inspect it instead of only printing the URL.",
+		"Reuse the session Agent browser tab by default; create a foreground or background tab only when the user explicitly requests it.",
 	},
 }
 

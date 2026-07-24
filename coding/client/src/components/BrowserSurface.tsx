@@ -5,6 +5,7 @@ import type { NativeBrowserState } from '@/lib/desktop'
 import { useNativeBrowserController } from '@/useNativeBrowserController'
 
 export function BrowserSurface({
+  active,
   tabID,
   navigation,
   onResolveURL,
@@ -14,6 +15,7 @@ export function BrowserSurface({
   visible,
   workspaceFile = false,
 }: {
+  active: boolean
   tabID: string
   navigation: number
   onResolveURL: (url: string) => void
@@ -40,7 +42,8 @@ export function BrowserSurface({
     <div
       ref={surfaceRef}
       className="relative min-h-0 flex-1 bg-white"
-      data-testid="native-browser-surface"
+      data-testid={active ? 'native-browser-surface' : undefined}
+      data-browser-tab-id={tabID}
       data-status={status}
       title={error || undefined}
     >

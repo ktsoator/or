@@ -1,3 +1,5 @@
+import type { BrowserDisposition } from './generated/wire'
+
 export type BrowserTabOwner = 'agent' | 'user'
 
 export type BrowserTargetKind = 'web' | 'workspace-preview'
@@ -10,6 +12,7 @@ export type BrowserNavigationTarget = {
   kind: BrowserTargetKind
   title?: string
   workspacePath?: string
+  commandID?: string
 }
 
 export type DesiredNavigation = BrowserNavigationTarget & {
@@ -76,6 +79,23 @@ export type BrowserTabsAction =
 
 export function agentBrowserTabID(sessionID?: string): string {
   return `preview:${sessionID ?? 'unknown'}`
+}
+
+export function agentBrowserCommandTabID(
+  sessionID: string | undefined,
+  commandID: string,
+): string {
+  return `${agentBrowserTabID(sessionID)}:command:${commandID}`
+}
+
+export function browserCommandTabID(
+  sessionID: string | undefined,
+  commandID: string,
+  disposition: BrowserDisposition,
+): string {
+  return disposition === 'reuse_agent_tab'
+    ? agentBrowserTabID(sessionID)
+    : agentBrowserCommandTabID(sessionID, commandID)
 }
 
 export function browserTabNavigationURL(tab: BrowserTab): string {
@@ -230,6 +250,7 @@ export function browserTabsReducer(
             kind: desired.kind,
             title: desired.title,
             workspacePath: desired.workspacePath,
+            commandID: desired.commandID,
           },
           'reload',
         )

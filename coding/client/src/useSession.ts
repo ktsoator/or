@@ -19,6 +19,7 @@ import {
 import type {
   ApprovalChoice,
   ApprovalItem,
+  BrowserCommandState,
   CompactionResult,
   ConnectionStatus,
   ContextUsage,
@@ -49,6 +50,7 @@ export type Session = {
   queuedMessages: QueuedMessage[]
   contextUsage?: ContextUsage
   preview?: PreviewState
+  browserCommands: BrowserCommandState[]
   previewOpen: boolean
   approval?: ApprovalItem
   running: boolean
@@ -75,6 +77,7 @@ export type Session = {
   removeQueuedMessage: (id: string) => Promise<void>
   stop: () => void
   resolveApproval: (id: string, choice: ApprovalChoice) => Promise<void>
+  handleBrowserCommand: (sessionID: string, id: string) => void
   secondaryThread?: SessionThread
 }
 
@@ -84,6 +87,7 @@ export type SessionThread = {
   queuedMessages: QueuedMessage[]
   contextUsage?: ContextUsage
   preview?: PreviewState
+  browserCommands: BrowserCommandState[]
   previewOpen: boolean
   approval?: ApprovalItem
   running: boolean
@@ -782,6 +786,7 @@ export function useSession(secondarySessionID?: string): Session {
         queuedMessages: secondaryState?.queue ?? [],
         contextUsage: secondaryState?.contextUsage,
         preview: secondaryState?.preview,
+        browserCommands: secondaryState?.browserCommands ?? [],
         previewOpen: secondaryState?.previewOpen ?? false,
         approval: secondaryApproval,
         running: secondaryState?.running ?? secondarySession.running,
@@ -815,6 +820,7 @@ export function useSession(secondarySessionID?: string): Session {
     queuedMessages: thread?.queue ?? [],
     contextUsage: thread?.contextUsage,
     preview: thread?.preview,
+    browserCommands: thread?.browserCommands ?? [],
     previewOpen: thread?.previewOpen ?? false,
     approval,
     running: thread?.running ?? activeSession?.running ?? false,
@@ -841,6 +847,8 @@ export function useSession(secondarySessionID?: string): Session {
     removeQueuedMessage,
     stop,
     resolveApproval,
+    handleBrowserCommand: (sessionID: string, id: string) =>
+      dispatch({ t: 'browserCommandHandled', sessionID, id }),
     secondaryThread,
   }
 }
