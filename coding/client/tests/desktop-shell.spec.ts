@@ -1,25 +1,39 @@
 import { expect, test, type Page } from '@playwright/test'
 
-type NativeBrowserInput = {
+type NativeBrowserNavigateInput = {
   tabID: string
   url: string
-  bounds: { x: number; y: number; width: number; height: number }
-  navigation: number
-  workspacePreview: boolean
+  revision: number
+  kind: 'web' | 'workspace-preview'
+}
+
+type NativeBrowserViewportInput = {
+  tabID: string
+  visible: boolean
+  bounds?: { x: number; y: number; width: number; height: number }
 }
 
 type NativeBrowserState = {
   tabID: string
-  url: string
+  appliedRevision: number
+  requestedURL: string
+  committedURL: string
   title: string
-  loading: boolean
+  status: 'navigating' | 'ready' | 'failed'
   canGoBack: boolean
   canGoForward: boolean
   error?: string
 }
 
-type NativeBrowserRecord = NativeBrowserInput & {
+type NativeBrowserRecord = {
+  tabID: string
+  url: string
+  bounds: { x: number; y: number; width: number; height: number }
+  navigation: number
+  workspacePreview: boolean
   visible: boolean
+  navigateCalls: number
+  viewportCalls: number
   state?: NativeBrowserState
 }
 
@@ -113,13 +127,17 @@ async function openDesktopClient(
     const browserWindow = window as BrowserTestWindow
     const browserListeners = new Set<(state: NativeBrowserState) => void>()
     const browserViews: Record<string, NativeBrowserRecord> = {}
+    const browserViewports: Record<
+      string,
+      NativeBrowserViewportInput & { calls: number }
+    > = {}
     const browserActions: Array<{ action: string; tabID: string }> = []
     browserWindow.__browserViews = browserViews
     browserWindow.__browserActions = browserActions
     browserWindow.__emitBrowserState = (state) => {
       const view = browserViews[state.tabID]
-      if (view) {
-        view.url = state.url
+      if (view && state.appliedRevision >= view.navigation) {
+        view.url = state.committedURL || state.requestedURL
         view.state = state
       }
       for (const listener of browserListeners) listener(state)
@@ -145,35 +163,81 @@ async function openDesktopClient(
           return Promise.resolve(nativeDirectory ?? '')
         },
         browser: {
-          show(input: NativeBrowserInput) {
+          navigate(input: NativeBrowserNavigateInput) {
             const url = new URL(input.url, window.location.href).href
-            const previousState = browserViews[input.tabID]?.state
+            const previous = browserViews[input.tabID]
+            if (previous && input.revision < previous.navigation) {
+              return Promise.resolve(previous.state)
+            }
+            if (previous && input.revision === previous.navigation) {
+              return Promise.resolve(previous.state)
+            }
+            const viewport = browserViewports[input.tabID]
+            const state: NativeBrowserState = {
+              tabID: input.tabID,
+              appliedRevision: input.revision,
+              requestedURL: url,
+              committedURL: previous?.state?.committedURL ?? '',
+              title: '',
+              status: 'navigating',
+              canGoBack: previous?.state?.canGoBack ?? false,
+              canGoForward: false,
+            }
             browserViews[input.tabID] = {
-              ...input,
+              tabID: input.tabID,
               url,
-              visible: true,
-              state: previousState?.url === url ? previousState : undefined,
+              bounds: viewport?.bounds ?? previous?.bounds ?? {
+                x: 0,
+                y: 0,
+                width: 0,
+                height: 0,
+              },
+              navigation: input.revision,
+              workspacePreview: input.kind === 'workspace-preview',
+              visible: viewport?.visible ?? previous?.visible ?? false,
+              navigateCalls: (previous?.navigateCalls ?? 0) + 1,
+              viewportCalls: viewport?.calls ?? previous?.viewportCalls ?? 0,
+              state,
             }
             window.setTimeout(() => {
+              if (browserViews[input.tabID]?.navigation !== input.revision) return
               browserWindow.__emitBrowserState?.(
-                browserViews[input.tabID]?.state ?? {
+                {
                   tabID: input.tabID,
-                  url,
+                  appliedRevision: input.revision,
+                  requestedURL: url,
+                  committedURL: url,
                   title: '',
-                  loading: false,
+                  status: 'ready',
                   canGoBack: false,
                   canGoForward: false,
                 },
               )
             }, 0)
-            return Promise.resolve()
+            return Promise.resolve(state)
           },
-          hide(tabID: string) {
-            if (browserViews[tabID]) browserViews[tabID].visible = false
+          setViewport(input: NativeBrowserViewportInput) {
+            const previous = browserViewports[input.tabID]
+            browserViewports[input.tabID] = {
+              ...input,
+              calls: (previous?.calls ?? 0) + 1,
+            }
+            const view = browserViews[input.tabID]
+            if (view) {
+              view.visible = input.visible
+              view.viewportCalls += 1
+              if (input.bounds) view.bounds = input.bounds
+              if (input.visible) {
+                for (const candidate of Object.values(browserViews)) {
+                  if (candidate !== view) candidate.visible = false
+                }
+              }
+            }
             return Promise.resolve()
           },
           close(tabID: string) {
             delete browserViews[tabID]
+            delete browserViewports[tabID]
             browserActions.push({ action: 'close', tabID })
             return Promise.resolve()
           },
@@ -183,10 +247,6 @@ async function openDesktopClient(
           },
           goForward(tabID: string) {
             browserActions.push({ action: 'forward', tabID })
-            return Promise.resolve()
-          },
-          reload(tabID: string) {
-            browserActions.push({ action: 'reload', tabID })
             return Promise.resolve()
           },
           onState(listener: (state: NativeBrowserState) => void) {
@@ -598,9 +658,11 @@ test('workbench opens before a preview and launches Browser without hiding Chat'
     ).__emitBrowserState
     emit?.({
       tabID: 'tab-2',
-      url: 'https://example.com/search',
+      appliedRevision: 1,
+      requestedURL: 'https://example.com/search',
+      committedURL: 'https://example.com/search',
       title: 'Example',
-      loading: false,
+      status: 'ready',
       canGoBack: true,
       canGoForward: false,
     })
@@ -1302,6 +1364,89 @@ test('AI preview tool opens a public website inside the native Browser', async (
   expect(
     await page.evaluate(() => (window as Window & { __openedURL?: string }).__openedURL),
   ).toBeUndefined()
+})
+
+test('AI browser keeps the latest revision across stale state and viewport changes', async ({
+  page,
+}) => {
+  await openDesktopClient(page, { existingSession: true })
+  await expect.poll(() =>
+    page.evaluate(
+      () =>
+        (window as Window & { __eventSources?: unknown[] }).__eventSources?.length ?? 0,
+    ),
+  ).toBeGreaterThan(0)
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'tool_end',
+      id: 'github-preview',
+      tool: 'open_preview',
+      result: 'Opened preview at https://github.com',
+      preview: { url: 'https://github.com', title: 'GitHub' },
+    })
+  })
+  await expect.poll(async () =>
+    (await nativeBrowserView(page, 'preview:test-session'))?.url,
+  ).toBe('https://github.com/')
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'tool_end',
+      id: 'bilibili-preview',
+      tool: 'open_preview',
+      result: 'Opened preview at https://www.bilibili.com',
+      preview: { url: 'https://www.bilibili.com', title: 'Bilibili' },
+    })
+  })
+  await expect.poll(async () =>
+    (await nativeBrowserView(page, 'preview:test-session'))?.url,
+  ).toBe('https://www.bilibili.com/')
+  const navigated = await nativeBrowserView(page, 'preview:test-session')
+  expect(navigated).toMatchObject({ navigation: 1, navigateCalls: 2 })
+
+  await page.evaluate(() => {
+    const emit = (
+      window as Window & {
+        __emitBrowserState?: (state: NativeBrowserState) => void
+      }
+    ).__emitBrowserState
+    emit?.({
+      tabID: 'preview:test-session',
+      appliedRevision: 0,
+      requestedURL: 'https://github.com/',
+      committedURL: 'https://github.com/',
+      title: 'GitHub',
+      status: 'ready',
+      canGoBack: false,
+      canGoForward: false,
+    })
+  })
+
+  await expect(page.getByRole('textbox', { name: 'Preview address' })).toHaveValue(
+    'https://www.bilibili.com/',
+  )
+  await expect(page.getByRole('tab', { name: 'Bilibili' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+
+  const navigateCalls = navigated?.navigateCalls
+  const viewportCalls = navigated?.viewportCalls ?? 0
+  const toggle = page.getByTestId('workbench-panel-toggle')
+  await toggle.click()
+  await expect.poll(async () =>
+    (await nativeBrowserView(page, 'preview:test-session'))?.visible,
+  ).toBe(false)
+  await toggle.click()
+  await expect.poll(async () =>
+    (await nativeBrowserView(page, 'preview:test-session'))?.visible,
+  ).toBe(true)
+  const restored = await nativeBrowserView(page, 'preview:test-session')
+  expect(restored?.navigateCalls).toBe(navigateCalls)
+  expect(restored?.viewportCalls).toBeGreaterThan(viewportCalls)
 })
 
 test('streaming tool input shows write progress without duplicating the tool row', async ({

@@ -1,44 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useRef } from 'react'
 import { CircleAlert, LoaderCircle, RefreshCw } from 'lucide-react'
-import { apiURL } from '@/api'
 import { useI18n } from '@/i18n'
-import { isLocalPreviewURL } from '@/lib/browser'
-import {
-  hasNativeBrowser,
-  hideNativeBrowser,
-  onNativeBrowserState,
-  showNativeBrowser,
-  type NativeBrowserState,
-} from '@/lib/desktop'
-
-type SurfaceStatus = 'idle' | 'loading' | 'ready' | 'failed'
-const previewProbeRequests = new Map<string, Promise<string>>()
-
-function probeLocalPreview(url: string, navigation: number): Promise<string> {
-  const key = `${navigation}:${url}`
-  const pending = previewProbeRequests.get(key)
-  if (pending) return pending
-
-  const controller = new AbortController()
-  const timeout = window.setTimeout(() => controller.abort(), 6000)
-  const request = fetch(apiURL('/preview/check'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url }),
-    signal: controller.signal,
-  })
-    .then(async (response) => {
-      if (!response.ok) throw new Error('preview unavailable')
-      const body = (await response.json()) as { url?: string }
-      return body.url || url
-    })
-    .finally(() => {
-      window.clearTimeout(timeout)
-      if (previewProbeRequests.get(key) === request) previewProbeRequests.delete(key)
-    })
-  previewProbeRequests.set(key, request)
-  return request
-}
+import type { NativeBrowserState } from '@/lib/desktop'
+import { useNativeBrowserController } from '@/useNativeBrowserController'
 
 export function BrowserSurface({
   tabID,
@@ -61,117 +25,16 @@ export function BrowserSurface({
 }) {
   const { t } = useI18n()
   const surfaceRef = useRef<HTMLDivElement>(null)
-  const onResolveURLRef = useRef(onResolveURL)
-  const onStateRef = useRef(onState)
-  const [resolvedURL, setResolvedURL] = useState(
-    workspaceFile || !isLocalPreviewURL(url) ? url : '',
-  )
-  const [status, setStatus] = useState<SurfaceStatus>(url ? 'loading' : 'idle')
-  const [error, setError] = useState('')
-  const nativeAvailable = hasNativeBrowser()
-
-  useEffect(() => {
-    onResolveURLRef.current = onResolveURL
-    onStateRef.current = onState
-  }, [onResolveURL, onState])
-
-  useEffect(() => {
-    if (!url) {
-      setResolvedURL('')
-      setStatus('idle')
-      setError('')
-      return
-    }
-    if (!nativeAvailable) {
-      setResolvedURL('')
-      setStatus('failed')
-      setError('Native browser is unavailable')
-      return
-    }
-    if (workspaceFile || !isLocalPreviewURL(url)) {
-      setResolvedURL(url)
-      setStatus('loading')
-      setError('')
-      return
-    }
-
-    let active = true
-    setResolvedURL('')
-    setStatus('loading')
-    setError('')
-    void probeLocalPreview(url, navigation)
-      .then((nextURL) => {
-        if (!active) return
-        if (nextURL !== url) onResolveURLRef.current(nextURL)
-        setResolvedURL(nextURL)
-      })
-      .catch(() => {
-        if (!active) return
-        setStatus('failed')
-        setError('preview unavailable')
-      })
-    return () => {
-      active = false
-    }
-  }, [nativeAvailable, navigation, url, workspaceFile])
-
-  useEffect(() => onNativeBrowserState((state) => {
-    if (state.tabID !== tabID) return
-    onStateRef.current(state)
-    if (state.error) {
-      setStatus('failed')
-      setError(state.error)
-      void hideNativeBrowser(tabID)
-      return
-    }
-    setError('')
-    setStatus(state.loading ? 'loading' : 'ready')
-  }), [tabID])
-
-  useLayoutEffect(() => {
-    const surface = surfaceRef.current
-    if (!surface || !nativeAvailable || !visible || !resolvedURL) {
-      void hideNativeBrowser(tabID)
-      return
-    }
-
-    let active = true
-    const sync = () => {
-      if (!active) return
-      const bounds = surface.getBoundingClientRect()
-      if (bounds.width < 1 || bounds.height < 1) {
-        void hideNativeBrowser(tabID)
-        return
-      }
-      void showNativeBrowser({
-        tabID,
-        url: resolvedURL,
-        navigation,
-        workspacePreview: workspaceFile,
-        bounds: {
-          x: bounds.x,
-          y: bounds.y,
-          width: bounds.width,
-          height: bounds.height,
-        },
-      }).catch((reason: unknown) => {
-        if (!active) return
-        setStatus('failed')
-        setError(reason instanceof Error ? reason.message : String(reason))
-        void hideNativeBrowser(tabID)
-      })
-    }
-    const observer = new ResizeObserver(sync)
-    observer.observe(surface)
-    window.addEventListener('resize', sync)
-    sync()
-    return () => {
-      active = false
-      observer.disconnect()
-      window.removeEventListener('resize', sync)
-      void hideNativeBrowser(tabID)
-    }
-  }, [nativeAvailable, navigation, resolvedURL, tabID, visible, workspaceFile])
+  const { error, status } = useNativeBrowserController({
+    kind: workspaceFile ? 'workspace-preview' : 'web',
+    onResolveURL,
+    onState,
+    revision: navigation,
+    surfaceRef,
+    tabID,
+    url,
+    visible,
+  })
 
   return (
     <div

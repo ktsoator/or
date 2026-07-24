@@ -94,6 +94,25 @@ describe('browser tabs reducer', () => {
     expect(nativeState(tabs, 2, 'https://www.bilibili.com/', 'Bilibili')).toBe(tabs)
   })
 
+  test('keeps the desired URL while its revision is still navigating', () => {
+    let tabs = navigate([agentTab()], 'https://github.com/')
+    tabs = nativeState(tabs, 1, 'https://github.com/', 'GitHub')
+    tabs = navigate(tabs, 'https://www.bilibili.com/')
+    tabs = browserTabsReducer(tabs, {
+      t: 'native_state_received',
+      tabID: 'preview:session-1',
+      appliedRevision: 2,
+      committedURL: 'https://github.com/',
+      title: '',
+      status: 'navigating',
+      canGoBack: false,
+      canGoForward: false,
+    })
+
+    expect(tabs[0]?.addressDraft).toBe('https://www.bilibili.com/')
+    expect(browserTabNavigationURL(tabs[0]!)).toBe('https://www.bilibili.com/')
+  })
+
   test('stores requested and redirected committed URLs separately', () => {
     let tabs = navigate([agentTab()], 'https://example.com/start')
     tabs = nativeState(tabs, 1, 'https://example.com/final', 'Final')

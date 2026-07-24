@@ -431,7 +431,7 @@ export function BrowserView({
             key={activeTab.id}
             tabID={activeTab.id}
             navigation={activeDesired?.revision ?? 0}
-            url={activeNavigationURL}
+            url={activeDesired?.requestedURL ?? ''}
             visible={open}
             workspaceFile={activeDesired?.kind === 'workspace-preview'}
             onResolveURL={(url) => {
@@ -448,10 +448,10 @@ export function BrowserView({
               dispatchTabs({
                 t: 'native_state_received',
                 tabID: activeTab.id,
-                appliedRevision: activeDesired?.revision ?? -1,
-                committedURL: state.url,
+                appliedRevision: state.appliedRevision,
+                committedURL: state.committedURL,
                 title: state.title,
-                status: state.error ? 'failed' : state.loading ? 'navigating' : 'ready',
+                status: state.status,
                 canGoBack: state.canGoBack,
                 canGoForward: state.canGoForward,
                 error: state.error,

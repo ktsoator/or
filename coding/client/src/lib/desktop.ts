@@ -5,31 +5,37 @@ export type NativeBrowserBounds = {
   height: number
 }
 
-export type NativeBrowserViewInput = {
+export type NativeBrowserNavigateInput = {
   tabID: string
   url: string
-  bounds: NativeBrowserBounds
-  navigation: number
-  workspacePreview: boolean
+  revision: number
+  kind: 'web' | 'workspace-preview'
+}
+
+export type NativeBrowserViewportInput = {
+  tabID: string
+  visible: boolean
+  bounds?: NativeBrowserBounds
 }
 
 export type NativeBrowserState = {
   tabID: string
-  url: string
+  appliedRevision: number
+  requestedURL: string
+  committedURL: string
   title: string
-  loading: boolean
+  status: 'navigating' | 'ready' | 'failed'
   canGoBack: boolean
   canGoForward: boolean
   error?: string
 }
 
 type NativeBrowserBridge = {
-  show: (input: NativeBrowserViewInput) => Promise<void>
-  hide: (tabID: string) => Promise<void>
+  navigate: (input: NativeBrowserNavigateInput) => Promise<NativeBrowserState>
+  setViewport: (input: NativeBrowserViewportInput) => Promise<void>
   close: (tabID: string) => Promise<void>
   goBack: (tabID: string) => Promise<void>
   goForward: (tabID: string) => Promise<void>
-  reload: (tabID: string) => Promise<void>
   onState: (listener: (state: NativeBrowserState) => void) => () => void
 }
 
@@ -55,15 +61,22 @@ export function desktopPlatform(): string | undefined {
 }
 
 export function hasNativeBrowser(): boolean {
-  return typeof window.codingDesktop?.browser?.show === 'function'
+  return (
+    typeof window.codingDesktop?.browser?.navigate === 'function' &&
+    typeof window.codingDesktop.browser.setViewport === 'function'
+  )
 }
 
-export function showNativeBrowser(input: NativeBrowserViewInput): Promise<void> {
-  return window.codingDesktop?.browser?.show(input) ?? Promise.resolve()
+export function navigateNativeBrowser(
+  input: NativeBrowserNavigateInput,
+): Promise<NativeBrowserState | undefined> {
+  return window.codingDesktop?.browser?.navigate(input) ?? Promise.resolve(undefined)
 }
 
-export function hideNativeBrowser(tabID: string): Promise<void> {
-  return window.codingDesktop?.browser?.hide(tabID) ?? Promise.resolve()
+export function setNativeBrowserViewport(
+  input: NativeBrowserViewportInput,
+): Promise<void> {
+  return window.codingDesktop?.browser?.setViewport(input) ?? Promise.resolve()
 }
 
 export function closeNativeBrowser(tabID: string): Promise<void> {
@@ -76,10 +89,6 @@ export function goBackNativeBrowser(tabID: string): Promise<void> {
 
 export function goForwardNativeBrowser(tabID: string): Promise<void> {
   return window.codingDesktop?.browser?.goForward(tabID) ?? Promise.resolve()
-}
-
-export function reloadNativeBrowser(tabID: string): Promise<void> {
-  return window.codingDesktop?.browser?.reload(tabID) ?? Promise.resolve()
 }
 
 export function onNativeBrowserState(

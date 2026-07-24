@@ -82,6 +82,7 @@ export function browserTabNavigationURL(tab: BrowserTab): string {
   if (!tab.desired) return ''
   if (
     tab.observed.appliedRevision >= tab.desired.revision &&
+    tab.observed.status === 'ready' &&
     tab.observed.committedURL
   ) {
     return tab.observed.committedURL
@@ -266,7 +267,9 @@ export function browserTabsReducer(
         return {
           ...tab,
           addressDraft:
-            tab.desired?.kind === 'workspace-preview' || !action.committedURL
+            action.status !== 'ready' ||
+              tab.desired?.kind === 'workspace-preview' ||
+              !action.committedURL
               ? tab.addressDraft
               : action.committedURL,
           observed: {

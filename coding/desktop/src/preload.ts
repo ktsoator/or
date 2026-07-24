@@ -2,9 +2,11 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 type BrowserState = {
   tabID: string
-  url: string
+  appliedRevision: number
+  requestedURL: string
+  committedURL: string
   title: string
-  loading: boolean
+  status: 'navigating' | 'ready' | 'failed'
   canGoBack: boolean
   canGoForward: boolean
   error?: string
@@ -17,18 +19,16 @@ contextBridge.exposeInMainWorld('codingDesktop', {
   openExternalURL: (url: string): Promise<void> =>
     ipcRenderer.invoke('desktop:open-external', url),
   browser: {
-    show: (input: unknown): Promise<void> =>
-      ipcRenderer.invoke('desktop:browser:show', input),
-    hide: (tabID: string): Promise<void> =>
-      ipcRenderer.invoke('desktop:browser:hide', tabID),
+    navigate: (input: unknown): Promise<BrowserState> =>
+      ipcRenderer.invoke('desktop:browser:navigate', input),
+    setViewport: (input: unknown): Promise<void> =>
+      ipcRenderer.invoke('desktop:browser:set-viewport', input),
     close: (tabID: string): Promise<void> =>
       ipcRenderer.invoke('desktop:browser:close', tabID),
     goBack: (tabID: string): Promise<void> =>
       ipcRenderer.invoke('desktop:browser:go-back', tabID),
     goForward: (tabID: string): Promise<void> =>
       ipcRenderer.invoke('desktop:browser:go-forward', tabID),
-    reload: (tabID: string): Promise<void> =>
-      ipcRenderer.invoke('desktop:browser:reload', tabID),
     onState: (listener: (state: BrowserState) => void): (() => void) => {
       const handler = (_event: Electron.IpcRendererEvent, state: BrowserState) => {
         listener(state)

@@ -139,10 +139,10 @@ function registerIPC(): void {
     if (typeof target !== 'string') throw new TypeError('external URL must be a string')
     await openExternalURL(target)
   })
-  ipcMain.handle('desktop:browser:show', (event, input: unknown) =>
-    browserFor(event.sender).show(input))
-  ipcMain.handle('desktop:browser:hide', (event, tabID: unknown) => {
-    browserFor(event.sender).hide(tabID)
+  ipcMain.handle('desktop:browser:navigate', (event, input: unknown) =>
+    browserFor(event.sender).navigate(input))
+  ipcMain.handle('desktop:browser:set-viewport', (event, input: unknown) => {
+    browserFor(event.sender).setViewport(input)
   })
   ipcMain.handle('desktop:browser:close', (event, tabID: unknown) => {
     browserFor(event.sender).close(tabID)
@@ -152,9 +152,6 @@ function registerIPC(): void {
   })
   ipcMain.handle('desktop:browser:go-forward', (event, tabID: unknown) => {
     browserFor(event.sender).goForward(tabID)
-  })
-  ipcMain.handle('desktop:browser:reload', (event, tabID: unknown) => {
-    browserFor(event.sender).reload(tabID)
   })
 }
 
