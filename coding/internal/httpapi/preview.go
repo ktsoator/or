@@ -42,7 +42,7 @@ func (s *Server) handleWorkspacePreview(c *gin.Context) {
 		return
 	}
 	path := strings.TrimPrefix(c.Param("path"), "/")
-	if err := serveWorkspacePreview(c.Writer, c.Request, runtime.Session().Cwd(), path); err != nil {
+	if err := serveWorkspacePreview(c.Writer, c.Request, runtime.WorkspacePath(), path); err != nil {
 		http.NotFound(c.Writer, c.Request)
 	}
 }

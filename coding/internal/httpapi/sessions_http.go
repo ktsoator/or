@@ -215,10 +215,10 @@ func (s *Server) handleHistory(c *gin.Context) {
 	var contextUsage wireContextUsage
 	var running bool
 	eventSeq := transport.hub.snapshot(func() {
-		events = ProjectHistory(runtime.Session().History())
+		events = ProjectHistory(runtime.History())
 		events = append(events, transport.broker.PendingEvents()...)
 		queue = projectQueue(runtime.PendingEvents())
-		contextUsage = projectContextUsage(runtime.Session().ContextUsage())
+		contextUsage = projectContextUsage(runtime.ContextUsage())
 		running = runtime.Running()
 	})
 	c.JSON(http.StatusOK, gin.H{
@@ -322,7 +322,7 @@ func (s *Server) handleQueuedMessage(c *gin.Context, delivery conversation.Deliv
 		c.JSON(http.StatusConflict, gin.H{"error": "resolve the pending approval before queuing a message"})
 		return
 	}
-	if len(images) > 0 && !slices.Contains(runtime.Session().Snapshot().Model.Input, llm.Image) {
+	if len(images) > 0 && !runtime.SupportsImages() {
 		c.JSON(http.StatusBadRequest, gin.H{"error": conversation.ErrImagesUnsupported.Error()})
 		return
 	}
@@ -397,7 +397,7 @@ func (s *Server) handleAbort(c *gin.Context) {
 	if !ok {
 		return
 	}
-	runtime.Session().Abort()
+	runtime.Abort()
 	c.Status(http.StatusNoContent)
 }
 

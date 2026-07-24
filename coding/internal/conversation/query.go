@@ -2,6 +2,7 @@ package conversation
 
 import (
 	"path/filepath"
+	"slices"
 	"sort"
 
 	"github.com/ktsoator/or/coding/internal/engine"
@@ -72,9 +73,23 @@ func (s *Runtime) summary() Summary {
 	}
 }
 
-// Session exposes the underlying engine for transcript reads, queue operations,
-// approvals, and aborts. Manager owns starting and finishing runs.
-func (s *Runtime) Session() *engine.Session { return s.session }
+// History returns the displayable transcript without exposing the engine
+// session that owns it.
+func (s *Runtime) History() []engine.HistoryItem { return s.session.History() }
+
+// ContextUsage returns the current context-window estimate.
+func (s *Runtime) ContextUsage() engine.ContextUsage { return s.session.ContextUsage() }
+
+// WorkspacePath returns the root used by this conversation's tools.
+func (s *Runtime) WorkspacePath() string { return s.session.Cwd() }
+
+// SupportsImages reports whether the active model accepts image input.
+func (s *Runtime) SupportsImages() bool {
+	return slices.Contains(s.session.Snapshot().Model.Input, llm.Image)
+}
+
+// Abort cancels the active run, if any.
+func (s *Runtime) Abort() { s.session.Abort() }
 
 // Running reports the live state exposed to clients. It clears before the
 // terminal event is published, while the internal reservation remains held
