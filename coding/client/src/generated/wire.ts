@@ -17,6 +17,7 @@ export type WireEventType =
   | "approval_resolved"
   | "approval_cancelled"
   | "browser_request"
+  | "browser_inspect_request"
   | "queue_cancelled"
   | "queue_removed"
   | "error"
@@ -42,6 +43,17 @@ export type BrowserResultStatus =
   | "failed"
   | "cancelled"
   | "timeout"
+
+export type BrowserInspectionStatus =
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "timeout"
+
+export type BrowserPageStatus =
+  | "ready"
+  | "navigating"
+  | "failed"
 
 export type FileChangeType = "file"
 
@@ -97,6 +109,17 @@ export type BrowserResult = {
   requestedURL?: string
   committedURL?: string
   title?: string
+  error?: string
+}
+
+export type BrowserInspectionResult = {
+  status: BrowserInspectionStatus
+  url?: string
+  title?: string
+  pageStatus?: BrowserPageStatus
+  revision: number
+  visibleText?: string
+  truncated?: boolean
   error?: string
 }
 

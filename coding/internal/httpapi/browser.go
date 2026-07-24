@@ -24,8 +24,9 @@ type BrowserBroker struct {
 	nextID  atomic.Uint64
 	timeout time.Duration
 
-	mu      sync.Mutex
-	pending map[string]pendingBrowserCommand
+	mu          sync.Mutex
+	pending     map[string]pendingBrowserCommand
+	inspections map[string]pendingBrowserInspection
 }
 
 type pendingBrowserCommand struct {
@@ -35,9 +36,10 @@ type pendingBrowserCommand struct {
 
 func NewBrowserBroker(hub *Hub) *BrowserBroker {
 	return &BrowserBroker{
-		hub:     hub,
-		timeout: browserCommandTimeout,
-		pending: make(map[string]pendingBrowserCommand),
+		hub:         hub,
+		timeout:     browserCommandTimeout,
+		pending:     make(map[string]pendingBrowserCommand),
+		inspections: make(map[string]pendingBrowserInspection),
 	}
 }
 
@@ -82,9 +84,12 @@ func (b *BrowserBroker) PendingEvents() []wireEvent {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	events := make([]wireEvent, 0, len(b.pending))
+	events := make([]wireEvent, 0, len(b.pending)+len(b.inspections))
 	for id, pending := range b.pending {
 		events = append(events, browserRequestEvent(id, pending.request))
+	}
+	for id := range b.inspections {
+		events = append(events, browserInspectionRequestEvent(id))
 	}
 	return events
 }
@@ -102,7 +107,7 @@ func (b *BrowserBroker) Resolve(id string, result tools.BrowserResult) bool {
 func (b *BrowserBroker) HasPending() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return len(b.pending) > 0
+	return len(b.pending) > 0 || len(b.inspections) > 0
 }
 
 // Close releases every waiter when its session transport is replaced or shut
@@ -111,9 +116,14 @@ func (b *BrowserBroker) Close() {
 	b.mu.Lock()
 	pending := b.pending
 	b.pending = make(map[string]pendingBrowserCommand)
+	inspections := b.inspections
+	b.inspections = make(map[string]pendingBrowserInspection)
 	b.mu.Unlock()
 	for id, command := range pending {
 		command.response <- tools.BrowserResult{ID: id, Status: tools.BrowserCancelled}
+	}
+	for id, command := range inspections {
+		command.response <- tools.BrowserInspectionResult{ID: id, Status: tools.BrowserInspectionCancelled}
 	}
 }
 

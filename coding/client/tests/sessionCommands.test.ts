@@ -67,18 +67,40 @@ describe('sessionCommands', () => {
       requestedURL: 'https://example.com/start',
       committedURL: 'https://example.com/final',
     })
+    await commands.reportBrowserInspection('session / one', 'inspection / one', {
+      status: 'completed',
+      url: 'https://example.com/final',
+      title: 'Example',
+      pageStatus: 'ready',
+      revision: 2,
+      visibleText: 'Visible page',
+      truncated: false,
+    })
 
     expect(calls.map((call) => [call.url, call.init.method])).toEqual([
       ['/api/sessions/session%20%2F%20one/abort', 'POST'],
       ['/api/sessions/session%20%2F%20one/queue/queue%20%2F%20one', 'DELETE'],
       ['/api/sessions/session%20%2F%20one/approvals/approval%20%2F%20one', 'POST'],
       ['/api/sessions/session%20%2F%20one/browser/browser%20%2F%20one/result', 'POST'],
+      [
+        '/api/sessions/session%20%2F%20one/browser/inspect/inspection%20%2F%20one/result',
+        'POST',
+      ],
     ])
     expect(jsonBody(calls[2])).toEqual({ choice: 'allow_once' })
     expect(jsonBody(calls[3])).toEqual({
       status: 'committed',
       requestedURL: 'https://example.com/start',
       committedURL: 'https://example.com/final',
+    })
+    expect(jsonBody(calls[4])).toEqual({
+      status: 'completed',
+      url: 'https://example.com/final',
+      title: 'Example',
+      pageStatus: 'ready',
+      revision: 2,
+      visibleText: 'Visible page',
+      truncated: false,
     })
   })
 

@@ -24,6 +24,7 @@ const (
 	wireEventApprovalResolved  wireEventType = "approval_resolved"
 	wireEventApprovalCancelled wireEventType = "approval_cancelled"
 	wireEventBrowserRequest    wireEventType = "browser_request"
+	wireEventBrowserInspect    wireEventType = "browser_inspect_request"
 	wireEventQueueCancelled    wireEventType = "queue_cancelled"
 	wireEventQueueRemoved      wireEventType = "queue_removed"
 	wireEventError             wireEventType = "error"
@@ -61,6 +62,23 @@ const (
 	wireBrowserFailed    wireBrowserResultStatus = "failed"
 	wireBrowserCancelled wireBrowserResultStatus = "cancelled"
 	wireBrowserTimeout   wireBrowserResultStatus = "timeout"
+)
+
+type wireBrowserInspectionStatus string
+
+const (
+	wireBrowserInspectionCompleted wireBrowserInspectionStatus = "completed"
+	wireBrowserInspectionFailed    wireBrowserInspectionStatus = "failed"
+	wireBrowserInspectionCancelled wireBrowserInspectionStatus = "cancelled"
+	wireBrowserInspectionTimeout   wireBrowserInspectionStatus = "timeout"
+)
+
+type wireBrowserPageStatus string
+
+const (
+	wireBrowserPageReady      wireBrowserPageStatus = "ready"
+	wireBrowserPageNavigating wireBrowserPageStatus = "navigating"
+	wireBrowserPageFailed     wireBrowserPageStatus = "failed"
 )
 
 type wireFileChangeType string
@@ -185,6 +203,17 @@ type wireBrowserResult struct {
 	CommittedURL string                  `json:"committedURL,omitempty"`
 	Title        string                  `json:"title,omitempty"`
 	Error        string                  `json:"error,omitempty"`
+}
+
+type wireBrowserInspectionResult struct {
+	Status      wireBrowserInspectionStatus `json:"status"`
+	URL         string                      `json:"url,omitempty"`
+	Title       string                      `json:"title,omitempty"`
+	PageStatus  wireBrowserPageStatus       `json:"pageStatus,omitempty"`
+	Revision    int                         `json:"revision"`
+	VisibleText string                      `json:"visibleText,omitempty"`
+	Truncated   bool                        `json:"truncated,omitempty"`
+	Error       string                      `json:"error,omitempty"`
 }
 
 type wireUsage struct {

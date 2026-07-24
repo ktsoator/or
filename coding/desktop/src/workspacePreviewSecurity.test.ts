@@ -4,6 +4,7 @@ import {
   workspacePreviewPrefix,
   workspacePreviewRequestAllowed,
 } from './workspacePreviewSecurity'
+import { isAgentBrowserTabID, isBrowserInspectionText } from './browserInspection'
 
 const desktopURL = 'http://127.0.0.1:4310/'
 const previewURL = new URL(
@@ -53,5 +54,19 @@ describe('workspace preview security', () => {
       prefix,
     )).toBe(false)
     expect(workspacePreviewNavigationAllowed('data:text/html,unsafe', desktopURL, prefix)).toBe(false)
+  })
+})
+
+describe('browser inspection boundary', () => {
+  test('accepts only stable Agent tab IDs', () => {
+    expect(isAgentBrowserTabID('preview:session-1')).toBe(true)
+    expect(isAgentBrowserTabID('preview:session-1:command:new-tab')).toBe(false)
+    expect(isAgentBrowserTabID('tab-1')).toBe(false)
+  })
+
+  test('validates isolated-world text results', () => {
+    expect(isBrowserInspectionText({ visibleText: 'Page', truncated: false })).toBe(true)
+    expect(isBrowserInspectionText({ visibleText: 'Page' })).toBe(false)
+    expect(isBrowserInspectionText({ visibleText: 1, truncated: false })).toBe(false)
   })
 })

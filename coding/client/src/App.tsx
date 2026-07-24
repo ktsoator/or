@@ -52,6 +52,7 @@ import { SidebarToggleButton } from './components/SidebarToggleButton'
 import { useI18n } from './i18n'
 import { useSidebarLayout } from './useSidebarLayout'
 import { useWorkbenchLayout } from './useWorkbenchLayout'
+import { useBrowserInspectionRequests } from './useBrowserInspectionRequests'
 
 function wheelDeltaInPixels(event: WheelEvent, pageHeight: number) {
   if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) return event.deltaY * 16
@@ -73,6 +74,7 @@ export default function App() {
     contextUsage,
     preview,
     browserCommands,
+    browserInspections,
     previewOpen,
     approval,
     running,
@@ -100,8 +102,21 @@ export default function App() {
     stop,
     resolveApproval,
     handleBrowserCommand,
+    handleBrowserInspection,
     secondaryThread,
   } = useSession(secondarySessionID)
+  useBrowserInspectionRequests({
+    sessionID: activeSessionID,
+    browserCommands,
+    browserInspections,
+    onHandled: handleBrowserInspection,
+  })
+  useBrowserInspectionRequests({
+    sessionID: secondaryThread?.session.id,
+    browserCommands: secondaryThread?.browserCommands ?? [],
+    browserInspections: secondaryThread?.browserInspections ?? [],
+    onHandled: handleBrowserInspection,
+  })
   const logRef = useRef<HTMLDivElement>(null)
   const followLatestRef = useRef(true)
   const previousSessionIDRef = useRef<string | undefined>(undefined)

@@ -1,6 +1,7 @@
 import type {
   ApprovalItem,
   BrowserCommandState,
+  BrowserInspectionCommandState,
   ConnectionStatus,
   ContextUsage,
   DeliveryMode,
@@ -20,6 +21,7 @@ export type ThreadState = {
   contextUsage?: ContextUsage
   preview?: PreviewState
   browserCommands: BrowserCommandState[]
+  browserInspections: BrowserInspectionCommandState[]
   previewOpen: boolean
   running: boolean
   autoCompacting: boolean
@@ -56,6 +58,7 @@ export type ThreadAction =
     }
   | { t: 'resolveApproval'; sessionID: string; id: string }
   | { t: 'browserCommandHandled'; sessionID: string; id: string }
+  | { t: 'browserInspectionHandled'; sessionID: string; id: string }
   | { t: 'forget'; sessionID: string }
 
 const emptyUsage = (): Usage => ({
@@ -74,6 +77,7 @@ export const createThreadState = (): ThreadState => ({
   contextUsage: undefined,
   preview: undefined,
   browserCommands: [],
+  browserInspections: [],
   previewOpen: false,
   running: false,
   autoCompacting: false,
@@ -233,6 +237,14 @@ export function threadsReducer(state: ThreadsState, action: ThreadAction): Threa
         ),
       }
       break
+    case 'browserInspectionHandled':
+      next = {
+        ...current,
+        browserInspections: current.browserInspections.filter(
+          (command) => command.commandID !== action.id,
+        ),
+      }
+      break
     case 'wire':
       next = reduceWire(current, action.ev)
       break
@@ -248,6 +260,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
   let contextUsage = state.contextUsage
   let preview = state.preview
   let browserCommands = state.browserCommands
+  let browserInspections = state.browserInspections
   let previewOpen = state.previewOpen
   let running = state.running
   let autoCompacting = state.autoCompacting
@@ -660,6 +673,16 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
       break
     }
 
+    case 'browser_inspect_request': {
+      if (
+        ev.id &&
+        !browserInspections.some((command) => command.commandID === ev.id)
+      ) {
+        browserInspections = [...browserInspections, { commandID: ev.id }]
+      }
+      break
+    }
+
     case 'message_end':
       completeThinking()
       responseUsage = mergeUsage(responseUsage, ev.usage)
@@ -810,6 +833,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
     contextUsage,
     preview,
     browserCommands,
+    browserInspections,
     previewOpen,
     running,
     autoCompacting,

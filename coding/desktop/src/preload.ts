@@ -12,6 +12,15 @@ type BrowserState = {
   error?: string
 }
 
+type BrowserInspection = {
+  url: string
+  title: string
+  pageStatus: 'ready'
+  revision: number
+  visibleText: string
+  truncated: boolean
+}
+
 contextBridge.exposeInMainWorld('codingDesktop', {
   platform: process.platform,
   chooseDirectory: (initialPath: string, title: string): Promise<string> =>
@@ -29,6 +38,8 @@ contextBridge.exposeInMainWorld('codingDesktop', {
       ipcRenderer.invoke('desktop:browser:go-back', tabID),
     goForward: (tabID: string): Promise<void> =>
       ipcRenderer.invoke('desktop:browser:go-forward', tabID),
+    inspect: (tabID: string): Promise<BrowserInspection> =>
+      ipcRenderer.invoke('desktop:browser:inspect', tabID),
     onState: (listener: (state: BrowserState) => void): (() => void) => {
       const handler = (_event: Electron.IpcRendererEvent, state: BrowserState) => {
         listener(state)

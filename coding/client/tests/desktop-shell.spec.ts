@@ -25,6 +25,15 @@ type NativeBrowserState = {
   error?: string
 }
 
+type NativeBrowserInspection = {
+  url: string
+  title: string
+  pageStatus: 'ready'
+  revision: number
+  visibleText: string
+  truncated: boolean
+}
+
 type NativeBrowserRecord = {
   tabID: string
   url: string
@@ -122,6 +131,7 @@ async function openDesktopClient(
     type BrowserTestWindow = Window & {
       __browserViews?: Record<string, NativeBrowserRecord>
       __browserActions?: Array<{ action: string; tabID: string }>
+      __browserInspectionTabIDs?: string[]
       __emitBrowserState?: (state: NativeBrowserState) => void
     }
     const browserWindow = window as BrowserTestWindow
@@ -132,8 +142,10 @@ async function openDesktopClient(
       NativeBrowserViewportInput & { calls: number }
     > = {}
     const browserActions: Array<{ action: string; tabID: string }> = []
+    const browserInspectionTabIDs: string[] = []
     browserWindow.__browserViews = browserViews
     browserWindow.__browserActions = browserActions
+    browserWindow.__browserInspectionTabIDs = browserInspectionTabIDs
     browserWindow.__emitBrowserState = (state) => {
       const view = browserViews[state.tabID]
       if (view && state.appliedRevision >= view.navigation) {
@@ -248,6 +260,27 @@ async function openDesktopClient(
           goForward(tabID: string) {
             browserActions.push({ action: 'forward', tabID })
             return Promise.resolve()
+          },
+          inspect(tabID: string): Promise<NativeBrowserInspection> {
+            browserInspectionTabIDs.push(tabID)
+            if (!/^preview:[^:]+$/.test(tabID)) {
+              return Promise.reject(new Error('Agent browser tab ID is invalid'))
+            }
+            const view = browserViews[tabID]
+            if (!view) {
+              return Promise.reject(new Error('Agent browser tab is not open'))
+            }
+            if (view.state?.status !== 'ready') {
+              return Promise.reject(new Error('Agent browser tab is not ready'))
+            }
+            return Promise.resolve({
+              url: view.url,
+              title: view.state.title || new URL(view.url).hostname,
+              pageStatus: 'ready',
+              revision: view.navigation,
+              visibleText: `Visible content for ${view.url}`,
+              truncated: false,
+            })
           },
           onState(listener: (state: NativeBrowserState) => void) {
             browserListeners.add(listener)
@@ -588,7 +621,7 @@ test('workbench opens before a preview and launches Browser without hiding Chat'
     conversationHeaderColor,
   )
   await expect(page.getByTestId('browser-titlebar')).toHaveCSS('border-bottom-width', '0px')
-  const address = page.getByRole('textbox', { name: 'Preview address' })
+  const address = page.getByRole('textbox', { name: 'Address' })
   await address.fill('127.0.0.1:4310')
   await address.press('Enter')
   await expect.poll(async () => (await nativeBrowserView(page, 'tab-1'))?.url).toBe(
@@ -697,7 +730,7 @@ test('workbench opens before a preview and launches Browser without hiding Chat'
     'aria-selected',
     'true',
   )
-  await page.getByRole('button', { name: 'Open in browser' }).click()
+  await page.getByRole('button', { name: 'Open in system browser' }).click()
   await expect.poll(() =>
     page.evaluate(() => (window as Window & { __openedURL?: string }).__openedURL),
   ).toBe('https://example.com/search')
@@ -1014,7 +1047,7 @@ test('main and right-side chats keep separate preview tabs and workspace routes'
     'aria-selected',
     'true',
   )
-  await expect(workbench.getByRole('textbox', { name: 'Preview address' })).toHaveValue(
+  await expect(workbench.getByRole('textbox', { name: 'Address' })).toHaveValue(
     '/tmp/secondary-session/web/index.html',
   )
   await expect.poll(async () =>
@@ -1301,7 +1334,7 @@ test('AI preview tool opens Browser in the workbench beside Chat', async ({ page
     'true',
   )
 
-  await page.getByRole('button', { name: 'Open in browser' }).click()
+  await page.getByRole('button', { name: 'Open in system browser' }).click()
   await expect.poll(() =>
     page.evaluate(() => (window as Window & { __openedURL?: string }).__openedURL),
   ).toBe('http://127.0.0.1:4310/')
@@ -1363,7 +1396,7 @@ test('AI preview tool opens a public website inside the native Browser', async (
     if (!dividerBox || !nativeView) return Number.NEGATIVE_INFINITY
     return nativeView.bounds.x - (dividerBox.x + dividerBox.width)
   }).toBeGreaterThanOrEqual(0)
-  await expect(page.getByRole('textbox', { name: 'Preview address' })).toHaveValue(
+  await expect(page.getByRole('textbox', { name: 'Address' })).toHaveValue(
     'https://www.google.com/',
   )
   expect(requests.filter((request) => request.path === '/api/preview/check')).toHaveLength(0)
@@ -1437,6 +1470,10 @@ test('AI browser restores and acknowledges a pending history command', async ({ 
     existingSession: true,
     historyEvents: [
       {
+        type: 'browser_inspect_request',
+        id: 'restored-browser-inspection',
+      },
+      {
         type: 'browser_request',
         id: 'restored-browser-command',
         disposition: 'reuse_agent_tab',
@@ -1459,6 +1496,25 @@ test('AI browser restores and acknowledges a pending history command', async ({ 
     'aria-selected',
     'true',
   )
+  await expect.poll(() =>
+    requests.filter(
+      (request) =>
+        request.path ===
+        '/api/sessions/test-session/browser/inspect/restored-browser-inspection/result',
+    ).length,
+  ).toBe(1)
+  expect(
+    requests.find(
+      (request) =>
+        request.path ===
+        '/api/sessions/test-session/browser/inspect/restored-browser-inspection/result',
+    )?.body,
+  ).toMatchObject({
+    status: 'completed',
+    url: 'https://example.com/restored',
+    pageStatus: 'ready',
+    visibleText: 'Visible content for https://example.com/restored',
+  })
 })
 
 test('AI browser opens foreground and background tabs without replacing the Agent tab', async ({
@@ -1548,6 +1604,190 @@ test('AI browser opens foreground and background tabs without replacing the Agen
   ).toBe(3)
 })
 
+test('AI browser inspection reads only the stable Agent tab and reports once', async ({
+  page,
+}) => {
+  const requests = await openDesktopClient(page, { existingSession: true })
+  await expect.poll(() =>
+    page.evaluate(
+      () =>
+        (window as Window & { __eventSources?: unknown[] }).__eventSources?.length ?? 0,
+    ),
+  ).toBeGreaterThan(0)
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'browser_request',
+      id: 'browser-agent',
+      disposition: 'reuse_agent_tab',
+      preview: { url: 'https://github.com', title: 'GitHub' },
+    })
+  })
+  await expect.poll(async () =>
+    (await nativeBrowserView(page, 'preview:test-session'))?.url,
+  ).toBe('https://github.com/')
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'browser_request',
+      id: 'browser-command-tab',
+      disposition: 'new_foreground_tab',
+      preview: { url: 'https://www.bilibili.com', title: 'Bilibili' },
+    })
+  })
+  await expect.poll(async () =>
+    (await nativeBrowserView(
+      page,
+      'preview:test-session:command:browser-command-tab',
+    ))?.url,
+  ).toBe('https://www.bilibili.com/')
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({ type: 'browser_inspect_request', id: 'inspection-1' })
+    emit?.({ type: 'browser_inspect_request', id: 'inspection-1' })
+  })
+
+  const resultPath =
+    '/api/sessions/test-session/browser/inspect/inspection-1/result'
+  await expect.poll(() =>
+    requests.filter((request) => request.path === resultPath).length,
+  ).toBe(1)
+  expect(requests.find((request) => request.path === resultPath)).toMatchObject({
+    method: 'POST',
+    body: {
+      status: 'completed',
+      url: 'https://github.com/',
+      title: 'github.com',
+      pageStatus: 'ready',
+      revision: 0,
+      visibleText: 'Visible content for https://github.com/',
+      truncated: false,
+    },
+  })
+  expect(
+    await page.evaluate(() =>
+      (window as Window & { __browserInspectionTabIDs?: string[] })
+        .__browserInspectionTabIDs,
+    ),
+  ).toEqual(['preview:test-session'])
+})
+
+test('AI browser inspection fails promptly without reopening a closed Agent tab', async ({
+  page,
+}) => {
+  const requests = await openDesktopClient(page, { existingSession: true })
+  await expect.poll(() =>
+    page.evaluate(
+      () =>
+        (window as Window & { __eventSources?: unknown[] }).__eventSources?.length ?? 0,
+    ),
+  ).toBeGreaterThan(0)
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({ type: 'browser_inspect_request', id: 'inspection-without-tab' })
+  })
+
+  const resultPath =
+    '/api/sessions/test-session/browser/inspect/inspection-without-tab/result'
+  await expect.poll(() =>
+    requests.filter((request) => request.path === resultPath).length,
+  ).toBe(1)
+  expect(requests.find((request) => request.path === resultPath)).toMatchObject({
+    method: 'POST',
+    body: {
+      status: 'failed',
+      revision: 0,
+      error: 'Agent browser tab is not open',
+    },
+  })
+  await expect(page.getByTestId('browser-view')).toHaveCount(0)
+  expect(await nativeBrowserView(page, 'preview:test-session')).toBeUndefined()
+})
+
+test('browser tools use page-focused labels and keep inspection text collapsed', async ({
+  page,
+}) => {
+  await openDesktopClient(page, { existingSession: true })
+  await expect.poll(() =>
+    page.evaluate(
+      () =>
+        (window as Window & { __eventSources?: unknown[] }).__eventSources?.length ?? 0,
+    ),
+  ).toBeGreaterThan(0)
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'tool_start',
+      id: 'open-browser-ui',
+      tool: 'open_preview',
+      args: { url: 'https://github.com/' },
+    })
+  })
+  await expect(page.getByText('Opening', { exact: true })).toBeVisible()
+  await expect(page.getByText('github.com', { exact: true })).toBeVisible()
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'tool_end',
+      id: 'open-browser-ui',
+      tool: 'open_preview',
+      result: 'Opened preview at https://github.com/',
+      preview: { url: 'https://github.com/', title: 'GitHub' },
+    })
+  })
+  await expect(page.getByText('Opened', { exact: true })).toBeVisible()
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'tool_start',
+      id: 'inspect-browser-ui',
+      tool: 'inspect_browser',
+      args: {},
+    })
+  })
+  const stepSummary = page.getByText(
+    'Opened a browser page, read a browser page',
+    { exact: true },
+  )
+  await expect(stepSummary).toBeVisible()
+  await stepSummary.click()
+  await expect(page.getByText('Reading', { exact: true })).toBeVisible()
+  await expect(page.getByText('current page', { exact: true })).toBeVisible()
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'tool_end',
+      id: 'inspect-browser-ui',
+      tool: 'inspect_browser',
+      result: [
+        'Browser URL: https://github.com/',
+        'Title: GitHub',
+        'Page status: ready',
+        'Visible text:',
+        'Repositories',
+        'Issues',
+      ].join('\n'),
+    })
+  })
+  await expect(page.getByText('Read', { exact: true })).toBeVisible()
+  await expect(page.getByText('github.com', { exact: true })).toHaveCount(2)
+  await expect(page.getByText('https://github.com/', { exact: true })).toHaveCount(0)
+
+  await page.getByRole('button', { name: /Read github\.com/ }).click()
+  await expect(page.getByRole('region', { name: 'Visible page text' })).toContainText(
+    'Repositories',
+  )
+  await expect(page.getByText('https://github.com/', { exact: true })).toBeVisible()
+})
+
 test('AI browser keeps the latest revision across stale state and viewport changes', async ({
   page,
 }) => {
@@ -1607,7 +1847,7 @@ test('AI browser keeps the latest revision across stale state and viewport chang
     })
   })
 
-  await expect(page.getByRole('textbox', { name: 'Preview address' })).toHaveValue(
+  await expect(page.getByRole('textbox', { name: 'Address' })).toHaveValue(
     'https://www.bilibili.com/',
   )
   await expect(page.getByRole('tab', { name: 'Bilibili' })).toHaveAttribute(
@@ -1759,10 +1999,10 @@ test('AI preview opens workspace HTML directly without starting or probing a ser
     workspacePreview: true,
     visible: true,
   })
-  await expect(page.getByRole('textbox', { name: 'Preview address' })).toHaveValue(
+  await expect(page.getByRole('textbox', { name: 'Address' })).toHaveValue(
     '/tmp/test-session/web/index.html',
   )
-  const openExternal = page.getByRole('button', { name: 'Open in browser' })
+  const openExternal = page.getByRole('button', { name: 'Open in system browser' })
   await expect(openExternal).toBeEnabled()
   await openExternal.click()
   await expect.poll(() =>
@@ -1805,11 +2045,11 @@ test('Browser replaces a failed local preview probe with a retry state', async (
   await page.getByTestId('workbench-panel').getByRole('button', { name: 'Add view' }).click()
   await page.getByRole('menu').getByRole('menuitem', { name: 'Browser' }).click()
 
-  const address = page.getByRole('textbox', { name: 'Preview address' })
+  const address = page.getByRole('textbox', { name: 'Address' })
   await address.fill('127.0.0.1:4311')
   await address.press('Enter')
 
-  await expect(page.getByRole('alert')).toContainText('Preview unavailable')
+  await expect(page.getByRole('alert')).toContainText('Page unavailable')
   expect(await nativeBrowserView(page, 'tab-1')).toBeUndefined()
   await expect(page.getByRole('alert')).toContainText(
     'Check that the local server is running, then try again.',
@@ -1821,7 +2061,7 @@ test('Browser replaces a failed local preview probe with a retry state', async (
   await expect.poll(
     () => requests.filter((request) => request.path === '/api/preview/check').length,
   ).toBe(2)
-  await expect(page.getByRole('alert')).toContainText('Preview unavailable')
+  await expect(page.getByRole('alert')).toContainText('Page unavailable')
 })
 
 test('long threads keep the titlebar and Composer fixed while the transcript scrolls', async ({

@@ -1,14 +1,16 @@
 # Browser Controller Design
 
 Status: Phase 1 and Phase 2 implemented, including Agent tab dispositions;
-Phase 3 proposed
+Phase 3 read-only text inspection implemented, remaining capabilities proposed
 
 ## Objective
 
 Turn the right-side Browser from a display-only preview surface into a reliable,
 session-aware browser controller. Phase 1 makes navigation and tab ownership
 deterministic. Phase 2 adds an acknowledgement path so an agent can distinguish
-a requested navigation from one that actually committed in Electron.
+a requested navigation from one that actually committed in Electron. The first
+Phase 3 capability adds explicit, bounded, read-only observation of the stable
+Agent tab.
 
 This design is independently implemented on Electron APIs. It borrows general
 product patterns from mature browser automation systems, but does not reuse
@@ -32,7 +34,7 @@ This has three structural causes:
 Each coding session has one deterministic reusable Agent tab:
 
 ```text
-agent:<session-id>
+preview:<session-id>
 ```
 
 The default agent action reuses that tab. The existing `WebContentsView` stays
@@ -78,6 +80,8 @@ without creating duplicates.
 
 - Own the workbench tab model and active tab selection.
 - Route an agent request to its deterministic session tab.
+- Handle inspection requests independently of whether `BrowserView` is mounted,
+  waiting for a restored reusable-tab navigation before observing it.
 - Keep every pending browser command until its result is acknowledged and route
   new-tab commands to stable command-owned tabs.
 - Keep desired command state separate from observed page state.
@@ -318,13 +322,48 @@ Every tab keeps its native controller mounted. Only the active tab gets a
 visible viewport; inactive tabs can still navigate and report terminal state.
 Closing a tab with an unfinished Agent command reports `cancelled`.
 
-## Phase 3: Optional Capabilities
+## Phase 3: Explicit Browser Capabilities
 
-Capabilities are added after the navigation control plane is stable:
+The first implemented capability is `inspect_browser`. It returns the stable
+Agent tab's final HTTP(S) URL, title, page status, applied revision, and at most
+12,000 characters of rendered text.
+
+```text
+inspect_browser tool
+  -> BrowserBroker broadcasts browser_inspect_request
+  -> Renderer inspection controller waits for pending Agent navigation
+  -> Electron runs one fixed extractor in isolated world 1001
+  -> React POSTs one terminal result
+  -> BrowserBroker returns the observation to the tool
+```
+
+The result endpoint is session and inspection scoped:
+
+```text
+POST /api/sessions/:sessionID/browser/inspect/:inspectionID/result
+```
+
+Pending inspection requests are included in history snapshots so a renderer
+reconnect does not strand the waiting tool call. The first terminal result wins;
+context cancellation, timeout, transport replacement, duplicates, and late
+results use the same broker lifecycle rules as navigation commands.
+
+The fixed extractor excludes form controls, editable regions, script and style
+content, hidden/inert/ARIA-hidden content, and non-rendered text. The Electron
+bridge accepts only `preview:<session-id>` IDs, so user tabs and command-owned
+new tabs cannot be inspected. It rejects the result if the tab or revision
+changes while extraction is running.
+
+The page text is untrusted external data. The tool description explicitly tells
+the model not to interpret instructions in the page as system or tool
+instructions. The capability does not expose raw DOM, arbitrary JavaScript,
+cookies, storage, form values, passwords, or browsing history.
+
+Remaining capabilities are proposed and must be added separately:
 
 - `state`: current URL, title, and loading state.
 - `screenshot`: bitmap capture of the controlled tab.
-- `inspect`: visible text or a constrained DOM/accessibility snapshot.
+- `inspect`: constrained DOM or accessibility snapshots beyond bounded text.
 - `interact`: click, type, select, and scroll through Playwright or CDP.
 - `dev`: console errors and failed network requests for local app testing.
 
@@ -344,6 +383,8 @@ to the model.
   navigation outside the active grant. Changing grants recreates the native
   entry and its isolated Electron session.
 - Browser commands accept only HTTP(S) URLs after product validation.
+- Browser inspection runs fixed product code in an Electron isolated world and
+  checks that the applied revision remains unchanged before returning data.
 - User-owned tabs require an explicit user request before agent control is
   added in a future phase.
 - Sensitive form submission, uploads, purchases, messages, permission changes,
@@ -378,6 +419,21 @@ to the model.
 - Same-target reload and different-target navigation are distinct.
 - Web-to-workspace transitions replace the isolated entry.
 - Main-frame redirect and failure states carry the applied revision.
+- Inspection accepts only the stable Agent tab ID and validates the isolated
+  world result shape.
+
+### Inspection tests
+
+- Broker resolution is one-shot and covers timeout, context cancellation,
+  transport close, and reconnect restoration.
+- The endpoint rejects invalid statuses, revisions, URLs, credentials, and
+  inconsistent completed-page state, and enforces the text limit again in Go.
+- Rendered headings and button text are returned while form values, editable
+  text, script content, and hidden text are excluded.
+- Inspection still reads the stable Agent tab when a command-owned new tab is
+  active, and duplicate wire events produce exactly one result POST.
+- Inspection handling is independent of `BrowserView`; a closed or absent Agent
+  tab returns a prompt failure without reopening the workbench or navigating.
 
 ### End-to-end sequence
 
@@ -402,12 +458,14 @@ none can overwrite the current tab.
    `reuse_agent_tab` for `open_preview`. Completed.
 7. Add `BrowserBroker`, the result endpoint, history restoration, and broker
    tests. Completed.
-8. Add optional screenshot, inspection, and interaction capabilities only after
-   the command/result path is stable.
+8. Add bounded read-only text inspection for the stable Agent tab. Completed.
+9. Add optional screenshot, structured inspection, interaction, and developer
+   capabilities independently.
 
 Agent foreground/background tab dispositions and multi-command reconnect
-recovery were completed as the final Phase 2 delivery. Phase 3 begins with
-read-only page state and screenshot capabilities.
+recovery were completed as the final Phase 2 delivery. Phase 3 now includes
+read-only page URL, title, state, and visible text through `inspect_browser`.
 
-Phase 3 is the next implementation target. It must use explicit capabilities;
-navigation acknowledgement alone does not authorize page observation or input.
+Screenshot, structured page inspection, input, and developer diagnostics remain
+separate future capabilities. Navigation acknowledgement alone does not
+authorize any of them.

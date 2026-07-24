@@ -1,6 +1,7 @@
 import { APIError, sessionURL } from './api'
 import type {
   ApprovalChoice,
+  BrowserInspectionResult,
   BrowserResult,
   DeliveryMode,
   MessageImage,
@@ -28,6 +29,11 @@ export type SessionCommands = {
   removeQueuedMessage: (sessionID: string, id: string) => Promise<void>
   resolveApproval: (sessionID: string, id: string, choice: ApprovalChoice) => Promise<void>
   reportBrowserResult: (sessionID: string, id: string, result: BrowserResult) => Promise<void>
+  reportBrowserInspection: (
+    sessionID: string,
+    id: string,
+    result: BrowserInspectionResult,
+  ) => Promise<void>
 }
 
 type ErrorBody = {
@@ -116,6 +122,14 @@ export function createSessionCommands(
         sessionURL(sessionID, `/browser/${encodeURIComponent(id)}/result`),
         jsonRequest('POST', result),
         (status) => `browser result request failed (${status})`,
+      ),
+
+    reportBrowserInspection: (sessionID, id, result) =>
+      requestOK(
+        request,
+        sessionURL(sessionID, `/browser/inspect/${encodeURIComponent(id)}/result`),
+        jsonRequest('POST', result),
+        (status) => `browser inspection result request failed (${status})`,
       ),
   }
 }

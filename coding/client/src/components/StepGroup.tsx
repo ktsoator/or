@@ -15,7 +15,8 @@ import { useI18n } from '@/i18n'
 // in ToolCard's toolPresentation so the summary reads consistently.
 function stepCategory(name: string): string {
   const v = name.toLowerCase()
-  if (v === 'open_preview') return 'preview'
+  if (v === 'open_preview') return 'browserOpen'
+  if (v === 'inspect_browser') return 'browserInspect'
   if (v.includes('read') || v.includes('cat')) return 'read'
   if (v.includes('write')) return 'write'
   if (v.includes('edit') || v.includes('patch')) return 'edit'

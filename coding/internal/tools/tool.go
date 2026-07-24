@@ -57,6 +57,12 @@ func CodingToolsWithShells(
 ) ([]Tool, *BackgroundShells) {
 	files := NewFileStateStore()
 	shells := NewBackgroundShells()
+	var inspectors []BrowserInspector
+	if len(browserControllers) > 0 {
+		if inspector, ok := browserControllers[0].(BrowserInspector); ok {
+			inspectors = append(inspectors, inspector)
+		}
+	}
 	return []Tool{
 		Read(root, ops, files),
 		Grep(root, ops),
@@ -67,6 +73,7 @@ func CodingToolsWithShells(
 		Bash(root, ops, shells),
 		BashOutput(shells),
 		OpenPreview(root, browserControllers...),
+		InspectBrowser(inspectors...),
 		KillBash(shells),
 	}, shells
 }

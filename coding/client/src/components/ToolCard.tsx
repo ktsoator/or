@@ -4,6 +4,7 @@ import {
   ChevronRight,
   CircleStop,
   CircleX,
+  Eye,
   File,
   FileCode2,
   FilePlus2,
@@ -74,12 +75,14 @@ type ToolKind =
   | 'logs'
   | 'kill'
   | 'skill'
-  | 'preview'
+  | 'browserOpen'
+  | 'browserInspect'
 
 function toolPresentation(name: string): { Icon: LucideIcon; kind: ToolKind } {
   const value = name.toLowerCase()
   if (value === 'skill') return { Icon: BookOpenText, kind: 'skill' }
-  if (value === 'open_preview') return { Icon: Globe2, kind: 'preview' }
+  if (value === 'open_preview') return { Icon: Globe2, kind: 'browserOpen' }
+  if (value === 'inspect_browser') return { Icon: Eye, kind: 'browserInspect' }
   if (value.includes('read') || value.includes('cat')) return { Icon: FileSearch, kind: 'read' }
   if (value.includes('write')) return { Icon: FilePlus2, kind: 'write' }
   if (value.includes('edit')) return { Icon: PencilLine, kind: 'edit' }
@@ -94,6 +97,35 @@ function toolPresentation(name: string): { Icon: LucideIcon; kind: ToolKind } {
   if (value.includes('output') || value.includes('log')) return { Icon: ScrollText, kind: 'logs' }
   if (value.includes('file')) return { Icon: FileCode2, kind: 'inspect' }
   return { Icon: Terminal, kind: 'run' }
+}
+
+function browserResultURL(output: string): string {
+  return /^Browser URL:\s*(.+)$/m.exec(output)?.[1]?.trim() ?? ''
+}
+
+function browserTargetLabel(value: string): string {
+  if (!value) return ''
+  try {
+    const url = new URL(value)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return value
+    const path = url.pathname === '/' ? '' : url.pathname.replace(/\/$/, '')
+    return `${url.host}${path}`
+  } catch {
+    return value
+  }
+}
+
+function browserVerb(
+  kind: 'browserOpen' | 'browserInspect',
+  status: ToolItem['status'],
+  t: ReturnType<typeof useI18n>['t'],
+): string {
+  if (kind === 'browserOpen') {
+    if (status === 'error') return t('tool.browserOpenFailed')
+    return t(status === 'complete' ? 'tool.browserOpened' : 'tool.browserOpening')
+  }
+  if (status === 'error') return t('tool.browserReadFailed')
+  return t(status === 'complete' ? 'tool.browserRead' : 'tool.browserReading')
 }
 
 function argHint(args: unknown): string {
@@ -155,10 +187,12 @@ function Status({
   status,
   generatedBytes,
   lineCount,
+  compact = false,
 }: {
   status: ToolItem['status']
   generatedBytes?: number
   lineCount?: number
+  compact?: boolean
 }) {
   const { t } = useI18n()
   if (status === 'preparing' || status === 'running') {
@@ -167,7 +201,7 @@ function Status({
         ? t('tool.lines', { count: lineCount })
         : status === 'preparing' && generatedBytes
           ? formatBytes(generatedBytes)
-          : status === 'running'
+          : status === 'running' && !compact
             ? t('tool.running')
             : ''
     return (
@@ -177,6 +211,7 @@ function Status({
       </span>
     )
   }
+  if (compact) return null
   if (status === 'error') {
     return (
       <span className="ml-auto flex shrink-0 items-center gap-1 text-[0.75rem] text-red-600">
@@ -291,6 +326,96 @@ function ReadPreview({ output, path, failed }: { output: string; path: string; f
         >
           {output}
         </pre>
+      )}
+    </div>
+  )
+}
+
+type BrowserInspectionContent = {
+  url: string
+  title: string
+  status: string
+  visibleText: string
+  truncated: boolean
+}
+
+function parseBrowserInspection(output: string): BrowserInspectionContent | undefined {
+  const lines = output.trim().split('\n')
+  const visibleIndex = lines.findIndex((line) => line.startsWith('Visible text:'))
+  const url = lines.find((line) => line.startsWith('Browser URL:'))?.slice(12).trim() ?? ''
+  if (!url || visibleIndex < 0) return undefined
+  const title = lines.find((line) => line.startsWith('Title:'))?.slice(6).trim() ?? ''
+  const status = lines.find((line) => line.startsWith('Page status:'))?.slice(12).trim() ?? ''
+  const inlineText = lines[visibleIndex]?.slice('Visible text:'.length).trim() ?? ''
+  const visibleLines = inlineText ? [inlineText] : lines.slice(visibleIndex + 1)
+  const truncated = visibleLines.at(-1) === '[Visible text truncated]'
+  if (truncated) visibleLines.pop()
+  const visibleText = visibleLines.join('\n').trim()
+  return {
+    url,
+    title,
+    status,
+    visibleText: visibleText === '(none)' ? '' : visibleText,
+    truncated,
+  }
+}
+
+function BrowserInspectionPreview({
+  output,
+  failed,
+}: {
+  output: string
+  failed: boolean
+}) {
+  const { t } = useI18n()
+  if (failed) {
+    return (
+      <div className="mt-1 ml-5 rounded-md border-l-2 border-red-300 bg-red-50/50 px-3 py-1 text-[var(--tool-detail-font-size)] leading-5 text-red-700 max-md:ml-0">
+        {output || t('tool.browserInspectionFailed')}
+      </div>
+    )
+  }
+
+  const content = parseBrowserInspection(output)
+  if (!content) {
+    return (
+      <pre className="code-scroll-area mt-1 ml-5 max-h-72 overflow-auto rounded-md border border-stone-200 bg-white px-3 py-2 font-mono text-[var(--tool-detail-font-size)] leading-5 whitespace-pre-wrap text-stone-700 max-md:ml-0">
+        {output}
+      </pre>
+    )
+  }
+
+  return (
+    <div className="mt-1 ml-5 max-w-full overflow-hidden rounded-lg border border-stone-200/90 bg-white max-md:ml-0">
+      <div className="border-b border-stone-200/80 px-3 py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-medium text-stone-800">
+            {content.title || browserTargetLabel(content.url)}
+          </span>
+          {content.status && (
+            <span className="shrink-0 text-[0.6875rem] text-stone-400">
+              {content.status === 'ready' ? t('tool.browserReady') : content.status}
+            </span>
+          )}
+        </div>
+        <div className="truncate font-mono text-[0.71875rem] leading-4 text-stone-500" title={content.url}>
+          {content.url}
+        </div>
+      </div>
+      <div
+        className="code-scroll-area max-h-72 overflow-auto px-3 py-2 text-[0.8125rem] leading-5 whitespace-pre-wrap text-stone-700"
+        role="region"
+        aria-label={t('tool.browserVisibleText')}
+        tabIndex={0}
+      >
+        {content.visibleText || (
+          <span className="text-stone-400">{t('tool.browserNoVisibleText')}</span>
+        )}
+      </div>
+      {content.truncated && (
+        <div className="border-t border-stone-200/80 px-3 py-1 text-[0.6875rem] text-stone-400">
+          {t('tool.browserTextTruncated')}
+        </div>
       )}
     </div>
   )
@@ -461,38 +586,58 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
   const rawHint = argHint(item.args)
   const rawCommand = explicitCommand(item.args) || (rawHint ? `${item.name} ${rawHint}` : item.name)
   const { Icon, kind } = toolPresentation(item.name)
-  const verb = t(`tool.${kind}`)
   const hint = relativize(rawHint, cwd)
   const command = relativize(rawCommand, cwd)
+  const browserKind = kind === 'browserOpen' || kind === 'browserInspect'
+  const verb = browserKind
+    ? browserVerb(kind, item.status, t)
+    : t(`tool.${kind}`)
   const description = kind === 'run' ? commandDescription(item.args) : ''
   const skillTitle = kind === 'skill' ? skillField(item.args, 'name') : ''
   const skillArgs = kind === 'skill' ? skillField(item.args, 'arguments') : ''
   const lineCount = generatedLineCount(kind, item.args)
   const preparingLabel =
     item.status === 'preparing' && item.args === undefined
-      ? kind === 'write'
-        ? t('tool.preparingWrite')
-        : kind === 'edit'
-          ? t('tool.preparingEdit')
-          : t('tool.preparing')
+      ? kind === 'browserOpen'
+        ? t('tool.browserOpeningPage')
+        : kind === 'browserInspect'
+          ? t('tool.browserReadingPage')
+          : kind === 'write'
+            ? t('tool.preparingWrite')
+            : kind === 'edit'
+              ? t('tool.preparingEdit')
+              : t('tool.preparing')
       : ''
   const target =
-    kind === 'run'
-      ? stripLeadingCd(command)
-      : kind === 'skill'
-        ? skillTitle || item.name
-        : hint || item.name
-  const targetTitle = kind === 'run' ? rawCommand : kind === 'skill' ? skillTitle : rawHint || item.name
+    kind === 'browserOpen'
+      ? browserTargetLabel(hint) || t('tool.browserPage')
+      : kind === 'browserInspect'
+        ? browserTargetLabel(browserResultURL(item.result || '')) || t('tool.browserCurrentPage')
+        : kind === 'run'
+          ? stripLeadingCd(command)
+          : kind === 'skill'
+            ? skillTitle || item.name
+            : hint || item.name
+  const targetTitle =
+    kind === 'browserInspect'
+      ? browserResultURL(item.result || '') || t('tool.browserCurrentPage')
+      : kind === 'run'
+        ? rawCommand
+        : kind === 'skill'
+          ? skillTitle
+          : rawHint || item.name
   const fileChange = item.change?.changeType === 'file' ? item.change : undefined
   const changedFilename = fileChange?.path.split('/').filter(Boolean).pop() || fileChange?.path
   const hasDetails =
-    kind === 'preview'
+    kind === 'browserOpen'
       ? false
-      : kind === 'read'
-        ? item.status === 'complete' || item.status === 'error'
-      : kind === 'skill'
-        ? Boolean(skillArgs || item.status === 'error')
-        : Boolean(args || item.change || item.result || item.status === 'error')
+      : kind === 'browserInspect'
+        ? Boolean(item.result || item.status === 'error')
+        : kind === 'read'
+          ? item.status === 'complete' || item.status === 'error'
+          : kind === 'skill'
+            ? Boolean(skillArgs || item.status === 'error')
+            : Boolean(args || item.change || item.result || item.status === 'error')
   const shellOutput =
     item.result || (item.status === 'error' ? t('tool.failedNoMessage') : '')
   const readOutput =
@@ -538,6 +683,13 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
         >
           {description}
         </span>
+      ) : browserKind ? (
+        <span
+          className="min-w-0 overflow-hidden font-normal text-stone-600 text-ellipsis whitespace-nowrap transition-colors group-hover:text-stone-950"
+          title={targetTitle}
+        >
+          {target}
+        </span>
       ) : (
         <code
           className="min-w-0 overflow-hidden font-mono text-[var(--chat-font-size)] leading-6 font-normal text-stone-500 text-ellipsis whitespace-nowrap transition-colors group-hover:text-stone-950"
@@ -546,7 +698,12 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
           {target}
         </code>
       )}
-      <Status status={item.status} generatedBytes={item.generatedBytes} lineCount={lineCount} />
+      <Status
+        status={item.status}
+        generatedBytes={item.generatedBytes}
+        lineCount={lineCount}
+        compact={browserKind}
+      />
     </span>
   )
 
@@ -564,7 +721,9 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
         />
       </CollapsibleTrigger>
       <CollapsibleContent>
-        {kind === 'skill' ? (
+        {kind === 'browserInspect' ? (
+          <BrowserInspectionPreview output={item.result || ''} failed={item.status === 'error'} />
+        ) : kind === 'skill' ? (
           <div className="mt-1 ml-5 overflow-hidden rounded-lg border border-stone-200 bg-white max-md:ml-0">
             {skillArgs && (
               <DetailBlock title={t('tool.skillArguments')}>

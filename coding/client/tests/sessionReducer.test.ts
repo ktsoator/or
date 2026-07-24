@@ -331,6 +331,38 @@ describe('threadsReducer event sequences', () => {
     ])
   })
 
+  test('restores, deduplicates, and handles pending browser inspections', () => {
+    let state = reduce([
+      {
+        t: 'reset',
+        sessionID,
+        history: {
+          running: true,
+          events: [
+            { type: 'browser_inspect_request', id: 'inspection-1' },
+            { type: 'browser_inspect_request', id: 'inspection-1' },
+          ],
+        },
+      },
+      {
+        t: 'wire',
+        sessionID,
+        ev: { type: 'browser_inspect_request', id: 'inspection-2' },
+      },
+    ])
+
+    expect(thread(state).browserInspections).toEqual([
+      { commandID: 'inspection-1' },
+      { commandID: 'inspection-2' },
+    ])
+
+    state = reduce(
+      [{ t: 'browserInspectionHandled', sessionID, id: 'inspection-1' }],
+      state,
+    )
+    expect(thread(state).browserInspections).toEqual([{ commandID: 'inspection-2' }])
+  })
+
   test('rebuilds history after disconnect and finalizes an idle open run', () => {
     const state = reduce([
       { t: 'status', sessionID, status: 'disconnected' },

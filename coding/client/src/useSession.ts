@@ -20,6 +20,7 @@ import type {
   ApprovalChoice,
   ApprovalItem,
   BrowserCommandState,
+  BrowserInspectionCommandState,
   CompactionResult,
   ConnectionStatus,
   ContextUsage,
@@ -51,6 +52,7 @@ export type Session = {
   contextUsage?: ContextUsage
   preview?: PreviewState
   browserCommands: BrowserCommandState[]
+  browserInspections: BrowserInspectionCommandState[]
   previewOpen: boolean
   approval?: ApprovalItem
   running: boolean
@@ -78,6 +80,7 @@ export type Session = {
   stop: () => void
   resolveApproval: (id: string, choice: ApprovalChoice) => Promise<void>
   handleBrowserCommand: (sessionID: string, id: string) => void
+  handleBrowserInspection: (sessionID: string, id: string) => void
   secondaryThread?: SessionThread
 }
 
@@ -88,6 +91,7 @@ export type SessionThread = {
   contextUsage?: ContextUsage
   preview?: PreviewState
   browserCommands: BrowserCommandState[]
+  browserInspections: BrowserInspectionCommandState[]
   previewOpen: boolean
   approval?: ApprovalItem
   running: boolean
@@ -787,6 +791,7 @@ export function useSession(secondarySessionID?: string): Session {
         contextUsage: secondaryState?.contextUsage,
         preview: secondaryState?.preview,
         browserCommands: secondaryState?.browserCommands ?? [],
+        browserInspections: secondaryState?.browserInspections ?? [],
         previewOpen: secondaryState?.previewOpen ?? false,
         approval: secondaryApproval,
         running: secondaryState?.running ?? secondarySession.running,
@@ -821,6 +826,7 @@ export function useSession(secondarySessionID?: string): Session {
     contextUsage: thread?.contextUsage,
     preview: thread?.preview,
     browserCommands: thread?.browserCommands ?? [],
+    browserInspections: thread?.browserInspections ?? [],
     previewOpen: thread?.previewOpen ?? false,
     approval,
     running: thread?.running ?? activeSession?.running ?? false,
@@ -849,6 +855,8 @@ export function useSession(secondarySessionID?: string): Session {
     resolveApproval,
     handleBrowserCommand: (sessionID: string, id: string) =>
       dispatch({ t: 'browserCommandHandled', sessionID, id }),
+    handleBrowserInspection: (sessionID: string, id: string) =>
+      dispatch({ t: 'browserInspectionHandled', sessionID, id }),
     secondaryThread,
   }
 }

@@ -30,12 +30,22 @@ export type NativeBrowserState = {
   error?: string
 }
 
+export type NativeBrowserInspection = {
+  url: string
+  title: string
+  pageStatus: 'ready'
+  revision: number
+  visibleText: string
+  truncated: boolean
+}
+
 type NativeBrowserBridge = {
   navigate: (input: NativeBrowserNavigateInput) => Promise<NativeBrowserState>
   setViewport: (input: NativeBrowserViewportInput) => Promise<void>
   close: (tabID: string) => Promise<void>
   goBack: (tabID: string) => Promise<void>
   goForward: (tabID: string) => Promise<void>
+  inspect: (tabID: string) => Promise<NativeBrowserInspection>
   onState: (listener: (state: NativeBrowserState) => void) => () => void
 }
 
@@ -89,6 +99,12 @@ export function goBackNativeBrowser(tabID: string): Promise<void> {
 
 export function goForwardNativeBrowser(tabID: string): Promise<void> {
   return window.codingDesktop?.browser?.goForward(tabID) ?? Promise.resolve()
+}
+
+export function inspectNativeBrowser(
+  tabID: string,
+): Promise<NativeBrowserInspection | undefined> {
+  return window.codingDesktop?.browser?.inspect(tabID) ?? Promise.resolve(undefined)
 }
 
 export function onNativeBrowserState(

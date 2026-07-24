@@ -153,6 +153,8 @@ function registerIPC(): void {
   ipcMain.handle('desktop:browser:go-forward', (event, tabID: unknown) => {
     browserFor(event.sender).goForward(tabID)
   })
+  ipcMain.handle('desktop:browser:inspect', (event, tabID: unknown) =>
+    browserFor(event.sender).inspect(tabID))
 }
 
 function browserFor(sender: Electron.WebContents): NativeBrowserManager {

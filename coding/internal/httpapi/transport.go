@@ -118,6 +118,10 @@ func (t *sessionTransport) OpenBrowser(
 	return result, err
 }
 
+func (t *sessionTransport) InspectBrowser(ctx context.Context) (tools.BrowserInspectionResult, error) {
+	return t.browser.InspectBrowser(ctx)
+}
+
 func (t *sessionTransport) Close() {
 	t.closeOnce.Do(func() {
 		if t.owner.remove(t.sessionID, t) {

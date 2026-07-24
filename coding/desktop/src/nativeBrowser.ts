@@ -12,6 +12,12 @@ import {
   workspacePreviewPrefix,
   workspacePreviewRequestAllowed,
 } from './workspacePreviewSecurity'
+import {
+  browserInspectionScript,
+  browserInspectionTextLimit,
+  isAgentBrowserTabID,
+  isBrowserInspectionText,
+} from './browserInspection'
 
 export type DesktopEndpoint = {
   url: string
@@ -58,6 +64,18 @@ type BrowserState = {
   canGoForward: boolean
   error?: string
 }
+
+export type BrowserInspection = {
+  url: string
+  title: string
+  pageStatus: 'ready'
+  revision: number
+  visibleText: string
+  truncated: boolean
+}
+
+const browserInspectionTimeoutMs = 5_000
+const browserInspectionWorldID = 1001
 
 export class NativeBrowserManager {
   readonly #window: BrowserWindow
@@ -199,6 +217,48 @@ export class NativeBrowserManager {
     const entry = this.#entry(tabID)
     if (entry?.view.webContents.navigationHistory.canGoForward()) {
       entry.view.webContents.navigationHistory.goForward()
+    }
+  }
+
+  async inspect(tabID: unknown): Promise<BrowserInspection> {
+    const id = this.#agentTabID(tabID)
+    const entry = this.#entries.get(id)
+    if (!entry || entry.view.webContents.isDestroyed()) {
+      throw new Error('Agent browser tab is not open')
+    }
+    if (entry.status !== 'ready' || entry.appliedRevision < 0) {
+      throw new Error('Agent browser tab is not ready')
+    }
+
+    const revision = entry.appliedRevision
+    const contents = entry.view.webContents
+    const result = await withTimeout(
+      contents.executeJavaScriptInIsolatedWorld(
+        browserInspectionWorldID,
+        [{ code: browserInspectionScript }],
+        false,
+      ),
+      browserInspectionTimeoutMs,
+      'Browser inspection timed out',
+    )
+    if (
+      this.#entries.get(id) !== entry ||
+      contents.isDestroyed() ||
+      entry.status !== 'ready' ||
+      entry.appliedRevision !== revision
+    ) {
+      throw new Error('Agent browser page changed during inspection')
+    }
+    if (!isBrowserInspectionText(result)) {
+      throw new Error('Browser returned an invalid inspection result')
+    }
+    return {
+      url: contents.getURL(),
+      title: contents.getTitle(),
+      pageStatus: 'ready',
+      revision,
+      visibleText: result.visibleText.slice(0, browserInspectionTextLimit),
+      truncated: result.truncated || result.visibleText.length > browserInspectionTextLimit,
     }
   }
 
@@ -416,6 +476,13 @@ export class NativeBrowserManager {
     return typeof value === 'string' && value ? value : undefined
   }
 
+  #agentTabID(value: unknown): string {
+    if (!isAgentBrowserTabID(value)) {
+      throw new TypeError('Agent browser tab ID is invalid')
+    }
+    return value
+  }
+
   #beginOperation(tabID: string): number {
     const operation = (this.#operations.get(tabID) ?? 0) + 1
     this.#operations.set(tabID, operation)
@@ -537,4 +604,24 @@ function errorMessage(error: unknown): string {
 async function openExternalURL(url: URL): Promise<void> {
   if (!['mailto:', 'tel:'].includes(url.protocol)) return
   await shell.openExternal(url.href)
+}
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), timeoutMs)
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (error: unknown) => {
+        clearTimeout(timer)
+        reject(error)
+      },
+    )
+  })
 }

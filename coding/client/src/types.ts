@@ -23,6 +23,10 @@ export type BrowserCommandState = PreviewRequest & {
   disposition: BrowserDisposition
 }
 
+export type BrowserInspectionCommandState = {
+  commandID: string
+}
+
 // UI snapshots also cover a local degraded state when history cannot be read.
 export type ThreadSnapshot = Pick<HistoryResponse, 'events' | 'running'> &
   Partial<
