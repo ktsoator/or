@@ -8,8 +8,8 @@ import "github.com/ktsoator/or/llm"
 func defaultConvertToLLM(messages []AgentMessage) []llm.Message {
 	result := make([]llm.Message, 0, len(messages))
 	for _, message := range messages {
-		if wrapped, ok := message.(llmMessage); ok {
-			result = append(result, wrapped.Message)
+		if projected, ok := ToLLM(message); ok {
+			result = append(result, projected)
 		}
 	}
 	return result

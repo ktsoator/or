@@ -279,8 +279,9 @@ func (a *Agent) Subscribe(listener func(AgentEvent)) (unsubscribe func()) {
 	}
 }
 
-// QueueHandle identifies one message while it remains in an Agent queue. It is
-// opaque to callers and valid only for the Agent that created it.
+// QueueHandle is an opaque identity for one message submitted to an Agent
+// queue. It remains attached to that message when drained, while cancellation
+// succeeds only until the message leaves the queue.
 type QueueHandle struct {
 	queue *messageQueue
 	id    uint64
@@ -456,10 +457,10 @@ func (a *Agent) reduce(event AgentEvent) {
 	defer a.mu.Unlock()
 	switch event.Type {
 	case MessageStart, MessageUpdate:
-		a.streamingMessage = event.Message
+		a.streamingMessage = withoutQueueHandle(event.Message)
 	case MessageEnd:
 		a.streamingMessage = nil
-		a.messages = append(a.messages, event.Message)
+		a.messages = append(a.messages, withoutQueueHandle(event.Message))
 	case ToolStart:
 		a.pendingToolCalls = append(a.pendingToolCalls, event.ToolCallID)
 	case ToolEnd:
@@ -542,13 +543,19 @@ func (q *messageQueue) drain() []AgentMessage {
 	if q.mode == QueueOneAtATime {
 		next := q.items[0]
 		q.items = append([]queuedMessage(nil), q.items[1:]...)
-		return []AgentMessage{next.message}
+		return []AgentMessage{queuedMessageEnvelope{
+			message: next.message,
+			handle:  QueueHandle{queue: q, id: next.id},
+		}}
 	}
 	drained := q.items
 	q.items = nil
 	messages := make([]AgentMessage, 0, len(drained))
 	for _, item := range drained {
-		messages = append(messages, item.message)
+		messages = append(messages, queuedMessageEnvelope{
+			message: item.message,
+			handle:  QueueHandle{queue: q, id: item.id},
+		})
 	}
 	return messages
 }
@@ -607,10 +614,10 @@ func lastAssistantError(messages []AgentMessage) string {
 
 // assistantMessage unwraps an AgentMessage into an llm assistant message.
 func assistantMessage(message AgentMessage) (*llm.AssistantMessage, bool) {
-	wrapped, ok := message.(llmMessage)
+	projected, ok := ToLLM(message)
 	if !ok {
 		return nil, false
 	}
-	assistant, ok := wrapped.Message.(*llm.AssistantMessage)
+	assistant, ok := projected.(*llm.AssistantMessage)
 	return assistant, ok
 }

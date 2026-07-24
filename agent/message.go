@@ -17,16 +17,28 @@ func FromLLM(m llm.Message) AgentMessage {
 	return llmMessage{Message: m}
 }
 
-// ToLLM returns the standard llm.Message wrapped by FromLLM, reporting false for
-// a custom (UI-only) AgentMessage that has no llm projection. It is the inverse
-// of FromLLM, intended for use inside a custom ConvertToLLM that needs to pass
-// the adapted messages through while projecting its own message types.
+// ToLLM returns the standard llm.Message wrapped by FromLLM, including through
+// an internal queue envelope. It reports false for a custom (UI-only)
+// AgentMessage with no LLM projection.
 func ToLLM(m AgentMessage) (llm.Message, bool) {
-	wrapped, ok := m.(llmMessage)
-	if !ok {
+	switch message := m.(type) {
+	case llmMessage:
+		return message.Message, true
+	case queuedMessageEnvelope:
+		return ToLLM(message.message)
+	default:
 		return nil, false
 	}
-	return wrapped.Message, true
+}
+
+// QueueHandleOf returns the queue identity attached to a drained message.
+// Ordinary prompts and messages that never passed through a queue have none.
+func QueueHandleOf(message AgentMessage) (QueueHandle, bool) {
+	queued, ok := message.(queuedMessageEnvelope)
+	if !ok {
+		return QueueHandle{}, false
+	}
+	return queued.handle, true
 }
 
 // UserMessage builds a user AgentMessage from text and optional images — the
@@ -49,6 +61,25 @@ type llmMessage struct {
 }
 
 func (llmMessage) isAgentMessage() {}
+
+// queuedMessageEnvelope carries queue identity through RunLoop events without
+// exposing it to the model or retaining it in the Agent transcript.
+type queuedMessageEnvelope struct {
+	message AgentMessage
+	handle  QueueHandle
+}
+
+func (queuedMessageEnvelope) isAgentMessage() {}
+
+func withoutQueueHandle(message AgentMessage) AgentMessage {
+	for {
+		queued, ok := message.(queuedMessageEnvelope)
+		if !ok {
+			return message
+		}
+		message = queued.message
+	}
+}
 
 // Custom is embedded by an application's own message types so they satisfy
 // AgentMessage without referencing the interface's unexported marker.

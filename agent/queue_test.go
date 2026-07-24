@@ -10,13 +10,13 @@ import (
 // userText unwraps a queued user message back to its text for assertions.
 func userText(t *testing.T, message AgentMessage) string {
 	t.Helper()
-	wrapped, ok := message.(llmMessage)
+	projected, ok := ToLLM(message)
 	if !ok {
 		t.Fatalf("not an llm message: %T", message)
 	}
-	user, ok := wrapped.Message.(*llm.UserMessage)
+	user, ok := projected.(*llm.UserMessage)
 	if !ok {
-		t.Fatalf("not a user message: %T", wrapped.Message)
+		t.Fatalf("not a user message: %T", projected)
 	}
 	for _, block := range user.Content {
 		if text, ok := block.(*llm.TextContent); ok {
@@ -24,6 +24,86 @@ func userText(t *testing.T, message AgentMessage) string {
 		}
 	}
 	return ""
+}
+
+func TestMessageQueueDrainPreservesDistinctHandles(t *testing.T) {
+	q := &messageQueue{mode: QueueAll}
+	firstID := q.enqueue(userPrompt("same"))
+	secondID := q.enqueue(userPrompt("same"))
+
+	drained := q.drain()
+	if len(drained) != 2 {
+		t.Fatalf("drained = %d messages, want 2", len(drained))
+	}
+	first, firstOK := QueueHandleOf(drained[0])
+	second, secondOK := QueueHandleOf(drained[1])
+	if !firstOK || !secondOK {
+		t.Fatalf("queue handles found = %v, %v, want both", firstOK, secondOK)
+	}
+	if first != (QueueHandle{queue: q, id: firstID}) {
+		t.Fatal("first drained message has the wrong queue handle")
+	}
+	if second != (QueueHandle{queue: q, id: secondID}) {
+		t.Fatal("second drained message has the wrong queue handle")
+	}
+	if first == second {
+		t.Fatal("identical messages received the same queue handle")
+	}
+}
+
+func TestQueueEnvelopeDoesNotChangeModelProjection(t *testing.T) {
+	q := &messageQueue{mode: QueueOneAtATime}
+	original := userPrompt("same")
+	q.enqueue(original)
+	drained := q.drain()
+
+	converted := defaultConvertToLLM(drained)
+	want, _ := ToLLM(original)
+	if len(converted) != 1 || converted[0] != want {
+		t.Fatalf("converted = %#v, want original message %#v", converted, want)
+	}
+	if _, ok := QueueHandleOf(original); ok {
+		t.Fatal("ordinary message unexpectedly has a queue handle")
+	}
+}
+
+func TestAgentEventsDistinguishPromptFromQueuedMessage(t *testing.T) {
+	rec := &recorder{turns: [][]llm.Event{{done(textAssistant("ok"))}}}
+	a := New(Options{Model: testModel, StreamFn: rec.fn()})
+	queued := a.Steer(userPrompt("same"))
+	var userHandles []QueueHandle
+	var userQueued []bool
+	a.Subscribe(func(event AgentEvent) {
+		if event.Type != MessageEnd {
+			return
+		}
+		projected, ok := ToLLM(event.Message)
+		if !ok {
+			return
+		}
+		if _, ok := projected.(*llm.UserMessage); !ok {
+			return
+		}
+		handle, found := QueueHandleOf(event.Message)
+		userHandles = append(userHandles, handle)
+		userQueued = append(userQueued, found)
+	})
+
+	if err := a.Prompt(context.Background(), "same"); err != nil {
+		t.Fatal(err)
+	}
+	if len(userQueued) != 2 {
+		t.Fatalf("user events = %d, want prompt and queued message", len(userQueued))
+	}
+	if userQueued[0] {
+		t.Fatal("ordinary prompt unexpectedly carried a queue handle")
+	}
+	if !userQueued[1] || userHandles[1] != queued {
+		t.Fatal("queued message did not carry its original queue handle")
+	}
+	if _, ok := a.Snapshot().Messages[1].(llmMessage); !ok {
+		t.Fatalf("queued transcript message retained internal envelope: %T", a.Snapshot().Messages[1])
+	}
 }
 
 func TestMessageQueueDrainAll(t *testing.T) {
