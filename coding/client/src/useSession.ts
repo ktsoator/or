@@ -32,6 +32,8 @@ import type {
   PreviewState,
   MessageImage,
   QueuedMessage,
+  QuestionAnswer,
+  QuestionItem,
   SessionSummary,
   ThreadSnapshot,
   WorkspaceSummary,
@@ -55,6 +57,7 @@ export type Session = {
   browserInspections: BrowserInspectionCommandState[]
   previewOpen: boolean
   approval?: ApprovalItem
+  question?: QuestionItem
   running: boolean
   autoCompacting: boolean
   loading: boolean
@@ -79,6 +82,7 @@ export type Session = {
   removeQueuedMessage: (id: string) => Promise<void>
   stop: () => void
   resolveApproval: (id: string, choice: ApprovalChoice) => Promise<void>
+  resolveQuestion: (id: string, answers: QuestionAnswer[]) => Promise<void>
   handleBrowserCommand: (sessionID: string, id: string) => void
   handleBrowserInspection: (sessionID: string, id: string) => void
   secondaryThread?: SessionThread
@@ -94,6 +98,7 @@ export type SessionThread = {
   browserInspections: BrowserInspectionCommandState[]
   previewOpen: boolean
   approval?: ApprovalItem
+  question?: QuestionItem
   running: boolean
   autoCompacting: boolean
   loading: boolean
@@ -104,6 +109,7 @@ export type SessionThread = {
   removeQueuedMessage: (id: string) => Promise<void>
   stop: () => void
   resolveApproval: (id: string, choice: ApprovalChoice) => Promise<void>
+  resolveQuestion: (id: string, answers: QuestionAnswer[]) => Promise<void>
   updateSettings: (provider: string, model: string, thinkingLevel: ThinkingLevel) => Promise<void>
   updatePermissionMode: (mode: PermissionMode) => Promise<void>
   compactContext: () => Promise<CompactionResult>
@@ -773,20 +779,45 @@ export function useSession(secondarySessionID?: string): Session {
     await resolveSessionApproval(activeSessionID, id, choice)
   }
 
+  const resolveSessionQuestion = async (
+    sessionID: string,
+    id: string,
+    answers: QuestionAnswer[],
+  ) => {
+    await sessionCommands.resolveQuestion(sessionID, id, answers)
+    dispatch({ t: 'resolveQuestion', sessionID, id })
+    dispatchSessionStore({ t: 'sessionQuestionResolved', sessionID })
+  }
+
+  const resolveQuestion = async (id: string, answers: QuestionAnswer[]) => {
+    if (!activeSessionID) throw new Error('no active session')
+    await resolveSessionQuestion(activeSessionID, id, answers)
+  }
+
   const approval = thread?.items.findLast(
     (item): item is ApprovalItem => item.kind === 'approval',
   )
-  const items = thread?.items.filter((item) => item.kind !== 'approval') ?? []
+  const question = thread?.items.findLast(
+    (item): item is QuestionItem => item.kind === 'question',
+  )
+  const items =
+    thread?.items.filter((item) => item.kind !== 'approval' && item.kind !== 'question') ?? []
 
   const secondarySession = sessions.find((session) => session.id === secondarySessionID)
   const secondaryState = secondarySessionID ? threads[secondarySessionID] : undefined
   const secondaryApproval = secondaryState?.items.findLast(
     (item): item is ApprovalItem => item.kind === 'approval',
   )
+  const secondaryQuestion = secondaryState?.items.findLast(
+    (item): item is QuestionItem => item.kind === 'question',
+  )
   const secondaryThread = secondarySession
     ? {
         session: secondarySession,
-        items: secondaryState?.items.filter((item) => item.kind !== 'approval') ?? [],
+        items:
+          secondaryState?.items.filter(
+            (item) => item.kind !== 'approval' && item.kind !== 'question',
+          ) ?? [],
         queuedMessages: secondaryState?.queue ?? [],
         contextUsage: secondaryState?.contextUsage,
         preview: secondaryState?.preview,
@@ -794,6 +825,7 @@ export function useSession(secondarySessionID?: string): Session {
         browserInspections: secondaryState?.browserInspections ?? [],
         previewOpen: secondaryState?.previewOpen ?? false,
         approval: secondaryApproval,
+        question: secondaryQuestion,
         running: secondaryState?.running ?? secondarySession.running,
         autoCompacting: secondaryState?.autoCompacting ?? false,
         loading: !secondaryState?.loaded,
@@ -807,6 +839,8 @@ export function useSession(secondarySessionID?: string): Session {
         stop: () => stopSession(secondarySession.id),
         resolveApproval: (id: string, choice: ApprovalChoice) =>
           resolveSessionApproval(secondarySession.id, id, choice),
+        resolveQuestion: (id: string, answers: QuestionAnswer[]) =>
+          resolveSessionQuestion(secondarySession.id, id, answers),
         updateSettings: (provider: string, model: string, thinkingLevel: ThinkingLevel) =>
           updateSessionSettings(secondarySession.id, provider, model, thinkingLevel),
         updatePermissionMode: (mode: PermissionMode) =>
@@ -829,6 +863,7 @@ export function useSession(secondarySessionID?: string): Session {
     browserInspections: thread?.browserInspections ?? [],
     previewOpen: thread?.previewOpen ?? false,
     approval,
+    question,
     running: thread?.running ?? activeSession?.running ?? false,
     autoCompacting: thread?.autoCompacting ?? false,
     loading: initializing || (Boolean(activeSessionID) && !thread?.loaded),
@@ -853,6 +888,7 @@ export function useSession(secondarySessionID?: string): Session {
     removeQueuedMessage,
     stop,
     resolveApproval,
+    resolveQuestion,
     handleBrowserCommand: (sessionID: string, id: string) =>
       dispatch({ t: 'browserCommandHandled', sessionID, id }),
     handleBrowserInspection: (sessionID: string, id: string) =>

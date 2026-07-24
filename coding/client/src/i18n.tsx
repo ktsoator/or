@@ -258,6 +258,12 @@ const en = {
   'approval.deny': 'Deny',
   'approval.allowOnce': 'Allow once',
 
+  'composer.answerQuestionPlaceholder': 'Answer the question above to continue',
+  'question.title': 'Input needed',
+  'question.otherPlaceholder': 'Something else…',
+  'question.submit': 'Send answer',
+  'question.couldNotSend': 'Could not send answer',
+
   'permission.choose': 'How should actions be approved?',
   'permission.ask': 'Ask for approval',
   'permission.askShort': 'Ask',
@@ -736,6 +742,12 @@ const zh: Record<TranslationKey, string> = {
   'approval.noDetails': '未提供详细信息',
   'approval.deny': '拒绝',
   'approval.allowOnce': '允许一次',
+
+  'composer.answerQuestionPlaceholder': '回答上面的问题后继续',
+  'question.title': '需要你决定',
+  'question.otherPlaceholder': '其他…',
+  'question.submit': '发送回答',
+  'question.couldNotSend': '回答发送失败',
 
   'permission.choose': '如何处理操作权限',
   'permission.ask': '请求审批',

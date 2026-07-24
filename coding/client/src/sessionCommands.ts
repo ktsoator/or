@@ -5,6 +5,7 @@ import type {
   BrowserResult,
   DeliveryMode,
   MessageImage,
+  QuestionAnswer,
 } from './types'
 
 export type PromptInput = {
@@ -28,6 +29,7 @@ export type SessionCommands = {
   abortRun: (sessionID: string) => Promise<void>
   removeQueuedMessage: (sessionID: string, id: string) => Promise<void>
   resolveApproval: (sessionID: string, id: string, choice: ApprovalChoice) => Promise<void>
+  resolveQuestion: (sessionID: string, id: string, answers: QuestionAnswer[]) => Promise<void>
   reportBrowserResult: (sessionID: string, id: string, result: BrowserResult) => Promise<void>
   reportBrowserInspection: (
     sessionID: string,
@@ -113,6 +115,14 @@ export function createSessionCommands(
         request,
         sessionURL(sessionID, `/approvals/${encodeURIComponent(id)}`),
         jsonRequest('POST', { choice }),
+        () => 'request failed',
+      ),
+
+    resolveQuestion: (sessionID, id, answers) =>
+      requestOK(
+        request,
+        sessionURL(sessionID, `/questions/${encodeURIComponent(id)}`),
+        jsonRequest('POST', { answers }),
         () => 'request failed',
       ),
 

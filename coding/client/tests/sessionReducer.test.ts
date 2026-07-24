@@ -226,6 +226,58 @@ describe('threadsReducer event sequences', () => {
     expect(thread(state).running).toBe(true)
   })
 
+  test('adds, resolves, and cancels questions without ending the run', () => {
+    const questions = [
+      {
+        question: 'Which cache?',
+        header: 'Cache',
+        options: [
+          { label: 'Redis', description: 'shared' },
+          { label: 'In-memory', description: 'no dependency' },
+        ],
+      },
+    ]
+    let state = reduce([
+      {
+        t: 'wire',
+        sessionID,
+        ev: { type: 'question_request', id: 'question-1', questions },
+      },
+    ])
+
+    expect(thread(state).running).toBe(true)
+    expect(thread(state).items).toContainEqual({
+      kind: 'question',
+      id: 'question-1',
+      questions,
+    })
+
+    state = reduce(
+      [
+        {
+          t: 'wire',
+          sessionID,
+          ev: { type: 'question_resolved', id: 'question-1' },
+        },
+        {
+          t: 'wire',
+          sessionID,
+          ev: { type: 'question_request', id: 'question-2', questions },
+        },
+        {
+          t: 'wire',
+          sessionID,
+          ev: { type: 'question_cancelled', id: 'question-2' },
+        },
+      ],
+      state,
+    )
+
+    expect(thread(state).items.filter((item) => item.kind === 'question')).toHaveLength(0)
+    // The run continues after a question is answered, exactly as with approvals.
+    expect(thread(state).running).toBe(true)
+  })
+
   test('opens a pending browser command and keeps tool completion navigation-idempotent', () => {
     const state = reduce([
       {

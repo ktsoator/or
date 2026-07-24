@@ -5,6 +5,7 @@ import type {
   HistoryResponse,
   MessageImage,
   PreviewRequest,
+  Question,
   Usage,
 } from './generated/wire'
 
@@ -133,6 +134,11 @@ export type ApprovalItem = {
   summary: string
   reason: string
 }
+export type QuestionItem = {
+  kind: 'question'
+  id: string
+  questions: Question[]
+}
 export type ErrorItem = { kind: 'error'; id: string; text: string }
 
 export type Item =
@@ -142,6 +148,7 @@ export type Item =
   | ThinkingItem
   | ToolItem
   | ApprovalItem
+  | QuestionItem
   | ErrorItem
 
 export type ConnectionStatus = 'connecting' | 'ready' | 'disconnected'
@@ -215,6 +222,7 @@ export type SessionSummary = {
   updatedAt: string
   running: boolean
   hasApproval: boolean
+  hasQuestion: boolean
   modelProvider: string
   modelId: string
   modelName: string

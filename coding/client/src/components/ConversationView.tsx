@@ -37,6 +37,7 @@ export function ConversationView({
       connected={thread.status === 'ready'}
       running={thread.running}
       approval={thread.approval}
+      question={thread.question}
       queuedMessages={thread.queuedMessages}
       contextUsage={thread.contextUsage}
       centered={centered}
@@ -53,6 +54,7 @@ export function ConversationView({
       onRemoveQueued={thread.removeQueuedMessage}
       onStop={thread.stop}
       onResolve={thread.resolveApproval}
+      onResolveQuestion={thread.resolveQuestion}
       onSelectProject={() => {}}
       onBrowseProjects={() => {}}
       onConfigureModel={onConfigureModel}

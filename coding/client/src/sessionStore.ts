@@ -69,6 +69,7 @@ export type SessionStoreAction =
   | { t: 'sessionDeleted'; sessionID: string }
   | { t: 'sessionPromptStarted'; sessionID: string; text: string; updatedAt: string }
   | { t: 'sessionApprovalResolved'; sessionID: string }
+  | { t: 'sessionQuestionResolved'; sessionID: string }
 
 export const createSessionStoreState = (): SessionStoreState => ({
   sessions: [],
@@ -166,6 +167,12 @@ export function sessionStoreReducer(
       if (event.type === 'approval_resolved' || event.type === 'approval_cancelled') {
         return patchSession(state, action.sessionID, { hasApproval: false })
       }
+      if (event.type === 'question_request') {
+        return patchSession(state, action.sessionID, { running: true, hasQuestion: true })
+      }
+      if (event.type === 'question_resolved' || event.type === 'question_cancelled') {
+        return patchSession(state, action.sessionID, { hasQuestion: false })
+      }
       if (event.type === 'done' || event.type === 'error') {
         return patchSession(state, action.sessionID, { running: false })
       }
@@ -197,6 +204,15 @@ export function sessionStoreReducer(
               : pending,
         false,
       )
+      const hasQuestion = action.history.events.reduce(
+        (pending, event) =>
+          event.type === 'question_request'
+            ? true
+            : event.type === 'question_resolved' || event.type === 'question_cancelled'
+              ? false
+              : pending,
+        false,
+      )
       const titlePatch = action.history.title === undefined
         ? {}
         : {
@@ -207,6 +223,7 @@ export function sessionStoreReducer(
       return patchSession(state, action.sessionID, {
         running: action.history.running,
         hasApproval,
+        hasQuestion,
         ...titlePatch,
       })
     }
@@ -344,6 +361,9 @@ export function sessionStoreReducer(
 
     case 'sessionApprovalResolved':
       return patchSession(state, action.sessionID, { hasApproval: false })
+
+    case 'sessionQuestionResolved':
+      return patchSession(state, action.sessionID, { hasQuestion: false })
   }
 }
 

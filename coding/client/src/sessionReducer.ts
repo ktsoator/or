@@ -9,6 +9,7 @@ import type {
   MessageImage,
   PreviewState,
   QueuedMessage,
+  QuestionItem,
   ThreadSnapshot,
   Usage,
   WireEvent,
@@ -57,6 +58,7 @@ export type ThreadAction =
       contextWindow: number
     }
   | { t: 'resolveApproval'; sessionID: string; id: string }
+  | { t: 'resolveQuestion'; sessionID: string; id: string }
   | { t: 'browserCommandHandled'; sessionID: string; id: string }
   | { t: 'browserInspectionHandled'; sessionID: string; id: string }
   | { t: 'forget'; sessionID: string }
@@ -226,6 +228,14 @@ export function threadsReducer(state: ThreadsState, action: ThreadAction): Threa
         ...current,
         items: current.items.filter(
           (item) => !(item.kind === 'approval' && item.id === action.id),
+        ),
+      }
+      break
+    case 'resolveQuestion':
+      next = {
+        ...current,
+        items: current.items.filter(
+          (item) => !(item.kind === 'question' && item.id === action.id),
         ),
       }
       break
@@ -767,6 +777,21 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
     case 'approval_resolved':
     case 'approval_cancelled':
       if (ev.id) items = items.filter((item) => !(item.kind === 'approval' && item.id === ev.id))
+      break
+
+    case 'question_request': {
+      completeThinking()
+      running = true
+      const id = ev.id ?? nextId()
+      const idx = lastIndex(items, (it) => it.kind === 'question' && it.id === id)
+      const question: QuestionItem = { kind: 'question', id, questions: ev.questions ?? [] }
+      items = idx >= 0 ? replaceAt(items, idx, question) : [...items, question]
+      break
+    }
+
+    case 'question_resolved':
+    case 'question_cancelled':
+      if (ev.id) items = items.filter((item) => !(item.kind === 'question' && item.id === ev.id))
       break
 
     case 'turn_discard': {
