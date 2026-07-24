@@ -15,11 +15,9 @@ import (
 type Tool struct {
 	agent.AgentTool
 
-	// PromptSnippet is a one-line description for the "Available tools" section
-	// of the system prompt. An empty snippet omits the tool from that section.
-	PromptSnippet string
 	// Guidelines are bullet points appended to the system prompt's guidelines
-	// section while this tool is active.
+	// section while this tool is active. A tool's own description travels in its
+	// schema; only rules that span tools belong here.
 	Guidelines []string
 	// AccessFor describes the effects of one validated call. A nil function is
 	// treated as unknown access and therefore requires approval.

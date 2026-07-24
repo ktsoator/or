@@ -36,9 +36,8 @@ func Glob(root string, ops FileOps) Tool {
 				return runGlob(ctx, root, ops, in)
 			},
 		},
-		AccessFor:     pathAccess(permission.Read),
-		PromptSnippet: globText.snippet,
-		Guidelines:    globText.guidelines,
+		AccessFor:  pathAccess(permission.Read),
+		Guidelines: globText.guidelines,
 	}
 }
 

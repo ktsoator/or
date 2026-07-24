@@ -1,6 +1,8 @@
 package prompt
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"html"
 	"sort"
@@ -16,7 +18,6 @@ const (
 	ScopeUser    ContextScope = "user"
 	ScopeProject ContextScope = "project"
 	ScopeLocal   ContextScope = "local"
-	ScopeNested  ContextScope = "nested"
 )
 
 // ContextFile is one instruction document rendered into model-visible context.
@@ -47,35 +48,115 @@ type SkillsDelta struct {
 // skill tool loads complete instructions on demand.
 const maxSkillDescChars = 240
 
-// RenderBaseContext renders project instruction files independently from skill
-// discovery metadata. It is stable for one context epoch.
-func RenderBaseContext(contextFiles []ContextFile) string {
+// maxContextFileChars caps each instruction file. An instruction file is
+// projected into every request of the session and sits outside the compactable
+// transcript, so one oversized file would permanently occupy context. The cut is
+// announced in the rendered block rather than made silently.
+const maxContextFileChars = 8_000
+
+// RenderBaseContext renders the session's environment together with its project
+// instruction files. It is stable for one context epoch; RenderContextUpdate
+// supersedes it when either input changes.
+func RenderBaseContext(env Environment, contextFiles []ContextFile) string {
 	files := usableContextFiles(contextFiles)
-	if len(files) == 0 {
+	if env == (Environment{}) && len(files) == 0 {
 		return ""
 	}
 
 	var b strings.Builder
 	b.WriteString("<or-context kind=\"base\">\n")
-	b.WriteString("This instruction context is provided by Or for the current coding session.\n")
-	b.WriteString("Later and more specific instruction files take precedence.\n")
+	b.WriteString("This environment and instruction context is provided by Or for the current coding session.\n")
+	b.WriteString("Later instruction files are more specific and take precedence.\n")
+	renderEnvironment(&b, env)
+	renderInstructionFiles(&b, files)
+	b.WriteString("</or-context>")
+	return b.String()
+}
+
+// RenderContextUpdate renders a bounded, self-contained refresh of the
+// environment and instruction files. Like a skills update it carries complete
+// current state, so this single block supersedes the base context and every
+// earlier update without the model replaying a delta history.
+func RenderContextUpdate(
+	revision string,
+	env Environment,
+	contextFiles []ContextFile,
+) string {
+	var b strings.Builder
+	fmt.Fprintf(
+		&b,
+		"<or-context kind=\"context_update\" revision=\"%s\">\n",
+		html.EscapeString(revision),
+	)
+	b.WriteString("The session environment or its instruction files changed. ")
+	b.WriteString("This block replaces the earlier base context and every earlier context update.\n")
+	renderEnvironment(&b, env)
+	renderInstructionFiles(&b, usableContextFiles(contextFiles))
+	b.WriteString("</or-context>")
+	return b.String()
+}
+
+// ContextRevision fingerprints the model-visible environment and instruction
+// state. Callers compare revisions to decide whether a refresh is needed, so it
+// must depend on exactly what RenderBaseContext shows and nothing else.
+func ContextRevision(env Environment, contextFiles []ContextFile) string {
+	sum := sha256.Sum256([]byte(RenderBaseContext(env, contextFiles)))
+	return hex.EncodeToString(sum[:])
+}
+
+func renderEnvironment(b *strings.Builder, env Environment) {
+	if env == (Environment{}) {
+		return
+	}
+	b.WriteString("\n<environment>\n")
+	writeEnvField(b, "os", env.OS)
+	writeEnvField(b, "arch", env.Arch)
+	writeEnvField(b, "shell", env.Shell)
+	writeEnvField(b, "date", env.Date)
+	if env.GitRepo {
+		writeEnvField(b, "git-repo", "true")
+		writeEnvField(b, "git-branch", env.GitBranch)
+	} else {
+		writeEnvField(b, "git-repo", "false")
+	}
+	b.WriteString("</environment>\n")
+}
+
+func writeEnvField(b *strings.Builder, name, value string) {
+	if strings.TrimSpace(value) == "" {
+		return
+	}
+	fmt.Fprintf(b, "<%s>%s</%s>\n", name, html.EscapeString(value), name)
+}
+
+func renderInstructionFiles(b *strings.Builder, files []ContextFile) {
+	if len(files) == 0 {
+		return
+	}
 	b.WriteString("\n<instruction-files>\n")
 	for _, file := range files {
 		scope := file.Scope
 		if scope == "" {
 			scope = ScopeProject
 		}
+		content, truncated := truncateContent(file.Content, maxContextFileChars)
 		fmt.Fprintf(
-			&b,
-			"<instruction-file scope=\"%s\" path=\"%s\">\n%s\n</instruction-file>\n",
+			b,
+			"<instruction-file scope=\"%s\" path=\"%s\"%s>\n%s\n</instruction-file>\n",
 			html.EscapeString(string(scope)),
 			html.EscapeString(file.Path),
-			strings.TrimRight(file.Content, "\n"),
+			truncatedAttr(truncated),
+			strings.TrimRight(content, "\n"),
 		)
 	}
 	b.WriteString("</instruction-files>\n")
-	b.WriteString("</or-context>")
-	return b.String()
+}
+
+func truncatedAttr(truncated bool) string {
+	if !truncated {
+		return ""
+	}
+	return " truncated=\"true\""
 }
 
 // RenderSkillListing renders the initial discovery snapshot. An empty skill set
@@ -216,4 +297,19 @@ func truncateChars(s string, n int) string {
 		return s
 	}
 	return string(runes[:n-1]) + "…"
+}
+
+// truncateContent caps an instruction file at n runes, keeping the head and
+// appending a notice the model can act on. It reports whether it cut.
+func truncateContent(s string, n int) (string, bool) {
+	runes := []rune(s)
+	if len(runes) <= n {
+		return s, false
+	}
+	dropped := len(runes) - n
+	return fmt.Sprintf(
+		"%s\n\n[truncated: %d more character(s) not shown; read the file directly if you need the rest]",
+		strings.TrimRight(string(runes[:n]), "\n"),
+		dropped,
+	), true
 }

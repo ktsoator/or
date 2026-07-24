@@ -30,29 +30,123 @@ func TestRenderSkillListingIncludesSkills(t *testing.T) {
 }
 
 func TestRenderBaseContextIncludesInstructionFilesInInputOrder(t *testing.T) {
-	out := RenderBaseContext([]ContextFile{
+	out := RenderBaseContext(Environment{}, []ContextFile{
+		{Path: "/home/dev/.or/AGENTS.md", Content: "user", Scope: ScopeUser},
 		{Path: "/repo/AGENTS.md", Content: "outer", Scope: ScopeProject},
-		{Path: "/repo/service/AGENTS.md", Content: "inner", Scope: ScopeNested},
+		{Path: "/repo/AGENTS.local.md", Content: "local", Scope: ScopeLocal},
 	})
 	if !strings.Contains(out, `kind="base"`) {
 		t.Fatalf("missing base metadata:\n%s", out)
 	}
-	if !strings.Contains(out, `scope="project" path="/repo/AGENTS.md"`) {
-		t.Fatalf("missing project instruction file:\n%s", out)
+	for _, want := range []string{
+		`scope="user" path="/home/dev/.or/AGENTS.md"`,
+		`scope="project" path="/repo/AGENTS.md"`,
+		`scope="local" path="/repo/AGENTS.local.md"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing instruction file %q:\n%s", want, out)
+		}
 	}
-	if !strings.Contains(out, `scope="nested" path="/repo/service/AGENTS.md"`) {
-		t.Fatalf("missing nested instruction file:\n%s", out)
-	}
-	if strings.Index(out, "/repo/AGENTS.md") > strings.Index(out, "/repo/service/AGENTS.md") {
+	if strings.Index(out, "/home/dev/.or/AGENTS.md") > strings.Index(out, "/repo/AGENTS.md") ||
+		strings.Index(out, "/repo/AGENTS.md") > strings.Index(out, "/repo/AGENTS.local.md") {
 		t.Errorf("instruction precedence order changed:\n%s", out)
 	}
 }
 
+func TestRenderBaseContextIncludesEnvironment(t *testing.T) {
+	out := RenderBaseContext(Environment{
+		OS:        "darwin",
+		Arch:      "arm64",
+		Shell:     "/bin/zsh",
+		Date:      "2026-07-24",
+		GitRepo:   true,
+		GitBranch: "main",
+	}, nil)
+	for _, want := range []string{
+		"<os>darwin</os>",
+		"<arch>arm64</arch>",
+		"<shell>/bin/zsh</shell>",
+		"<date>2026-07-24</date>",
+		"<git-repo>true</git-repo>",
+		"<git-branch>main</git-branch>",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("environment missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestRenderBaseContextReportsAbsentRepositoryWithoutABranch(t *testing.T) {
+	out := RenderBaseContext(Environment{OS: "linux", Date: "2026-07-24"}, nil)
+	if !strings.Contains(out, "<git-repo>false</git-repo>") {
+		t.Errorf("missing git-repo field:\n%s", out)
+	}
+	if strings.Contains(out, "<git-branch>") {
+		t.Errorf("a non-repository must not claim a branch:\n%s", out)
+	}
+}
+
+func TestRenderBaseContextTruncatesAnOversizedInstructionFile(t *testing.T) {
+	long := strings.Repeat("x", maxContextFileChars+500)
+	out := RenderBaseContext(Environment{}, []ContextFile{
+		{Path: "/repo/AGENTS.md", Content: long, Scope: ScopeProject},
+	})
+	if strings.Contains(out, long) {
+		t.Errorf("an oversized instruction file was projected in full:\n%s", out)
+	}
+	if !strings.Contains(out, `truncated="true"`) ||
+		!strings.Contains(out, "[truncated: 500 more character(s) not shown") {
+		t.Errorf("truncation was not announced:\n%s", out)
+	}
+}
+
 func TestRenderInitialContextEmptyWhenNoUsableResources(t *testing.T) {
-	base := RenderBaseContext([]ContextFile{{Path: "/repo/AGENTS.md", Content: " \n"}})
+	base := RenderBaseContext(
+		Environment{},
+		[]ContextFile{{Path: "/repo/AGENTS.md", Content: " \n"}},
+	)
 	listing := RenderSkillListing("revision", []SkillInfo{{Name: "  ", Description: "ignored"}})
 	if base != "" || listing != "" {
 		t.Errorf("empty contexts = %q and %q, want empty", base, listing)
+	}
+}
+
+func TestRenderContextUpdateCarriesCompleteCurrentState(t *testing.T) {
+	env := Environment{OS: "darwin", Date: "2026-07-25", GitRepo: true, GitBranch: "feature"}
+	files := []ContextFile{{Path: "/repo/AGENTS.md", Content: "new rule", Scope: ScopeProject}}
+	out := RenderContextUpdate(ContextRevision(env, files), env, files)
+	for _, want := range []string{
+		`kind="context_update"`,
+		"replaces the earlier base context",
+		"<date>2026-07-25</date>",
+		"<git-branch>feature</git-branch>",
+		`scope="project" path="/repo/AGENTS.md"`,
+		"new rule",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("context update missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestContextRevisionTracksEveryModelVisibleInput(t *testing.T) {
+	env := Environment{OS: "darwin", Date: "2026-07-24", GitRepo: true, GitBranch: "main"}
+	files := []ContextFile{{Path: "/repo/AGENTS.md", Content: "rule", Scope: ScopeProject}}
+	base := ContextRevision(env, files)
+
+	branched := env
+	branched.GitBranch = "other"
+	edited := []ContextFile{{Path: "/repo/AGENTS.md", Content: "rule two", Scope: ScopeProject}}
+	for name, revision := range map[string]string{
+		"branch change": ContextRevision(branched, files),
+		"file edit":     ContextRevision(env, edited),
+	} {
+		if revision == base {
+			t.Errorf("%s did not advance the revision", name)
+		}
+	}
+	if ContextRevision(env, files) != base {
+		t.Error("revision is not stable for identical inputs")
 	}
 }
 
@@ -70,7 +164,7 @@ func TestRenderSkillListingTruncatesDescription(t *testing.T) {
 }
 
 func TestRenderContextEscapesMetadata(t *testing.T) {
-	base := RenderBaseContext([]ContextFile{{
+	base := RenderBaseContext(Environment{}, []ContextFile{{
 		Path:    `/repo/"quoted"&file`,
 		Content: "instructions",
 	}})
@@ -143,10 +237,11 @@ func TestContextRenderingIsDeterministic(t *testing.T) {
 		{Name: "zeta", Description: "last"},
 		{Name: "alpha", Description: "first"},
 	}
-	firstBase := RenderBaseContext(files)
+	env := Environment{OS: "darwin", Arch: "arm64", Date: "2026-07-24"}
+	firstBase := RenderBaseContext(env, files)
 	firstListing := RenderSkillListing("revision", skills)
 	for range 10 {
-		if got := RenderBaseContext(files); got != firstBase {
+		if got := RenderBaseContext(env, files); got != firstBase {
 			t.Fatalf("base render changed:\nfirst:\n%s\nnext:\n%s", firstBase, got)
 		}
 		if got := RenderSkillListing("revision", skills); got != firstListing {

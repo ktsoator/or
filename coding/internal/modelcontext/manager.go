@@ -16,9 +16,10 @@ type AttachmentKind string
 type Placement string
 
 const (
-	BaseContext  AttachmentKind = "base"
-	SkillListing AttachmentKind = "skill_listing"
-	SkillsUpdate AttachmentKind = "skills_update"
+	BaseContext   AttachmentKind = "base"
+	SkillListing  AttachmentKind = "skill_listing"
+	SkillsUpdate  AttachmentKind = "skills_update"
+	ContextUpdate AttachmentKind = "context_update"
 
 	Prefix       Placement = "prefix"
 	AfterCurrent Placement = "after-current"
@@ -54,6 +55,8 @@ type State struct {
 	SkillListingCommitted bool
 	ActiveSkillsRevision  string
 	StagedSkillsRevision  string
+	ActiveContextRevision string
+	StagedContextRevision string
 }
 
 type trackedAttachment struct {
@@ -61,35 +64,99 @@ type trackedAttachment struct {
 	committed bool
 }
 
-// Manager owns one process context epoch. Stable Base Context and the initial
-// skill listing are projected before canonical conversation messages. At most
-// one current skills-update block is projected after canonical messages; each
-// new update fully supersedes the previous one so projection cost stays bounded.
+// updateSlot holds the one current after-current block of a given kind. A new
+// revision supersedes the previous one entirely, so projection cost stays bounded
+// no matter how often the underlying resource changes. A staged revision only
+// becomes active once its transcript checkpoint succeeds.
+type updateSlot struct {
+	kind   AttachmentKind
+	active *trackedAttachment
+	staged *trackedAttachment
+}
+
+func (u *updateSlot) stage(epoch uint64, revision, rendered string) {
+	if revision == "" || rendered == "" {
+		return
+	}
+	if u.staged != nil && u.staged.Revision == revision {
+		return
+	}
+	if u.staged == nil && u.active != nil && u.active.Revision == revision {
+		return
+	}
+	u.staged = newTracked(epoch, u.kind, AfterCurrent, revision, rendered)
+}
+
+func (u *updateSlot) cancel() { u.staged = nil }
+
+// current returns the block to project: the staged revision when one is waiting,
+// otherwise the last durable one.
+func (u *updateSlot) current() *trackedAttachment {
+	if u.staged != nil {
+		return u.staged
+	}
+	return u.active
+}
+
+// commit promotes the staged block when id identifies it.
+func (u *updateSlot) commit(id string) bool {
+	if u.staged == nil || u.staged.ID != id {
+		return false
+	}
+	u.staged.committed = true
+	u.active = u.staged
+	u.staged = nil
+	return true
+}
+
+func (u *updateSlot) revisions() (active, staged string) {
+	if u.active != nil {
+		active = u.active.Revision
+	}
+	if u.staged != nil {
+		staged = u.staged.Revision
+	}
+	return active, staged
+}
+
+// Manager owns one process context epoch. The Base Context and the initial skill
+// listing are projected before canonical conversation messages so the provider
+// prompt-cache prefix stays stable. Refreshes of either resource are projected
+// after canonical messages as self-contained blocks that supersede the prefix,
+// which keeps the cached prefix intact across a change.
 type Manager struct {
 	mu sync.Mutex
 
 	epoch   uint64
 	base    *trackedAttachment
 	listing *trackedAttachment
-	active  *trackedAttachment
-	staged  *trackedAttachment
+	skills  updateSlot
+	context updateSlot
 }
 
 // New constructs an epoch from independently rendered Base Context and initial
 // skill listing. Empty renderings produce no message or durable attachment.
 func New(
 	epoch uint64,
+	baseRevision string,
 	baseRendered string,
 	skillRevision string,
 	skillListingRendered string,
 ) *Manager {
-	manager := &Manager{epoch: epoch}
+	manager := &Manager{
+		epoch:   epoch,
+		skills:  updateSlot{kind: SkillsUpdate},
+		context: updateSlot{kind: ContextUpdate},
+	}
 	if baseRendered != "" {
+		if baseRevision == "" {
+			baseRevision = revisionOf(baseRendered)
+		}
 		manager.base = newTracked(
 			epoch,
 			BaseContext,
 			Prefix,
-			revisionOf(baseRendered),
+			baseRevision,
 			baseRendered,
 		)
 	}
@@ -112,24 +179,12 @@ func New(
 // provider request. It replaces an uncheckpointed staged update. A revision
 // already active or staged is a no-op.
 func (m *Manager) StageSkillsUpdate(revision, rendered string) {
-	if m == nil || revision == "" || rendered == "" {
+	if m == nil {
 		return
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.staged != nil && m.staged.Revision == revision {
-		return
-	}
-	if m.staged == nil && m.active != nil && m.active.Revision == revision {
-		return
-	}
-	m.staged = newTracked(
-		m.epoch,
-		SkillsUpdate,
-		AfterCurrent,
-		revision,
-		rendered,
-	)
+	m.skills.stage(m.epoch, revision, rendered)
 }
 
 // CancelStagedSkillsUpdate removes an update that has not reached a persistence
@@ -139,14 +194,48 @@ func (m *Manager) CancelStagedSkillsUpdate() {
 		return
 	}
 	m.mu.Lock()
-	m.staged = nil
+	m.skills.cancel()
+	m.mu.Unlock()
+}
+
+// StageContextUpdate prepares a complete replacement of the environment and
+// instruction files for the next provider request. It supersedes the Base
+// Context without disturbing the cached request prefix.
+func (m *Manager) StageContextUpdate(revision, rendered string) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.base != nil && m.staleContextRevision(revision) {
+		return
+	}
+	m.context.stage(m.epoch, revision, rendered)
+}
+
+// staleContextRevision reports whether revision is the state the model already
+// sees from the Base Context, with no update layered on top. Callers hold mu.
+func (m *Manager) staleContextRevision(revision string) bool {
+	return m.context.active == nil &&
+		m.context.staged == nil &&
+		m.base.Revision == revision
+}
+
+// CancelStagedContextUpdate removes a context update that has not reached a
+// persistence checkpoint.
+func (m *Manager) CancelStagedContextUpdate() {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	m.context.cancel()
 	m.mu.Unlock()
 }
 
 // PrepareStep creates a detached provider input. Prefix attachments come before
-// canonical messages; the latest skills update comes after them. Attachments
-// remain provider-visible on every request but appear in Pending only until
-// their transcript checkpoint succeeds.
+// canonical messages; the latest context and skills updates come after them.
+// Attachments remain provider-visible on every request but appear in Pending only
+// until their transcript checkpoint succeeds.
 func (m *Manager) PrepareStep(input llm.Context) PreparedStep {
 	if m == nil {
 		return PreparedStep{Input: cloneContext(input)}
@@ -157,12 +246,9 @@ func (m *Manager) PrepareStep(input llm.Context) PreparedStep {
 
 	prepared := PreparedStep{Input: cloneContext(input)}
 	prefix := compactAttachments(m.base, m.listing)
-	update := m.active
-	if m.staged != nil {
-		update = m.staged
-	}
+	suffix := compactAttachments(m.context.current(), m.skills.current())
 
-	messages := make([]llm.Message, 0, len(prefix)+len(input.Messages)+1)
+	messages := make([]llm.Message, 0, len(prefix)+len(input.Messages)+len(suffix))
 	for _, attachment := range prefix {
 		messages = append(messages, llm.UserText(attachment.Rendered))
 		if !attachment.committed {
@@ -170,18 +256,18 @@ func (m *Manager) PrepareStep(input llm.Context) PreparedStep {
 		}
 	}
 	messages = append(messages, input.Messages...)
-	if update != nil {
-		messages = append(messages, llm.UserText(update.Rendered))
-		if !update.committed {
-			prepared.Pending = append(prepared.Pending, update.Attachment)
+	for _, attachment := range suffix {
+		messages = append(messages, llm.UserText(attachment.Rendered))
+		if !attachment.committed {
+			prepared.Pending = append(prepared.Pending, attachment.Attachment)
 		}
 	}
 	prepared.Input.Messages = messages
 	return prepared
 }
 
-// Commit marks exactly the attachments included in prepared as durable. A
-// staged skills update becomes the sole active update only after its checkpoint
+// Commit marks exactly the attachments included in prepared as durable. A staged
+// update becomes the sole active update of its kind only after its checkpoint
 // succeeds.
 func (m *Manager) Commit(prepared PreparedStep) {
 	if m == nil || len(prepared.Pending) == 0 {
@@ -196,10 +282,8 @@ func (m *Manager) Commit(prepared PreparedStep) {
 			m.base.committed = true
 		case m.listing != nil && pending.ID == m.listing.ID:
 			m.listing.committed = true
-		case m.staged != nil && pending.ID == m.staged.ID:
-			m.staged.committed = true
-			m.active = m.staged
-			m.staged = nil
+		case m.skills.commit(pending.ID):
+		case m.context.commit(pending.ID):
 		}
 	}
 }
@@ -226,12 +310,8 @@ func (m *Manager) State() State {
 		state.SkillListingRevision = m.listing.Revision
 		state.SkillListingCommitted = m.listing.committed
 	}
-	if m.active != nil {
-		state.ActiveSkillsRevision = m.active.Revision
-	}
-	if m.staged != nil {
-		state.StagedSkillsRevision = m.staged.Revision
-	}
+	state.ActiveSkillsRevision, state.StagedSkillsRevision = m.skills.revisions()
+	state.ActiveContextRevision, state.StagedContextRevision = m.context.revisions()
 	return state
 }
 

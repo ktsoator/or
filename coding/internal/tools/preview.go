@@ -129,9 +129,8 @@ func OpenPreview(root string, controllers ...BrowserController) Tool {
 				return browserToolResult(destination, preview, result), nil
 			},
 		},
-		AccessFor:     previewAccess,
-		PromptSnippet: openPreviewText.snippet,
-		Guidelines:    openPreviewText.guidelines,
+		AccessFor:  previewAccess,
+		Guidelines: openPreviewText.guidelines,
 	}
 }
 

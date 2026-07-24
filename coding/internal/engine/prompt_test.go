@@ -205,6 +205,98 @@ func TestRestoredSessionStartsNewBaseContextEpochFromCurrentFiles(t *testing.T) 
 	}
 }
 
+func TestEditedInstructionsRefreshWithoutDisturbingTheRequestPrefix(t *testing.T) {
+	ctx := context.Background()
+	workspace := t.TempDir()
+	agentsPath := filepath.Join(workspace, "AGENTS.md")
+	if err := os.WriteFile(agentsPath, []byte("old rule"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	store := &checkpointStore{}
+	var inputs []llm.Context
+	session, err := New(ctx, Options{
+		Model: llm.Model{Provider: "test", ID: "model"},
+		Cwd:   workspace,
+		Tools: []tools.Tool{},
+		Store: store,
+		StreamFn: func(
+			_ context.Context,
+			model llm.Model,
+			input llm.Context,
+			_ llm.StreamOptions,
+		) (<-chan llm.Event, error) {
+			inputs = append(inputs, input)
+			return assistantEvents(model, "done"), nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := session.Prompt(ctx, "one"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(agentsPath, []byte("new rule"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.Prompt(ctx, "two"); err != nil {
+		t.Fatal(err)
+	}
+	if len(inputs) != 2 {
+		t.Fatalf("provider requests = %d, want 2", len(inputs))
+	}
+
+	// The cached prefix still carries the original file; the refresh arrives as a
+	// bounded block after the canonical messages.
+	prefix := llmUserText(t, inputs[1].Messages[0])
+	if prefix != llmUserText(t, inputs[0].Messages[0]) {
+		t.Fatalf("request prefix changed on refresh:\n%s", prefix)
+	}
+	update := llmUserText(t, inputs[1].Messages[len(inputs[1].Messages)-1])
+	for _, want := range []string{`kind="context_update"`, "new rule"} {
+		if !strings.Contains(update, want) {
+			t.Errorf("context update missing %q:\n%s", want, update)
+		}
+	}
+	if strings.Contains(update, "old rule") {
+		t.Errorf("context update replayed the superseded rule:\n%s", update)
+	}
+
+	// An unchanged workspace emits no further block, but the model keeps seeing
+	// the current one.
+	if err := session.Prompt(ctx, "three"); err != nil {
+		t.Fatal(err)
+	}
+	third := llmUserText(t, inputs[2].Messages[len(inputs[2].Messages)-1])
+	if third != update {
+		t.Fatalf("unchanged workspace changed its context block:\n%s", third)
+	}
+
+	entries, _, _ := store.snapshot()
+	var updates int
+	for _, entry := range entries {
+		if entry.Type != transcript.ContextEntry || entry.Context == nil {
+			continue
+		}
+		if entry.Context.Kind != "context_update" {
+			continue
+		}
+		updates++
+		if entry.Context.Placement != "after-current" {
+			t.Fatalf("context update placement = %q", entry.Context.Placement)
+		}
+	}
+	if updates != 1 {
+		t.Fatalf("durable context updates = %d, want one for the single edit", updates)
+	}
+	for _, item := range session.History() {
+		if strings.Contains(item.Text, "<or-context") {
+			t.Fatalf("hidden context update leaked into history: %#v", item)
+		}
+	}
+}
+
 func TestBaseContextIsCheckpointedOnceAcrossAppRetry(t *testing.T) {
 	ctx := context.Background()
 	workspace := t.TempDir()

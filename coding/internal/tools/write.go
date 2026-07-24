@@ -104,9 +104,8 @@ func Write(root string, ops FileOps, files *FileStateStore) Tool {
 				return resultWith(formatWriteResult(change), change), nil
 			},
 		},
-		AccessFor:     pathAccess(permission.Write),
-		PromptSnippet: writeText.snippet,
-		Guidelines:    writeText.guidelines,
+		AccessFor:  pathAccess(permission.Write),
+		Guidelines: writeText.guidelines,
 	}
 }
 

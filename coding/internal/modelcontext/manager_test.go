@@ -7,7 +7,7 @@ import (
 )
 
 func TestPrepareStepPrependsBaseWithoutMutatingCanonicalInput(t *testing.T) {
-	manager := New(3, `<or-context kind="base">rules</or-context>`, "", "")
+	manager := New(3, "", `<or-context kind="base">rules</or-context>`, "", "")
 	canonical := llm.Context{
 		SystemPrompt: "stable",
 		Messages:     []llm.Message{llm.UserText("question")},
@@ -36,7 +36,7 @@ func TestPrepareStepPrependsBaseWithoutMutatingCanonicalInput(t *testing.T) {
 }
 
 func TestCommitStopsRepersistingButKeepsProjectingBase(t *testing.T) {
-	manager := New(1, "base", "", "")
+	manager := New(1, "", "base", "", "")
 	canonical := llm.Context{Messages: []llm.Message{llm.UserText("question")}}
 
 	first := manager.PrepareStep(canonical)
@@ -56,7 +56,7 @@ func TestCommitStopsRepersistingButKeepsProjectingBase(t *testing.T) {
 }
 
 func TestEmptyBaseLeavesInputUnchanged(t *testing.T) {
-	manager := New(2, "", "", "")
+	manager := New(2, "", "", "", "")
 	canonical := llm.Context{Messages: []llm.Message{llm.UserText("question")}}
 	prepared := manager.PrepareStep(canonical)
 	if len(prepared.Input.Messages) != 1 || len(prepared.Pending) != 0 {
@@ -69,7 +69,7 @@ func TestEmptyBaseLeavesInputUnchanged(t *testing.T) {
 }
 
 func TestSkillListingAndLatestUpdateUseStablePlacements(t *testing.T) {
-	manager := New(4, "base", "skills-v1", "initial skills")
+	manager := New(4, "", "base", "skills-v1", "initial skills")
 	canonical := llm.Context{
 		Messages: []llm.Message{
 			llm.UserText("question"),
@@ -128,7 +128,7 @@ func TestSkillListingAndLatestUpdateUseStablePlacements(t *testing.T) {
 }
 
 func TestCancelStagedSkillsUpdateKeepsCommittedSnapshot(t *testing.T) {
-	manager := New(1, "", "", "")
+	manager := New(1, "", "", "", "")
 	manager.StageSkillsUpdate("v1", "first")
 	first := manager.PrepareStep(llm.Context{})
 	manager.Commit(first)
@@ -141,6 +141,82 @@ func TestCancelStagedSkillsUpdateKeepsCommittedSnapshot(t *testing.T) {
 	}
 	if len(prepared.Pending) != 0 {
 		t.Fatalf("pending after cancel = %#v", prepared.Pending)
+	}
+}
+
+func TestContextUpdateSupersedesBaseWithoutDisturbingThePrefix(t *testing.T) {
+	manager := New(7, "base-v1", "base", "", "")
+	canonical := llm.Context{Messages: []llm.Message{llm.UserText("question")}}
+	manager.Commit(manager.PrepareStep(canonical))
+
+	// Restaging the state the model already sees must not emit a block.
+	manager.StageContextUpdate("base-v1", "identical")
+	unchanged := manager.PrepareStep(canonical)
+	if got := messageTexts(t, unchanged.Input.Messages); !equalStrings(
+		got,
+		[]string{"base", "question"},
+	) {
+		t.Fatalf("unchanged projection = %v", got)
+	}
+
+	manager.StageContextUpdate("base-v2", "new environment and rules")
+	updated := manager.PrepareStep(canonical)
+	if got := messageTexts(t, updated.Input.Messages); !equalStrings(
+		got,
+		[]string{"base", "question", "new environment and rules"},
+	) {
+		t.Fatalf("updated projection = %v", got)
+	}
+	// The cached request prefix must survive the change untouched.
+	if got := userText(t, updated.Input.Messages[0]); got != "base" {
+		t.Fatalf("context update rewrote the prefix: %q", got)
+	}
+	if len(updated.Pending) != 1 ||
+		updated.Pending[0].Kind != ContextUpdate ||
+		updated.Pending[0].Placement != AfterCurrent {
+		t.Fatalf("update pending = %#v", updated.Pending)
+	}
+	manager.Commit(updated)
+
+	// A later revision replaces the previous update rather than stacking on it.
+	manager.StageContextUpdate("base-v3", "newest rules")
+	latest := manager.PrepareStep(canonical)
+	if got := messageTexts(t, latest.Input.Messages); !equalStrings(
+		got,
+		[]string{"base", "question", "newest rules"},
+	) {
+		t.Fatalf("latest projection retained an obsolete update: %v", got)
+	}
+	manager.CancelStagedContextUpdate()
+	if got := messageTexts(t, manager.PrepareStep(canonical).Input.Messages); !equalStrings(
+		got,
+		[]string{"base", "question", "new environment and rules"},
+	) {
+		t.Fatalf("cancel dropped the committed update: %v", got)
+	}
+	state := manager.State()
+	if state.ActiveContextRevision != "base-v2" || state.StagedContextRevision != "" {
+		t.Fatalf("state = %#v", state)
+	}
+}
+
+func TestContextAndSkillUpdatesProjectTogether(t *testing.T) {
+	manager := New(8, "base-v1", "base", "skills-v1", "listing")
+	canonical := llm.Context{Messages: []llm.Message{llm.UserText("question")}}
+	manager.Commit(manager.PrepareStep(canonical))
+
+	manager.StageContextUpdate("base-v2", "context update")
+	manager.StageSkillsUpdate("skills-v2", "skills update")
+	prepared := manager.PrepareStep(canonical)
+	if got := messageTexts(t, prepared.Input.Messages); !equalStrings(
+		got,
+		[]string{"base", "listing", "question", "context update", "skills update"},
+	) {
+		t.Fatalf("combined projection = %v", got)
+	}
+	manager.Commit(prepared)
+	if len(manager.PrepareStep(canonical).Pending) != 0 {
+		t.Fatal("committed updates were re-emitted as pending")
 	}
 }
 

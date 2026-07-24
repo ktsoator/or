@@ -60,8 +60,7 @@ func LS(root string, ops FileOps) Tool {
 				return textResult(strings.Join(names, "\n")), nil
 			},
 		},
-		AccessFor:     pathAccess(permission.Read),
-		PromptSnippet: lsText.snippet,
-		Guidelines:    lsText.guidelines,
+		AccessFor:  pathAccess(permission.Read),
+		Guidelines: lsText.guidelines,
 	}
 }

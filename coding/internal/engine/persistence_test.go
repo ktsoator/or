@@ -71,10 +71,15 @@ func TestSessionCheckpointsPromptBeforeModelRequest(t *testing.T) {
 			_ llm.StreamOptions,
 		) (<-chan llm.Event, error) {
 			entries, _, _ := store.snapshot()
-			if len(entries) != 1 {
-				checkpointErr = fmt.Errorf("entries before model request = %d, want 1", len(entries))
-			} else if _, ok := llmEntry(entries[0]).(*llm.UserMessage); !ok {
-				checkpointErr = fmt.Errorf("first durable message = %T, want user", llmEntry(entries[0]))
+			if len(entries) != 2 {
+				checkpointErr = fmt.Errorf(
+					"entries before model request = %d, want base context and user",
+					len(entries),
+				)
+			} else if entries[0].Type != transcript.ContextEntry {
+				checkpointErr = fmt.Errorf("first durable entry = %q, want context", entries[0].Type)
+			} else if _, ok := llmEntry(entries[1]).(*llm.UserMessage); !ok {
+				checkpointErr = fmt.Errorf("first durable message = %T, want user", llmEntry(entries[1]))
 			}
 			return assistantEvents(model, "answer"), nil
 		},
@@ -91,14 +96,14 @@ func TestSessionCheckpointsPromptBeforeModelRequest(t *testing.T) {
 	}
 
 	entries, batches, _ := store.snapshot()
-	if len(entries) != 3 {
-		t.Fatalf("durable entries = %d, want user, assistant, run", len(entries))
+	if len(entries) != 4 {
+		t.Fatalf("durable entries = %d, want context, user, assistant, run", len(entries))
 	}
-	if len(batches) != 2 || len(batches[0]) != 1 || len(batches[1]) != 2 {
-		t.Fatalf("append batch sizes = %v, want [1 2]", batchSizes(batches))
+	if len(batches) != 2 || len(batches[0]) != 2 || len(batches[1]) != 2 {
+		t.Fatalf("append batch sizes = %v, want [2 2]", batchSizes(batches))
 	}
-	if entries[2].Type != transcript.RunEntry {
-		t.Fatalf("last entry type = %q, want run", entries[2].Type)
+	if entries[3].Type != transcript.RunEntry {
+		t.Fatalf("last entry type = %q, want run", entries[3].Type)
 	}
 }
 
@@ -178,11 +183,14 @@ func TestSessionCheckpointsCompleteToolBatchBeforeNextModelRequest(t *testing.T)
 	}
 
 	entries, batches, _ := store.snapshot()
-	if len(entries) != 6 {
-		t.Fatalf("durable entries = %d, want user, tool call, two results, final assistant, run", len(entries))
+	if len(entries) != 7 {
+		t.Fatalf(
+			"durable entries = %d, want context, user, tool call, two results, final assistant, run",
+			len(entries),
+		)
 	}
-	if len(batches) != 3 || len(batches[0]) != 1 || len(batches[1]) != 3 || len(batches[2]) != 2 {
-		t.Fatalf("append batch sizes = %v, want [1 3 2]", batchSizes(batches))
+	if len(batches) != 3 || len(batches[0]) != 2 || len(batches[1]) != 3 || len(batches[2]) != 2 {
+		t.Fatalf("append batch sizes = %v, want [2 3 2]", batchSizes(batches))
 	}
 }
 
@@ -205,18 +213,22 @@ func TestSessionCheckpointsFollowUpBeforeNextModelRequest(t *testing.T) {
 			defer func() { call++ }()
 			if call == 1 {
 				entries, _, _ := store.snapshot()
-				if len(entries) != 3 {
-					checkpointErr = fmt.Errorf("entries before follow-up request = %d, want 3", len(entries))
+				if len(entries) != 4 {
+					checkpointErr = fmt.Errorf(
+						"entries before follow-up request = %d, want context, user, assistant, follow-up",
+						len(entries),
+					)
 				} else {
-					_, firstUser := llmEntry(entries[0]).(*llm.UserMessage)
-					_, assistant := llmEntry(entries[1]).(*llm.AssistantMessage)
-					_, followUp := llmEntry(entries[2]).(*llm.UserMessage)
-					if !firstUser || !assistant || !followUp {
+					_, firstUser := llmEntry(entries[1]).(*llm.UserMessage)
+					_, assistant := llmEntry(entries[2]).(*llm.AssistantMessage)
+					_, followUp := llmEntry(entries[3]).(*llm.UserMessage)
+					if entries[0].Type != transcript.ContextEntry || !firstUser || !assistant || !followUp {
 						checkpointErr = fmt.Errorf(
-							"follow-up checkpoint types = %T, %T, %T",
-							llmEntry(entries[0]),
+							"follow-up checkpoint types = %q, %T, %T, %T",
+							entries[0].Type,
 							llmEntry(entries[1]),
 							llmEntry(entries[2]),
+							llmEntry(entries[3]),
 						)
 					}
 				}
@@ -369,30 +381,34 @@ func TestSessionRetryDoesNotPersistFailedAssistantOrDuplicatePrompt(t *testing.T
 		t.Fatalf("model requests = %d, want 2", call)
 	}
 	entries, batches, _ := store.snapshot()
-	if len(entries) != 3 {
-		t.Fatalf("durable entries = %d, want user, successful assistant, run", len(entries))
+	if len(entries) != 4 {
+		t.Fatalf("durable entries = %d, want context, user, successful assistant, run", len(entries))
 	}
-	if len(batches) != 2 || len(batches[0]) != 1 || len(batches[1]) != 2 {
-		t.Fatalf("append batch sizes = %v, want [1 2]", batchSizes(batches))
+	if len(batches) != 2 || len(batches[0]) != 2 || len(batches[1]) != 2 {
+		t.Fatalf("append batch sizes = %v, want [2 2]", batchSizes(batches))
 	}
-	assistant, ok := llmEntry(entries[1]).(*llm.AssistantMessage)
+	assistant, ok := llmEntry(entries[2]).(*llm.AssistantMessage)
 	if !ok || assistant.StopReason != llm.StopReasonStop || assistant.Text() != "recovered" {
 		t.Fatalf("persisted assistant = %#v, want successful retry only", assistant)
 	}
 }
 
 func validateToolCheckpoint(entries []transcript.Entry) error {
-	if len(entries) != 4 {
-		return fmt.Errorf("entries before second model request = %d, want 4", len(entries))
+	// The base context is checkpointed once, ahead of the first user message.
+	if len(entries) != 5 {
+		return fmt.Errorf("entries before second model request = %d, want 5", len(entries))
 	}
-	if _, ok := llmEntry(entries[0]).(*llm.UserMessage); !ok {
-		return fmt.Errorf("checkpoint[0] = %T, want user", llmEntry(entries[0]))
+	if entries[0].Type != transcript.ContextEntry {
+		return fmt.Errorf("checkpoint[0] = %q, want context", entries[0].Type)
 	}
-	assistant, ok := llmEntry(entries[1]).(*llm.AssistantMessage)
+	if _, ok := llmEntry(entries[1]).(*llm.UserMessage); !ok {
+		return fmt.Errorf("checkpoint[1] = %T, want user", llmEntry(entries[1]))
+	}
+	assistant, ok := llmEntry(entries[2]).(*llm.AssistantMessage)
 	if !ok || len(assistant.ToolCalls()) != 2 {
-		return fmt.Errorf("checkpoint[1] = %#v, want assistant with two tool calls", assistant)
+		return fmt.Errorf("checkpoint[2] = %#v, want assistant with two tool calls", assistant)
 	}
-	for index := 2; index < 4; index++ {
+	for index := 3; index < 5; index++ {
 		if _, ok := llmEntry(entries[index]).(*llm.ToolResultMessage); !ok {
 			return fmt.Errorf("checkpoint[%d] = %T, want tool result", index, llmEntry(entries[index]))
 		}

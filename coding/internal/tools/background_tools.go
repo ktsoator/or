@@ -34,8 +34,7 @@ func BashOutput(shells *BackgroundShells) Tool {
 				return textResult(renderBackgroundOutput(out)), nil
 			},
 		},
-		AccessFor:     InternalAccess,
-		PromptSnippet: bashOutputText.snippet,
+		AccessFor: InternalAccess,
 	}
 }
 
@@ -62,8 +61,7 @@ func KillBash(shells *BackgroundShells) Tool {
 				return textResult(fmt.Sprintf("Stopped background shell %s.", in.ShellID)), nil
 			},
 		},
-		AccessFor:     InternalAccess,
-		PromptSnippet: killBashText.snippet,
+		AccessFor: InternalAccess,
 	}
 }
 
