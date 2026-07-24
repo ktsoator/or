@@ -52,6 +52,9 @@ type MessageDequeued struct{ ID string }
 // MessageCancelled reports a queued message dropped because its run ended.
 type MessageCancelled struct{ ID string }
 
+// RunFailed reports an asynchronous prompt failure to the viewer.
+type RunFailed struct{ Text string }
+
 // TitleChanged reports the session's display title and the two sources it is
 // derived from, so a client can tell a user-set name from a generated one.
 type TitleChanged struct {
@@ -63,6 +66,7 @@ type TitleChanged struct {
 func (MessageAccepted) Event()  {}
 func (MessageDequeued) Event()  {}
 func (MessageCancelled) Event() {}
+func (RunFailed) Event()        {}
 func (TitleChanged) Event()     {}
 
 // Transport returns this session's delivery link, for a caller that needs to

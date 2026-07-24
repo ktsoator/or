@@ -86,15 +86,15 @@ func TestManagerRunReservationProtectsConversation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	runtime, err := manager.BeginPrompt(created.ID, "Inspect the parser", false)
+	runtime, err := manager.reservePrompt(created.ID, "Inspect the parser", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !runtime.Running() {
 		t.Fatal("runtime is not exposed as running")
 	}
-	if _, err := manager.BeginPrompt(created.ID, "second", false); !errors.Is(err, engine.ErrBusy) {
-		t.Fatalf("second BeginPrompt error = %v, want ErrBusy", err)
+	if _, err := manager.reservePrompt(created.ID, "second", nil); !errors.Is(err, engine.ErrBusy) {
+		t.Fatalf("second reservation error = %v, want ErrBusy", err)
 	}
 	if err := manager.Delete(created.ID); !errors.Is(err, ErrSessionActive) {
 		t.Fatalf("Delete error = %v, want ErrSessionActive", err)
@@ -106,9 +106,9 @@ func TestManagerRunReservationProtectsConversation(t *testing.T) {
 		t.Fatalf("UpdatePermissionMode error = %v, want ErrSessionActive", err)
 	}
 
-	manager.EndRun(created.ID)
+	manager.finishRun(created.ID, runtime)
 	if runtime.Running() {
-		t.Fatal("runtime is still exposed as running after EndRun")
+		t.Fatal("runtime is still exposed as running after cleanup")
 	}
 	updated, err := manager.UpdatePermissionMode(created.ID, permission.ModeReadOnly)
 	if err != nil || updated.PermissionMode != permission.ModeReadOnly {
@@ -293,8 +293,8 @@ func TestManagerCloseIsIdempotentAndRejectsNewWork(t *testing.T) {
 	manager.Close()
 	manager.Close()
 
-	if _, err := manager.BeginPrompt(created.ID, "after shutdown", false); !errors.Is(err, ErrManagerClosed) {
-		t.Fatalf("BeginPrompt error = %v, want ErrManagerClosed", err)
+	if err := manager.StartPrompt(created.ID, "after shutdown"); !errors.Is(err, ErrManagerClosed) {
+		t.Fatalf("StartPrompt error = %v, want ErrManagerClosed", err)
 	}
 	if _, err := manager.Create("", t.TempDir(), ScopeProject, model, thinking, permission.ModeAsk); !errors.Is(err, ErrManagerClosed) {
 		t.Fatalf("Create error = %v, want ErrManagerClosed", err)

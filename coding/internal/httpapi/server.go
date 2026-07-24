@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -24,7 +23,6 @@ func init() {
 // Each field is the store one group of routes actually reads. Handlers reach
 // for the store they need and never through another component to find it.
 type Server struct {
-	ctx           context.Context
 	conversations *conversation.Manager
 	ledger        *usage.Store
 	workspaces    *workspace.Registry
@@ -38,7 +36,6 @@ type Server struct {
 // belongs to internal/app; this package only translates between HTTP and those
 // services.
 type Options struct {
-	Context       context.Context
 	Conversations *conversation.Manager
 	Ledger        *usage.Store
 	Workspaces    *workspace.Registry
@@ -51,7 +48,6 @@ type Options struct {
 // NewServer builds the HTTP delivery layer from already-created services.
 func NewServer(opts Options) *Server {
 	return &Server{
-		ctx:           opts.Context,
 		conversations: opts.Conversations,
 		ledger:        opts.Ledger,
 		workspaces:    opts.Workspaces,

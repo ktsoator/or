@@ -5,9 +5,25 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ktsoator/or/coding/internal/conversation"
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/tools"
 )
+
+func TestProjectSessionEventIncludesRunFailure(t *testing.T) {
+	data, ok := projectSessionEvent(conversation.RunFailed{Text: "model unavailable"})
+	if !ok {
+		t.Fatal("run failure event was not projected")
+	}
+
+	var event wireEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		t.Fatal(err)
+	}
+	if event.Type != "error" || event.Text != "model unavailable" {
+		t.Fatalf("event = %#v", event)
+	}
+}
 
 func TestProjectEventIncludesResponseCompletionTime(t *testing.T) {
 	completedAt := time.Date(2026, time.July, 22, 9, 42, 3, 123000000, time.FixedZone("PDT", -7*60*60))

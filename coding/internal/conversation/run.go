@@ -1,6 +1,8 @@
 package conversation
 
 import (
+	"context"
+	"errors"
 	"os"
 	"slices"
 	"strings"
@@ -10,8 +12,45 @@ import (
 	"github.com/ktsoator/or/llm"
 )
 
-// BeginPrompt reserves a session run and updates its durable title/activity.
-func (m *Manager) BeginPrompt(id, prompt string, hasImages bool) (*Runtime, error) {
+// StartPrompt reserves a session and runs the prompt in the background. The
+// manager owns the complete lifecycle so callers cannot forget to release the
+// reservation or clean up queued messages.
+func (m *Manager) StartPrompt(id, prompt string, images ...llm.ImageContent) error {
+	runtime, err := m.reservePrompt(id, prompt, images)
+	if err != nil {
+		return err
+	}
+	images = slices.Clone(images)
+	go func() {
+		defer m.finishRun(id, runtime)
+		if err := runtime.session.Prompt(m.ctx, prompt, images...); err != nil &&
+			!errors.Is(err, context.Canceled) {
+			runtime.emit(RunFailed{Text: err.Error()})
+		}
+	}()
+	return nil
+}
+
+// Compact reserves an idle session and performs one explicit context
+// compaction. It blocks until the summary is durable.
+func (m *Manager) Compact(
+	ctx context.Context,
+	id string,
+	instructions string,
+) (engine.CompactionResult, error) {
+	runtime, err := m.reserveCompact(id)
+	if err != nil {
+		return engine.CompactionResult{}, err
+	}
+	defer m.finishRun(id, runtime)
+	return runtime.session.Compact(ctx, instructions)
+}
+
+func (m *Manager) reservePrompt(
+	id string,
+	prompt string,
+	images []llm.ImageContent,
+) (*Runtime, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.closed {
@@ -21,7 +60,7 @@ func (m *Manager) BeginPrompt(id, prompt string, hasImages bool) (*Runtime, erro
 	if !ok {
 		return nil, os.ErrNotExist
 	}
-	if hasImages {
+	if len(images) > 0 {
 		model, found := llm.LookupModel(runtime.record.Provider, runtime.record.Model)
 		if !found || !slices.Contains(model.Input, llm.Image) {
 			return nil, ErrImagesUnsupported
@@ -35,7 +74,7 @@ func (m *Manager) BeginPrompt(id, prompt string, hasImages bool) (*Runtime, erro
 	runtime.record.UpdatedAt = time.Now().UTC()
 	if runtime.record.AutoTitle {
 		title := prompt
-		if strings.TrimSpace(title) == "" && hasImages {
+		if strings.TrimSpace(title) == "" && len(images) > 0 {
 			title = "Image"
 		}
 		runtime.record.Title = titleFromPrompt(title)
@@ -53,10 +92,7 @@ func (m *Manager) BeginPrompt(id, prompt string, hasImages bool) (*Runtime, erro
 	return runtime, nil
 }
 
-// BeginCompact reserves an idle session for a manual context compaction. It
-// does not alter the visible title or transcript; engine commits the compaction
-// boundary only after summary generation succeeds.
-func (m *Manager) BeginCompact(id string) (*Runtime, error) {
+func (m *Manager) reserveCompact(id string) (*Runtime, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.closed {
@@ -82,20 +118,16 @@ func (m *Manager) BeginCompact(id string) (*Runtime, error) {
 	return runtime, nil
 }
 
-// EndRun clears live activity and records when the session last finished. The
-// timestamp lets clients reject an older in-flight list response after an
-// optimistic prompt update.
-func (m *Manager) EndRun(id string) {
+// finishRun clears live activity, records when the session last finished, and
+// drops queued messages that the run did not consume.
+func (m *Manager) finishRun(id string, runtime *Runtime) {
 	m.mu.Lock()
-	runtime, ok := m.sessions[id]
-	if !ok {
-		m.mu.Unlock()
-		return
+	if current, ok := m.sessions[id]; ok && current == runtime {
+		runtime.running.Store(false)
+		runtime.live.Store(false)
+		runtime.record.UpdatedAt = time.Now().UTC()
+		_ = m.saveLocked()
 	}
-	runtime.running.Store(false)
-	runtime.live.Store(false)
-	runtime.record.UpdatedAt = time.Now().UTC()
-	_ = m.saveLocked()
 	m.mu.Unlock()
 
 	cancelled := runtime.cancelPending()

@@ -65,7 +65,6 @@ func New(ctx context.Context, cfg config.Config) (*Runtime, error) {
 	providers.Apply()
 
 	server := httpapi.NewServer(httpapi.Options{
-		Context:       ctx,
 		Conversations: manager,
 		Ledger:        ledger,
 		Workspaces:    workspaces,

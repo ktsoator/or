@@ -86,7 +86,7 @@ type Runtime struct {
 	record    record
 	session   *engine.Session
 	transport Transport
-	running   atomic.Bool // reserves the session until EndRun completes
+	running   atomic.Bool // serializes manager-owned work for this session
 	live      atomic.Bool // state exposed to clients; clears before done is published
 
 	pendingMu sync.Mutex

@@ -51,9 +51,6 @@ func (t *sessionTransport) HasPendingApproval() bool {
 	return t.broker.HasPending()
 }
 
-// send delivers an already-projected frame, for the API layer's own messages.
-func (t *sessionTransport) send(data []byte) { t.hub.Broadcast(data) }
-
 // transportOf returns the delivery link this package attached to a conversation.
 func transportOf(runtime *conversation.Runtime) *sessionTransport {
 	return runtime.Transport().(*sessionTransport)
@@ -78,6 +75,8 @@ func projectSessionEvent(event conversation.Event) ([]byte, bool) {
 		out = wireEvent{Type: "queue_removed", ID: e.ID}
 	case conversation.MessageCancelled:
 		out = wireEvent{Type: "queue_cancelled", ID: e.ID}
+	case conversation.RunFailed:
+		out = wireEvent{Type: "error", Text: e.Text}
 	case conversation.TitleChanged:
 		out = wireEvent{
 			Type:        "title_update",

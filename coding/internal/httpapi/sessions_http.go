@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -280,41 +279,26 @@ func (s *Server) handleEvents(c *gin.Context) {
 	}
 }
 
-// handlePrompt starts a run for the posted text. The run proceeds in the
-// background; its output arrives on the SSE stream. A busy session or other
-// start error is reported back as an error event.
+// handlePrompt starts a run for the posted text. The manager owns the
+// background lifecycle; output and asynchronous failures arrive over SSE.
 func (s *Server) handlePrompt(c *gin.Context) {
-	runtime, ok := s.runtime(c)
-	if !ok {
-		return
-	}
 	body, images, ok := bindMessageRequest(c)
 	if !ok {
 		return
 	}
-	sessionID := c.Param("sessionID")
-	reserved, err := s.conversations.BeginPrompt(sessionID, body.Text, len(images) > 0)
-	if errors.Is(err, engine.ErrBusy) {
+	err := s.conversations.StartPrompt(c.Param("sessionID"), body.Text, images...)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+	case errors.Is(err, engine.ErrBusy):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-		return
-	}
-	if errors.Is(err, conversation.ErrImagesUnsupported) {
+	case errors.Is(err, conversation.ErrImagesUnsupported):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	if err != nil {
+	case err != nil:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+	default:
+		c.Status(http.StatusAccepted)
 	}
-	runtime = reserved
-	go func() {
-		defer s.conversations.EndRun(sessionID)
-		if err := runtime.Session().Prompt(s.ctx, body.Text, images...); err != nil && !errors.Is(err, context.Canceled) {
-			payload, _ := json.Marshal(wireEvent{Type: "error", Text: err.Error()})
-			transportOf(runtime).send(payload)
-		}
-	}()
-	c.Status(http.StatusAccepted)
 }
 
 func (s *Server) handleSteer(c *gin.Context) {
@@ -419,7 +403,7 @@ func (s *Server) handleAbort(c *gin.Context) {
 
 // handleCompact performs the first explicit context-maintenance operation. It
 // blocks until the summary is durable so the caller gets a definitive result;
-// the session reservation prevents prompts and settings changes in parallel.
+// Manager prevents prompts and settings changes in parallel.
 func (s *Server) handleCompact(c *gin.Context) {
 	var body struct {
 		Instructions string `json:"instructions"`
@@ -432,23 +416,16 @@ func (s *Server) handleCompact(c *gin.Context) {
 		}
 	}
 
-	sessionID := c.Param("sessionID")
-	runtime, err := s.conversations.BeginCompact(sessionID)
+	result, err := s.conversations.Compact(
+		c.Request.Context(),
+		c.Param("sessionID"),
+		strings.TrimSpace(body.Instructions),
+	)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
 		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
-		return
 	case errors.Is(err, conversation.ErrSessionActive):
 		c.JSON(http.StatusConflict, gin.H{"error": "wait for the session to become idle before compacting"})
-		return
-	case err != nil:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	defer s.conversations.EndRun(sessionID)
-
-	result, err := runtime.Session().Compact(c.Request.Context(), strings.TrimSpace(body.Instructions))
-	switch {
 	case engine.IsNothingToCompact(err):
 		c.JSON(http.StatusConflict, gin.H{
 			"code":  "nothing_to_compact",

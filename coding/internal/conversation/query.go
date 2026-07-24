@@ -72,13 +72,13 @@ func (s *Runtime) summary() Summary {
 	}
 }
 
-// Session exposes the underlying conversation for callers that drive a turn or
-// read its transcript. The Runtime owns its lifecycle; callers only use it.
+// Session exposes the underlying engine for transcript reads, queue operations,
+// approvals, and aborts. Manager owns starting and finishing runs.
 func (s *Runtime) Session() *engine.Session { return s.session }
 
 // Running reports the live state exposed to clients. It clears before the
 // terminal event is published, while the internal reservation remains held
-// until EndRun finishes its cleanup.
+// until the manager finishes its cleanup.
 func (s *Runtime) Running() bool { return s.live.Load() }
 
 // HasPendingApproval reports a permission gate still waiting on an answer.
