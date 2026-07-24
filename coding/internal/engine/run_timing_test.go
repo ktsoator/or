@@ -37,11 +37,13 @@ func TestSessionPersistsAndReplaysRunTiming(t *testing.T) {
 	}
 
 	entries := session.Entries()
-	if len(entries) != 3 || entries[2].Type != transcript.RunEntry || entries[2].Run == nil {
-		t.Fatalf("entries = %#v, want user, assistant, run", entries)
+	if len(entries) != 4 || entries[3].Type != transcript.RunEntry || entries[3].Run == nil {
+		t.Fatalf("entries = %#v, want context, user, assistant, run", entries)
 	}
-	if entries[2].Run.FirstEntryID != entries[0].ID {
-		t.Fatalf("run first entry = %q, want %q", entries[2].Run.FirstEntryID, entries[0].ID)
+	// The run points at the first message of the turn, not at the hidden context
+	// attachment checkpointed ahead of it.
+	if entries[3].Run.FirstEntryID != entries[1].ID {
+		t.Fatalf("run first entry = %q, want %q", entries[3].Run.FirstEntryID, entries[1].ID)
 	}
 
 	history := session.History()

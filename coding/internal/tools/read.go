@@ -84,9 +84,8 @@ func Read(root string, ops FileOps, files *FileStateStore) Tool {
 				return textResult(formatReadResult(result)), nil
 			},
 		},
-		AccessFor:     pathAccess(permission.Read),
-		PromptSnippet: readText.snippet,
-		Guidelines:    readText.guidelines,
+		AccessFor:  pathAccess(permission.Read),
+		Guidelines: readText.guidelines,
 	}
 }
 

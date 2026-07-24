@@ -72,8 +72,7 @@ func Bash(root string, ops ExecOps, shells *BackgroundShells) Tool {
 				return textResult(b.String()), nil
 			},
 		},
-		AccessFor:     commandAccess,
-		PromptSnippet: bashText.snippet,
-		Guidelines:    bashText.guidelines,
+		AccessFor:  commandAccess,
+		Guidelines: bashText.guidelines,
 	}
 }

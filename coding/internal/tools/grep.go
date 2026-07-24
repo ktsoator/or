@@ -43,9 +43,8 @@ func Grep(root string, ops FileOps) Tool {
 				return runGrep(ctx, root, ops, in)
 			},
 		},
-		AccessFor:     pathAccess(permission.Read),
-		PromptSnippet: grepText.snippet,
-		Guidelines:    grepText.guidelines,
+		AccessFor:  pathAccess(permission.Read),
+		Guidelines: grepText.guidelines,
 	}
 }
 

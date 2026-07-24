@@ -9,18 +9,21 @@ func TestBuildSystemContainsStableProtocols(t *testing.T) {
 	out := BuildSystem(SystemOptions{
 		WorkspaceRoot: "/repo",
 		Tools: []ToolInfo{
-			{Name: "read", Snippet: "read a file", Guidelines: []string{"Inspect before editing."}},
-			{Name: "skill", Snippet: "load a skill"},
+			{Name: "read", Guidelines: []string{"Inspect before editing."}},
+			{Name: "skill"},
 		},
 	})
 
 	for _, want := range []string{
 		DefaultInstructions,
 		`- Root: "/repo"`,
-		"- read a file",
 		"## Tool guidelines",
+		"- Inspect before editing.",
+		"## Working rules",
+		"## Approvals",
 		"## Project context protocol",
 		"`<or-context>`",
+		"`context_update`",
 		"## Skills",
 		"call the `skill` tool",
 		"## Response style",
@@ -31,10 +34,20 @@ func TestBuildSystemContainsStableProtocols(t *testing.T) {
 	}
 }
 
-func TestBuildSystemOmitsSkillProtocolWithoutTool(t *testing.T) {
+// A tool's own description travels in its schema, which every request already
+// carries. Repeating it in the system prompt would spend tokens on a second copy
+// that can drift from the first.
+func TestBuildSystemDoesNotRestateToolDescriptions(t *testing.T) {
 	out := BuildSystem(SystemOptions{
-		Tools: []ToolInfo{{Name: "read", Snippet: "read a file"}},
+		Tools: []ToolInfo{{Name: "read"}, {Name: "grep"}},
 	})
+	if strings.Contains(out, "## Available tools") {
+		t.Errorf("system prompt duplicates the tool schemas:\n%s", out)
+	}
+}
+
+func TestBuildSystemOmitsSkillProtocolWithoutTool(t *testing.T) {
+	out := BuildSystem(SystemOptions{Tools: []ToolInfo{{Name: "read"}}})
 	if strings.Contains(out, "## Skills") {
 		t.Errorf("skill protocol should follow the active tool set:\n%s", out)
 	}
@@ -59,16 +72,8 @@ func TestBuildSystemIsDeterministic(t *testing.T) {
 		Instructions:  "\nCustom instructions.\n",
 		WorkspaceRoot: "/repo",
 		Tools: []ToolInfo{
-			{
-				Name:       "read",
-				Snippet:    "read a file",
-				Guidelines: []string{"First.", "Shared."},
-			},
-			{
-				Name:       "edit",
-				Snippet:    "edit a file",
-				Guidelines: []string{"Shared.", "Second."},
-			},
+			{Name: "read", Guidelines: []string{"First.", "Shared."}},
+			{Name: "edit", Guidelines: []string{"Shared.", "Second."}},
 		},
 	}
 	first := BuildSystem(opts)

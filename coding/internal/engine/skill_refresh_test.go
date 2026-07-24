@@ -74,8 +74,13 @@ func TestStableSkillToolExistsWithZeroSkills(t *testing.T) {
 	if len(captured.Tools) != 1 || captured.Tools[0].Name != skills.ToolName {
 		t.Fatalf("provider tools = %#v, want skill", captured.Tools)
 	}
-	if len(captured.Messages) != 1 || llmUserText(t, captured.Messages[0]) != "question" {
+	// Base context, then the user message. No skill listing is attached when no
+	// skill is installed.
+	if len(captured.Messages) != 2 || llmUserText(t, captured.Messages[1]) != "question" {
 		t.Fatalf("zero-skill provider messages = %#v", captured.Messages)
+	}
+	if base := llmUserText(t, captured.Messages[0]); strings.Contains(base, "skill") {
+		t.Fatalf("zero-skill session advertised a skill listing:\n%s", base)
 	}
 }
 
@@ -106,8 +111,8 @@ func TestDynamicSkillsAddUpdateAndRemoveAtTopLevelBoundary(t *testing.T) {
 	if err := session.Prompt(ctx, "first"); err != nil {
 		t.Fatal(err)
 	}
-	if len(inputs) != 1 || len(inputs[0].Messages) != 1 {
-		t.Fatalf("initial input = %#v", inputs)
+	if len(inputs) != 1 || len(inputs[0].Messages) != 2 {
+		t.Fatalf("initial input = %#v, want base context and user message", inputs)
 	}
 	stableTools := append([]llm.ToolDefinition(nil), inputs[0].Tools...)
 
@@ -171,20 +176,28 @@ func TestDynamicSkillsAddUpdateAndRemoveAtTopLevelBoundary(t *testing.T) {
 	}
 
 	entries, _, _ := store.snapshot()
-	var updates int
+	var updates, bases int
 	for _, entry := range entries {
-		if entry.Type != transcript.ContextEntry {
+		if entry.Type != transcript.ContextEntry || entry.Context == nil {
 			continue
 		}
-		updates++
-		if entry.Context == nil ||
-			entry.Context.Kind != string(modelcontext.SkillsUpdate) ||
-			entry.Context.Placement != string(modelcontext.AfterCurrent) {
-			t.Fatalf("skill context entry = %#v", entry)
+		switch entry.Context.Kind {
+		case string(modelcontext.BaseContext):
+			bases++
+		case string(modelcontext.SkillsUpdate):
+			updates++
+			if entry.Context.Placement != string(modelcontext.AfterCurrent) {
+				t.Fatalf("skill context entry = %#v", entry)
+			}
+		default:
+			t.Fatalf("unexpected context entry = %#v", entry)
 		}
 	}
 	if updates != 3 {
 		t.Fatalf("durable skill updates = %d, want add, update, remove", updates)
+	}
+	if bases != 1 {
+		t.Fatalf("durable base contexts = %d, want one per epoch", bases)
 	}
 	for _, item := range session.History() {
 		if strings.Contains(item.Text, "<or-context") {
@@ -239,8 +252,9 @@ func TestSkillRefreshIsFrozenAcrossAppRetry(t *testing.T) {
 	if !reflect.DeepEqual(inputs[0].Tools, inputs[1].Tools) {
 		t.Fatal("skill tool schema changed across retry")
 	}
-	firstListing := llmUserText(t, inputs[0].Messages[0])
-	secondListing := llmUserText(t, inputs[1].Messages[0])
+	// Message 0 is the base context; the skill listing follows it.
+	firstListing := llmUserText(t, inputs[0].Messages[1])
+	secondListing := llmUserText(t, inputs[1].Messages[1])
 	if firstListing != secondListing ||
 		!strings.Contains(firstListing, `kind="skill_listing"`) {
 		t.Fatalf("skill listing changed across retry:\nfirst:\n%s\nsecond:\n%s", firstListing, secondListing)
