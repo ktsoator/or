@@ -20,6 +20,7 @@ import type {
 } from '@/types'
 import type { SessionThread } from '@/useSession'
 import type { BrowserWorkspaceController } from '@/useBrowserWorkspace'
+import { browserTabNavigationURL } from '@/browserTabs'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 import { BrowserSurface } from './BrowserSurface'
@@ -306,7 +307,7 @@ export function BrowserView({
                     tabID={tab.id}
                     navigation={desired?.revision ?? 0}
                     observed={tab.observed}
-                    url={desired?.requestedURL ?? ''}
+                    url={browserTabNavigationURL(tab)}
                     workspaceFile={desired?.kind === 'workspace-preview'}
                     onResolveURL={(url) => {
                       if (!desired) return

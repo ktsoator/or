@@ -1101,6 +1101,43 @@ test('browser workspaces show only the selected session tabs and restore them on
   )
 })
 
+test('browser workspace restores a page navigation instead of the original URL', async ({
+  page,
+}) => {
+  await openDesktopClient(page, {
+    existingSession: true,
+    secondarySession: true,
+  })
+
+  await page.getByTestId('workbench-panel-toggle').click()
+  const workbench = page.getByTestId('workbench-panel')
+  await workbench.getByRole('button', { name: 'Add view' }).click()
+  await page.getByRole('menuitem', { name: 'Browser' }).click()
+
+  const address = workbench.getByRole('textbox', { name: 'Address' })
+  await address.fill('https://www.bilibili.com')
+  await address.press('Enter')
+  await expect.poll(async () => (await browserRuntimeView(page, 'tab-1'))?.url).toBe(
+    'https://www.bilibili.com/',
+  )
+
+  const videoURL = 'https://www.bilibili.com/video/BV1test'
+  await guestNavigatesItself(page, 'tab-1', videoURL, 'Bilibili video')
+  await expect(address).toHaveValue(videoURL)
+
+  const chats = page.getByRole('navigation', { name: 'Chats' })
+  await chats.getByRole('button', { name: 'Secondary task', exact: true }).click()
+  await expect.poll(async () => browserRuntimeView(page, 'tab-1')).toBeUndefined()
+
+  await chats.getByRole('button', { name: 'New session', exact: true }).click()
+  await expect.poll(async () => (await browserRuntimeView(page, 'tab-1'))?.url).toBe(
+    videoURL,
+  )
+  expect(await browserRuntimeView(page, 'tab-1')).toMatchObject({
+    loadCalls: [videoURL],
+  })
+})
+
 test('workbench divider resizes the panel without moving the corner control', async ({
   page,
 }) => {
@@ -1415,9 +1452,9 @@ test('AI preview tool opens a public website inside the Browser', async ({ page 
   await expect.poll(async () =>
     (await browserRuntimeView(page, 'preview:test-session'))?.url,
   ).toBe('https://www.google.com/')
-  expect(await browserRuntimeView(page, 'preview:test-session')).toMatchObject({
-    visible: true,
-  })
+  await expect.poll(async () =>
+    (await browserRuntimeView(page, 'preview:test-session'))?.visible,
+  ).toBe(true)
   const divider = page.getByTestId('workbench-divider-line')
   await expect.poll(async () => {
     const dividerBox = await divider.boundingBox()
