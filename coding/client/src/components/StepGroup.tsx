@@ -16,6 +16,7 @@ import { useI18n } from '@/i18n'
 function stepCategory(name: string): string {
   const v = name.toLowerCase()
   if (v === 'open_preview') return 'browserOpen'
+  if (v === 'tabs_context') return 'browserTabs'
   if (v === 'inspect_browser') return 'browserInspect'
   if (v.includes('read') || v.includes('cat')) return 'read'
   if (v.includes('write')) return 'write'

@@ -4,6 +4,7 @@ import type {
   BrowserInspectionCommandState,
   BrowserResult,
   BrowserResultOutboxEntry,
+  BrowserTabsCommandState,
   ConnectionStatus,
   ContextUsage,
   DeliveryMode,
@@ -25,6 +26,7 @@ export type ThreadState = {
   preview?: PreviewState
   browserCommands: BrowserCommandState[]
   browserResultOutbox: Record<string, BrowserResultOutboxEntry>
+  browserTabsRequests: BrowserTabsCommandState[]
   browserInspections: BrowserInspectionCommandState[]
   previewOpen: boolean
   running: boolean
@@ -69,6 +71,7 @@ export type ThreadAction =
       result: BrowserResult
     }
   | { t: 'browserResultAcknowledged'; sessionID: string; id: string }
+  | { t: 'browserTabsHandled'; sessionID: string; id: string }
   | { t: 'browserInspectionHandled'; sessionID: string; id: string }
   | { t: 'forget'; sessionID: string }
 
@@ -89,6 +92,7 @@ export const createThreadState = (): ThreadState => ({
   preview: undefined,
   browserCommands: [],
   browserResultOutbox: {},
+  browserTabsRequests: [],
   browserInspections: [],
   previewOpen: false,
   running: false,
@@ -296,6 +300,14 @@ export function threadsReducer(state: ThreadsState, action: ThreadAction): Threa
         ),
       }
       break
+    case 'browserTabsHandled':
+      next = {
+        ...current,
+        browserTabsRequests: current.browserTabsRequests.filter(
+          (command) => command.commandID !== action.id,
+        ),
+      }
+      break
     case 'wire':
       next = reduceWire(current, action.ev)
       break
@@ -312,6 +324,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
   let preview = state.preview
   let browserCommands = state.browserCommands
   const browserResultOutbox = state.browserResultOutbox
+  let browserTabsRequests = state.browserTabsRequests
   let browserInspections = state.browserInspections
   let previewOpen = state.previewOpen
   let running = state.running
@@ -729,12 +742,25 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
       break
     }
 
+    case 'browser_tabs_request': {
+      if (
+        ev.id &&
+        !browserTabsRequests.some((command) => command.commandID === ev.id)
+      ) {
+        browserTabsRequests = [...browserTabsRequests, { commandID: ev.id }]
+      }
+      break
+    }
+
     case 'browser_inspect_request': {
       if (
         ev.id &&
         !browserInspections.some((command) => command.commandID === ev.id)
       ) {
-        browserInspections = [...browserInspections, { commandID: ev.id }]
+        browserInspections = [
+          ...browserInspections,
+          { commandID: ev.id, tabID: ev.tabID || undefined },
+        ]
       }
       break
     }
@@ -908,6 +934,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
     contextUsage,
     preview,
     browserCommands,
+    browserTabsRequests,
     browserInspections,
     previewOpen,
     running,

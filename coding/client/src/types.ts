@@ -27,6 +27,11 @@ export type BrowserCommandState = PreviewRequest & {
 
 export type BrowserInspectionCommandState = {
   commandID: string
+  tabID?: string
+}
+
+export type BrowserTabsCommandState = {
+  commandID: string
 }
 
 export type BrowserResultOutboxEntry = {

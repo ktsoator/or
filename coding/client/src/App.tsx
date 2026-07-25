@@ -52,8 +52,6 @@ import { SidebarToggleButton } from './components/SidebarToggleButton'
 import { useI18n } from './i18n'
 import { useSidebarLayout } from './useSidebarLayout'
 import { useWorkbenchLayout } from './useWorkbenchLayout'
-import { useBrowserInspectionRequests } from './useBrowserInspectionRequests'
-import type { ActiveBrowserTab } from './browserTabs'
 
 function wheelDeltaInPixels(event: WheelEvent, pageHeight: number) {
   if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) return event.deltaY * 16
@@ -64,7 +62,6 @@ function wheelDeltaInPixels(event: WheelEvent, pageHeight: number) {
 export default function App() {
   const { t } = useI18n()
   const [secondarySessionID, setSecondarySessionID] = useState<string>()
-  const [activeBrowserTab, setActiveBrowserTab] = useState<ActiveBrowserTab>()
   const {
     sessions,
     workspaces,
@@ -76,6 +73,7 @@ export default function App() {
     contextUsage,
     preview,
     browserCommands,
+    browserTabsRequests,
     browserInspections,
     previewOpen,
     approval,
@@ -106,23 +104,10 @@ export default function App() {
     resolveApproval,
     resolveQuestion,
     queueBrowserResult,
+    handleBrowserTabs,
     handleBrowserInspection,
     secondaryThread,
   } = useSession(secondarySessionID)
-  useBrowserInspectionRequests({
-    activeTab: activeBrowserTab,
-    sessionID: activeSessionID,
-    browserCommands,
-    browserInspections,
-    onHandled: handleBrowserInspection,
-  })
-  useBrowserInspectionRequests({
-    activeTab: activeBrowserTab,
-    sessionID: secondaryThread?.session.id,
-    browserCommands: secondaryThread?.browserCommands ?? [],
-    browserInspections: secondaryThread?.browserInspections ?? [],
-    onHandled: handleBrowserInspection,
-  })
   const logRef = useRef<HTMLDivElement>(null)
   const followLatestRef = useRef(true)
   const previousSessionIDRef = useRef<string | undefined>(undefined)
@@ -204,6 +189,8 @@ export default function App() {
   const workbenchPreviewOwnerID = workbenchPreview
     ? workbenchPreviewSessionID ?? activeSessionID
     : undefined
+  const workbenchBrowserSessionID =
+    workbenchPreviewOwnerID ?? secondaryThread?.session.id ?? activeSessionID ?? draft?.id
   const workbenchBrowserCommands =
     secondaryThread && workbenchPreviewOwnerID === secondaryThread.session.id
       ? secondaryThread.browserCommands
@@ -925,7 +912,7 @@ export default function App() {
             open={workbenchOpen}
             preview={workbenchPreview}
             browserCommands={workbenchBrowserCommands}
-            sessionID={workbenchPreviewOwnerID}
+            sessionID={workbenchBrowserSessionID}
             activatePreview={activateWorkbenchPreview}
             conversation={secondaryThread}
             models={models}
@@ -936,8 +923,23 @@ export default function App() {
             onCreateConversation={() => void createSessionInWorkbench()}
             onDismissCreationError={() => setWorkbenchCreateError('')}
             onCloseConversation={() => setSecondarySessionID(undefined)}
-            onActiveBrowserTabChange={setActiveBrowserTab}
             onBrowserResult={queueBrowserResult}
+            browserInspectionSources={[
+              {
+                sessionID: activeSessionID,
+                browserCommands,
+                browserTabsRequests,
+                browserInspections,
+              },
+              {
+                sessionID: secondaryThread?.session.id,
+                browserCommands: secondaryThread?.browserCommands ?? [],
+                browserTabsRequests: secondaryThread?.browserTabsRequests ?? [],
+                browserInspections: secondaryThread?.browserInspections ?? [],
+              },
+            ]}
+            onBrowserTabsHandled={handleBrowserTabs}
+            onBrowserInspectionHandled={handleBrowserInspection}
             onConfigureModel={() => {
               setSettingsSection('models')
               setSettingsOpen(true)

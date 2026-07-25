@@ -17,6 +17,7 @@ export type WireEventType =
   | "approval_resolved"
   | "approval_cancelled"
   | "browser_request"
+  | "browser_tabs_request"
   | "browser_inspect_request"
   | "queue_cancelled"
   | "queue_removed"
@@ -52,6 +53,23 @@ export type BrowserInspectionStatus =
   | "failed"
   | "cancelled"
   | "timeout"
+
+export type BrowserTabsStatus =
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "timeout"
+
+export type BrowserControlCapability =
+  | "read"
+  | "navigate"
+  | "interact"
+
+export type BrowserTabStatus =
+  | "idle"
+  | "navigating"
+  | "ready"
+  | "failed"
 
 export type BrowserPageStatus =
   | "ready"
@@ -126,6 +144,26 @@ export type BrowserInspectionResult = {
   error?: string
 }
 
+export type BrowserOpenTab = {
+  tabID: string
+  url?: string
+  title?: string
+  status: BrowserTabStatus
+}
+
+export type BrowserControlledTab = {
+  tabID: string
+  capabilities: BrowserControlCapability[]
+}
+
+export type BrowserTabsResult = {
+  status: BrowserTabsStatus
+  openTabs?: BrowserOpenTab[]
+  controlledTabs?: BrowserControlledTab[]
+  selected?: string
+  error?: string
+}
+
 export type UsageCost = {
   input: number
   output: number
@@ -193,6 +231,7 @@ export type WireEvent = {
   summary?: string
   reason?: string
   disposition?: BrowserDisposition
+  tabID?: string
   questions?: Question[]
   title?: string
   aiTitle?: string

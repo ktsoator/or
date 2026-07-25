@@ -1,11 +1,4 @@
-import {
-  useEffect,
-  useReducer,
-  useRef,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from 'react'
+import type { FormEvent, ReactNode } from 'react'
 import {
   ArrowLeft,
   ArrowRight,
@@ -22,36 +15,11 @@ import {
 } from 'lucide-react'
 import { DropdownMenu } from 'radix-ui'
 import type {
-  BrowserCommandState,
-  BrowserResult,
   ModelOption,
-  PreviewState,
   WorkspaceSummary,
 } from '@/types'
 import type { SessionThread } from '@/useSession'
-import {
-  agentBrowserTabID,
-  browserCommandTabID,
-  browserTabNavigationURL,
-  browserTabsReducer,
-  createBrowserTab,
-  type ActiveBrowserTab,
-  type BrowserNavigationTarget,
-  type BrowserTab,
-} from '@/browserTabs'
-import {
-  normalizeBrowserAddress,
-  workspaceFileURL,
-  workspacePreviewURL,
-} from '@/lib/browser'
-import {
-  closeBrowser,
-  goBackBrowser,
-  goForwardBrowser,
-  hasBrowserRuntime,
-  openExternalURL,
-  type BrowserRuntimeState,
-} from '@/lib/desktop'
+import type { BrowserWorkspaceController } from '@/useBrowserWorkspace'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 import { BrowserSurface } from './BrowserSurface'
@@ -65,64 +33,27 @@ function addressTitle(url: string): string {
   }
 }
 
-function absoluteHTTPURL(value: string): string | undefined {
-  try {
-    const url = new URL(value)
-    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : undefined
-  } catch {
-    return undefined
-  }
-}
-
-function previewTarget(
-  preview: PreviewState,
-  sessionID?: string,
-): BrowserNavigationTarget {
-  const workspacePath = preview?.path
-  const requestedURL = workspacePath && sessionID && preview.grantID && preview.previewPath
-    ? workspacePreviewURL(sessionID, preview.grantID, preview.previewPath)
-    : preview?.url ?? ''
-  return {
-    requestedURL,
-    addressDraft: workspacePath ?? preview.url ?? '',
-    kind: workspacePath ? 'workspace-preview' : 'web',
-    title: preview?.title,
-    workspacePath,
-    commandID: preview.commandID,
-  }
-}
-
 export function BrowserView({
-  preview,
-  browserCommands,
-  sessionID,
-  activatePreview,
+  workspace,
   conversation,
   creatingConversation,
   models,
   workspaces,
   onCloseTab,
   onCloseConversation,
-  onActiveBrowserTabChange,
-  onBrowserResult,
   onCreateConversation,
   onConfigureModel,
   maximized,
   onToggleMaximized,
   toggleControl,
 }: {
-  preview?: PreviewState
-  browserCommands: BrowserCommandState[]
-  sessionID?: string
-  activatePreview: boolean
+  workspace: BrowserWorkspaceController
   conversation?: SessionThread
   creatingConversation: boolean
   models: ModelOption[]
   workspaces: WorkspaceSummary[]
   onCloseTab: () => void
   onCloseConversation: () => void
-  onActiveBrowserTabChange: (tab: ActiveBrowserTab | undefined) => void
-  onBrowserResult: (sessionID: string, commandID: string, result: BrowserResult) => void
   onCreateConversation: () => void
   onConfigureModel: () => void
   maximized: boolean
@@ -130,229 +61,32 @@ export function BrowserView({
   toggleControl?: ReactNode
 }) {
   const { t } = useI18n()
-  const initialTabRef = useRef<BrowserTab | undefined>(undefined)
-  if (
-    !initialTabRef.current &&
-    browserCommands.length === 0 &&
-    (preview || !conversation)
-  ) {
-    initialTabRef.current = preview
-      ? createBrowserTab({
-        id: agentBrowserTabID(sessionID),
-        owner: 'agent',
-        sessionID: sessionID ?? 'unknown',
-        target: previewTarget(preview, sessionID),
-      })
-      : createBrowserTab({ id: 'tab-1', owner: 'user' })
-  }
-  const [tabs, dispatchTabs] = useReducer(
-    browserTabsReducer,
-    initialTabRef.current ? [initialTabRef.current] : [],
-  )
-  const [activeTabID, setActiveTabID] = useState(
-    activatePreview && initialTabRef.current
-      ? initialTabRef.current.id
-      : conversation
-        ? `conversation:${conversation.session.id}`
-        : initialTabRef.current?.id ?? '',
-  )
-  const tabSequenceRef = useRef(initialTabRef.current && !preview ? 1 : 0)
-  const previewKey = preview
-    ? [
-        sessionID ?? 'unknown',
-        preview.revision,
-        preview.commandID ?? '',
-        preview.url ?? preview.path ?? '',
-        preview.grantID ?? '',
-        preview.previewPath ?? '',
-      ].join(':')
-    : undefined
-  const previewKeyRef = useRef(previewKey)
-  const processedCommandsRef = useRef(new Set<string>())
-  const previousConversationTabIDRef = useRef<string | undefined>(undefined)
-  const conversationTabID = conversation ? `conversation:${conversation.session.id}` : undefined
-  const conversationActive = activeTabID === conversationTabID
-  const activeTab = tabs.find((tab) => tab.id === activeTabID) ?? tabs[0]
-  const activeDesired = activeTab?.desired
-  const activeObserved = activeTab?.observed
-  const activeNavigationURL = activeTab ? browserTabNavigationURL(activeTab) : ''
-  const activeExternalURL = activeDesired
-    ? activeDesired.workspacePath
-      ? workspaceFileURL(activeDesired.workspacePath)
-      : activeNavigationURL
-    : ''
-  const browserRuntime = hasBrowserRuntime()
-
-  useEffect(() => {
-    if (conversationActive || !activeTab) {
-      onActiveBrowserTabChange(undefined)
-      return
-    }
-    onActiveBrowserTabChange({
-      id: activeTab.id,
-      owner: activeTab.owner,
-      sessionID: activeTab.sessionID,
-    })
-  }, [
-    activeTab,
-    conversationActive,
-    onActiveBrowserTabChange,
-  ])
-
-  useEffect(
-    () => () => onActiveBrowserTabChange(undefined),
-    [onActiveBrowserTabChange],
-  )
-
-  useEffect(() => {
-    const previous = previousConversationTabIDRef.current
-    previousConversationTabIDRef.current = conversationTabID
-    if (conversationTabID && conversationTabID !== previous) {
-      setActiveTabID(conversationTabID)
-      return
-    }
-    if (conversationTabID || !previous || activeTabID !== previous) return
-    if (tabs[0]) {
-      setActiveTabID(tabs[0].id)
-    } else {
-      onCloseTab()
-    }
-  }, [activeTabID, conversationTabID, onCloseTab, tabs])
-
-  useEffect(() => {
-    const command = browserCommands.find(
-      (candidate) =>
-        !processedCommandsRef.current.has(
-          `${sessionID ?? 'unknown'}:${candidate.commandID}`,
-        ),
-    )
-    if (!command) return
-    processedCommandsRef.current.add(`${sessionID ?? 'unknown'}:${command.commandID}`)
-
-    const tabID = browserCommandTabID(
-      sessionID,
-      command.commandID,
-      command.disposition,
-      conversationActive ? undefined : activeTab,
-    )
-    const existing = tabs.find((tab) => tab.id === tabID)
-    if (
-      command.disposition === 'reuse_agent_tab' &&
-      existing?.desired?.commandID &&
-      existing.desired.commandID !== command.commandID &&
-      existing.observed.status !== 'ready' &&
-      existing.observed.status !== 'failed'
-    ) {
-      if (existing.sessionID) {
-        onBrowserResult(existing.sessionID, existing.desired.commandID, {
-          status: 'cancelled',
-          requestedURL: absoluteHTTPURL(existing.desired.requestedURL),
-          committedURL: absoluteHTTPURL(existing.observed.committedURL),
-        })
-      }
-    }
-    dispatchTabs({
-      t: 'agent_navigate',
-      tabID,
-      sessionID: sessionID ?? 'unknown',
-      target: previewTarget(command, sessionID),
-    })
-    if (
-      command.disposition === 'new_foreground_tab' ||
-      (command.disposition === 'reuse_agent_tab' && activatePreview)
-    ) {
-      setActiveTabID(tabID)
-    }
-  }, [
-    activatePreview,
-    activeTab,
-    browserCommands,
-    conversationActive,
-    onBrowserResult,
-    sessionID,
+  const {
     tabs,
-  ])
-
-  useEffect(() => {
-    if ((!preview?.url && !preview?.path) || preview.commandID || preview.disposition) return
-    if (previewKeyRef.current === previewKey) return
-    previewKeyRef.current = previewKey
-    const tabID = agentBrowserTabID(sessionID)
-    dispatchTabs({
-      t: 'agent_navigate',
-      tabID,
-      sessionID: sessionID ?? 'unknown',
-      target: previewTarget(preview, sessionID),
-    })
-    if (activatePreview) setActiveTabID(tabID)
-  }, [activatePreview, preview, previewKey, sessionID])
-
-  const reload = () => {
-    if (!activeDesired?.requestedURL || !activeTab) return
-    dispatchTabs({ t: 'reload', tabID: activeTab.id })
-  }
+    workspaceID,
+    conversationTabID,
+    conversationActive,
+    activeTab,
+    activeDesired,
+    activeObserved,
+    activeExternalURL,
+    browserRuntime,
+    selectItem,
+    newTab,
+    closeTab,
+    reload,
+    navigateActiveAddress,
+    editAddress,
+    resolveNavigation,
+    runtimeStateReceived,
+    goBack,
+    goForward,
+    openExternal,
+  } = workspace
 
   const navigate = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!activeTab) return
-    if (
-      activeDesired?.workspacePath &&
-      activeTab.addressDraft === activeDesired.workspacePath
-    ) {
-      reload()
-      return
-    }
-    const next = normalizeBrowserAddress(activeTab.addressDraft)
-    if (!next) {
-      dispatchTabs({ t: 'reject_address', tabID: activeTab.id })
-      return
-    }
-    dispatchTabs({
-      t: 'submit_navigation',
-      tabID: activeTab.id,
-      source: 'address',
-      target: {
-        requestedURL: next,
-        addressDraft: next,
-        kind: 'web',
-      },
-    })
-  }
-
-  const newTab = () => {
-    tabSequenceRef.current += 1
-    const tabID = `tab-${tabSequenceRef.current}`
-    dispatchTabs({ t: 'create_user_tab', tabID })
-    setActiveTabID(tabID)
-  }
-
-  const closeTab = (tabID: string) => {
-    const closing = tabs.find((tab) => tab.id === tabID)
-    if (
-      closing?.desired?.commandID &&
-      closing.observed.status !== 'ready' &&
-      closing.observed.status !== 'failed'
-    ) {
-      if (closing.sessionID) {
-        onBrowserResult(closing.sessionID, closing.desired.commandID, {
-          status: 'cancelled',
-          requestedURL: absoluteHTTPURL(closing.desired.requestedURL),
-          committedURL: absoluteHTTPURL(closing.observed.committedURL),
-        })
-      }
-    }
-    void closeBrowser(tabID)
-    if (tabs.length === 1 && !conversation) {
-      onCloseTab()
-      return
-    }
-    const closingIndex = tabs.findIndex((tab) => tab.id === tabID)
-    const remaining = tabs.filter((tab) => tab.id !== tabID)
-    dispatchTabs({ t: 'close_tab', tabID })
-    if (tabID === activeTabID) {
-      const next = remaining[Math.min(closingIndex, remaining.length - 1)]
-      setActiveTabID(next?.id ?? conversationTabID ?? '')
-    }
+    navigateActiveAddress()
   }
 
   return (
@@ -381,7 +115,7 @@ export function BrowserView({
             const active = !conversationActive && tab.id === activeTab?.id
             return (
               <div
-                key={tab.id}
+                key={`${workspaceID}:${tab.id}`}
                 className={cn(
                   'group flex h-8 min-w-[7rem] max-w-[11rem] shrink-0 items-center rounded-md border transition-colors',
                   active
@@ -397,7 +131,7 @@ export function BrowserView({
                   role="tab"
                   aria-selected={active}
                   title={title}
-                  onClick={() => setActiveTabID(tab.id)}
+                  onClick={() => selectItem(tab.id)}
                 >
                   {desired?.kind === 'workspace-preview' ? (
                     <FileCode2 className="size-3.5 shrink-0 text-stone-400" aria-hidden="true" />
@@ -414,7 +148,9 @@ export function BrowserView({
                   type="button"
                   title={t('preview.closeNamedTab', { title })}
                   aria-label={t('preview.closeNamedTab', { title })}
-                  onClick={() => closeTab(tab.id)}
+                  onClick={() => {
+                    if (closeTab(tab.id)) onCloseTab()
+                  }}
                 >
                   <X className="size-3.5" aria-hidden="true" />
                 </button>
@@ -438,7 +174,7 @@ export function BrowserView({
                 role="tab"
                 aria-selected={conversationActive}
                 title={conversation.session.title}
-                onClick={() => setActiveTabID(conversationTabID)}
+                onClick={() => selectItem(conversationTabID)}
               >
                 <MessageSquare className="size-3.5 shrink-0 text-stone-400" aria-hidden="true" />
                 <span className="min-w-0 flex-1 truncate">
@@ -494,7 +230,7 @@ export function BrowserView({
               title={t('preview.back')}
               aria-label={t('preview.back')}
               disabled={!browserRuntime || !activeObserved?.canGoBack}
-              onClick={() => void goBackBrowser(activeTab.id)}
+              onClick={goBack}
             >
               <ArrowLeft className="size-4" aria-hidden="true" />
             </button>
@@ -504,7 +240,7 @@ export function BrowserView({
               title={t('preview.forward')}
               aria-label={t('preview.forward')}
               disabled={!browserRuntime || !activeObserved?.canGoForward}
-              onClick={() => void goForwardBrowser(activeTab.id)}
+              onClick={goForward}
             >
               <ArrowRight className="size-4" aria-hidden="true" />
             </button>
@@ -514,7 +250,7 @@ export function BrowserView({
               title={t('preview.refresh')}
               aria-label={t('preview.refresh')}
               disabled={!browserRuntime || !activeDesired?.requestedURL}
-              onClick={reload}
+              onClick={() => reload()}
             >
               <RefreshCw
                 className={cn(
@@ -536,11 +272,7 @@ export function BrowserView({
                 placeholder={t('preview.enterURL')}
                 spellCheck={false}
                 onChange={(event) => {
-                  dispatchTabs({
-                    t: 'edit_address',
-                    tabID: activeTab.id,
-                    address: event.target.value,
-                  })
+                  editAddress(activeTab.id, event.target.value)
                 }}
               />
             </form>
@@ -550,9 +282,7 @@ export function BrowserView({
               title={t('preview.openExternal')}
               aria-label={t('preview.openExternal')}
               disabled={!activeExternalURL}
-              onClick={() => {
-                if (activeExternalURL) openExternalURL(activeExternalURL)
-              }}
+              onClick={openExternal}
             >
               <ExternalLink className="size-3.5" aria-hidden="true" />
             </button>
@@ -564,7 +294,7 @@ export function BrowserView({
               const active = tab.id === activeTab.id
               return (
                 <div
-                  key={tab.id}
+                  key={`${workspaceID}:${tab.id}`}
                   className={cn(
                     'absolute inset-0 flex',
                     active ? 'visible' : 'invisible pointer-events-none',
@@ -580,47 +310,10 @@ export function BrowserView({
                     workspaceFile={desired?.kind === 'workspace-preview'}
                     onResolveURL={(url) => {
                       if (!desired) return
-                      dispatchTabs({
-                        t: 'resolve_navigation',
-                        tabID: tab.id,
-                        revision: desired.revision,
-                        url,
-                      })
+                      resolveNavigation(tab.id, desired.revision, url)
                     }}
-                    onRetry={() => dispatchTabs({ t: 'reload', tabID: tab.id })}
-                    onState={(state: BrowserRuntimeState) => {
-                      dispatchTabs({
-                        t: 'runtime_state_received',
-                        tabID: tab.id,
-                        appliedRevision: state.appliedRevision,
-                        committedURL: state.committedURL,
-                        title: state.title,
-                        status: state.status,
-                        canGoBack: state.canGoBack,
-                        canGoForward: state.canGoForward,
-                        error: state.error,
-                      })
-                      const committedURL = absoluteHTTPURL(state.committedURL)
-                      if (
-                        desired?.commandID &&
-                        state.appliedRevision === desired.revision &&
-                        state.status !== 'navigating' &&
-                        // A ready page without an HTTP(S) URL is not this
-                        // command's landing page; reporting it would be
-                        // rejected and would consume the command's only result.
-                        (state.status !== 'ready' || committedURL)
-                      ) {
-                        if (tab.sessionID) {
-                          onBrowserResult(tab.sessionID, desired.commandID, {
-                            status: state.status === 'ready' ? 'committed' : 'failed',
-                            requestedURL: absoluteHTTPURL(state.requestedURL),
-                            committedURL,
-                            title: state.title || undefined,
-                            error: state.error,
-                          })
-                        }
-                      }
-                    }}
+                    onRetry={() => reload(tab.id)}
+                    onState={(state) => runtimeStateReceived(tab.id, state)}
                   />
                 </div>
               )

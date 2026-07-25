@@ -24,6 +24,7 @@ const (
 	wireEventApprovalResolved  wireEventType = "approval_resolved"
 	wireEventApprovalCancelled wireEventType = "approval_cancelled"
 	wireEventBrowserRequest    wireEventType = "browser_request"
+	wireEventBrowserTabs       wireEventType = "browser_tabs_request"
 	wireEventBrowserInspect    wireEventType = "browser_inspect_request"
 	wireEventQueueCancelled    wireEventType = "queue_cancelled"
 	wireEventQueueRemoved      wireEventType = "queue_removed"
@@ -78,6 +79,32 @@ const (
 	wireBrowserInspectionFailed    wireBrowserInspectionStatus = "failed"
 	wireBrowserInspectionCancelled wireBrowserInspectionStatus = "cancelled"
 	wireBrowserInspectionTimeout   wireBrowserInspectionStatus = "timeout"
+)
+
+type wireBrowserTabsStatus string
+
+const (
+	wireBrowserTabsCompleted wireBrowserTabsStatus = "completed"
+	wireBrowserTabsFailed    wireBrowserTabsStatus = "failed"
+	wireBrowserTabsCancelled wireBrowserTabsStatus = "cancelled"
+	wireBrowserTabsTimeout   wireBrowserTabsStatus = "timeout"
+)
+
+type wireBrowserControlCapability string
+
+const (
+	wireBrowserControlRead     wireBrowserControlCapability = "read"
+	wireBrowserControlNavigate wireBrowserControlCapability = "navigate"
+	wireBrowserControlInteract wireBrowserControlCapability = "interact"
+)
+
+type wireBrowserTabStatus string
+
+const (
+	wireBrowserTabIdle       wireBrowserTabStatus = "idle"
+	wireBrowserTabNavigating wireBrowserTabStatus = "navigating"
+	wireBrowserTabReady      wireBrowserTabStatus = "ready"
+	wireBrowserTabFailed     wireBrowserTabStatus = "failed"
 )
 
 type wireBrowserPageStatus string
@@ -202,6 +229,8 @@ type wireEvent struct {
 	Reason  string `json:"reason,omitempty"`
 	// browser_request
 	Disposition wireBrowserDisposition `json:"disposition,omitempty"`
+	// browser inspection request
+	TabID string `json:"tabID,omitempty"`
 	// question_request
 	Questions []wireQuestion `json:"questions,omitempty"`
 	// title_update
@@ -245,6 +274,26 @@ type wireBrowserInspectionResult struct {
 	VisibleText string                      `json:"visibleText,omitempty"`
 	Truncated   bool                        `json:"truncated,omitempty"`
 	Error       string                      `json:"error,omitempty"`
+}
+
+type wireBrowserOpenTab struct {
+	TabID  string               `json:"tabID"`
+	URL    string               `json:"url,omitempty"`
+	Title  string               `json:"title,omitempty"`
+	Status wireBrowserTabStatus `json:"status"`
+}
+
+type wireBrowserControlledTab struct {
+	TabID        string                         `json:"tabID"`
+	Capabilities []wireBrowserControlCapability `json:"capabilities"`
+}
+
+type wireBrowserTabsResult struct {
+	Status         wireBrowserTabsStatus      `json:"status"`
+	OpenTabs       []wireBrowserOpenTab       `json:"openTabs,omitempty"`
+	ControlledTabs []wireBrowserControlledTab `json:"controlledTabs,omitempty"`
+	Selected       string                     `json:"selected,omitempty"`
+	Error          string                     `json:"error,omitempty"`
 }
 
 type wireUsage struct {

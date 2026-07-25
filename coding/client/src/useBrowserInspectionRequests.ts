@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { agentBrowserTabID, type ActiveBrowserTab } from './browserTabs'
+import {
+  browserWorkspaceInspectionTabID,
+  type BrowserWorkspaceState,
+} from './browserWorkspace'
 import { inspectBrowser } from './lib/desktop'
 import { sessionCommands } from './sessionCommands'
 import { useCommandResultReporter } from './useCommandResultReporter'
@@ -16,16 +19,25 @@ const pendingNavigationWaitMs = 10_000
 const reportRetryMs = 1_000
 
 export function useBrowserInspectionRequests({
-  activeTab,
+  workspace,
   sessionID,
   browserCommands,
   browserInspections,
+  attachControl,
+  releaseControl,
   onHandled,
 }: {
-  activeTab?: ActiveBrowserTab
+  workspace?: BrowserWorkspaceState
   sessionID?: string
   browserCommands: BrowserCommandState[]
   browserInspections: BrowserInspectionCommandState[]
+  attachControl: (
+    sessionID: string,
+    leaseID: string,
+    tabID: string,
+    capabilities: ['read'],
+  ) => void
+  releaseControl: (sessionID: string, leaseID: string) => void
   onHandled: (sessionID: string, commandID: string) => void
 }) {
   const processedRef = useRef(new Set<string>())
@@ -77,10 +89,17 @@ export function useBrowserInspectionRequests({
     }
 
     processedRef.current.add(key)
-    const inspectionTabID = resolveInspectionTabID(sessionID, activeTab)
-    const inspectionRequest = inspectionTabID
-      ? inspectBrowser(inspectionTabID)
-      : Promise.reject(new Error('Current browser tab is user-owned and cannot be inspected'))
+    const leaseID = `inspection:${key}`
+    const inspectionRequest = Promise.resolve()
+      .then(() => browserWorkspaceInspectionTabID(workspace, sessionID, inspection.tabID))
+      .then(async (tabID) => {
+        attachControl(sessionID, leaseID, tabID, ['read'])
+        try {
+          return await inspectBrowser(tabID)
+        } finally {
+          releaseControl(sessionID, leaseID)
+        }
+      })
     void inspectionRequest
       .then((observed): BrowserInspectionResult => {
         if (!observed) throw new Error('Browser inspection is unavailable')
@@ -106,16 +125,13 @@ export function useBrowserInspectionRequests({
         }
         retry(reportRetryMs)
       })
-  }, [activeTab, browserCommands, browserInspections, report, sessionID])
-}
-
-function resolveInspectionTabID(
-  sessionID: string,
-  activeTab: ActiveBrowserTab | undefined,
-): string | undefined {
-  if (!activeTab) return agentBrowserTabID(sessionID)
-  if (activeTab.owner === 'user') return undefined
-  return activeTab.sessionID === sessionID
-    ? activeTab.id
-    : agentBrowserTabID(sessionID)
+  }, [
+    attachControl,
+    browserCommands,
+    browserInspections,
+    releaseControl,
+    report,
+    sessionID,
+    workspace,
+  ])
 }

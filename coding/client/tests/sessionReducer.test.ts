@@ -530,7 +530,7 @@ describe('threadsReducer event sequences', () => {
     })
   })
 
-  test('restores, deduplicates, and handles pending browser inspections', () => {
+  test('restores, targets, deduplicates, and handles browser observations', () => {
     let state = reduce([
       {
         t: 'reset',
@@ -538,8 +538,18 @@ describe('threadsReducer event sequences', () => {
         history: {
           running: true,
           events: [
-            { type: 'browser_inspect_request', id: 'inspection-1' },
-            { type: 'browser_inspect_request', id: 'inspection-1' },
+            { type: 'browser_tabs_request', id: 'tabs-1' },
+            { type: 'browser_tabs_request', id: 'tabs-1' },
+            {
+              type: 'browser_inspect_request',
+              id: 'inspection-1',
+              tabID: 'stable-tab-1',
+            },
+            {
+              type: 'browser_inspect_request',
+              id: 'inspection-1',
+              tabID: 'stable-tab-1',
+            },
           ],
         },
       },
@@ -550,16 +560,23 @@ describe('threadsReducer event sequences', () => {
       },
     ])
 
+    expect(thread(state).browserTabsRequests).toEqual([{ commandID: 'tabs-1' }])
     expect(thread(state).browserInspections).toEqual([
-      { commandID: 'inspection-1' },
-      { commandID: 'inspection-2' },
+      { commandID: 'inspection-1', tabID: 'stable-tab-1' },
+      { commandID: 'inspection-2', tabID: undefined },
     ])
 
     state = reduce(
-      [{ t: 'browserInspectionHandled', sessionID, id: 'inspection-1' }],
+      [
+        { t: 'browserTabsHandled', sessionID, id: 'tabs-1' },
+        { t: 'browserInspectionHandled', sessionID, id: 'inspection-1' },
+      ],
       state,
     )
-    expect(thread(state).browserInspections).toEqual([{ commandID: 'inspection-2' }])
+    expect(thread(state).browserTabsRequests).toEqual([])
+    expect(thread(state).browserInspections).toEqual([
+      { commandID: 'inspection-2', tabID: undefined },
+    ])
   })
 
   test('rebuilds history after disconnect and finalizes an idle open run', () => {

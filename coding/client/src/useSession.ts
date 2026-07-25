@@ -23,6 +23,7 @@ import type {
   BrowserCommandState,
   BrowserInspectionCommandState,
   BrowserResult,
+  BrowserTabsCommandState,
   CompactionResult,
   ConnectionStatus,
   ContextUsage,
@@ -56,6 +57,7 @@ export type Session = {
   contextUsage?: ContextUsage
   preview?: PreviewState
   browserCommands: BrowserCommandState[]
+  browserTabsRequests: BrowserTabsCommandState[]
   browserInspections: BrowserInspectionCommandState[]
   previewOpen: boolean
   approval?: ApprovalItem
@@ -86,6 +88,7 @@ export type Session = {
   resolveApproval: (id: string, choice: ApprovalChoice) => Promise<void>
   resolveQuestion: (id: string, answers: QuestionAnswer[]) => Promise<void>
   queueBrowserResult: (sessionID: string, id: string, result: BrowserResult) => void
+  handleBrowserTabs: (sessionID: string, id: string) => void
   handleBrowserInspection: (sessionID: string, id: string) => void
   secondaryThread?: SessionThread
 }
@@ -97,6 +100,7 @@ export type SessionThread = {
   contextUsage?: ContextUsage
   preview?: PreviewState
   browserCommands: BrowserCommandState[]
+  browserTabsRequests: BrowserTabsCommandState[]
   browserInspections: BrowserInspectionCommandState[]
   previewOpen: boolean
   approval?: ApprovalItem
@@ -835,6 +839,7 @@ export function useSession(secondarySessionID?: string): Session {
         contextUsage: secondaryState?.contextUsage,
         preview: secondaryState?.preview,
         browserCommands: secondaryState?.browserCommands ?? [],
+        browserTabsRequests: secondaryState?.browserTabsRequests ?? [],
         browserInspections: secondaryState?.browserInspections ?? [],
         previewOpen: secondaryState?.previewOpen ?? false,
         approval: secondaryApproval,
@@ -873,6 +878,7 @@ export function useSession(secondarySessionID?: string): Session {
     contextUsage: thread?.contextUsage,
     preview: thread?.preview,
     browserCommands: thread?.browserCommands ?? [],
+    browserTabsRequests: thread?.browserTabsRequests ?? [],
     browserInspections: thread?.browserInspections ?? [],
     previewOpen: thread?.previewOpen ?? false,
     approval,
@@ -903,6 +909,8 @@ export function useSession(secondarySessionID?: string): Session {
     resolveApproval,
     resolveQuestion,
     queueBrowserResult,
+    handleBrowserTabs: (sessionID: string, id: string) =>
+      dispatch({ t: 'browserTabsHandled', sessionID, id }),
     handleBrowserInspection: (sessionID: string, id: string) =>
       dispatch({ t: 'browserInspectionHandled', sessionID, id }),
     secondaryThread,

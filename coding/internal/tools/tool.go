@@ -56,9 +56,13 @@ func CodingToolsWithShells(
 	files := NewFileStateStore()
 	shells := NewBackgroundShells()
 	var inspectors []BrowserInspector
+	var tabProviders []BrowserTabsProvider
 	if len(browserControllers) > 0 {
 		if inspector, ok := browserControllers[0].(BrowserInspector); ok {
 			inspectors = append(inspectors, inspector)
+		}
+		if provider, ok := browserControllers[0].(BrowserTabsProvider); ok {
+			tabProviders = append(tabProviders, provider)
 		}
 	}
 	return []Tool{
@@ -71,6 +75,7 @@ func CodingToolsWithShells(
 		Bash(root, ops, shells),
 		BashOutput(shells),
 		OpenPreview(root, browserControllers...),
+		BrowserTabs(tabProviders...),
 		InspectBrowser(inspectors...),
 		KillBash(shells),
 	}, shells

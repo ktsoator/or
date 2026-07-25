@@ -31,7 +31,7 @@ func TestBrowserBrokerResolvesFirstInspectionResult(t *testing.T) {
 	result := make(chan browserInspectionCallResult, 1)
 
 	go func() {
-		got, err := broker.InspectBrowser(context.Background())
+		got, err := broker.InspectBrowser(context.Background(), "stable-tab-1")
 		result <- browserInspectionCallResult{result: got, err: err}
 	}()
 
@@ -39,8 +39,11 @@ func TestBrowserBrokerResolvesFirstInspectionResult(t *testing.T) {
 	if requested.Type != wireEventBrowserInspect || requested.ID == "" {
 		t.Fatalf("inspection request event = %#v", requested)
 	}
+	if requested.TabID != "stable-tab-1" {
+		t.Fatalf("inspection tab ID = %q", requested.TabID)
+	}
 	pending := broker.PendingEvents()
-	if len(pending) != 1 || pending[0].Type != wireEventBrowserInspect || pending[0].ID != requested.ID {
+	if len(pending) != 1 || pending[0].Type != wireEventBrowserInspect || pending[0].ID != requested.ID || pending[0].TabID != "stable-tab-1" {
 		t.Fatalf("pending events = %#v", pending)
 	}
 
@@ -80,7 +83,7 @@ func TestBrowserBrokerCancelsInspectionWithRunContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	result := make(chan browserInspectionCallResult, 1)
 	go func() {
-		got, err := broker.InspectBrowser(ctx)
+		got, err := broker.InspectBrowser(ctx, "")
 		result <- browserInspectionCallResult{result: got, err: err}
 	}()
 
@@ -108,7 +111,7 @@ func TestBrowserBrokerInspectionTimeoutAndClose(t *testing.T) {
 		broker.timeout = 10 * time.Millisecond
 		result := make(chan browserInspectionCallResult, 1)
 		go func() {
-			got, err := broker.InspectBrowser(context.Background())
+			got, err := broker.InspectBrowser(context.Background(), "")
 			result <- browserInspectionCallResult{result: got, err: err}
 		}()
 		requested := readBrowserEvent(t, events)
@@ -133,7 +136,7 @@ func TestBrowserBrokerInspectionTimeoutAndClose(t *testing.T) {
 		broker := NewBrowserBroker(hub)
 		result := make(chan browserInspectionCallResult, 1)
 		go func() {
-			got, err := broker.InspectBrowser(context.Background())
+			got, err := broker.InspectBrowser(context.Background(), "")
 			result <- browserInspectionCallResult{result: got, err: err}
 		}()
 		requested := readBrowserEvent(t, events)
@@ -158,7 +161,7 @@ func TestBrowserInspectionResultEndpointResolvesSessionCommand(t *testing.T) {
 	defer transport.hub.remove(events)
 	result := make(chan browserInspectionCallResult, 1)
 	go func() {
-		got, err := transport.InspectBrowser(context.Background())
+		got, err := transport.InspectBrowser(context.Background(), "stable-tab-1")
 		result <- browserInspectionCallResult{result: got, err: err}
 	}()
 	requested := readBrowserEvent(t, events)

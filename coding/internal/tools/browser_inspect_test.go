@@ -13,9 +13,13 @@ import (
 type resultBrowserInspector struct {
 	result BrowserInspectionResult
 	err    error
+	tabID  *string
 }
 
-func (b resultBrowserInspector) InspectBrowser(context.Context) (BrowserInspectionResult, error) {
+func (b resultBrowserInspector) InspectBrowser(_ context.Context, tabID string) (BrowserInspectionResult, error) {
+	if b.tabID != nil {
+		*b.tabID = tabID
+	}
 	return b.result, b.err
 }
 
@@ -77,12 +81,34 @@ func TestInspectBrowserReportsUnavailableController(t *testing.T) {
 	}
 }
 
+func TestInspectBrowserPassesExplicitTabID(t *testing.T) {
+	var tabID string
+	result := executeBrowserInspectionWithArgs(
+		t,
+		InspectBrowser(resultBrowserInspector{
+			result: BrowserInspectionResult{Status: BrowserInspectionFailed},
+			tabID:  &tabID,
+		}),
+		json.RawMessage(`{"tabID":"  stable-tab  "}`),
+	)
+	if tabID != "stable-tab" {
+		t.Fatalf("tabID = %q", tabID)
+	}
+	if text := browserInspectionResultText(t, result); !strings.Contains(text, "page observation failed") {
+		t.Fatalf("result = %q", text)
+	}
+}
+
 func executeBrowserInspection(t *testing.T, tool Tool) agent.ToolResult {
+	return executeBrowserInspectionWithArgs(t, tool, json.RawMessage(`{}`))
+}
+
+func executeBrowserInspectionWithArgs(t *testing.T, tool Tool, args json.RawMessage) agent.ToolResult {
 	t.Helper()
 	result, err := tool.Execute(
 		context.Background(),
 		"inspection-call",
-		json.RawMessage(`{}`),
+		args,
 		func(agent.ToolResult) {},
 	)
 	if err != nil {
