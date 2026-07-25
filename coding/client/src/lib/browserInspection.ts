@@ -5,9 +5,6 @@ export type BrowserInspectionText = {
   truncated: boolean
 }
 
-// This is fixed product code, never caller-provided JavaScript. NativeBrowser
-// executes it in an isolated world so a page cannot replace the DOM helpers it
-// relies on.
 export const browserInspectionScript = `(() => {
   const limit = ${browserInspectionTextLimit};
   const excluded = 'script,style,noscript,template,input,textarea,select,option,[hidden],[inert],[aria-hidden="true"],[contenteditable]:not([contenteditable="false"])';

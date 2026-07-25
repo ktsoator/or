@@ -1,21 +1,18 @@
-import {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type RefObject,
-} from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { apiURL } from './api'
 import { isLocalPreviewURL } from './lib/browser'
 import {
-  hasNativeBrowser,
-  navigateNativeBrowser,
-  onNativeBrowserState,
-  setNativeBrowserViewport,
-  type NativeBrowserState,
+  hasBrowserRuntime,
+  navigateBrowser,
+  onBrowserState,
+  type BrowserRuntimeState,
 } from './lib/desktop'
+import {
+  registerWebviewBrowser,
+  type BrowserWebviewElement,
+} from './lib/webviewBrowser'
 
-export type NativeBrowserControllerStatus = 'idle' | 'loading' | 'ready' | 'failed'
+export type BrowserControllerStatus = 'idle' | 'loading' | 'ready' | 'failed'
 
 type ResolvedNavigation = {
   revision: number
@@ -30,7 +27,7 @@ function failedBrowserState(
   revision: number,
   requestedURL: string,
   error: string,
-): NativeBrowserState {
+): BrowserRuntimeState {
   return {
     tabID,
     appliedRevision: revision,
@@ -70,26 +67,24 @@ function probeLocalPreview(url: string, revision: number): Promise<string> {
   return request
 }
 
-export function useNativeBrowserController({
+export function useBrowserController({
   kind,
   onResolveURL,
   onState,
   revision,
-  surfaceRef,
   tabID,
   url,
-  visible,
+  webviewRef,
 }: {
   kind: 'web' | 'workspace-preview'
   onResolveURL: (url: string) => void
-  onState: (state: NativeBrowserState) => void
+  onState: (state: BrowserRuntimeState) => void
   revision: number
-  surfaceRef: RefObject<HTMLDivElement | null>
   tabID: string
   url: string
-  visible: boolean
-}): { error: string; status: NativeBrowserControllerStatus } {
-  const nativeAvailable = hasNativeBrowser()
+  webviewRef: RefObject<BrowserWebviewElement | null>
+}): { error: string; status: BrowserControllerStatus } {
+  const browserAvailable = hasBrowserRuntime()
   const onResolveURLRef = useRef(onResolveURL)
   const onStateRef = useRef(onState)
   const revisionRef = useRef(revision)
@@ -100,7 +95,7 @@ export function useNativeBrowserController({
       ? { revision, url, kind }
       : undefined,
   )
-  const [status, setStatus] = useState<NativeBrowserControllerStatus>(
+  const [status, setStatus] = useState<BrowserControllerStatus>(
     url ? 'loading' : 'idle',
   )
   const [error, setError] = useState('')
@@ -110,18 +105,31 @@ export function useNativeBrowserController({
   revisionRef.current = revision
 
   useEffect(() => {
+    if (!browserAvailable) return
+    const webview = webviewRef.current
+    if (!webview) return
+    const release = registerWebviewBrowser(tabID, webview)
+    return () => {
+      // A navigation issued against this registration does not survive it, so
+      // the next registration has to issue the current revision again.
+      issuedRevisionRef.current = undefined
+      release()
+    }
+  }, [browserAvailable, tabID, webviewRef])
+
+  useEffect(() => {
     if (!url) {
       setResolved(undefined)
       setStatus('idle')
       setError('')
       return
     }
-    if (!nativeAvailable) {
+    if (!browserAvailable) {
       setResolved(undefined)
       setStatus('failed')
-      setError('Native browser is unavailable')
+      setError('Browser runtime is unavailable')
       onStateRef.current(
-        failedBrowserState(tabID, revision, url, 'Native browser is unavailable'),
+        failedBrowserState(tabID, revision, url, 'Browser runtime is unavailable'),
       )
       return
     }
@@ -154,15 +162,15 @@ export function useNativeBrowserController({
     return () => {
       active = false
     }
-  }, [kind, nativeAvailable, revision, tabID, url])
+  }, [browserAvailable, kind, revision, tabID, url])
 
   useEffect(() => {
-    if (!resolved || resolved.revision !== revision || !nativeAvailable) return
+    if (!resolved || resolved.revision !== revision || !browserAvailable) return
     if (issuedRevisionRef.current === revision) return
     issuedRevisionRef.current = revision
     setStatus('loading')
     setError('')
-    void navigateNativeBrowser({
+    void navigateBrowser({
       tabID,
       revision,
       url: resolved.url,
@@ -181,64 +189,15 @@ export function useNativeBrowserController({
         setError(message)
         onStateRef.current(failedBrowserState(tabID, revision, resolved.url, message))
       })
-  }, [nativeAvailable, resolved, revision, tabID])
+  }, [browserAvailable, resolved, revision, tabID])
 
-  useEffect(() => onNativeBrowserState((state) => {
+  useEffect(() => onBrowserState((state) => {
     if (state.tabID !== tabID) return
     onStateRef.current(state)
     if (state.appliedRevision < revisionRef.current) return
     setStatus(state.status === 'navigating' ? 'loading' : state.status)
     setError(state.error ?? '')
   }), [tabID])
-
-  const viewportEnabled = Boolean(
-    nativeAvailable &&
-    visible &&
-    resolved?.revision === revision &&
-    status !== 'failed',
-  )
-
-  useLayoutEffect(() => {
-    const surface = surfaceRef.current
-    let active = true
-    const hide = () => setNativeBrowserViewport({ tabID, visible: false })
-    const sync = () => {
-      if (!active) return
-      if (!surface || !viewportEnabled) {
-        void hide()
-        return
-      }
-      const bounds = surface.getBoundingClientRect()
-      if (bounds.width < 1 || bounds.height < 1) {
-        void hide()
-        return
-      }
-      void setNativeBrowserViewport({
-        tabID,
-        visible: true,
-        bounds: {
-          x: bounds.x,
-          y: bounds.y,
-          width: bounds.width,
-          height: bounds.height,
-        },
-      }).catch((reason: unknown) => {
-        if (!active) return
-        setStatus('failed')
-        setError(reason instanceof Error ? reason.message : String(reason))
-      })
-    }
-    const observer = surface ? new ResizeObserver(sync) : undefined
-    if (surface) observer?.observe(surface)
-    window.addEventListener('resize', sync)
-    sync()
-    return () => {
-      active = false
-      observer?.disconnect()
-      window.removeEventListener('resize', sync)
-      void hide()
-    }
-  }, [surfaceRef, tabID, viewportEnabled])
 
   return { error, status }
 }

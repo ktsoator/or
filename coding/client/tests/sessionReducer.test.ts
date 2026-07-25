@@ -179,6 +179,69 @@ describe('threadsReducer event sequences', () => {
     expect(JSON.stringify(thread(state).items)).not.toContain('partial answer')
   })
 
+  test('does not duplicate assistant text when tool input arrives before message end', () => {
+    const text = 'Let me load the design guidance first.'
+    const state = reduce([
+      {
+        t: 'wire',
+        sessionID,
+        ev: { type: 'run_start', id: 'run-tool-text', startedAt },
+      },
+      {
+        t: 'wire',
+        sessionID,
+        ev: { type: 'delta', kind: 'text', delta: text },
+      },
+      {
+        t: 'wire',
+        sessionID,
+        ev: {
+          type: 'tool_input_start',
+          id: 'skill-1',
+          tool: 'skill',
+          toolContentIndex: 0,
+        },
+      },
+      {
+        t: 'wire',
+        sessionID,
+        ev: {
+          type: 'tool_input_end',
+          id: 'skill-1',
+          tool: 'skill',
+          toolContentIndex: 0,
+          args: { name: 'frontend-design' },
+        },
+      },
+      {
+        t: 'wire',
+        sessionID,
+        ev: { type: 'message_end', text, finalResponse: false },
+      },
+    ])
+
+    const items = thread(state).items
+    const assistants = items.filter(
+      (item) => item.kind === 'assistant' && item.markdown === text,
+    )
+    const assistantIndex = items.findIndex((item) => item.kind === 'assistant')
+    const toolIndex = items.findIndex((item) => item.kind === 'tool')
+
+    expect(assistants).toHaveLength(1)
+    expect(assistants[0]).toEqual(
+      expect.objectContaining({ open: false, complete: false }),
+    )
+    expect(assistantIndex).toBeLessThan(toolIndex)
+    expect(items[toolIndex]).toEqual(
+      expect.objectContaining({
+        kind: 'tool',
+        id: 'skill-1',
+        name: 'skill',
+        status: 'preparing',
+      }),
+    )
+  })
+
   test('adds, resolves, and cancels approvals without ending the run', () => {
     let state = reduce([
       {

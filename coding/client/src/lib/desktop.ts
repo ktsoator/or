@@ -1,24 +1,16 @@
-export type NativeBrowserBounds = {
-  x: number
-  y: number
-  width: number
-  height: number
-}
+import {
+  webviewBrowserBridge,
+  webviewBrowserEnabled,
+} from './webviewBrowser'
 
-export type NativeBrowserNavigateInput = {
+export type BrowserNavigateInput = {
   tabID: string
   url: string
   revision: number
   kind: 'web' | 'workspace-preview'
 }
 
-export type NativeBrowserViewportInput = {
-  tabID: string
-  visible: boolean
-  bounds?: NativeBrowserBounds
-}
-
-export type NativeBrowserState = {
+export type BrowserRuntimeState = {
   tabID: string
   appliedRevision: number
   requestedURL: string
@@ -30,7 +22,7 @@ export type NativeBrowserState = {
   error?: string
 }
 
-export type NativeBrowserInspection = {
+export type BrowserInspection = {
   url: string
   title: string
   pageStatus: 'ready'
@@ -39,21 +31,20 @@ export type NativeBrowserInspection = {
   truncated: boolean
 }
 
-type NativeBrowserBridge = {
-  navigate: (input: NativeBrowserNavigateInput) => Promise<NativeBrowserState>
-  setViewport: (input: NativeBrowserViewportInput) => Promise<void>
+export type BrowserRuntimeBridge = {
+  navigate: (input: BrowserNavigateInput) => Promise<BrowserRuntimeState>
   close: (tabID: string) => Promise<void>
   goBack: (tabID: string) => Promise<void>
   goForward: (tabID: string) => Promise<void>
-  inspect: (tabID: string) => Promise<NativeBrowserInspection>
-  onState: (listener: (state: NativeBrowserState) => void) => () => void
+  inspect: (tabID: string) => Promise<BrowserInspection>
+  onState: (listener: (state: BrowserRuntimeState) => void) => () => void
 }
 
 export type CodingDesktop = {
   platform: string
+  browserMode: 'webview'
   chooseDirectory: (initialPath: string, title: string) => Promise<string>
   openExternalURL: (url: string) => Promise<void> | void
-  browser: NativeBrowserBridge
 }
 
 declare global {
@@ -70,47 +61,44 @@ export function desktopPlatform(): string | undefined {
   return window.codingDesktop?.platform
 }
 
-export function hasNativeBrowser(): boolean {
-  return (
-    typeof window.codingDesktop?.browser?.navigate === 'function' &&
-    typeof window.codingDesktop.browser.setViewport === 'function'
-  )
+// The browser runtime is the renderer's own <webview> registry, so it exists
+// exactly when the desktop shell enables the webview tag.
+export function hasBrowserRuntime(): boolean {
+  return webviewBrowserEnabled()
 }
 
-export function navigateNativeBrowser(
-  input: NativeBrowserNavigateInput,
-): Promise<NativeBrowserState | undefined> {
-  return window.codingDesktop?.browser?.navigate(input) ?? Promise.resolve(undefined)
+function browserBridge(): BrowserRuntimeBridge | undefined {
+  return webviewBrowserEnabled() ? webviewBrowserBridge : undefined
 }
 
-export function setNativeBrowserViewport(
-  input: NativeBrowserViewportInput,
-): Promise<void> {
-  return window.codingDesktop?.browser?.setViewport(input) ?? Promise.resolve()
+export function navigateBrowser(
+  input: BrowserNavigateInput,
+): Promise<BrowserRuntimeState | undefined> {
+  return browserBridge()?.navigate(input) ?? Promise.resolve(undefined)
 }
 
-export function closeNativeBrowser(tabID: string): Promise<void> {
-  return window.codingDesktop?.browser?.close(tabID) ?? Promise.resolve()
+export function closeBrowser(tabID: string): Promise<void> {
+  return browserBridge()?.close(tabID) ?? Promise.resolve()
 }
 
-export function goBackNativeBrowser(tabID: string): Promise<void> {
-  return window.codingDesktop?.browser?.goBack(tabID) ?? Promise.resolve()
+export function goBackBrowser(tabID: string): Promise<void> {
+  return browserBridge()?.goBack(tabID) ?? Promise.resolve()
 }
 
-export function goForwardNativeBrowser(tabID: string): Promise<void> {
-  return window.codingDesktop?.browser?.goForward(tabID) ?? Promise.resolve()
+export function goForwardBrowser(tabID: string): Promise<void> {
+  return browserBridge()?.goForward(tabID) ?? Promise.resolve()
 }
 
-export function inspectNativeBrowser(
+export function inspectBrowser(
   tabID: string,
-): Promise<NativeBrowserInspection | undefined> {
-  return window.codingDesktop?.browser?.inspect(tabID) ?? Promise.resolve(undefined)
+): Promise<BrowserInspection | undefined> {
+  return browserBridge()?.inspect(tabID) ?? Promise.resolve(undefined)
 }
 
-export function onNativeBrowserState(
-  listener: (state: NativeBrowserState) => void,
+export function onBrowserState(
+  listener: (state: BrowserRuntimeState) => void,
 ): () => void {
-  return window.codingDesktop?.browser?.onState(listener) ?? (() => undefined)
+  return browserBridge()?.onState(listener) ?? (() => undefined)
 }
 
 // Opens a URL outside Coding when the native runtime is available, with the
