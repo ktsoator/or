@@ -13,13 +13,12 @@ import {
   type BrowserTabsAction,
 } from './browserTabs'
 
-export type BrowserControlLease = {
+type BrowserControlLease = {
   tabID: string
   capabilities: BrowserControlCapability[]
-  commandID?: string
 }
 
-export type BrowserWorkspaceContext = {
+type BrowserWorkspaceContext = {
   openTabs: BrowserOpenTab[]
   controlledTabs: BrowserControlledTab[]
   selected?: string
@@ -36,7 +35,7 @@ export type BrowserWorkspaceState = {
   handledPreviewKey?: string
 }
 
-export type BrowserWorkspaceRegistryState = {
+type BrowserWorkspaceRegistryState = {
   workspaces: Record<string, BrowserWorkspaceState>
 }
 
@@ -51,7 +50,6 @@ export type BrowserWorkspaceAction =
       leaseID: string
       tabID: string
       capabilities: BrowserControlCapability[]
-      commandID?: string
       select?: boolean
     }
   | { t: 'release_control'; leaseID: string }
@@ -74,7 +72,7 @@ export type BrowserWorkspaceAction =
       activate: boolean
     }
 
-export type BrowserWorkspaceRegistryAction = {
+type BrowserWorkspaceRegistryAction = {
   t: 'workspace_action'
   workspaceID: string
   initialState: BrowserWorkspaceState
@@ -104,7 +102,6 @@ export function createBrowserWorkspaceState({
           [browserNavigationLeaseID(initialTab.id)]: {
             tabID: initialTab.id,
             capabilities: ['read', 'navigate'],
-            commandID: initialTab.desired?.commandID,
           },
         }
       : {},
@@ -218,13 +215,11 @@ export function browserWorkspaceReducer(
       const lease: BrowserControlLease = {
         tabID: action.tabID,
         capabilities,
-        commandID: action.commandID,
       }
       const current = state.controlLeases[action.leaseID]
       if (
         current &&
         current.tabID === lease.tabID &&
-        current.commandID === lease.commandID &&
         sameCapabilities(current.capabilities, lease.capabilities) &&
         (!action.select || state.agentSelectedTabID === action.tabID)
       ) {
@@ -269,7 +264,6 @@ export function browserWorkspaceReducer(
           [browserNavigationLeaseID(action.tabID)]: {
             tabID: action.tabID,
             capabilities: ['read', 'navigate'],
-            commandID: action.target.commandID,
           },
         },
         commandTargets: {
@@ -295,7 +289,6 @@ export function browserWorkspaceReducer(
           [browserNavigationLeaseID(action.tabID)]: {
             tabID: action.tabID,
             capabilities: ['read', 'navigate'],
-            commandID: action.target.commandID,
           },
         },
         handledPreviewKey: action.previewKey,

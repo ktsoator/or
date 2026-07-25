@@ -10,6 +10,7 @@ import type {
   WorkspaceSummary,
 } from '@/types'
 import type { SessionThread } from '@/useSession'
+import type { BrowserWorkspaceState } from '@/browserWorkspace'
 import { cn } from '@/lib/utils'
 import { BrowserView, WorkbenchHeaderActions } from './BrowserView'
 import { useI18n } from '@/i18n'
@@ -174,7 +175,7 @@ function BrowserInspectionWorker({
   onInspectionHandled,
   source,
 }: {
-  workspace: ReturnType<typeof useBrowserWorkspace>['state'] | undefined
+  workspace: BrowserWorkspaceState | undefined
   attachControl: ReturnType<typeof useBrowserWorkspace>['attachControl']
   releaseControl: ReturnType<typeof useBrowserWorkspace>['releaseControl']
   onBrowserTabsHandled: (sessionID: string, commandID: string) => void
