@@ -5,6 +5,7 @@ import type { ObservedNavigation } from '@/browserTabs'
 import { hasBrowserRuntime, type BrowserRuntimeState } from '@/lib/desktop'
 import type { BrowserWebviewElement } from '@/lib/webviewBrowser'
 import { useBrowserController } from '@/useBrowserController'
+import type { BrowserRuntimeTabID } from '@/browserRuntime'
 
 // React omits unknown boolean attributes, while Electron treats this as a
 // presence attribute that must exist before the webview guest is attached.
@@ -12,6 +13,7 @@ const allowPopupsAttribute = 'true' as unknown as boolean
 
 export function BrowserSurface({
   active,
+  runtimeTabID,
   tabID,
   navigation,
   onResolveURL,
@@ -22,6 +24,7 @@ export function BrowserSurface({
   workspaceFile = false,
 }: {
   active: boolean
+  runtimeTabID: BrowserRuntimeTabID
   tabID: string
   navigation: number
   onResolveURL: (url: string) => void
@@ -39,7 +42,7 @@ export function BrowserSurface({
     onResolveURL,
     onState,
     revision: navigation,
-    tabID,
+    runtimeTabID,
     url,
     webviewRef,
   })
@@ -50,6 +53,7 @@ export function BrowserSurface({
       className="relative min-h-0 flex-1 bg-white"
       data-testid={active ? 'browser-surface' : undefined}
       data-browser-tab-id={tabID}
+      data-browser-runtime-tab-id={runtimeTabID}
       data-status={status}
       title={observed.error || undefined}
     >

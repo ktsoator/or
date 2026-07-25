@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { createBrowserTab, type BrowserNavigationTarget } from '../src/browserTabs'
+import { browserRuntimeTabID } from '../src/browserRuntime'
 import {
   browserWorkspaceCommandTabID,
   browserWorkspaceContext,
@@ -23,6 +24,15 @@ const webTarget = (
 })
 
 describe('browser workspace reducer', () => {
+  test('namespaces runtime tab IDs without ambiguous concatenation', () => {
+    expect(browserRuntimeTabID('session/1', 'tab:1')).toBe(
+      'workspace:session%2F1:tab:tab%3A1',
+    )
+    expect(browserRuntimeTabID('session/1', 'tab:1')).not.toBe(
+      browserRuntimeTabID('session', '1:tab:1'),
+    )
+  })
+
   test('creates and selects browser tabs without an external sequence ref', () => {
     let state = createBrowserWorkspaceState({
       initialTab: createBrowserTab({ id: 'tab-1' }),

@@ -7,6 +7,7 @@ import type {
   BrowserRuntimeBridge,
   BrowserRuntimeState,
 } from './desktop'
+import type { BrowserRuntimeTabID } from '../browserRuntime'
 
 export interface BrowserWebviewElement extends HTMLElement {
   getWebContentsId: () => number
@@ -50,7 +51,7 @@ type PendingNavigation = {
   timeout?: number
 }
 
-const entries = new Map<string, WebviewEntry>()
+const entries = new Map<BrowserRuntimeTabID, WebviewEntry>()
 const listeners = new Set<(state: BrowserRuntimeState) => void>()
 const browserInspectionTimeoutMs = 5_000
 const browserNavigationTimeoutMs = 15_000
@@ -60,7 +61,7 @@ export function webviewBrowserEnabled(): boolean {
 }
 
 export function registerWebviewBrowser(
-  tabID: string,
+  tabID: BrowserRuntimeTabID,
   element: BrowserWebviewElement,
 ): () => void {
   // A registration always replaces the entry, so any navigation still waiting
@@ -300,7 +301,7 @@ export const webviewBrowserBridge: BrowserRuntimeBridge = {
   },
 }
 
-function requiredEntry(tabID: string): WebviewEntry {
+function requiredEntry(tabID: BrowserRuntimeTabID): WebviewEntry {
   const entry = entries.get(tabID)
   if (!entry) throw new Error(`Browser tab is not mounted: ${tabID}`)
   return entry
