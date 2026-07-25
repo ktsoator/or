@@ -21,6 +21,7 @@ import type {
 import type { SessionThread } from '@/useSession'
 import type { BrowserWorkspaceController } from '@/useBrowserWorkspace'
 import { browserTabNavigationURL } from '@/browserTabs'
+import { browserRuntimeTabID } from '@/browserRuntime'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 import { BrowserSurface } from './BrowserSurface'
@@ -304,6 +305,7 @@ export function BrowserView({
                 >
                   <BrowserSurface
                     active={active}
+                    runtimeTabID={browserRuntimeTabID(workspaceID, tab.id)}
                     tabID={tab.id}
                     navigation={desired?.revision ?? 0}
                     observed={tab.observed}

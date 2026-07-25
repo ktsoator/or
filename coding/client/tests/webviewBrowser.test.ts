@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
+import { browserRuntimeTabID } from '../src/browserRuntime'
 
 // The webview bridge only touches window for timers and URL resolution.
 ;(globalThis as unknown as { window: unknown }).window = {
@@ -13,6 +14,7 @@ const { registerWebviewBrowser, webviewBrowserBridge } = await import(
 type BrowserRuntimeState = Awaited<
   ReturnType<typeof webviewBrowserBridge.navigate>
 >
+const runtimeTabID = browserRuntimeTabID('session-1', 'tab-1')
 
 // A guest that has not attached yet: getWebContentsId throws and getURL is
 // empty until the first document commits, exactly like a fresh <webview>.
@@ -128,7 +130,7 @@ describe('webviewBrowserBridge.navigate', () => {
     states = []
     unregister?.()
     unsubscribe?.()
-    unregister = registerWebviewBrowser('preview:s1', element(guest))
+    unregister = registerWebviewBrowser(runtimeTabID, element(guest))
     unsubscribe = webviewBrowserBridge.onState((state) => {
       states.push(state)
     })
@@ -136,7 +138,7 @@ describe('webviewBrowserBridge.navigate', () => {
 
   test('the guest initial document does not complete a pending navigation', async () => {
     const navigation = webviewBrowserBridge.navigate({
-      tabID: 'preview:s1',
+      tabID: runtimeTabID,
       revision: 0,
       url: 'https://www.bilibili.com',
       kind: 'web',
@@ -170,7 +172,7 @@ describe('webviewBrowserBridge.navigate', () => {
 
   test('a superseded navigation cannot commit over the latest one', async () => {
     const first = webviewBrowserBridge.navigate({
-      tabID: 'preview:s1',
+      tabID: runtimeTabID,
       revision: 0,
       url: 'https://github.com',
       kind: 'web',
@@ -180,7 +182,7 @@ describe('webviewBrowserBridge.navigate', () => {
     await settle()
 
     const second = webviewBrowserBridge.navigate({
-      tabID: 'preview:s1',
+      tabID: runtimeTabID,
       revision: 1,
       url: 'https://www.bilibili.com',
       kind: 'web',
@@ -208,7 +210,7 @@ describe('webviewBrowserBridge.navigate', () => {
 
   test('an explicit reload of the committed URL still completes', async () => {
     const first = webviewBrowserBridge.navigate({
-      tabID: 'preview:s1',
+      tabID: runtimeTabID,
       revision: 0,
       url: 'https://example.com',
       kind: 'web',
@@ -221,7 +223,7 @@ describe('webviewBrowserBridge.navigate', () => {
     await first
 
     const reloaded = webviewBrowserBridge.navigate({
-      tabID: 'preview:s1',
+      tabID: runtimeTabID,
       revision: 1,
       url: 'https://example.com',
       kind: 'web',

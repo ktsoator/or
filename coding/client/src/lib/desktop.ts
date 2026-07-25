@@ -2,16 +2,17 @@ import {
   webviewBrowserBridge,
   webviewBrowserEnabled,
 } from './webviewBrowser'
+import type { BrowserRuntimeTabID } from '../browserRuntime'
 
 export type BrowserNavigateInput = {
-  tabID: string
+  tabID: BrowserRuntimeTabID
   url: string
   revision: number
   kind: 'web' | 'workspace-preview'
 }
 
 export type BrowserRuntimeState = {
-  tabID: string
+  tabID: BrowserRuntimeTabID
   appliedRevision: number
   requestedURL: string
   committedURL: string
@@ -33,10 +34,10 @@ export type BrowserInspection = {
 
 export type BrowserRuntimeBridge = {
   navigate: (input: BrowserNavigateInput) => Promise<BrowserRuntimeState>
-  close: (tabID: string) => Promise<void>
-  goBack: (tabID: string) => Promise<void>
-  goForward: (tabID: string) => Promise<void>
-  inspect: (tabID: string) => Promise<BrowserInspection>
+  close: (tabID: BrowserRuntimeTabID) => Promise<void>
+  goBack: (tabID: BrowserRuntimeTabID) => Promise<void>
+  goForward: (tabID: BrowserRuntimeTabID) => Promise<void>
+  inspect: (tabID: BrowserRuntimeTabID) => Promise<BrowserInspection>
   onState: (listener: (state: BrowserRuntimeState) => void) => () => void
 }
 
@@ -77,20 +78,20 @@ export function navigateBrowser(
   return browserBridge()?.navigate(input) ?? Promise.resolve(undefined)
 }
 
-export function closeBrowser(tabID: string): Promise<void> {
+export function closeBrowser(tabID: BrowserRuntimeTabID): Promise<void> {
   return browserBridge()?.close(tabID) ?? Promise.resolve()
 }
 
-export function goBackBrowser(tabID: string): Promise<void> {
+export function goBackBrowser(tabID: BrowserRuntimeTabID): Promise<void> {
   return browserBridge()?.goBack(tabID) ?? Promise.resolve()
 }
 
-export function goForwardBrowser(tabID: string): Promise<void> {
+export function goForwardBrowser(tabID: BrowserRuntimeTabID): Promise<void> {
   return browserBridge()?.goForward(tabID) ?? Promise.resolve()
 }
 
 export function inspectBrowser(
-  tabID: string,
+  tabID: BrowserRuntimeTabID,
 ): Promise<BrowserInspection | undefined> {
   return browserBridge()?.inspect(tabID) ?? Promise.resolve(undefined)
 }

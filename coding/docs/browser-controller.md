@@ -80,6 +80,8 @@ without creating duplicates.
 
 - Own the workbench tab model and active tab selection.
 - Own each `<webview>`, its DOM layout, and the browser runtime registry.
+- Namespace runtime registry entries by workspace and local tab ID while keeping
+  the UI and Agent protocol IDs session-local.
 - Route an agent request to its deterministic session tab.
 - Handle inspection requests independently of whether `BrowserView` is mounted,
   waiting for a restored reusable-tab navigation before observing it.

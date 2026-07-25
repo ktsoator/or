@@ -4,6 +4,7 @@ import {
   type BrowserWorkspaceState,
 } from './browserWorkspace'
 import { inspectBrowser } from './lib/desktop'
+import { browserRuntimeTabID } from './browserRuntime'
 import { sessionCommands } from './sessionCommands'
 import { useCommandResultReporter } from './useCommandResultReporter'
 import type {
@@ -95,7 +96,7 @@ export function useBrowserInspectionRequests({
       .then(async (tabID) => {
         attachControl(sessionID, leaseID, tabID, ['read'])
         try {
-          return await inspectBrowser(tabID)
+          return await inspectBrowser(browserRuntimeTabID(sessionID, tabID))
         } finally {
           releaseControl(sessionID, leaseID)
         }

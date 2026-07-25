@@ -2092,6 +2092,72 @@ test('AI browser temporarily attaches read control to an existing open tab', asy
   await expect(page.locator('[data-browser-tab-id]')).toHaveCount(2)
 })
 
+test('browser inspection cannot cross session boundaries for same-named tabs', async ({
+  page,
+}) => {
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    secondarySession: true,
+  })
+
+  await page.getByTestId('workbench-panel-toggle').click()
+  const workbench = page.getByTestId('workbench-panel')
+  await workbench.getByRole('button', { name: 'Add view' }).click()
+  await page.getByRole('menuitem', { name: 'Browser' }).click()
+  let address = workbench.getByRole('textbox', { name: 'Address' })
+  await address.fill('https://main.example')
+  await address.press('Enter')
+  await expect.poll(async () => (await browserRuntimeView(page, 'tab-1'))?.url).toBe(
+    'https://main.example/',
+  )
+
+  await page.getByRole('button', { name: 'Actions for Secondary task' }).click()
+  await page.getByRole('menuitem', { name: 'Open in right panel' }).click()
+  await workbench.getByRole('button', { name: 'Add view' }).click()
+  await page.getByRole('menuitem', { name: 'Browser' }).click()
+  address = workbench.getByRole('textbox', { name: 'Address' })
+  await address.fill('https://secondary.example')
+  await address.press('Enter')
+  await expect.poll(async () => (await browserRuntimeView(page, 'tab-1'))?.url).toBe(
+    'https://secondary.example/',
+  )
+  await expect(page.locator('[data-browser-tab-id="tab-1"]')).toHaveAttribute(
+    'data-browser-runtime-tab-id',
+    'workspace:secondary-session:tab:tab-1',
+  )
+
+  await page.evaluate(() => {
+    const emit = (
+      window as Window & {
+        __emitSessionSSE?: (sessionID: string, payload: unknown) => void
+      }
+    ).__emitSessionSSE
+    emit?.('test-session', {
+      type: 'browser_inspect_request',
+      id: 'cross-session-inspection',
+      tabID: 'tab-1',
+    })
+  })
+
+  const resultPath =
+    '/api/sessions/test-session/browser/inspect/cross-session-inspection/result'
+  await expect.poll(() =>
+    requests.filter((request) => request.path === resultPath).length,
+  ).toBe(1)
+  expect(requests.find((request) => request.path === resultPath)).toMatchObject({
+    method: 'POST',
+    body: {
+      status: 'failed',
+      revision: 0,
+      error: 'Browser tab is not open',
+    },
+  })
+  expect(await browserRuntimeView(page, 'tab-1')).toMatchObject({
+    url: 'https://secondary.example/',
+    inspectCalls: 0,
+  })
+})
+
 test('AI browser inspection fails promptly without reopening a closed Agent tab', async ({
   page,
 }) => {

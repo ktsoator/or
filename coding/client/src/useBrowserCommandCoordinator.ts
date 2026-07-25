@@ -7,6 +7,7 @@ import {
 } from './browserWorkspace'
 import { workspacePreviewURL } from './lib/browser'
 import { closeBrowser, type BrowserRuntimeState } from './lib/desktop'
+import { browserRuntimeTabID } from './browserRuntime'
 import type { BrowserCommandState, BrowserResult, PreviewState } from './types'
 
 export function browserPreviewKey(
@@ -50,6 +51,7 @@ export function useBrowserCommandCoordinator({
   preview,
   sessionID,
   state,
+  workspaceID,
 }: {
   activatePreview: boolean
   browserCommands: BrowserCommandState[]
@@ -58,6 +60,7 @@ export function useBrowserCommandCoordinator({
   preview?: PreviewState
   sessionID?: string
   state: BrowserWorkspaceState
+  workspaceID: string
 }) {
   const stateRef = useRef(state)
   const onBrowserResultRef = useRef(onBrowserResult)
@@ -138,10 +141,10 @@ export function useBrowserCommandCoordinator({
   const closeTab = useCallback((tabID: string): boolean => {
     const current = stateRef.current
     reportCancelled(current.tabs.find((tab) => tab.id === tabID))
-    void closeBrowser(tabID)
+    void closeBrowser(browserRuntimeTabID(workspaceID, tabID))
     dispatch({ t: 'close_tab', tabID })
     return current.tabs.length === 1 && !current.conversationTabID
-  }, [dispatch, reportCancelled])
+  }, [dispatch, reportCancelled, workspaceID])
 
   const runtimeStateReceived = useCallback((
     tabID: string,

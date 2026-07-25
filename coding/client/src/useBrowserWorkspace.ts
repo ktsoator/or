@@ -19,6 +19,7 @@ import {
   useBrowserCommandCoordinator,
 } from './useBrowserCommandCoordinator'
 import { normalizeBrowserAddress, workspaceFileURL } from './lib/browser'
+import { browserRuntimeTabID } from './browserRuntime'
 import {
   goBackBrowser,
   goForwardBrowser,
@@ -108,6 +109,7 @@ export function useBrowserWorkspace({
     preview,
     sessionID,
     state,
+    workspaceID,
   })
   const activeTab = selectedBrowserTab(state)
   const conversationActive = state.activeItemID === state.conversationTabID
@@ -211,12 +213,12 @@ export function useBrowserWorkspace({
     goBack: () => {
       if (!activeTab) return
       dispatch({ t: 'release_tab_control', tabID: activeTab.id })
-      void goBackBrowser(activeTab.id)
+      void goBackBrowser(browserRuntimeTabID(workspaceID, activeTab.id))
     },
     goForward: () => {
       if (!activeTab) return
       dispatch({ t: 'release_tab_control', tabID: activeTab.id })
-      void goForwardBrowser(activeTab.id)
+      void goForwardBrowser(browserRuntimeTabID(workspaceID, activeTab.id))
     },
     openExternal,
   }
