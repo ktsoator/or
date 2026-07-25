@@ -20,7 +20,7 @@ import (
 type openPreviewArgs struct {
 	URL         string             `json:"url" jsonschema:"description=An HTTP(S) URL or absolute workspace HTML path to open in Coding's Browser view,minLength=1"`
 	Title       string             `json:"title,omitempty" jsonschema:"description=A short title for the preview"`
-	Disposition BrowserDisposition `json:"disposition,omitempty" jsonschema:"description=Where to open the page. Reuse the session Agent tab unless the user explicitly asks for a new or background tab,enum=reuse_agent_tab,enum=new_foreground_tab,enum=new_background_tab"`
+	Disposition BrowserDisposition `json:"disposition,omitempty" jsonschema:"description=Where to open the page. Reuse the selected Agent-controlled tab unless the user explicitly asks for a new or background tab,enum=reuse_agent_tab,enum=new_foreground_tab,enum=new_background_tab"`
 }
 
 // PreviewRequest is the structured UI intent emitted by open_preview. Product
@@ -36,8 +36,8 @@ type PreviewRequest struct {
 }
 
 // BrowserDisposition describes where a product shell should apply an agent
-// navigation request. Reuse is the default; new tabs require an explicit user
-// request surfaced by the model.
+// navigation request. Reuse prefers the selected Agent-controlled tab and is
+// the default; new tabs require an explicit user request surfaced by the model.
 type BrowserDisposition string
 
 const (

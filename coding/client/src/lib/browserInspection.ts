@@ -53,5 +53,8 @@ export function isBrowserInspectionText(value: unknown): value is BrowserInspect
 }
 
 export function isAgentBrowserTabID(value: unknown): value is string {
-  return typeof value === 'string' && /^preview:[^:]+$/.test(value)
+  return (
+    typeof value === 'string' &&
+    /^preview:[^:]+(?::command:[^:]+)?$/.test(value)
+  )
 }

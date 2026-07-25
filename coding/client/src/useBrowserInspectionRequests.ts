@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { agentBrowserTabID } from './browserTabs'
+import { agentBrowserTabID, type ActiveBrowserTab } from './browserTabs'
 import { inspectBrowser } from './lib/desktop'
 import { sessionCommands } from './sessionCommands'
 import { useCommandResultReporter } from './useCommandResultReporter'
@@ -9,18 +9,20 @@ import type {
   BrowserInspectionResult,
 } from './types'
 
-// An inspection waits for the stable Agent tab to finish an unacknowledged
-// navigation, but only for this long. A command that can never be acknowledged
-// must not block every later inspection of the session.
+// An inspection waits for the foreground Agent navigation to finish, but only
+// for this long. A command that can never be acknowledged must not block every
+// later inspection of the session.
 const pendingNavigationWaitMs = 10_000
 const reportRetryMs = 1_000
 
 export function useBrowserInspectionRequests({
+  activeTab,
   sessionID,
   browserCommands,
   browserInspections,
   onHandled,
 }: {
+  activeTab?: ActiveBrowserTab
   sessionID?: string
   browserCommands: BrowserCommandState[]
   browserInspections: BrowserInspectionCommandState[]
@@ -61,8 +63,8 @@ export function useBrowserInspectionRequests({
     }
 
     // A restored history snapshot can contain navigation and inspection
-    // requests together. Let the stable Agent tab finish navigating first.
-    if (browserCommands.some((command) => command.disposition === 'reuse_agent_tab')) {
+    // requests together. Let the tab that will become foreground finish first.
+    if (browserCommands.some((command) => command.disposition !== 'new_background_tab')) {
       const started = waitStartedRef.current.get(key) ?? Date.now()
       waitStartedRef.current.set(key, started)
       const remaining = pendingNavigationWaitMs - (Date.now() - started)
@@ -75,7 +77,11 @@ export function useBrowserInspectionRequests({
     }
 
     processedRef.current.add(key)
-    void inspectBrowser(agentBrowserTabID(sessionID))
+    const inspectionTabID = resolveInspectionTabID(sessionID, activeTab)
+    const inspectionRequest = inspectionTabID
+      ? inspectBrowser(inspectionTabID)
+      : Promise.reject(new Error('Current browser tab is user-owned and cannot be inspected'))
+    void inspectionRequest
       .then((observed): BrowserInspectionResult => {
         if (!observed) throw new Error('Browser inspection is unavailable')
         return {
@@ -100,5 +106,16 @@ export function useBrowserInspectionRequests({
         }
         retry(reportRetryMs)
       })
-  }, [browserCommands, browserInspections, report, sessionID])
+  }, [activeTab, browserCommands, browserInspections, report, sessionID])
+}
+
+function resolveInspectionTabID(
+  sessionID: string,
+  activeTab: ActiveBrowserTab | undefined,
+): string | undefined {
+  if (!activeTab) return agentBrowserTabID(sessionID)
+  if (activeTab.owner === 'user') return undefined
+  return activeTab.sessionID === sessionID
+    ? activeTab.id
+    : agentBrowserTabID(sessionID)
 }

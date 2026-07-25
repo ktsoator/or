@@ -8,6 +8,7 @@ import { APIError, apiURL, sessionURL } from './api'
 import { sessionCommands } from './sessionCommands'
 import { useSessionConnection } from './sessionConnection'
 import { threadsReducer } from './sessionReducer'
+import { useBrowserResultOutbox } from './useBrowserResultOutbox'
 import {
   createSessionDraft,
   createSessionStoreState,
@@ -21,6 +22,7 @@ import type {
   ApprovalItem,
   BrowserCommandState,
   BrowserInspectionCommandState,
+  BrowserResult,
   CompactionResult,
   ConnectionStatus,
   ContextUsage,
@@ -83,7 +85,7 @@ export type Session = {
   stop: () => void
   resolveApproval: (id: string, choice: ApprovalChoice) => Promise<void>
   resolveQuestion: (id: string, answers: QuestionAnswer[]) => Promise<void>
-  handleBrowserCommand: (sessionID: string, id: string) => void
+  queueBrowserResult: (sessionID: string, id: string, result: BrowserResult) => void
   handleBrowserInspection: (sessionID: string, id: string) => void
   secondaryThread?: SessionThread
 }
@@ -131,6 +133,17 @@ export function useSession(secondarySessionID?: string): Session {
   const [models, setModels] = useState<ModelOption[]>([])
   const [modelDefaults, setModelDefaults] = useState<ModelDefaults>()
   const [serviceStatus, setServiceStatus] = useState<ConnectionStatus>('connecting')
+
+  const acknowledgeBrowserResult = useCallback((sessionID: string, id: string) => {
+    dispatch({ t: 'browserResultAcknowledged', sessionID, id })
+  }, [])
+  const queueBrowserResult = useCallback(
+    (sessionID: string, id: string, result: BrowserResult) => {
+      dispatch({ t: 'browserResultQueued', sessionID, id, result })
+    },
+    [],
+  )
+  useBrowserResultOutbox(threads, acknowledgeBrowserResult)
 
   const applySessionWire = useCallback((sessionID: string, wire: WireEvent) => {
     dispatch({ t: 'wire', sessionID, ev: wire })
@@ -889,8 +902,7 @@ export function useSession(secondarySessionID?: string): Session {
     stop,
     resolveApproval,
     resolveQuestion,
-    handleBrowserCommand: (sessionID: string, id: string) =>
-      dispatch({ t: 'browserCommandHandled', sessionID, id }),
+    queueBrowserResult,
     handleBrowserInspection: (sessionID: string, id: string) =>
       dispatch({ t: 'browserInspectionHandled', sessionID, id }),
     secondaryThread,

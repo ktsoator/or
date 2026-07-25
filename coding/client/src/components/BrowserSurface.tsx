@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import { CircleAlert, LoaderCircle, RefreshCw } from 'lucide-react'
 import { useI18n } from '@/i18n'
+import type { ObservedNavigation } from '@/browserTabs'
 import { hasBrowserRuntime, type BrowserRuntimeState } from '@/lib/desktop'
 import type { BrowserWebviewElement } from '@/lib/webviewBrowser'
 import { useBrowserController } from '@/useBrowserController'
@@ -16,6 +17,7 @@ export function BrowserSurface({
   onResolveURL,
   onRetry,
   onState,
+  observed,
   url,
   workspaceFile = false,
 }: {
@@ -25,13 +27,14 @@ export function BrowserSurface({
   onResolveURL: (url: string) => void
   onRetry: () => void
   onState: (state: BrowserRuntimeState) => void
+  observed: ObservedNavigation
   url: string
   workspaceFile?: boolean
 }) {
   const { t } = useI18n()
   const webviewRef = useRef<BrowserWebviewElement>(null)
   const browserRuntime = hasBrowserRuntime()
-  const { error, status } = useBrowserController({
+  useBrowserController({
     kind: workspaceFile ? 'workspace-preview' : 'web',
     onResolveURL,
     onState,
@@ -40,6 +43,7 @@ export function BrowserSurface({
     url,
     webviewRef,
   })
+  const status = observed.status === 'navigating' ? 'loading' : observed.status
 
   return (
     <div
@@ -47,7 +51,7 @@ export function BrowserSurface({
       data-testid={active ? 'browser-surface' : undefined}
       data-browser-tab-id={tabID}
       data-status={status}
-      title={error || undefined}
+      title={observed.error || undefined}
     >
       {browserRuntime && (
         <webview
@@ -65,7 +69,7 @@ export function BrowserSurface({
           </div>
         </div>
       )}
-      {status === 'failed' && (
+      {observed.status === 'failed' && (
         <div className="absolute inset-0 z-10 grid place-items-center bg-white px-8" role="alert">
           <div className="flex max-w-[19rem] flex-col items-center text-center">
             <CircleAlert className="size-5 text-stone-400" aria-hidden="true" />

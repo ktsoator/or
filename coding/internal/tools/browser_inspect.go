@@ -31,9 +31,9 @@ const (
 	BrowserPageFailed     BrowserPageStatus = "failed"
 )
 
-// BrowserInspectionResult is a bounded, read-only observation of the stable
-// Agent browser tab. It intentionally contains no DOM, storage, cookies, form
-// values, or executable page code.
+// BrowserInspectionResult is a bounded, read-only observation of an
+// Agent-controlled browser tab. It intentionally contains no DOM, storage,
+// cookies, form values, or executable page code.
 type BrowserInspectionResult struct {
 	ID          string
 	Status      BrowserInspectionStatus
@@ -50,8 +50,8 @@ type BrowserInspector interface {
 	InspectBrowser(context.Context) (BrowserInspectionResult, error)
 }
 
-// InspectBrowser returns a product tool that observes the current session's
-// stable Agent browser tab without granting control over user-owned tabs.
+// InspectBrowser returns a product tool that observes an Agent-controlled tab
+// selected by the product shell without granting control over user-owned tabs.
 func InspectBrowser(inspectors ...BrowserInspector) Tool {
 	var inspector BrowserInspector
 	if len(inspectors) > 0 {

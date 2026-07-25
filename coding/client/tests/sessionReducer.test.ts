@@ -406,6 +406,82 @@ describe('threadsReducer event sequences', () => {
     expect(thread(state).previewOpen).toBe(true)
   })
 
+  test('keeps terminal browser results in the outbox across history resync', () => {
+    const browserRequest = {
+      type: 'browser_request' as const,
+      id: 'browser-pending',
+      disposition: 'reuse_agent_tab' as const,
+      preview: { url: 'https://example.com/', title: 'Example' },
+    }
+    let state = reduce([
+      { t: 'wire', sessionID, ev: browserRequest },
+      {
+        t: 'browserResultQueued',
+        sessionID,
+        id: 'browser-pending',
+        result: {
+          status: 'committed',
+          requestedURL: 'https://example.com/',
+          committedURL: 'https://example.com/',
+        },
+      },
+    ])
+
+    expect(thread(state).browserCommands).toEqual([])
+    expect(thread(state).browserResultOutbox).toEqual({
+      'browser-pending': {
+        commandID: 'browser-pending',
+        result: {
+          status: 'committed',
+          requestedURL: 'https://example.com/',
+          committedURL: 'https://example.com/',
+        },
+      },
+    })
+    expect(thread(state).preview).toEqual({
+      url: 'https://example.com/',
+      title: 'Example',
+      disposition: 'reuse_agent_tab',
+      revision: 1,
+    })
+
+    state = reduce([
+      {
+        t: 'wire',
+        sessionID,
+        ev: {
+          type: 'tool_end',
+          id: 'preview-call',
+          tool: 'open_preview',
+          result: 'Opened preview at https://example.com/',
+          preview: { url: 'https://example.com/', title: 'Example' },
+        },
+      },
+    ], state)
+    expect(thread(state).preview).toEqual({
+      url: 'https://example.com/',
+      title: 'Example',
+      disposition: 'reuse_agent_tab',
+      revision: 1,
+    })
+
+    state = reduce([
+      {
+        t: 'reset',
+        sessionID,
+        history: { running: true, events: [browserRequest] },
+      },
+    ], state)
+    expect(thread(state).browserCommands).toEqual([])
+    expect(thread(state).browserResultOutbox['browser-pending']).toBeDefined()
+    expect(thread(state).previewOpen).toBe(true)
+
+    state = reduce([
+      { t: 'browserResultAcknowledged', sessionID, id: 'browser-pending' },
+    ], state)
+    expect(thread(state).browserResultOutbox).toEqual({})
+  })
+
   test('restores multiple pending tab commands and keeps a background request hidden', () => {
     let state = reduce([
       {
@@ -437,13 +513,21 @@ describe('threadsReducer event sequences', () => {
     ])
     expect(thread(state).previewOpen).toBe(false)
 
-    state = reduce(
-      [{ t: 'browserCommandHandled', sessionID, id: 'browser-foreground' }],
-      state,
-    )
+    state = reduce([
+      {
+        t: 'browserResultQueued',
+        sessionID,
+        id: 'browser-foreground',
+        result: { status: 'cancelled' },
+      },
+    ], state)
     expect(thread(state).browserCommands.map((command) => command.commandID)).toEqual([
       'browser-background',
     ])
+    expect(thread(state).browserResultOutbox['browser-foreground']).toEqual({
+      commandID: 'browser-foreground',
+      result: { status: 'cancelled' },
+    })
   })
 
   test('restores, deduplicates, and handles pending browser inspections', () => {

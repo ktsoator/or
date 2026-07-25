@@ -1,7 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { CircleAlert, PanelTopDashed, X } from 'lucide-react'
+import type { ActiveBrowserTab } from '@/browserTabs'
 import type {
   BrowserCommandState,
+  BrowserResult,
   ModelOption,
   PreviewState,
   WorkspaceSummary,
@@ -28,7 +30,8 @@ export function WorkbenchPanel({
   onCreateConversation,
   onDismissCreationError,
   onCloseConversation,
-  onBrowserCommandHandled,
+  onActiveBrowserTabChange,
+  onBrowserResult,
   onConfigureModel,
   onToggleMaximized,
   toggleControl,
@@ -47,7 +50,8 @@ export function WorkbenchPanel({
   onCreateConversation: () => void
   onDismissCreationError: () => void
   onCloseConversation: () => void
-  onBrowserCommandHandled: (sessionID: string, commandID: string) => void
+  onActiveBrowserTabChange: (tab: ActiveBrowserTab | undefined) => void
+  onBrowserResult: (sessionID: string, commandID: string, result: BrowserResult) => void
   onConfigureModel: () => void
   onToggleMaximized: () => void
   toggleControl?: ReactNode
@@ -85,7 +89,8 @@ export function WorkbenchPanel({
           workspaces={workspaces}
           onCloseTab={() => setMode('launcher')}
           onCloseConversation={onCloseConversation}
-          onBrowserCommandHandled={onBrowserCommandHandled}
+          onActiveBrowserTabChange={onActiveBrowserTabChange}
+          onBrowserResult={onBrowserResult}
           onConfigureModel={onConfigureModel}
           onCreateConversation={onCreateConversation}
           maximized={maximized}

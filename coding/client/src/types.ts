@@ -1,4 +1,5 @@
 import type {
+  BrowserResult,
   BrowserDisposition,
   Change,
   DeliveryMode,
@@ -26,6 +27,11 @@ export type BrowserCommandState = PreviewRequest & {
 
 export type BrowserInspectionCommandState = {
   commandID: string
+}
+
+export type BrowserResultOutboxEntry = {
+  commandID: string
+  result: BrowserResult
 }
 
 // UI snapshots also cover a local degraded state when history cannot be read.

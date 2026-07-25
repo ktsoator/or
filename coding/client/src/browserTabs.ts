@@ -40,6 +40,8 @@ export type BrowserTab = {
   invalidAddress: boolean
 }
 
+export type ActiveBrowserTab = Pick<BrowserTab, 'id' | 'owner' | 'sessionID'>
+
 export type BrowserTabsAction =
   | { t: 'create_agent_tab'; tabID: string; sessionID: string }
   | { t: 'create_user_tab'; tabID: string }
@@ -65,7 +67,7 @@ export type BrowserTabsAction =
       url: string
     }
   | {
-      t: 'native_state_received'
+      t: 'runtime_state_received'
       tabID: string
       appliedRevision: number
       committedURL: string
@@ -92,10 +94,14 @@ export function browserCommandTabID(
   sessionID: string | undefined,
   commandID: string,
   disposition: BrowserDisposition,
+  activeTab?: ActiveBrowserTab,
 ): string {
-  return disposition === 'reuse_agent_tab'
-    ? agentBrowserTabID(sessionID)
-    : agentBrowserCommandTabID(sessionID, commandID)
+  if (disposition !== 'reuse_agent_tab') {
+    return agentBrowserCommandTabID(sessionID, commandID)
+  }
+  return activeTab?.owner === 'agent' && activeTab.sessionID === sessionID
+    ? activeTab.id
+    : agentBrowserTabID(sessionID)
 }
 
 export function browserTabNavigationURL(tab: BrowserTab): string {
@@ -275,7 +281,7 @@ export function browserTabsReducer(
           desired: { ...tab.desired, requestedURL: action.url },
         }
       })
-    case 'native_state_received':
+    case 'runtime_state_received':
       return replaceTab(tabs, action.tabID, (tab) => {
         const desiredRevision = tab.desired?.revision ?? -1
         if (

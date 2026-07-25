@@ -2,6 +2,8 @@ import type {
   ApprovalItem,
   BrowserCommandState,
   BrowserInspectionCommandState,
+  BrowserResult,
+  BrowserResultOutboxEntry,
   ConnectionStatus,
   ContextUsage,
   DeliveryMode,
@@ -22,6 +24,7 @@ export type ThreadState = {
   contextUsage?: ContextUsage
   preview?: PreviewState
   browserCommands: BrowserCommandState[]
+  browserResultOutbox: Record<string, BrowserResultOutboxEntry>
   browserInspections: BrowserInspectionCommandState[]
   previewOpen: boolean
   running: boolean
@@ -59,7 +62,13 @@ export type ThreadAction =
     }
   | { t: 'resolveApproval'; sessionID: string; id: string }
   | { t: 'resolveQuestion'; sessionID: string; id: string }
-  | { t: 'browserCommandHandled'; sessionID: string; id: string }
+  | {
+      t: 'browserResultQueued'
+      sessionID: string
+      id: string
+      result: BrowserResult
+    }
+  | { t: 'browserResultAcknowledged'; sessionID: string; id: string }
   | { t: 'browserInspectionHandled'; sessionID: string; id: string }
   | { t: 'forget'; sessionID: string }
 
@@ -79,6 +88,7 @@ export const createThreadState = (): ThreadState => ({
   contextUsage: undefined,
   preview: undefined,
   browserCommands: [],
+  browserResultOutbox: {},
   browserInspections: [],
   previewOpen: false,
   running: false,
@@ -119,6 +129,7 @@ export function threadsReducer(state: ThreadsState, action: ThreadAction): Threa
 
   switch (action.t) {
     case 'reset': {
+      const browserResultOutbox = current.browserResultOutbox
       next = {
         ...createThreadState(),
         status: current.status,
@@ -128,15 +139,23 @@ export function threadsReducer(state: ThreadsState, action: ThreadAction): Threa
       for (const ev of action.history.events) next = reduceWire(next, ev)
       for (const ev of action.history.queue ?? []) next = reduceWire(next, ev)
       const restoredPreview = next.preview
+      const preview = browserResultOutbox[restoredPreview?.commandID ?? '']
+        ? withoutBrowserCommand(restoredPreview)
+        : restoredPreview ?? current.preview
       next = {
         ...next,
+        browserResultOutbox,
+        browserCommands: next.browserCommands.filter(
+          (command) => !browserResultOutbox[command.commandID],
+        ),
         contextUsage: action.history.context,
-        preview: restoredPreview ?? current.preview,
+        preview,
         // History makes the last preview available as a tab, but only a live
         // open_preview event should bring the workbench forward.
-        previewOpen: restoredPreview?.commandID
-          ? restoredPreview.disposition !== 'new_background_tab'
-          : Boolean(current.previewOpen && (restoredPreview || current.preview)),
+        previewOpen:
+          restoredPreview?.commandID && !browserResultOutbox[restoredPreview.commandID]
+            ? restoredPreview.disposition !== 'new_background_tab'
+            : Boolean(current.previewOpen && preview),
         running: action.history.running,
         items: action.history.running ? next.items : completeOpenRun(next.items),
       }
@@ -248,14 +267,27 @@ export function threadsReducer(state: ThreadsState, action: ThreadAction): Threa
         ),
       }
       break
-    case 'browserCommandHandled':
+    case 'browserResultQueued':
+      if (current.browserResultOutbox[action.id]) return state
       next = {
         ...current,
         browserCommands: current.browserCommands.filter(
           (command) => command.commandID !== action.id,
         ),
+        browserResultOutbox: {
+          ...current.browserResultOutbox,
+          [action.id]: { commandID: action.id, result: action.result },
+        },
+        preview: withoutBrowserCommand(current.preview, action.id),
       }
       break
+    case 'browserResultAcknowledged': {
+      if (!current.browserResultOutbox[action.id]) return state
+      const browserResultOutbox = { ...current.browserResultOutbox }
+      delete browserResultOutbox[action.id]
+      next = { ...current, browserResultOutbox }
+      break
+    }
     case 'browserInspectionHandled':
       next = {
         ...current,
@@ -279,6 +311,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
   let contextUsage = state.contextUsage
   let preview = state.preview
   let browserCommands = state.browserCommands
+  const browserResultOutbox = state.browserResultOutbox
   let browserInspections = state.browserInspections
   let previewOpen = state.previewOpen
   let running = state.running
@@ -652,7 +685,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
         const pendingCommand = preview?.commandID
           ? browserCommands.some((command) => command.commandID === preview?.commandID)
           : false
-        preview = sameTarget && preview?.commandID
+        preview = sameTarget && (preview?.commandID || preview?.disposition)
           ? pendingCommand
             ? { ...ev.preview, ...preview }
             : {
@@ -672,7 +705,11 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
     }
 
     case 'browser_request': {
-      if (ev.id && (ev.preview?.url || ev.preview?.path)) {
+      if (
+        ev.id &&
+        !browserResultOutbox[ev.id] &&
+        (ev.preview?.url || ev.preview?.path)
+      ) {
         const existing = browserCommands.find((command) => command.commandID === ev.id)
         const revision = existing?.revision ?? (preview?.revision ?? 0) + 1
         const command: BrowserCommandState = {
@@ -877,6 +914,16 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
     autoCompacting,
     seq,
   }
+}
+
+function withoutBrowserCommand(
+  preview: PreviewState | undefined,
+  commandID?: string,
+): PreviewState | undefined {
+  if (!preview?.commandID || (commandID && preview.commandID !== commandID)) return preview
+  const completed = { ...preview }
+  delete completed.commandID
+  return completed
 }
 
 function elapsedSince(startedAt: string): number {
