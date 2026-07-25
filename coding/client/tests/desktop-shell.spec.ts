@@ -115,6 +115,7 @@ async function openDesktopClient(
   page: Page,
   options: {
     failCreate?: boolean
+    browserResultFailures?: number
     existingSession?: boolean
     historyEvents?: unknown[]
     secondarySession?: boolean
@@ -160,6 +161,7 @@ async function openDesktopClient(
   }
   let sessionCreated = Boolean(options.existingSession)
   let workbenchSessionCreated = false
+  let remainingBrowserResultFailures = options.browserResultFailures ?? 0
 
   await page.addInitScript(({ nativeDirectory }) => {
     // A stand-in for Electron's <webview>: it attaches asynchronously and
@@ -401,6 +403,20 @@ async function openDesktopClient(
           unavailable ? { error: 'local server is not reachable' } : { url: previewURL },
         ),
       })
+      return
+    }
+
+    if (/\/api\/sessions\/[^/]+\/browser\/[^/]+\/result$/.test(path) && method === 'POST') {
+      if (remainingBrowserResultFailures > 0) {
+        remainingBrowserResultFailures -= 1
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'browser result temporarily unavailable' }),
+        })
+      } else {
+        await route.fulfill({ status: 204 })
+      }
       return
     }
 
@@ -1448,7 +1464,50 @@ test('AI browser request reports the committed Electron navigation exactly once'
   await page.waitForTimeout(50)
   expect(await browserRuntimeView(page, 'preview:test-session')).toMatchObject({
     loadCalls: ['https://github.com/'],
+    reloadCalls: 0,
   })
+})
+
+test('AI browser result outbox survives Browser closure and retries without navigating again', async ({
+  page,
+}) => {
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    browserResultFailures: 3,
+  })
+  await expect.poll(() =>
+    page.evaluate(
+      () =>
+        (window as Window & { __eventSources?: unknown[] }).__eventSources?.length ?? 0,
+    ),
+  ).toBeGreaterThan(0)
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'browser_request',
+      id: 'browser-retry',
+      disposition: 'reuse_agent_tab',
+      preview: { url: 'https://github.com', title: 'GitHub' },
+    })
+  })
+
+  const resultRequests = () => requests.filter(
+    (request) =>
+      request.path === '/api/sessions/test-session/browser/browser-retry/result',
+  )
+  await expect.poll(() => resultRequests().length).toBe(1)
+  expect(await browserRuntimeView(page, 'preview:test-session')).toMatchObject({
+    url: 'https://github.com/',
+    loadCalls: ['https://github.com/'],
+  })
+
+  await page.getByRole('button', { name: 'Close tab: GitHub' }).click()
+  await expect(page.getByTestId('workbench-empty')).toBeVisible()
+  await expect.poll(() => resultRequests().length, { timeout: 8_000 }).toBe(4)
+  await page.waitForTimeout(300)
+  expect(resultRequests()).toHaveLength(4)
+  await expect(page.getByTestId('workbench-empty')).toBeVisible()
 })
 
 test('a guest initial document cannot consume the AI browser command result', async ({
@@ -1592,7 +1651,7 @@ test('AI browser restores and acknowledges a pending history command', async ({ 
   })
 })
 
-test('AI browser opens foreground and background tabs without replacing the Agent tab', async ({
+test('AI browser opens foreground and background tabs and reuses the active Agent tab', async ({
   page,
 }) => {
   const requests = await openDesktopClient(page, { existingSession: true })
@@ -1650,6 +1709,29 @@ test('AI browser opens foreground and background tabs without replacing the Agen
   await expect.poll(async () =>
     (await browserRuntimeView(page, 'preview:test-session'))?.visible,
   ).toBe(false)
+  await expect.poll(() =>
+    requests.filter(
+      (request) =>
+        request.path ===
+        '/api/sessions/test-session/browser/browser-foreground/result',
+    ).length,
+  ).toBe(1)
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'tool_end',
+      id: 'preview-foreground',
+      tool: 'open_preview',
+      result: 'Opened preview at https://www.bilibili.com/',
+      preview: { url: 'https://www.bilibili.com', title: 'Bilibili' },
+    })
+  })
+  await expect(page.getByRole('tab', { name: 'Bilibili' })).toHaveCount(1)
+  expect(await browserRuntimeView(page, 'preview:test-session')).toMatchObject({
+    url: 'https://github.com/',
+    loadCalls: ['https://github.com/'],
+    reloadCalls: 0,
+  })
 
   await emitBrowserRequest(
     'browser-background',
@@ -1671,15 +1753,38 @@ test('AI browser opens foreground and background tabs without replacing the Agen
     url: 'https://github.com/',
   })
 
+  await emitBrowserRequest(
+    'browser-reuse-active',
+    'reuse_agent_tab',
+    'https://chat.deepseek.com',
+    'DeepSeek',
+  )
+  await expect.poll(async () =>
+    (await browserRuntimeView(page, foregroundTabID))?.url,
+  ).toBe('https://chat.deepseek.com/')
+  await expect(page.getByRole('tab', { name: 'DeepSeek' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  expect(await browserRuntimeView(page, 'preview:test-session')).toMatchObject({
+    url: 'https://github.com/',
+    loadCalls: ['https://github.com/'],
+    reloadCalls: 0,
+  })
+  expect(await browserRuntimeView(page, backgroundTabID)).toMatchObject({
+    url: 'https://www.google.com/',
+    visible: false,
+  })
+
   await expect.poll(() =>
     requests.filter((request) =>
       request.path.startsWith('/api/sessions/test-session/browser/browser-') &&
       request.path.endsWith('/result'),
     ).length,
-  ).toBe(3)
+  ).toBe(4)
 })
 
-test('AI browser inspection reads only the stable Agent tab and reports once', async ({
+test('AI browser inspection reads the active Agent-owned tab and reports once', async ({
   page,
 }) => {
   const requests = await openDesktopClient(page, { existingSession: true })
@@ -1704,6 +1809,7 @@ test('AI browser inspection reads only the stable Agent tab and reports once', a
     (await browserRuntimeView(page, 'preview:test-session'))?.url,
   ).toBe('https://github.com/')
 
+  await setGuestControls(page, { pageTitle: 'bilibili.com' })
   await page.evaluate(() => {
     const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
     emit?.({
@@ -1735,11 +1841,11 @@ test('AI browser inspection reads only the stable Agent tab and reports once', a
     method: 'POST',
     body: {
       status: 'completed',
-      url: 'https://github.com/',
-      title: 'github.com',
+      url: 'https://www.bilibili.com/',
+      title: 'bilibili.com',
       pageStatus: 'ready',
       revision: 0,
-      visibleText: 'Visible content for https://github.com/',
+      visibleText: 'Visible content for https://www.bilibili.com/',
       truncated: false,
     },
   })
@@ -1755,7 +1861,66 @@ test('AI browser inspection reads only the stable Agent tab and reports once', a
         .filter((entry) => entry.inspectCalls > 0)
         .map((entry) => entry.tabID),
     ),
-  ).toEqual(['preview:test-session'])
+  ).toEqual(['preview:test-session:command:browser-command-tab'])
+})
+
+test('AI browser inspection refuses the active user-owned tab', async ({ page }) => {
+  const requests = await openDesktopClient(page, { existingSession: true })
+  await expect.poll(() =>
+    page.evaluate(
+      () =>
+        (window as Window & { __eventSources?: unknown[] }).__eventSources?.length ?? 0,
+    ),
+  ).toBeGreaterThan(0)
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'browser_request',
+      id: 'browser-agent',
+      disposition: 'reuse_agent_tab',
+      preview: { url: 'https://github.com', title: 'GitHub' },
+    })
+  })
+  await expect.poll(async () =>
+    (await browserRuntimeView(page, 'preview:test-session'))?.url,
+  ).toBe('https://github.com/')
+
+  await page.getByTestId('workbench-add-view').click()
+  await page.getByRole('menuitem').first().click()
+  await page.getByRole('textbox', { name: 'Address' }).fill('https://example.com')
+  await page.getByRole('textbox', { name: 'Address' }).press('Enter')
+  await expect.poll(async () => (await browserRuntimeView(page, 'tab-1'))?.url).toBe(
+    'https://example.com/',
+  )
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({ type: 'browser_inspect_request', id: 'inspection-user-tab' })
+  })
+
+  const resultPath =
+    '/api/sessions/test-session/browser/inspect/inspection-user-tab/result'
+  await expect.poll(() =>
+    requests.filter((request) => request.path === resultPath).length,
+  ).toBe(1)
+  expect(requests.find((request) => request.path === resultPath)).toMatchObject({
+    method: 'POST',
+    body: {
+      status: 'failed',
+      revision: 0,
+      error: 'Current browser tab is user-owned and cannot be inspected',
+    },
+  })
+  expect(
+    await page.evaluate(() =>
+      Array.from(document.querySelectorAll('webview')).reduce(
+        (calls, element) =>
+          calls + ((element as HTMLElement & { inspectCalls?: number }).inspectCalls ?? 0),
+        0,
+      ),
+    ),
+  ).toBe(0)
 })
 
 test('AI browser inspection fails promptly without reopening a closed Agent tab', async ({

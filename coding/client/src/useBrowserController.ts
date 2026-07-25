@@ -12,8 +12,6 @@ import {
   type BrowserWebviewElement,
 } from './lib/webviewBrowser'
 
-export type BrowserControllerStatus = 'idle' | 'loading' | 'ready' | 'failed'
-
 type ResolvedNavigation = {
   revision: number
   url: string
@@ -83,23 +81,17 @@ export function useBrowserController({
   tabID: string
   url: string
   webviewRef: RefObject<BrowserWebviewElement | null>
-}): { error: string; status: BrowserControllerStatus } {
+}): void {
   const browserAvailable = hasBrowserRuntime()
   const onResolveURLRef = useRef(onResolveURL)
   const onStateRef = useRef(onState)
   const revisionRef = useRef(revision)
   const issuedRevisionRef = useRef<number | undefined>(undefined)
-  const statusRevisionRef = useRef(revision)
   const [resolved, setResolved] = useState<ResolvedNavigation | undefined>(() =>
     url && (kind === 'workspace-preview' || !isLocalPreviewURL(url))
       ? { revision, url, kind }
       : undefined,
   )
-  const [status, setStatus] = useState<BrowserControllerStatus>(
-    url ? 'loading' : 'idle',
-  )
-  const [error, setError] = useState('')
-
   onResolveURLRef.current = onResolveURL
   onStateRef.current = onState
   revisionRef.current = revision
@@ -120,14 +112,10 @@ export function useBrowserController({
   useEffect(() => {
     if (!url) {
       setResolved(undefined)
-      setStatus('idle')
-      setError('')
       return
     }
     if (!browserAvailable) {
       setResolved(undefined)
-      setStatus('failed')
-      setError('Browser runtime is unavailable')
       onStateRef.current(
         failedBrowserState(tabID, revision, url, 'Browser runtime is unavailable'),
       )
@@ -135,11 +123,6 @@ export function useBrowserController({
     }
     if (issuedRevisionRef.current === revision) return
 
-    if (statusRevisionRef.current !== revision) {
-      statusRevisionRef.current = revision
-      setStatus('loading')
-      setError('')
-    }
     if (kind === 'workspace-preview' || !isLocalPreviewURL(url)) {
       setResolved({ revision, url, kind })
       return
@@ -155,8 +138,6 @@ export function useBrowserController({
       })
       .catch(() => {
         if (!active || revisionRef.current !== revision) return
-        setStatus('failed')
-        setError('preview unavailable')
         onStateRef.current(failedBrowserState(tabID, revision, url, 'preview unavailable'))
       })
     return () => {
@@ -168,8 +149,6 @@ export function useBrowserController({
     if (!resolved || resolved.revision !== revision || !browserAvailable) return
     if (issuedRevisionRef.current === revision) return
     issuedRevisionRef.current = revision
-    setStatus('loading')
-    setError('')
     void navigateBrowser({
       tabID,
       revision,
@@ -179,14 +158,10 @@ export function useBrowserController({
       .then((state) => {
         if (!state || revisionRef.current !== revision) return
         onStateRef.current(state)
-        setStatus(state.status === 'navigating' ? 'loading' : state.status)
-        setError(state.error ?? '')
       })
       .catch((reason: unknown) => {
         if (revisionRef.current !== revision) return
         const message = reason instanceof Error ? reason.message : String(reason)
-        setStatus('failed')
-        setError(message)
         onStateRef.current(failedBrowserState(tabID, revision, resolved.url, message))
       })
   }, [browserAvailable, resolved, revision, tabID])
@@ -194,10 +169,5 @@ export function useBrowserController({
   useEffect(() => onBrowserState((state) => {
     if (state.tabID !== tabID) return
     onStateRef.current(state)
-    if (state.appliedRevision < revisionRef.current) return
-    setStatus(state.status === 'navigating' ? 'loading' : state.status)
-    setError(state.error ?? '')
   }), [tabID])
-
-  return { error, status }
 }

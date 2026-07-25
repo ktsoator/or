@@ -53,6 +53,7 @@ import { useI18n } from './i18n'
 import { useSidebarLayout } from './useSidebarLayout'
 import { useWorkbenchLayout } from './useWorkbenchLayout'
 import { useBrowserInspectionRequests } from './useBrowserInspectionRequests'
+import type { ActiveBrowserTab } from './browserTabs'
 
 function wheelDeltaInPixels(event: WheelEvent, pageHeight: number) {
   if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) return event.deltaY * 16
@@ -63,6 +64,7 @@ function wheelDeltaInPixels(event: WheelEvent, pageHeight: number) {
 export default function App() {
   const { t } = useI18n()
   const [secondarySessionID, setSecondarySessionID] = useState<string>()
+  const [activeBrowserTab, setActiveBrowserTab] = useState<ActiveBrowserTab>()
   const {
     sessions,
     workspaces,
@@ -103,17 +105,19 @@ export default function App() {
     stop,
     resolveApproval,
     resolveQuestion,
-    handleBrowserCommand,
+    queueBrowserResult,
     handleBrowserInspection,
     secondaryThread,
   } = useSession(secondarySessionID)
   useBrowserInspectionRequests({
+    activeTab: activeBrowserTab,
     sessionID: activeSessionID,
     browserCommands,
     browserInspections,
     onHandled: handleBrowserInspection,
   })
   useBrowserInspectionRequests({
+    activeTab: activeBrowserTab,
     sessionID: secondaryThread?.session.id,
     browserCommands: secondaryThread?.browserCommands ?? [],
     browserInspections: secondaryThread?.browserInspections ?? [],
@@ -932,8 +936,8 @@ export default function App() {
             onCreateConversation={() => void createSessionInWorkbench()}
             onDismissCreationError={() => setWorkbenchCreateError('')}
             onCloseConversation={() => setSecondarySessionID(undefined)}
-            onBrowserCommandHandled={(sessionID, commandID) =>
-              handleBrowserCommand(sessionID, commandID)}
+            onActiveBrowserTabChange={setActiveBrowserTab}
+            onBrowserResult={queueBrowserResult}
             onConfigureModel={() => {
               setSettingsSection('models')
               setSettingsOpen(true)

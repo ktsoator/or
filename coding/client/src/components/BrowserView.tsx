@@ -23,6 +23,7 @@ import {
 import { DropdownMenu } from 'radix-ui'
 import type {
   BrowserCommandState,
+  BrowserResult,
   ModelOption,
   PreviewState,
   WorkspaceSummary,
@@ -34,6 +35,7 @@ import {
   browserTabNavigationURL,
   browserTabsReducer,
   createBrowserTab,
+  type ActiveBrowserTab,
   type BrowserNavigationTarget,
   type BrowserTab,
 } from '@/browserTabs'
@@ -52,8 +54,6 @@ import {
 } from '@/lib/desktop'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
-import { sessionCommands } from '@/sessionCommands'
-import { useCommandResultReporter } from '@/useCommandResultReporter'
 import { BrowserSurface } from './BrowserSurface'
 import { ConversationView } from './ConversationView'
 
@@ -103,7 +103,8 @@ export function BrowserView({
   workspaces,
   onCloseTab,
   onCloseConversation,
-  onBrowserCommandHandled,
+  onActiveBrowserTabChange,
+  onBrowserResult,
   onCreateConversation,
   onConfigureModel,
   maximized,
@@ -120,7 +121,8 @@ export function BrowserView({
   workspaces: WorkspaceSummary[]
   onCloseTab: () => void
   onCloseConversation: () => void
-  onBrowserCommandHandled: (sessionID: string, commandID: string) => void
+  onActiveBrowserTabChange: (tab: ActiveBrowserTab | undefined) => void
+  onBrowserResult: (sessionID: string, commandID: string, result: BrowserResult) => void
   onCreateConversation: () => void
   onConfigureModel: () => void
   maximized: boolean
@@ -181,11 +183,26 @@ export function BrowserView({
     : ''
   const browserRuntime = hasBrowserRuntime()
 
-  const reportBrowserResult = useCommandResultReporter({
-    send: sessionCommands.reportBrowserResult,
-    resolvedCode: 'browser_command_not_found',
-    onHandled: onBrowserCommandHandled,
-  })
+  useEffect(() => {
+    if (conversationActive || !activeTab) {
+      onActiveBrowserTabChange(undefined)
+      return
+    }
+    onActiveBrowserTabChange({
+      id: activeTab.id,
+      owner: activeTab.owner,
+      sessionID: activeTab.sessionID,
+    })
+  }, [
+    activeTab,
+    conversationActive,
+    onActiveBrowserTabChange,
+  ])
+
+  useEffect(
+    () => () => onActiveBrowserTabChange(undefined),
+    [onActiveBrowserTabChange],
+  )
 
   useEffect(() => {
     const previous = previousConversationTabIDRef.current
@@ -216,6 +233,7 @@ export function BrowserView({
       sessionID,
       command.commandID,
       command.disposition,
+      conversationActive ? undefined : activeTab,
     )
     const existing = tabs.find((tab) => tab.id === tabID)
     if (
@@ -225,11 +243,13 @@ export function BrowserView({
       existing.observed.status !== 'ready' &&
       existing.observed.status !== 'failed'
     ) {
-      void reportBrowserResult(existing.sessionID, existing.desired.commandID, {
-        status: 'cancelled',
-        requestedURL: absoluteHTTPURL(existing.desired.requestedURL),
-        committedURL: absoluteHTTPURL(existing.observed.committedURL),
-      })
+      if (existing.sessionID) {
+        onBrowserResult(existing.sessionID, existing.desired.commandID, {
+          status: 'cancelled',
+          requestedURL: absoluteHTTPURL(existing.desired.requestedURL),
+          committedURL: absoluteHTTPURL(existing.observed.committedURL),
+        })
+      }
     }
     dispatchTabs({
       t: 'agent_navigate',
@@ -243,7 +263,15 @@ export function BrowserView({
     ) {
       setActiveTabID(tabID)
     }
-  }, [activatePreview, browserCommands, reportBrowserResult, sessionID, tabs])
+  }, [
+    activatePreview,
+    activeTab,
+    browserCommands,
+    conversationActive,
+    onBrowserResult,
+    sessionID,
+    tabs,
+  ])
 
   useEffect(() => {
     if ((!preview?.url && !preview?.path) || preview.commandID || preview.disposition) return
@@ -305,11 +333,13 @@ export function BrowserView({
       closing.observed.status !== 'ready' &&
       closing.observed.status !== 'failed'
     ) {
-      void reportBrowserResult(closing.sessionID, closing.desired.commandID, {
-        status: 'cancelled',
-        requestedURL: absoluteHTTPURL(closing.desired.requestedURL),
-        committedURL: absoluteHTTPURL(closing.observed.committedURL),
-      })
+      if (closing.sessionID) {
+        onBrowserResult(closing.sessionID, closing.desired.commandID, {
+          status: 'cancelled',
+          requestedURL: absoluteHTTPURL(closing.desired.requestedURL),
+          committedURL: absoluteHTTPURL(closing.observed.committedURL),
+        })
+      }
     }
     void closeBrowser(tabID)
     if (tabs.length === 1 && !conversation) {
@@ -545,6 +575,7 @@ export function BrowserView({
                     active={active}
                     tabID={tab.id}
                     navigation={desired?.revision ?? 0}
+                    observed={tab.observed}
                     url={desired?.requestedURL ?? ''}
                     workspaceFile={desired?.kind === 'workspace-preview'}
                     onResolveURL={(url) => {
@@ -559,7 +590,7 @@ export function BrowserView({
                     onRetry={() => dispatchTabs({ t: 'reload', tabID: tab.id })}
                     onState={(state: BrowserRuntimeState) => {
                       dispatchTabs({
-                        t: 'native_state_received',
+                        t: 'runtime_state_received',
                         tabID: tab.id,
                         appliedRevision: state.appliedRevision,
                         committedURL: state.committedURL,
@@ -579,13 +610,15 @@ export function BrowserView({
                         // rejected and would consume the command's only result.
                         (state.status !== 'ready' || committedURL)
                       ) {
-                        void reportBrowserResult(tab.sessionID, desired.commandID, {
-                          status: state.status === 'ready' ? 'committed' : 'failed',
-                          requestedURL: absoluteHTTPURL(state.requestedURL),
-                          committedURL,
-                          title: state.title || undefined,
-                          error: state.error,
-                        })
+                        if (tab.sessionID) {
+                          onBrowserResult(tab.sessionID, desired.commandID, {
+                            status: state.status === 'ready' ? 'committed' : 'failed',
+                            requestedURL: absoluteHTTPURL(state.requestedURL),
+                            committedURL,
+                            title: state.title || undefined,
+                            error: state.error,
+                          })
+                        }
                       }
                     }}
                   />

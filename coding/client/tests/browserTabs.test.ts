@@ -38,7 +38,7 @@ function nativeState(
   title: string,
 ): BrowserTab[] {
   return browserTabsReducer(tabs, {
-    t: 'native_state_received',
+    t: 'runtime_state_received',
     tabID: 'preview:session-1',
     appliedRevision: revision,
     committedURL: url,
@@ -50,10 +50,30 @@ function nativeState(
 }
 
 describe('browser tabs reducer', () => {
-  test('uses a stable session tab for reuse and a stable command tab for new tabs', () => {
+  test('reuses the active session Agent tab and keeps new command tab IDs stable', () => {
     expect(browserCommandTabID('session-1', 'command-1', 'reuse_agent_tab')).toBe(
       'preview:session-1',
     )
+    expect(
+      browserCommandTabID('session-1', 'command-1', 'reuse_agent_tab', {
+        id: 'preview:session-1:command:previous-command',
+        owner: 'agent',
+        sessionID: 'session-1',
+      }),
+    ).toBe('preview:session-1:command:previous-command')
+    expect(
+      browserCommandTabID('session-1', 'command-1', 'reuse_agent_tab', {
+        id: 'tab-1',
+        owner: 'user',
+      }),
+    ).toBe('preview:session-1')
+    expect(
+      browserCommandTabID('session-1', 'command-1', 'reuse_agent_tab', {
+        id: 'preview:session-2',
+        owner: 'agent',
+        sessionID: 'session-2',
+      }),
+    ).toBe('preview:session-1')
     expect(browserCommandTabID('session-1', 'command-1', 'new_foreground_tab')).toBe(
       'preview:session-1:command:command-1',
     )
@@ -112,7 +132,7 @@ describe('browser tabs reducer', () => {
     tabs = nativeState(tabs, 1, 'https://github.com/', 'GitHub')
     tabs = navigate(tabs, 'https://www.bilibili.com/')
     tabs = browserTabsReducer(tabs, {
-      t: 'native_state_received',
+      t: 'runtime_state_received',
       tabID: 'preview:session-1',
       appliedRevision: 2,
       committedURL: 'https://github.com/',
