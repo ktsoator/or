@@ -6,8 +6,10 @@
   "author": "Kt <ktsoator@gmail.com>",
   "main": "dist/main.js",
   "scripts": {
-    "test": "bun test src/workspacePreviewSecurity.test.ts",
-    "build:main": "tsc -p tsconfig.json",
+    "clean": "node scripts/clean.mjs dist release client-dist",
+    "clean:main": "node scripts/clean.mjs dist",
+    "test": "bun run --cwd ../client test:electron",
+    "build:main": "bun run clean:main && tsc -p tsconfig.json",
     "build:sidecar": "node scripts/build-sidecar.mjs",
     "build:client": "bun run --cwd ../client build",
     "build": "bun run build:client && bun run build:main && bun run build:sidecar",

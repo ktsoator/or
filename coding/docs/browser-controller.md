@@ -27,7 +27,7 @@ This has three structural causes:
 
 1. Layout synchronization and navigation share one command.
 2. Desired navigation state and observed page state share the same fields.
-3. Electron state events do not identify the navigation revision they describe.
+3. Browser state events do not identify the navigation revision they describe.
 
 ## User Semantics
 
@@ -37,8 +37,8 @@ Each coding session has one deterministic reusable Agent tab:
 preview:<session-id>
 ```
 
-The default agent action reuses that tab. The existing `WebContentsView` stays
-alive so web-to-web navigation preserves back and forward history.
+The default agent action reuses that tab. Its existing `<webview>` stays alive
+so web-to-web navigation preserves back and forward history.
 
 ```text
 "Open GitHub"                 -> reuse the session agent tab
@@ -79,6 +79,7 @@ without creating duplicates.
 ### React renderer
 
 - Own the workbench tab model and active tab selection.
+- Own each `<webview>`, its DOM layout, and the browser runtime registry.
 - Route an agent request to its deterministic session tab.
 - Handle inspection requests independently of whether `BrowserView` is mounted,
   waiting for a restored reusable-tab navigation before observing it.
@@ -91,14 +92,13 @@ without creating duplicates.
 
 ### Electron main process
 
-- Own every `WebContentsView` and Electron `Session`.
-- Apply navigation, visibility, and bounds commands.
-- Enforce protocol, permission, cookie, and workspace isolation policies.
-- Report main-frame navigation state with the applied revision.
-- Preserve public-browser history and recreate a view when crossing the
-  workspace-preview security boundary.
+- Enable the webview tag for the renderer.
+- Handle guest attempts to open new windows and external protocols.
+- Supervise the sidecar and install the desktop session cookie.
+- Add attach-time validation, dedicated partitions, permission policy, and
+  workspace request isolation before untrusted preview isolation is claimed.
 
-## Phase 1: Renderer and Electron Control Plane
+## Phase 1: Renderer Browser Runtime
 
 Phase 1 fixes repeated navigation without changing the Go tool contract.
 
@@ -139,7 +139,7 @@ type BrowserTab = {
 ```
 
 The address input writes only `addressDraft`. Submitting it creates a new
-`desired` command. Electron state writes only `observed`. A committed observed
+`desired` command. Browser runtime state writes only `observed`. A committed observed
 URL may update `addressDraft` only when its revision is not older than the
 current desired revision.
 
@@ -154,30 +154,21 @@ current desired revision.
 - A state event for an unknown tab is ignored.
 - Closing a tab invalidates all pending work for that tab.
 
-### Desktop bridge
+### Browser runtime bridge
 
-Replace the overloaded `show` API with independent operations:
+The renderer registry is the only browser runtime. The desktop shell exposes
+`browserMode: 'webview'` and nothing else, so tests drive the shipped bridge
+through a stand-in `<webview>` guest rather than a second adapter:
 
 ```ts
-type NativeBrowserNavigateInput = {
+type BrowserNavigateInput = {
   tabID: string
   revision: number
   url: string
   kind: 'web' | 'workspace-preview'
 }
 
-type NativeBrowserViewportInput = {
-  tabID: string
-  visible: boolean
-  bounds?: {
-    x: number
-    y: number
-    width: number
-    height: number
-  }
-}
-
-type NativeBrowserState = {
+type BrowserRuntimeState = {
   tabID: string
   appliedRevision: number
   requestedURL: string
@@ -189,28 +180,27 @@ type NativeBrowserState = {
   error?: string
 }
 
-type NativeBrowserBridge = {
-  navigate(input: NativeBrowserNavigateInput): Promise<NativeBrowserState>
-  setViewport(input: NativeBrowserViewportInput): Promise<void>
+type BrowserRuntimeBridge = {
+  navigate(input: BrowserNavigateInput): Promise<BrowserRuntimeState>
   close(tabID: string): Promise<void>
   goBack(tabID: string): Promise<void>
   goForward(tabID: string): Promise<void>
-  onState(listener: (state: NativeBrowserState) => void): () => void
+  onState(listener: (state: BrowserRuntimeState) => void): () => void
 }
 ```
 
-`setViewport` must never cancel, reload, or supersede navigation. ResizeObserver
-calls only `setViewport`.
+Electron webviews participate in DOM layout directly, so the runtime owns no
+bounds or visibility protocol.
 
-### Native entry state
+### Webview entry state
 
-Electron keeps requested and committed state separately:
+The renderer registry keeps requested and committed state separately:
 
 ```ts
 type BrowserEntry = {
   tabID: string
-  kind: BrowserTargetKind
-  view: WebContentsView
+  element: BrowserWebviewElement
+  operation: number
   appliedRevision: number
   requestedURL: string
   committedURL: string
@@ -223,12 +213,23 @@ type BrowserEntry = {
 
 1. Parse and validate the target URL.
 2. Ignore the command when its revision is older than `appliedRevision`.
-3. Recreate the entry only when the target kind crosses the security boundary.
-4. Record revision and requested URL before starting the load.
+3. Record revision and requested URL before starting the load.
+4. Claim the navigation, then wait for the webview's first `dom-ready` event.
 5. Stop a superseded main-frame load when necessary.
 6. Call `loadURL` for a different target or `reload` for an explicit same-target
-   revision.
-7. Return a state carrying the same applied revision.
+   revision, marking the navigation as issued.
+7. Ignore completion from an operation superseded by a newer revision.
+8. Return a state carrying the same applied revision.
+
+A freshly mounted guest loads its own `about:blank` document before any
+requested load. That document commits, fires `did-navigate`, and finishes while
+the navigation is still waiting at step 4, so a claimed navigation is not
+observable until it has been issued: until then the guest's `did-navigate`,
+`did-navigate-in-page`, load-completion, `did-fail-load`, and
+`render-process-gone` events are ignored. Without that rule the guest's initial
+document is reported as the requested page's arrival, with a ready status and a
+non-HTTP committed URL. Claiming before the wait also bounds it by the
+navigation timeout.
 
 Main-frame `did-navigate` sets `committedURL`. `did-fail-load` sets `failed`
 except for Electron's aborted-load error. Redirects are successful and retain
@@ -236,22 +237,23 @@ both requested and committed URLs.
 
 ### Browser controller hook
 
-Extract native synchronization from `BrowserSurface.tsx` into
-`useNativeBrowserController.ts`.
+Extract browser synchronization from `BrowserSurface.tsx` into
+`useBrowserController.ts`.
 
-The hook has two independent effects:
+The hook separates registration, target resolution, navigation, and observation:
 
+- Registration effect: connects the mounted webview to the runtime registry.
+  Releasing a registration also forgets which revision has been issued, because
+  a navigation issued against a replaced registry entry never completes.
 - Navigation effect: watches the complete desired command and calls
   `browser.navigate` exactly once per revision.
-- Viewport effect: watches bounds and visibility and calls
-  `browser.setViewport` without touching navigation.
 
 Public and workspace URLs are immediately resolved. Localhost validation uses
 an abortable request keyed by its desired URL and revision. A result is discarded
 unless it still matches the current desired command.
 
-`BrowserSurface` becomes a viewport anchor plus loading and failure overlays. It
-does not own URL state.
+`BrowserSurface` hosts the webview plus loading and failure overlays. It does not
+own URL state.
 
 ## Phase 2: Agent Command Acknowledgement
 
@@ -318,9 +320,15 @@ commands. `reuse_agent_tab` supersedes an unfinished navigation in the same
 session tab and reports the older command as cancelled. Foreground and
 background requests receive independent tabs and can finish concurrently.
 
-Every tab keeps its native controller mounted. Only the active tab gets a
-visible viewport; inactive tabs can still navigate and report terminal state.
+Every tab keeps its browser controller and webview mounted. Only the active tab
+is visible; inactive tabs can still navigate and report terminal state.
 Closing a tab with an unfinished Agent command reports `cancelled`.
+
+A command has exactly one result, so the renderer only reports `committed` for a
+page with an HTTP(S) committed URL, and a report that is retrying always sends
+the newest observation rather than the one it started with. Otherwise a rejected
+result consumes the command's only acknowledgement and the tool waits for its
+timeout even though the page loaded.
 
 ## Phase 3: Explicit Browser Capabilities
 
@@ -332,7 +340,7 @@ Agent tab's final HTTP(S) URL, title, page status, applied revision, and at most
 inspect_browser tool
   -> BrowserBroker broadcasts browser_inspect_request
   -> Renderer inspection controller waits for pending Agent navigation
-  -> Electron runs one fixed extractor in isolated world 1001
+  -> The stable Agent webview runs one fixed extractor
   -> React POSTs one terminal result
   -> BrowserBroker returns the observation to the tool
 ```
@@ -349,8 +357,8 @@ context cancellation, timeout, transport replacement, duplicates, and late
 results use the same broker lifecycle rules as navigation commands.
 
 The fixed extractor excludes form controls, editable regions, script and style
-content, hidden/inert/ARIA-hidden content, and non-rendered text. The Electron
-bridge accepts only `preview:<session-id>` IDs, so user tabs and command-owned
+content, hidden/inert/ARIA-hidden content, and non-rendered text. The renderer
+registry accepts only `preview:<session-id>` IDs, so user tabs and command-owned
 new tabs cannot be inspected. It rejects the result if the tab or revision
 changes while extraction is running.
 
@@ -373,22 +381,21 @@ to the model.
 
 ## Security
 
-- Public pages use the persistent browser session and deny browser permissions
-  by default.
-- Workspace previews use an isolated session with a path-limited desktop cookie
-  and a process-local cryptographic grant scoped to the HTML entry directory.
+- Public pages and workspace previews currently share the desktop session.
 - Workspace preview HTTP routes allow only `GET` and `HEAD`, reject hidden and
   credential-like files, prevent symlink escape, and return a restrictive CSP.
-- Workspace preview sessions block external requests, popups, forms, and
-  navigation outside the active grant. Changing grants recreates the native
-  entry and its isolated Electron session.
 - Browser commands accept only HTTP(S) URLs after product validation.
-- Browser inspection runs fixed product code in an Electron isolated world and
-  checks that the applied revision remains unchanged before returning data.
+- Browser inspection runs fixed product code in the guest main world and checks
+  that the applied revision remains unchanged before returning data.
 - User-owned tabs require an explicit user request before agent control is
   added in a future phase.
 - Sensitive form submission, uploads, purchases, messages, permission changes,
   CAPTCHA handling, and authentication actions require task-specific authority.
+
+Before untrusted workspace previews are considered isolated, Electron must add
+attach-time preference validation, dedicated partitions, path-scoped cookies,
+permission denial, request filtering, navigation restrictions, and an isolated
+execution world for inspection.
 
 ## Tests
 
@@ -401,6 +408,12 @@ to the model.
 - Closing a tab drops later state events.
 - Agent commands never mutate a user-owned tab.
 
+Renderer tests install a stand-in `<webview>` guest — one that attaches
+asynchronously and commits its own `about:blank` document first — so they
+exercise the shipped bridge, controller, and reducer together. A test-only
+runtime that the desktop shell does not implement would hide exactly the
+defects that live in that seam.
+
 ### Renderer tests
 
 - GitHub to Bilibili reuses one agent tab and preserves active selection.
@@ -411,16 +424,15 @@ to the model.
 - A delayed localhost probe cannot replace a newer public target.
 - Resize and hide/show never call navigate.
 - A failed navigation exposes retry without losing the requested address.
+- The guest's own initial document neither completes nor acknowledges the first
+  agent navigation of a session; the requested page is still loaded and reported
+  exactly once.
 
 ### Electron tests
 
-- `setViewport` never changes revision or URL.
-- Older navigate revisions are ignored.
-- Same-target reload and different-target navigation are distinct.
-- Web-to-workspace transitions replace the isolated entry.
-- Main-frame redirect and failure states carry the applied revision.
-- Inspection accepts only the stable Agent tab ID and validates the isolated
-  world result shape.
+- The webview guest viewport fills its DOM host rather than retaining the
+  default 150-pixel iframe height.
+- A renderer menu remains the top hit-test target where it overlaps the webview.
 
 ### Inspection tests
 
@@ -447,11 +459,10 @@ none can overwrite the current tab.
 ## Delivery Order
 
 1. Add `browserTabs.ts` and reducer sequence tests. Completed.
-2. Split the preload and Electron bridge into navigate and viewport operations.
+2. Separate navigation operations from DOM layout and visibility. Completed.
+3. Add applied revision to browser runtime state and reject stale operations.
    Completed.
-3. Add applied revision to native state and update `NativeBrowserManager`.
-   Completed.
-4. Add `useNativeBrowserController.ts` and simplify `BrowserSurface`. Completed.
+4. Add `useBrowserController.ts` and simplify `BrowserSurface`. Completed.
 5. Add repeated-navigation Playwright coverage and package the desktop app.
    Completed.
 6. Add the disposition enum and generated wire DTOs, using

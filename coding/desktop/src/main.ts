@@ -11,8 +11,8 @@ import {
   ipcMain,
   session,
   shell,
+  type WebContents,
 } from 'electron'
-import { NativeBrowserManager, type DesktopEndpoint } from './nativeBrowser.js'
 
 const isDevelopment = process.argv.includes('--dev')
 const sidecarReadyTimeoutMs = 15_000
@@ -27,8 +27,6 @@ type ReadyMessage = {
 let mainWindow: BrowserWindow | null = null
 let sidecar: ChildProcessWithoutNullStreams | null = null
 let rendererDevServer: ChildProcessWithoutNullStreams | null = null
-let nativeBrowser: NativeBrowserManager | null = null
-let desktopEndpoint: DesktopEndpoint | null = null
 let quitting = false
 let rendererURL = ''
 
@@ -59,7 +57,6 @@ process.once('SIGTERM', () => app.quit())
 async function start(): Promise<void> {
   registerIPC()
   const desktop = await startSidecar()
-  desktopEndpoint = desktop
   await session.defaultSession.cookies.set({
     url: desktop.url,
     name: desktop.cookieName,
@@ -94,17 +91,17 @@ function createWindow(url: string): void {
       nodeIntegration: false,
       sandbox: true,
       devTools: isDevelopment,
+      webviewTag: true,
     },
   })
   mainWindow = window
-  if (!desktopEndpoint) throw new Error('desktop endpoint is unavailable')
-  nativeBrowser = new NativeBrowserManager(window, desktopEndpoint)
 
   window.once('ready-to-show', () => window.show())
   window.on('closed', () => {
-    nativeBrowser?.destroy()
-    nativeBrowser = null
     if (mainWindow === window) mainWindow = null
+  })
+  window.webContents.on('did-attach-webview', (_event, guest) => {
+    configureGuestWindowHandling(guest)
   })
   window.webContents.setWindowOpenHandler(({ url: target }) => {
     void openExternalURL(target)
@@ -139,29 +136,25 @@ function registerIPC(): void {
     if (typeof target !== 'string') throw new TypeError('external URL must be a string')
     await openExternalURL(target)
   })
-  ipcMain.handle('desktop:browser:navigate', (event, input: unknown) =>
-    browserFor(event.sender).navigate(input))
-  ipcMain.handle('desktop:browser:set-viewport', (event, input: unknown) => {
-    browserFor(event.sender).setViewport(input)
-  })
-  ipcMain.handle('desktop:browser:close', (event, tabID: unknown) => {
-    browserFor(event.sender).close(tabID)
-  })
-  ipcMain.handle('desktop:browser:go-back', (event, tabID: unknown) => {
-    browserFor(event.sender).goBack(tabID)
-  })
-  ipcMain.handle('desktop:browser:go-forward', (event, tabID: unknown) => {
-    browserFor(event.sender).goForward(tabID)
-  })
-  ipcMain.handle('desktop:browser:inspect', (event, tabID: unknown) =>
-    browserFor(event.sender).inspect(tabID))
 }
 
-function browserFor(sender: Electron.WebContents): NativeBrowserManager {
-  if (!mainWindow || sender !== mainWindow.webContents || !nativeBrowser) {
-    throw new Error('native browser is unavailable')
-  }
-  return nativeBrowser
+function configureGuestWindowHandling(guest: WebContents): void {
+  guest.setWindowOpenHandler(({ url }) => {
+    const target = safeURL(url)
+    if (target && (target.protocol === 'http:' || target.protocol === 'https:')) {
+      setImmediate(() => {
+        if (guest.isDestroyed()) return
+        void guest.loadURL(target.href).catch((error: unknown) => {
+          console.error(`[browser] failed to open ${target.href}`, error)
+        })
+      })
+      return { action: 'deny' }
+    }
+    if (target && (target.protocol === 'mailto:' || target.protocol === 'tel:')) {
+      void openExternalURL(target.href)
+    }
+    return { action: 'deny' }
+  })
 }
 
 async function existingDirectory(value: unknown): Promise<string | undefined> {
@@ -181,6 +174,14 @@ async function openExternalURL(target: string): Promise<void> {
   await shell.openExternal(url.href)
 }
 
+function safeURL(value: string): URL | undefined {
+  try {
+    return new URL(value)
+  } catch {
+    return undefined
+  }
+}
+
 async function startSidecar(): Promise<ReadyMessage & { token: string }> {
   const token = randomBytes(32).toString('hex')
   const binaryName = process.platform === 'win32' ? 'coding-sidecar.exe' : 'coding-sidecar'
@@ -189,7 +190,7 @@ async function startSidecar(): Promise<ReadyMessage & { token: string }> {
     : path.join(__dirname, 'sidecar', binaryName)
   const assets = app.isPackaged
     ? path.join(process.resourcesPath, 'client')
-    : path.resolve(__dirname, '../../client')
+    : path.resolve(__dirname, '../../client', isDevelopment ? '' : 'dist')
 
   const child = spawn(executable, ['-assets', assets], {
     env: { ...process.env, CODING_DESKTOP_TOKEN: token },

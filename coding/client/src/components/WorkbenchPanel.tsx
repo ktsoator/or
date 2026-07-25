@@ -88,7 +88,6 @@ export function WorkbenchPanel({
           onBrowserCommandHandled={onBrowserCommandHandled}
           onConfigureModel={onConfigureModel}
           onCreateConversation={onCreateConversation}
-          open={open}
           maximized={maximized}
           onToggleMaximized={onToggleMaximized}
           toggleControl={toggleControl}

@@ -1,64 +1,98 @@
 import { expect, test, type Page } from '@playwright/test'
 
-type NativeBrowserNavigateInput = {
+type BrowserRuntimeRecord = {
   tabID: string
-  url: string
-  revision: number
-  kind: 'web' | 'workspace-preview'
-}
-
-type NativeBrowserViewportInput = {
-  tabID: string
-  visible: boolean
-  bounds?: { x: number; y: number; width: number; height: number }
-}
-
-type NativeBrowserState = {
-  tabID: string
-  appliedRevision: number
-  requestedURL: string
-  committedURL: string
-  title: string
-  status: 'navigating' | 'ready' | 'failed'
-  canGoBack: boolean
-  canGoForward: boolean
-  error?: string
-}
-
-type NativeBrowserInspection = {
   url: string
   title: string
-  pageStatus: 'ready'
-  revision: number
-  visibleText: string
-  truncated: boolean
-}
-
-type NativeBrowserRecord = {
-  tabID: string
-  url: string
   bounds: { x: number; y: number; width: number; height: number }
-  navigation: number
-  workspacePreview: boolean
   visible: boolean
-  navigateCalls: number
-  viewportCalls: number
-  state?: NativeBrowserState
+  status: string | null
+  loadCalls: string[]
+  reloadCalls: number
+  inspectCalls: number
 }
 
-async function nativeBrowserView(
+// Reads what the renderer's real webview bridge did to a tab's guest, so the
+// assertions describe the shipped path instead of a test-only adapter.
+async function browserRuntimeView(
   page: Page,
   tabID: string,
-): Promise<NativeBrowserRecord | undefined> {
-  return page.evaluate(
-    (id) =>
-      (
-        window as Window & {
-          __browserViews?: Record<string, NativeBrowserRecord>
-        }
-      ).__browserViews?.[id],
-    tabID,
-  )
+): Promise<BrowserRuntimeRecord | undefined> {
+  return page.evaluate((id) => {
+    const host = document.querySelector(`[data-browser-tab-id="${CSS.escape(id)}"]`)
+    if (!host) return undefined
+    const guest = host.querySelector('webview') as
+      | (HTMLElement & {
+          guestURL?: string
+          guestTitle?: string
+          loadCalls?: string[]
+          reloadCalls?: number
+          inspectCalls?: number
+        })
+      | null
+    const bounds = host.getBoundingClientRect()
+    return {
+      tabID: id,
+      url: guest?.guestURL ?? '',
+      title: guest?.guestTitle ?? '',
+      bounds: {
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+      },
+      visible: host.checkVisibility({
+        checkVisibilityCSS: true,
+        opacityProperty: true,
+      }),
+      status: host.getAttribute('data-status'),
+      loadCalls: guest?.loadCalls ?? [],
+      reloadCalls: guest?.reloadCalls ?? 0,
+      inspectCalls: guest?.inspectCalls ?? 0,
+    }
+  }, tabID)
+}
+
+// Drives the fake guest the way a page drives a real one: the guest commits a
+// navigation the renderer never requested.
+async function guestNavigatesItself(
+  page: Page,
+  tabID: string,
+  url: string,
+  title = '',
+): Promise<void> {
+  await page.evaluate(({ id, target, pageTitle }) => {
+    const host = document.querySelector(`[data-browser-tab-id="${CSS.escape(id)}"]`)
+    const guest = host?.querySelector('webview') as
+      | (HTMLElement & {
+          guestURL: string
+          guestTitle: string
+          history: string[]
+          historyIndex: number
+        })
+      | null
+    if (!guest) throw new Error(`no browser guest for ${id}`)
+    guest.guestURL = target
+    guest.guestTitle = pageTitle
+    guest.history = [...guest.history.slice(0, guest.historyIndex + 1), target]
+    guest.historyIndex = guest.history.length - 1
+    const navigated = new Event('did-navigate') as Event & { url: string }
+    navigated.url = target
+    guest.dispatchEvent(navigated)
+    guest.dispatchEvent(new Event('did-stop-loading'))
+  }, { id: tabID, target: url, pageTitle: title })
+}
+
+async function setGuestControls(
+  page: Page,
+  controls: { failNextLoad?: string; loadDelayMs?: number; pageTitle?: string },
+): Promise<void> {
+  await page.evaluate((next) => {
+    const controlsWindow = window as Window & {
+      __guestControls?: Record<string, unknown>
+    }
+    Object.assign(controlsWindow.__guestControls ?? {}, next)
+  }, controls)
 }
 
 const models = {
@@ -128,32 +162,126 @@ async function openDesktopClient(
   let workbenchSessionCreated = false
 
   await page.addInitScript(({ nativeDirectory }) => {
-    type BrowserTestWindow = Window & {
-      __browserViews?: Record<string, NativeBrowserRecord>
-      __browserActions?: Array<{ action: string; tabID: string }>
-      __browserInspectionTabIDs?: string[]
-      __emitBrowserState?: (state: NativeBrowserState) => void
+    // A stand-in for Electron's <webview>: it attaches asynchronously and
+    // commits its own about:blank document before any requested load, which is
+    // the sequence the renderer bridge has to survive. The tag name has no
+    // hyphen, so it cannot be registered as a custom element.
+    type FakeGuest = HTMLElement & {
+      attached: boolean
+      guestURL: string
+      guestTitle: string
+      history: string[]
+      historyIndex: number
+      loadCalls: string[]
+      reloadCalls: number
+      inspectCalls: number
+      stopCalls: number
     }
-    const browserWindow = window as BrowserTestWindow
-    const browserListeners = new Set<(state: NativeBrowserState) => void>()
-    const browserViews: Record<string, NativeBrowserRecord> = {}
-    const browserViewports: Record<
-      string,
-      NativeBrowserViewportInput & { calls: number }
-    > = {}
-    const browserActions: Array<{ action: string; tabID: string }> = []
-    const browserInspectionTabIDs: string[] = []
-    browserWindow.__browserViews = browserViews
-    browserWindow.__browserActions = browserActions
-    browserWindow.__browserInspectionTabIDs = browserInspectionTabIDs
-    browserWindow.__emitBrowserState = (state) => {
-      const view = browserViews[state.tabID]
-      if (view && state.appliedRevision >= view.navigation) {
-        view.url = state.committedURL || state.requestedURL
-        view.state = state
-      }
-      for (const listener of browserListeners) listener(state)
+    const navigateEvent = (url: string, name = 'did-navigate') => {
+      const event = new Event(name) as Event & { url: string }
+      event.url = url
+      return event
     }
+    const commitGuest = (guest: FakeGuest, url: string, title: string) => {
+      guest.guestURL = url
+      guest.guestTitle = title
+      guest.dispatchEvent(navigateEvent(url))
+      guest.dispatchEvent(new Event('did-stop-loading'))
+    }
+    const installFakeGuest = (element: HTMLElement) => {
+      const guest = element as FakeGuest
+      guest.attached = false
+      guest.guestURL = ''
+      guest.guestTitle = ''
+      guest.history = []
+      guest.historyIndex = -1
+      guest.loadCalls = []
+      guest.reloadCalls = 0
+      guest.inspectCalls = 0
+      guest.stopCalls = 0
+      Object.assign(guest, {
+        getWebContentsId() {
+          if (!guest.attached) throw new Error('The WebView must be attached to the DOM')
+          return 1
+        },
+        getURL: () => guest.guestURL,
+        getTitle: () => guest.guestTitle,
+        canGoBack: () => guest.historyIndex > 0,
+        canGoForward: () => guest.historyIndex < guest.history.length - 1,
+        stop() {
+          guest.stopCalls += 1
+        },
+        goBack() {
+          if (guest.historyIndex <= 0) return
+          guest.historyIndex -= 1
+          commitGuest(guest, guest.history[guest.historyIndex] ?? '', guestControls.pageTitle ?? '')
+        },
+        goForward() {
+          if (guest.historyIndex >= guest.history.length - 1) return
+          guest.historyIndex += 1
+          commitGuest(guest, guest.history[guest.historyIndex] ?? '', guestControls.pageTitle ?? '')
+        },
+        reload() {
+          guest.reloadCalls += 1
+          window.setTimeout(() => {
+            guest.dispatchEvent(new Event('did-stop-loading'))
+          }, 5)
+        },
+        loadURL(url: string) {
+          guest.loadCalls.push(url)
+          return new Promise<void>((resolve, reject) => {
+            window.setTimeout(() => {
+              if (guestControls.failNextLoad === url) {
+                guestControls.failNextLoad = undefined
+                const failure = new Event('did-fail-load') as Event & {
+                  errorCode: number
+                  errorDescription: string
+                }
+                failure.errorCode = -105
+                failure.errorDescription = 'ERR_NAME_NOT_RESOLVED'
+                guest.dispatchEvent(failure)
+                reject(new Error('ERR_NAME_NOT_RESOLVED'))
+                return
+              }
+              guest.history = [...guest.history.slice(0, guest.historyIndex + 1), url]
+              guest.historyIndex = guest.history.length - 1
+              commitGuest(guest, url, guestControls.pageTitle ?? '')
+              resolve()
+            }, guestControls.loadDelayMs ?? 5)
+          })
+        },
+        executeJavaScript() {
+          guest.inspectCalls += 1
+          return Promise.resolve({
+            visibleText: `Visible content for ${guest.guestURL}`,
+            truncated: false,
+          })
+        },
+      })
+      window.setTimeout(() => {
+        guest.attached = true
+        guest.guestURL = 'about:blank'
+        guest.guestTitle = 'about:blank'
+        guest.dispatchEvent(new Event('dom-ready'))
+        guest.dispatchEvent(navigateEvent('about:blank'))
+        guest.dispatchEvent(new Event('did-finish-load'))
+        guest.dispatchEvent(new Event('did-stop-loading'))
+      }, 0)
+    }
+    const nativeCreateElement = document.createElement.bind(document)
+    document.createElement = ((tag: string, options?: ElementCreationOptions) => {
+      const element = nativeCreateElement(tag, options)
+      if (tag === 'webview') installFakeGuest(element)
+      return element
+    }) as typeof document.createElement
+    type GuestControls = {
+      failNextLoad?: string
+      loadDelayMs?: number
+      pageTitle?: string
+    }
+    const guestControls: GuestControls = {}
+    ;(window as Window & { __guestControls?: GuestControls }).__guestControls =
+      guestControls
 
     Object.defineProperty(navigator, 'platform', {
       configurable: true,
@@ -163,6 +291,7 @@ async function openDesktopClient(
       configurable: true,
       value: {
         platform: 'darwin',
+        browserMode: 'webview',
         openExternalURL(url: string) {
           const testWindow = window as Window & { __openedURL?: string }
           testWindow.__openedURL = url
@@ -173,119 +302,6 @@ async function openDesktopClient(
           }
           testWindow.__directoryArgs = { initialPath, title }
           return Promise.resolve(nativeDirectory ?? '')
-        },
-        browser: {
-          navigate(input: NativeBrowserNavigateInput) {
-            const url = new URL(input.url, window.location.href).href
-            const previous = browserViews[input.tabID]
-            if (previous && input.revision < previous.navigation) {
-              return Promise.resolve(previous.state)
-            }
-            if (previous && input.revision === previous.navigation) {
-              return Promise.resolve(previous.state)
-            }
-            const viewport = browserViewports[input.tabID]
-            const state: NativeBrowserState = {
-              tabID: input.tabID,
-              appliedRevision: input.revision,
-              requestedURL: url,
-              committedURL: previous?.state?.committedURL ?? '',
-              title: '',
-              status: 'navigating',
-              canGoBack: previous?.state?.canGoBack ?? false,
-              canGoForward: false,
-            }
-            browserViews[input.tabID] = {
-              tabID: input.tabID,
-              url,
-              bounds: viewport?.bounds ?? previous?.bounds ?? {
-                x: 0,
-                y: 0,
-                width: 0,
-                height: 0,
-              },
-              navigation: input.revision,
-              workspacePreview: input.kind === 'workspace-preview',
-              visible: viewport?.visible ?? previous?.visible ?? false,
-              navigateCalls: (previous?.navigateCalls ?? 0) + 1,
-              viewportCalls: viewport?.calls ?? previous?.viewportCalls ?? 0,
-              state,
-            }
-            window.setTimeout(() => {
-              if (browserViews[input.tabID]?.navigation !== input.revision) return
-              browserWindow.__emitBrowserState?.(
-                {
-                  tabID: input.tabID,
-                  appliedRevision: input.revision,
-                  requestedURL: url,
-                  committedURL: url,
-                  title: '',
-                  status: 'ready',
-                  canGoBack: false,
-                  canGoForward: false,
-                },
-              )
-            }, 0)
-            return Promise.resolve(state)
-          },
-          setViewport(input: NativeBrowserViewportInput) {
-            const previous = browserViewports[input.tabID]
-            browserViewports[input.tabID] = {
-              ...input,
-              calls: (previous?.calls ?? 0) + 1,
-            }
-            const view = browserViews[input.tabID]
-            if (view) {
-              view.visible = input.visible
-              view.viewportCalls += 1
-              if (input.bounds) view.bounds = input.bounds
-              if (input.visible) {
-                for (const candidate of Object.values(browserViews)) {
-                  if (candidate !== view) candidate.visible = false
-                }
-              }
-            }
-            return Promise.resolve()
-          },
-          close(tabID: string) {
-            delete browserViews[tabID]
-            delete browserViewports[tabID]
-            browserActions.push({ action: 'close', tabID })
-            return Promise.resolve()
-          },
-          goBack(tabID: string) {
-            browserActions.push({ action: 'back', tabID })
-            return Promise.resolve()
-          },
-          goForward(tabID: string) {
-            browserActions.push({ action: 'forward', tabID })
-            return Promise.resolve()
-          },
-          inspect(tabID: string): Promise<NativeBrowserInspection> {
-            browserInspectionTabIDs.push(tabID)
-            if (!/^preview:[^:]+$/.test(tabID)) {
-              return Promise.reject(new Error('Agent browser tab ID is invalid'))
-            }
-            const view = browserViews[tabID]
-            if (!view) {
-              return Promise.reject(new Error('Agent browser tab is not open'))
-            }
-            if (view.state?.status !== 'ready') {
-              return Promise.reject(new Error('Agent browser tab is not ready'))
-            }
-            return Promise.resolve({
-              url: view.url,
-              title: view.state.title || new URL(view.url).hostname,
-              pageStatus: 'ready',
-              revision: view.navigation,
-              visibleText: `Visible content for ${view.url}`,
-              truncated: false,
-            })
-          },
-          onState(listener: (state: NativeBrowserState) => void) {
-            browserListeners.add(listener)
-            return () => browserListeners.delete(listener)
-          },
         },
       },
     })
@@ -624,14 +640,13 @@ test('workbench opens before a preview and launches Browser without hiding Chat'
   const address = page.getByRole('textbox', { name: 'Address' })
   await address.fill('127.0.0.1:4310')
   await address.press('Enter')
-  await expect.poll(async () => (await nativeBrowserView(page, 'tab-1'))?.url).toBe(
+  await expect.poll(async () => (await browserRuntimeView(page, 'tab-1'))?.url).toBe(
     'http://127.0.0.1:4310/',
   )
-  const localhostView = await nativeBrowserView(page, 'tab-1')
+  const localhostView = await browserRuntimeView(page, 'tab-1')
   expect(localhostView).toMatchObject({
-    navigation: 1,
-    workspacePreview: false,
     visible: true,
+    loadCalls: ['http://127.0.0.1:4310/'],
   })
   expect(localhostView?.bounds.width).toBeGreaterThan(0)
   expect(localhostView?.bounds.height).toBeGreaterThan(0)
@@ -660,14 +675,16 @@ test('workbench opens before a preview and launches Browser without hiding Chat'
     'aria-selected',
     'true',
   )
-  await expect.poll(async () => nativeBrowserView(page, 'tab-2')).toBeUndefined()
+  expect(await browserRuntimeView(page, 'tab-2')).toMatchObject({
+    status: 'idle',
+    loadCalls: [],
+  })
   await address.fill('https://example.com')
   await address.press('Enter')
-  await expect.poll(async () => (await nativeBrowserView(page, 'tab-2'))?.url).toBe(
+  await expect.poll(async () => (await browserRuntimeView(page, 'tab-2'))?.url).toBe(
     'https://example.com/',
   )
-  expect(await nativeBrowserView(page, 'tab-2')).toMatchObject({
-    workspacePreview: false,
+  expect(await browserRuntimeView(page, 'tab-2')).toMatchObject({
     visible: true,
   })
   expect(
@@ -678,28 +695,12 @@ test('workbench opens before a preview and launches Browser without hiding Chat'
     'true',
   )
   expect(requests.filter((request) => request.path === '/api/preview/check')).toHaveLength(1)
-  await expect(page.getByTestId('native-browser-surface')).toHaveAttribute(
+  await expect(page.getByTestId('browser-surface')).toHaveAttribute(
     'data-status',
     'ready',
   )
 
-  await page.evaluate(() => {
-    const emit = (
-      window as Window & {
-        __emitBrowserState?: (state: NativeBrowserState) => void
-      }
-    ).__emitBrowserState
-    emit?.({
-      tabID: 'tab-2',
-      appliedRevision: 1,
-      requestedURL: 'https://example.com/search',
-      committedURL: 'https://example.com/search',
-      title: 'Example',
-      status: 'ready',
-      canGoBack: true,
-      canGoForward: false,
-    })
-  })
+  await guestNavigatesItself(page, 'tab-2', 'https://example.com/search', 'Example')
   await expect(address).toHaveValue('https://example.com/search')
   await expect(page.getByRole('tab', { name: 'Example' })).toHaveAttribute(
     'aria-selected',
@@ -708,22 +709,14 @@ test('workbench opens before a preview and launches Browser without hiding Chat'
   const back = page.getByRole('button', { name: 'Back' })
   await expect(back).toBeEnabled()
   await back.click()
-  await expect.poll(() =>
-    page.evaluate(() =>
-      (
-        window as Window & {
-          __browserActions?: Array<{ action: string; tabID: string }>
-        }
-      ).__browserActions?.some(
-        (entry) => entry.action === 'back' && entry.tabID === 'tab-2',
-      ),
-    ),
-  ).toBe(true)
+  await expect.poll(async () => (await browserRuntimeView(page, 'tab-2'))?.url).toBe(
+    'https://example.com/',
+  )
 
   await originalTab.click()
   await expect(originalTab).toHaveAttribute('aria-selected', 'true')
-  await expect.poll(async () => (await nativeBrowserView(page, 'tab-1'))?.visible).toBe(true)
-  await expect.poll(async () => (await nativeBrowserView(page, 'tab-2'))?.visible).toBe(false)
+  await expect.poll(async () => (await browserRuntimeView(page, 'tab-1'))?.visible).toBe(true)
+  await expect.poll(async () => (await browserRuntimeView(page, 'tab-2'))?.visible).toBe(false)
   await page.getByRole('button', { name: 'Close tab: 127.0.0.1:4310' }).click()
   await expect(page.getByRole('tab')).toHaveCount(1)
   await expect(page.getByRole('tab', { name: 'Example' })).toHaveAttribute(
@@ -733,7 +726,7 @@ test('workbench opens before a preview and launches Browser without hiding Chat'
   await page.getByRole('button', { name: 'Open in system browser' }).click()
   await expect.poll(() =>
     page.evaluate(() => (window as Window & { __openedURL?: string }).__openedURL),
-  ).toBe('https://example.com/search')
+  ).toBe('https://example.com/')
   await page.getByRole('button', { name: 'Close tab: Example' }).click()
   await expect(page.getByTestId('browser-view')).toHaveCount(0)
   await expect(workbench.getByTestId('workbench-empty')).toContainText('No open views')
@@ -969,12 +962,11 @@ test('a restored right-side preview stays available without taking focus from Ch
 
   await previewTab.click()
   await expect.poll(async () =>
-    (await nativeBrowserView(page, 'preview:secondary-session'))?.url.endsWith(
+    (await browserRuntimeView(page, 'preview:secondary-session'))?.url.endsWith(
       '/api/sessions/secondary-session/previews/secondary-grant/index.html',
     ),
   ).toBe(true)
-  expect(await nativeBrowserView(page, 'preview:secondary-session')).toMatchObject({
-    workspacePreview: true,
+  expect(await browserRuntimeView(page, 'preview:secondary-session')).toMatchObject({
     visible: true,
   })
 })
@@ -1051,16 +1043,14 @@ test('main and right-side chats keep separate preview tabs and workspace routes'
     '/tmp/secondary-session/web/index.html',
   )
   await expect.poll(async () =>
-    (await nativeBrowserView(page, 'preview:secondary-session'))?.url.endsWith(
+    (await browserRuntimeView(page, 'preview:secondary-session'))?.url.endsWith(
       '/api/sessions/secondary-session/previews/secondary-grant/index.html',
     ),
   ).toBe(true)
-  expect(await nativeBrowserView(page, 'preview:secondary-session')).toMatchObject({
-    workspacePreview: true,
+  expect(await browserRuntimeView(page, 'preview:secondary-session')).toMatchObject({
     visible: true,
   })
-  expect(await nativeBrowserView(page, 'preview:test-session')).toMatchObject({
-    workspacePreview: true,
+  expect(await browserRuntimeView(page, 'preview:test-session')).toMatchObject({
     visible: false,
   })
   expect(
@@ -1295,14 +1285,11 @@ test('AI preview tool opens Browser in the workbench beside Chat', async ({ page
 
   await expect(page.getByTestId('browser-view')).toBeVisible()
   await expect.poll(async () =>
-    (await nativeBrowserView(page, 'preview:test-session'))?.url,
+    (await browserRuntimeView(page, 'preview:test-session'))?.url,
   ).toBe('http://127.0.0.1:4310/')
   await expect.poll(async () =>
-    (await nativeBrowserView(page, 'preview:test-session'))?.visible,
+    (await browserRuntimeView(page, 'preview:test-session'))?.visible,
   ).toBe(true)
-  expect(await nativeBrowserView(page, 'preview:test-session')).toMatchObject({
-    workspacePreview: false,
-  })
   await expect(page.getByRole('main')).toBeVisible()
   await expect.poll(async () => {
     const chatBox = await page.getByRole('main').boundingBox()
@@ -1342,7 +1329,7 @@ test('AI preview tool opens Browser in the workbench beside Chat', async ({ page
   await page.getByTestId('workbench-panel-toggle').click()
   await expect(page.getByTestId('browser-view')).toBeHidden()
   await expect.poll(async () =>
-    (await nativeBrowserView(page, 'preview:test-session'))?.visible,
+    (await browserRuntimeView(page, 'preview:test-session'))?.visible,
   ).toBe(false)
   await expect(page.getByRole('main')).toBeVisible()
   await expect(page.getByTestId('workbench-panel-toggle')).toHaveAccessibleName('Show workbench')
@@ -1350,7 +1337,7 @@ test('AI preview tool opens Browser in the workbench beside Chat', async ({ page
   await page.getByTestId('workbench-panel-toggle').click()
   await expect(page.getByTestId('browser-view')).toBeVisible()
   await expect.poll(async () =>
-    (await nativeBrowserView(page, 'preview:test-session'))?.visible,
+    (await browserRuntimeView(page, 'preview:test-session'))?.visible,
   ).toBe(true)
   await page.getByTestId('workbench-panel-toggle').click()
   await expect(page.getByTestId('workbench-panel')).toBeHidden()
@@ -1358,7 +1345,7 @@ test('AI preview tool opens Browser in the workbench beside Chat', async ({ page
   await expect(page.getByTestId('workbench-panel-toggle')).toBeVisible()
 })
 
-test('AI preview tool opens a public website inside the native Browser', async ({ page }) => {
+test('AI preview tool opens a public website inside the Browser', async ({ page }) => {
   const requests = await openDesktopClient(page, { existingSession: true })
   await expect.poll(() =>
     page.evaluate(
@@ -1383,18 +1370,17 @@ test('AI preview tool opens a public website inside the native Browser', async (
     'true',
   )
   await expect.poll(async () =>
-    (await nativeBrowserView(page, 'preview:test-session'))?.url,
+    (await browserRuntimeView(page, 'preview:test-session'))?.url,
   ).toBe('https://www.google.com/')
-  expect(await nativeBrowserView(page, 'preview:test-session')).toMatchObject({
-    workspacePreview: false,
+  expect(await browserRuntimeView(page, 'preview:test-session')).toMatchObject({
     visible: true,
   })
   const divider = page.getByTestId('workbench-divider-line')
   await expect.poll(async () => {
     const dividerBox = await divider.boundingBox()
-    const nativeView = await nativeBrowserView(page, 'preview:test-session')
-    if (!dividerBox || !nativeView) return Number.NEGATIVE_INFINITY
-    return nativeView.bounds.x - (dividerBox.x + dividerBox.width)
+    const runtimeView = await browserRuntimeView(page, 'preview:test-session')
+    if (!dividerBox || !runtimeView) return Number.NEGATIVE_INFINITY
+    return runtimeView.bounds.x - (dividerBox.x + dividerBox.width)
   }).toBeGreaterThanOrEqual(0)
   await expect(page.getByRole('textbox', { name: 'Address' })).toHaveValue(
     'https://www.google.com/',
@@ -1427,7 +1413,7 @@ test('AI browser request reports the committed Electron navigation exactly once'
   })
 
   await expect.poll(async () =>
-    (await nativeBrowserView(page, 'preview:test-session'))?.url,
+    (await browserRuntimeView(page, 'preview:test-session'))?.url,
   ).toBe('https://github.com/')
   await expect.poll(() =>
     requests.filter(
@@ -1460,8 +1446,97 @@ test('AI browser request reports the committed Electron navigation exactly once'
     })
   })
   await page.waitForTimeout(50)
-  expect(await nativeBrowserView(page, 'preview:test-session')).toMatchObject({
-    navigateCalls: 1,
+  expect(await browserRuntimeView(page, 'preview:test-session')).toMatchObject({
+    loadCalls: ['https://github.com/'],
+  })
+})
+
+test('a guest initial document cannot consume the AI browser command result', async ({
+  page,
+}) => {
+  const requests = await openDesktopClient(page, { existingSession: true })
+  await expect.poll(() =>
+    page.evaluate(
+      () =>
+        (window as Window & { __eventSources?: unknown[] }).__eventSources?.length ?? 0,
+    ),
+  ).toBeGreaterThan(0)
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'browser_request',
+      id: 'browser-command-1',
+      disposition: 'reuse_agent_tab',
+      preview: { url: 'https://github.com', title: 'GitHub' },
+    })
+  })
+
+  const results = () =>
+    requests.filter(
+      (request) =>
+        request.path ===
+        '/api/sessions/test-session/browser/browser-command-1/result',
+    )
+  await expect.poll(() => results().length).toBe(1)
+  expect(results()[0]).toMatchObject({
+    method: 'POST',
+    body: {
+      status: 'committed',
+      requestedURL: 'https://github.com/',
+      committedURL: 'https://github.com/',
+    },
+  })
+  await page.waitForTimeout(300)
+  expect(results()).toHaveLength(1)
+})
+
+test('the first agent navigation of a session commits in a real webview guest', async ({
+  page,
+}) => {
+  const requests = await openDesktopClient(page, { existingSession: true })
+  await expect.poll(() =>
+    page.evaluate(
+      () =>
+        (window as Window & { __eventSources?: unknown[] }).__eventSources?.length ?? 0,
+    ),
+  ).toBeGreaterThan(0)
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'browser_request',
+      id: 'browser-command-1',
+      disposition: 'reuse_agent_tab',
+      preview: { url: 'https://github.com', title: 'GitHub' },
+    })
+  })
+
+  const surface = page.getByTestId('browser-surface')
+  await expect(surface).toHaveAttribute('data-status', 'ready')
+  await expect.poll(() =>
+    page.evaluate(() => {
+      const guest = document.querySelector('webview') as
+        | (HTMLElement & { getURL?: () => string })
+        | null
+      return guest?.getURL?.() ?? ''
+    }),
+  ).toBe('https://github.com/')
+
+  const results = () =>
+    requests.filter(
+      (request) =>
+        request.path ===
+        '/api/sessions/test-session/browser/browser-command-1/result',
+    )
+  await expect.poll(() => results().length).toBe(1)
+  expect(results()[0]).toMatchObject({
+    method: 'POST',
+    body: {
+      status: 'committed',
+      requestedURL: 'https://github.com/',
+      committedURL: 'https://github.com/',
+    },
   })
 })
 
@@ -1483,7 +1558,7 @@ test('AI browser restores and acknowledges a pending history command', async ({ 
   })
 
   await expect.poll(async () =>
-    (await nativeBrowserView(page, 'preview:test-session'))?.url,
+    (await browserRuntimeView(page, 'preview:test-session'))?.url,
   ).toBe('https://example.com/restored')
   await expect.poll(() =>
     requests.filter(
@@ -1555,7 +1630,7 @@ test('AI browser opens foreground and background tabs without replacing the Agen
     'GitHub',
   )
   await expect.poll(async () =>
-    (await nativeBrowserView(page, 'preview:test-session'))?.url,
+    (await browserRuntimeView(page, 'preview:test-session'))?.url,
   ).toBe('https://github.com/')
 
   await emitBrowserRequest(
@@ -1566,14 +1641,14 @@ test('AI browser opens foreground and background tabs without replacing the Agen
   )
   const foregroundTabID = 'preview:test-session:command:browser-foreground'
   await expect.poll(async () =>
-    (await nativeBrowserView(page, foregroundTabID))?.url,
+    (await browserRuntimeView(page, foregroundTabID))?.url,
   ).toBe('https://www.bilibili.com/')
   await expect(page.getByRole('tab', { name: 'Bilibili' })).toHaveAttribute(
     'aria-selected',
     'true',
   )
   await expect.poll(async () =>
-    (await nativeBrowserView(page, 'preview:test-session'))?.visible,
+    (await browserRuntimeView(page, 'preview:test-session'))?.visible,
   ).toBe(false)
 
   await emitBrowserRequest(
@@ -1584,15 +1659,15 @@ test('AI browser opens foreground and background tabs without replacing the Agen
   )
   const backgroundTabID = 'preview:test-session:command:browser-background'
   await expect.poll(async () =>
-    (await nativeBrowserView(page, backgroundTabID))?.url,
+    (await browserRuntimeView(page, backgroundTabID))?.url,
   ).toBe('https://www.google.com/')
   await expect(page.getByRole('tab', { name: 'Bilibili' })).toHaveAttribute(
     'aria-selected',
     'true',
   )
-  expect(await nativeBrowserView(page, backgroundTabID)).toMatchObject({ visible: false })
-  expect(await nativeBrowserView(page, foregroundTabID)).toMatchObject({ visible: true })
-  expect(await nativeBrowserView(page, 'preview:test-session')).toMatchObject({
+  expect(await browserRuntimeView(page, backgroundTabID)).toMatchObject({ visible: false })
+  expect(await browserRuntimeView(page, foregroundTabID)).toMatchObject({ visible: true })
+  expect(await browserRuntimeView(page, 'preview:test-session')).toMatchObject({
     url: 'https://github.com/',
   })
 
@@ -1608,6 +1683,7 @@ test('AI browser inspection reads only the stable Agent tab and reports once', a
   page,
 }) => {
   const requests = await openDesktopClient(page, { existingSession: true })
+  await setGuestControls(page, { pageTitle: 'github.com' })
   await expect.poll(() =>
     page.evaluate(
       () =>
@@ -1625,7 +1701,7 @@ test('AI browser inspection reads only the stable Agent tab and reports once', a
     })
   })
   await expect.poll(async () =>
-    (await nativeBrowserView(page, 'preview:test-session'))?.url,
+    (await browserRuntimeView(page, 'preview:test-session'))?.url,
   ).toBe('https://github.com/')
 
   await page.evaluate(() => {
@@ -1638,7 +1714,7 @@ test('AI browser inspection reads only the stable Agent tab and reports once', a
     })
   })
   await expect.poll(async () =>
-    (await nativeBrowserView(
+    (await browserRuntimeView(
       page,
       'preview:test-session:command:browser-command-tab',
     ))?.url,
@@ -1669,8 +1745,15 @@ test('AI browser inspection reads only the stable Agent tab and reports once', a
   })
   expect(
     await page.evaluate(() =>
-      (window as Window & { __browserInspectionTabIDs?: string[] })
-        .__browserInspectionTabIDs,
+      Array.from(document.querySelectorAll('[data-browser-tab-id]'))
+        .map((host) => ({
+          tabID: host.getAttribute('data-browser-tab-id'),
+          inspectCalls:
+            (host.querySelector('webview') as (HTMLElement & { inspectCalls?: number }) | null)
+              ?.inspectCalls ?? 0,
+        }))
+        .filter((entry) => entry.inspectCalls > 0)
+        .map((entry) => entry.tabID),
     ),
   ).toEqual(['preview:test-session'])
 })
@@ -1705,7 +1788,7 @@ test('AI browser inspection fails promptly without reopening a closed Agent tab'
     },
   })
   await expect(page.getByTestId('browser-view')).toHaveCount(0)
-  expect(await nativeBrowserView(page, 'preview:test-session')).toBeUndefined()
+  expect(await browserRuntimeView(page, 'preview:test-session')).toBeUndefined()
 })
 
 test('browser tools use page-focused labels and keep inspection text collapsed', async ({
@@ -1788,7 +1871,7 @@ test('browser tools use page-focused labels and keep inspection text collapsed',
   await expect(page.getByText('https://github.com/', { exact: true })).toBeVisible()
 })
 
-test('AI browser keeps the latest revision across stale state and viewport changes', async ({
+test('AI browser applies the latest agent navigation and never renavigates on hide', async ({
   page,
 }) => {
   await openDesktopClient(page, { existingSession: true })
@@ -1810,7 +1893,7 @@ test('AI browser keeps the latest revision across stale state and viewport chang
     })
   })
   await expect.poll(async () =>
-    (await nativeBrowserView(page, 'preview:test-session'))?.url,
+    (await browserRuntimeView(page, 'preview:test-session'))?.url,
   ).toBe('https://github.com/')
 
   await page.evaluate(() => {
@@ -1824,29 +1907,13 @@ test('AI browser keeps the latest revision across stale state and viewport chang
     })
   })
   await expect.poll(async () =>
-    (await nativeBrowserView(page, 'preview:test-session'))?.url,
+    (await browserRuntimeView(page, 'preview:test-session'))?.url,
   ).toBe('https://www.bilibili.com/')
-  const navigated = await nativeBrowserView(page, 'preview:test-session')
-  expect(navigated).toMatchObject({ navigation: 1, navigateCalls: 2 })
-
-  await page.evaluate(() => {
-    const emit = (
-      window as Window & {
-        __emitBrowserState?: (state: NativeBrowserState) => void
-      }
-    ).__emitBrowserState
-    emit?.({
-      tabID: 'preview:test-session',
-      appliedRevision: 0,
-      requestedURL: 'https://github.com/',
-      committedURL: 'https://github.com/',
-      title: 'GitHub',
-      status: 'ready',
-      canGoBack: false,
-      canGoForward: false,
-    })
-  })
-
+  const navigated = await browserRuntimeView(page, 'preview:test-session')
+  expect(navigated?.loadCalls).toEqual([
+    'https://github.com/',
+    'https://www.bilibili.com/',
+  ])
   await expect(page.getByRole('textbox', { name: 'Address' })).toHaveValue(
     'https://www.bilibili.com/',
   )
@@ -1855,20 +1922,18 @@ test('AI browser keeps the latest revision across stale state and viewport chang
     'true',
   )
 
-  const navigateCalls = navigated?.navigateCalls
-  const viewportCalls = navigated?.viewportCalls ?? 0
   const toggle = page.getByTestId('workbench-panel-toggle')
   await toggle.click()
   await expect.poll(async () =>
-    (await nativeBrowserView(page, 'preview:test-session'))?.visible,
+    (await browserRuntimeView(page, 'preview:test-session'))?.visible,
   ).toBe(false)
   await toggle.click()
   await expect.poll(async () =>
-    (await nativeBrowserView(page, 'preview:test-session'))?.visible,
+    (await browserRuntimeView(page, 'preview:test-session'))?.visible,
   ).toBe(true)
-  const restored = await nativeBrowserView(page, 'preview:test-session')
-  expect(restored?.navigateCalls).toBe(navigateCalls)
-  expect(restored?.viewportCalls).toBeGreaterThan(viewportCalls)
+  expect((await browserRuntimeView(page, 'preview:test-session'))?.loadCalls).toEqual(
+    navigated?.loadCalls,
+  )
 })
 
 test('streaming tool input shows write progress without duplicating the tool row', async ({
@@ -1989,16 +2054,12 @@ test('AI preview opens workspace HTML directly without starting or probing a ser
   })
 
   await expect.poll(async () =>
-    (await nativeBrowserView(page, 'preview:test-session'))?.url.endsWith(
+    (await browserRuntimeView(page, 'preview:test-session'))?.url.endsWith(
       '/api/sessions/test-session/previews/test-grant/index.html',
     ),
   ).toBe(true)
-  const previewView = await nativeBrowserView(page, 'preview:test-session')
-  expect(previewView).toMatchObject({
-    navigation: 0,
-    workspacePreview: true,
-    visible: true,
-  })
+  const previewView = await browserRuntimeView(page, 'preview:test-session')
+  expect(previewView).toMatchObject({ visible: true })
   await expect(page.getByRole('textbox', { name: 'Address' })).toHaveValue(
     '/tmp/test-session/web/index.html',
   )
@@ -2035,7 +2096,7 @@ test('AI preview opens workspace HTML directly without starting or probing a ser
     })
   })
   await expect.poll(async () =>
-    (await nativeBrowserView(page, 'preview:test-session'))?.navigation,
+    (await browserRuntimeView(page, 'preview:test-session'))?.reloadCalls,
   ).toBe(1)
 })
 
@@ -2050,7 +2111,7 @@ test('Browser replaces a failed local preview probe with a retry state', async (
   await address.press('Enter')
 
   await expect(page.getByRole('alert')).toContainText('Page unavailable')
-  expect(await nativeBrowserView(page, 'tab-1')).toBeUndefined()
+  expect((await browserRuntimeView(page, 'tab-1'))?.loadCalls).toEqual([])
   await expect(page.getByRole('alert')).toContainText(
     'Check that the local server is running, then try again.',
   )

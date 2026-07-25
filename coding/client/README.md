@@ -30,11 +30,11 @@ Open `http://localhost:5173`.
 
 Set `CODING_API_PROXY` when the local API uses a different address.
 
-The right-side Browser has no web iframe fallback. It requires the Electron
-preload bridge and renders public sites, localhost apps and workspace HTML in a
-sandboxed `WebContentsView`. Use `bun run dev` from `coding/desktop` when working
-on that feature; standalone Vite mode remains useful for the rest of the React
-client.
+The right-side Browser has no web iframe fallback. In Electron it renders public
+sites, localhost apps, and workspace HTML with `<webview>` elements managed by a
+renderer-side registry. Use `bun run dev` from `coding/desktop` when working on
+that feature; standalone Vite mode uses a test bridge and remains useful for the
+rest of the React client.
 
 Run the desktop-shell UI regression tests with a locally installed Chrome:
 

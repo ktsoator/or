@@ -99,6 +99,15 @@ function replaceAt(items: Item[], index: number, next: Item): Item[] {
   return copy
 }
 
+function hasOnlyPreparingToolsAfter(items: Item[], index: number): boolean {
+  return (
+    index < items.length - 1 &&
+    items
+      .slice(index + 1)
+      .every((item) => item.kind === 'tool' && item.status === 'preparing')
+  )
+}
+
 export function threadsReducer(state: ThreadsState, action: ThreadAction): ThreadsState {
   if (action.t === 'forget') {
     const next = { ...state }
@@ -716,7 +725,11 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
             items,
             (item) => item.kind === 'assistant' && item.markdown === ev.text,
           )
-          if (matchingAssistant > runIndex && matchingAssistant === items.length - 1) {
+          if (
+            matchingAssistant > runIndex &&
+            (matchingAssistant === items.length - 1 ||
+              hasOnlyPreparingToolsAfter(items, matchingAssistant))
+          ) {
             idx = matchingAssistant
           }
         }

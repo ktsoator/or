@@ -1,5 +1,4 @@
 import {
-  useCallback,
   useEffect,
   useReducer,
   useRef,
@@ -22,7 +21,6 @@ import {
   X,
 } from 'lucide-react'
 import { DropdownMenu } from 'radix-ui'
-import { isAPIError } from '@/api'
 import type {
   BrowserCommandState,
   ModelOption,
@@ -45,16 +43,17 @@ import {
   workspacePreviewURL,
 } from '@/lib/browser'
 import {
-  closeNativeBrowser,
-  goBackNativeBrowser,
-  goForwardNativeBrowser,
-  hasNativeBrowser,
+  closeBrowser,
+  goBackBrowser,
+  goForwardBrowser,
+  hasBrowserRuntime,
   openExternalURL,
-  type NativeBrowserState,
+  type BrowserRuntimeState,
 } from '@/lib/desktop'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 import { sessionCommands } from '@/sessionCommands'
+import { useCommandResultReporter } from '@/useCommandResultReporter'
 import { BrowserSurface } from './BrowserSurface'
 import { ConversationView } from './ConversationView'
 
@@ -108,7 +107,6 @@ export function BrowserView({
   onCreateConversation,
   onConfigureModel,
   maximized,
-  open,
   onToggleMaximized,
   toggleControl,
 }: {
@@ -126,7 +124,6 @@ export function BrowserView({
   onCreateConversation: () => void
   onConfigureModel: () => void
   maximized: boolean
-  open: boolean
   onToggleMaximized: () => void
   toggleControl?: ReactNode
 }) {
@@ -170,8 +167,6 @@ export function BrowserView({
     : undefined
   const previewKeyRef = useRef(previewKey)
   const processedCommandsRef = useRef(new Set<string>())
-  const reportingCommandsRef = useRef(new Set<string>())
-  const reportedCommandsRef = useRef(new Set<string>())
   const previousConversationTabIDRef = useRef<string | undefined>(undefined)
   const conversationTabID = conversation ? `conversation:${conversation.session.id}` : undefined
   const conversationActive = activeTabID === conversationTabID
@@ -184,40 +179,13 @@ export function BrowserView({
       ? workspaceFileURL(activeDesired.workspacePath)
       : activeNavigationURL
     : ''
-  const nativeBrowser = hasNativeBrowser()
+  const browserRuntime = hasBrowserRuntime()
 
-  const reportBrowserResult = useCallback(async (
-    commandSessionID: string | undefined,
-    commandID: string,
-    result: Parameters<typeof sessionCommands.reportBrowserResult>[2],
-  ): Promise<void> => {
-    const reportKey = `${commandSessionID ?? 'unknown'}:${commandID}`
-    if (
-      !commandSessionID ||
-      reportingCommandsRef.current.has(reportKey) ||
-      reportedCommandsRef.current.has(reportKey)
-    ) return
-    reportingCommandsRef.current.add(reportKey)
-    try {
-      for (const delay of [0, 250, 1000]) {
-        if (delay > 0) await new Promise((resolve) => window.setTimeout(resolve, delay))
-        try {
-          await sessionCommands.reportBrowserResult(commandSessionID, commandID, result)
-          reportedCommandsRef.current.add(reportKey)
-          onBrowserCommandHandled(commandSessionID, commandID)
-          return
-        } catch (error) {
-          if (isAPIError(error, 'browser_command_not_found')) {
-            reportedCommandsRef.current.add(reportKey)
-            onBrowserCommandHandled(commandSessionID, commandID)
-            return
-          }
-        }
-      }
-    } finally {
-      reportingCommandsRef.current.delete(reportKey)
-    }
-  }, [onBrowserCommandHandled])
+  const reportBrowserResult = useCommandResultReporter({
+    send: sessionCommands.reportBrowserResult,
+    resolvedCode: 'browser_command_not_found',
+    onHandled: onBrowserCommandHandled,
+  })
 
   useEffect(() => {
     const previous = previousConversationTabIDRef.current
@@ -343,7 +311,7 @@ export function BrowserView({
         committedURL: absoluteHTTPURL(closing.observed.committedURL),
       })
     }
-    void closeNativeBrowser(tabID)
+    void closeBrowser(tabID)
     if (tabs.length === 1 && !conversation) {
       onCloseTab()
       return
@@ -495,8 +463,8 @@ export function BrowserView({
               type="button"
               title={t('preview.back')}
               aria-label={t('preview.back')}
-              disabled={!nativeBrowser || !activeObserved?.canGoBack}
-              onClick={() => void goBackNativeBrowser(activeTab.id)}
+              disabled={!browserRuntime || !activeObserved?.canGoBack}
+              onClick={() => void goBackBrowser(activeTab.id)}
             >
               <ArrowLeft className="size-4" aria-hidden="true" />
             </button>
@@ -505,8 +473,8 @@ export function BrowserView({
               type="button"
               title={t('preview.forward')}
               aria-label={t('preview.forward')}
-              disabled={!nativeBrowser || !activeObserved?.canGoForward}
-              onClick={() => void goForwardNativeBrowser(activeTab.id)}
+              disabled={!browserRuntime || !activeObserved?.canGoForward}
+              onClick={() => void goForwardBrowser(activeTab.id)}
             >
               <ArrowRight className="size-4" aria-hidden="true" />
             </button>
@@ -515,7 +483,7 @@ export function BrowserView({
               type="button"
               title={t('preview.refresh')}
               aria-label={t('preview.refresh')}
-              disabled={!nativeBrowser || !activeDesired?.requestedURL}
+              disabled={!browserRuntime || !activeDesired?.requestedURL}
               onClick={reload}
             >
               <RefreshCw
@@ -532,6 +500,7 @@ export function BrowserView({
                   'h-7 w-full rounded-lg border border-stone-200 bg-stone-50 px-2.5 font-mono text-[0.75rem] text-stone-700 outline-none placeholder:text-center placeholder:font-sans placeholder:text-stone-400 focus:border-stone-300 focus:bg-white focus:placeholder:text-left',
                   activeTab.invalidAddress && 'border-red-300 bg-red-50/50',
                 )}
+                data-testid="browser-address"
                 value={activeTab.addressDraft}
                 aria-label={t('preview.address')}
                 placeholder={t('preview.enterURL')}
@@ -577,7 +546,6 @@ export function BrowserView({
                     tabID={tab.id}
                     navigation={desired?.revision ?? 0}
                     url={desired?.requestedURL ?? ''}
-                    visible={open && active && !conversationActive}
                     workspaceFile={desired?.kind === 'workspace-preview'}
                     onResolveURL={(url) => {
                       if (!desired) return
@@ -589,7 +557,7 @@ export function BrowserView({
                       })
                     }}
                     onRetry={() => dispatchTabs({ t: 'reload', tabID: tab.id })}
-                    onState={(state: NativeBrowserState) => {
+                    onState={(state: BrowserRuntimeState) => {
                       dispatchTabs({
                         t: 'native_state_received',
                         tabID: tab.id,
@@ -601,15 +569,20 @@ export function BrowserView({
                         canGoForward: state.canGoForward,
                         error: state.error,
                       })
+                      const committedURL = absoluteHTTPURL(state.committedURL)
                       if (
                         desired?.commandID &&
                         state.appliedRevision === desired.revision &&
-                        state.status !== 'navigating'
+                        state.status !== 'navigating' &&
+                        // A ready page without an HTTP(S) URL is not this
+                        // command's landing page; reporting it would be
+                        // rejected and would consume the command's only result.
+                        (state.status !== 'ready' || committedURL)
                       ) {
                         void reportBrowserResult(tab.sessionID, desired.commandID, {
                           status: state.status === 'ready' ? 'committed' : 'failed',
                           requestedURL: absoluteHTTPURL(state.requestedURL),
-                          committedURL: absoluteHTTPURL(state.committedURL),
+                          committedURL,
                           title: state.title || undefined,
                           error: state.error,
                         })
@@ -650,6 +623,7 @@ export function WorkbenchHeaderActions({
         <DropdownMenu.Trigger asChild>
           <button
             className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-md text-stone-500 outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-900 focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(237,237,237)] data-[state=open]:text-stone-900"
+            data-testid="workbench-add-view"
             type="button"
             title={t('workbench.addView')}
             aria-label={t('workbench.addView')}

@@ -47,12 +47,16 @@ sidecar serves both the React build and `/api`, so browser and desktop clients
 keep the same relative HTTP/SSE contract. Every request requires a per-launch
 HttpOnly session cookie installed by Electron before the first navigation.
 
-The right-side Browser is backed entirely by Electron `WebContentsView`; there
-is no iframe fallback. Public HTTP(S) pages and localhost apps use a persistent
-browser session. Workspace HTML previews use an isolated in-memory session whose
-desktop cookie and Coding API access are restricted to that session's preview
-route. All browser views run sandboxed without Node.js integration, and browser
-permissions are denied by default.
+The right-side Browser is rendered with Electron `<webview>` elements. React
+owns their layout and tab lifecycle, so menus and dialogs can compose above a
+page without hiding a separate native child view. A renderer-side registry owns
+navigation revisions, history state, failure reporting, and bounded read-only
+inspection.
+
+Public HTTP(S), localhost, and workspace preview pages currently share the
+desktop session. Dedicated webview partitions, workspace request isolation,
+permission policy, and attach-time validation remain required before treating
+untrusted workspace content as isolated.
 
 Run the desktop app in development:
 
