@@ -61,10 +61,14 @@ const (
 type wireBrowserResultStatus string
 
 const (
+	//lint:ignore U1000 This constant is consumed by genwire when it builds the TypeScript union.
 	wireBrowserCommitted wireBrowserResultStatus = "committed"
-	wireBrowserFailed    wireBrowserResultStatus = "failed"
+	//lint:ignore U1000 This constant is consumed by genwire when it builds the TypeScript union.
+	wireBrowserFailed wireBrowserResultStatus = "failed"
+	//lint:ignore U1000 This constant is consumed by genwire when it builds the TypeScript union.
 	wireBrowserCancelled wireBrowserResultStatus = "cancelled"
-	wireBrowserTimeout   wireBrowserResultStatus = "timeout"
+	//lint:ignore U1000 This constant is consumed by genwire when it builds the TypeScript union.
+	wireBrowserTimeout wireBrowserResultStatus = "timeout"
 )
 
 type wireBrowserInspectionStatus string
