@@ -1,16 +1,17 @@
 # Browser Controller Design
 
-Status: Phase 1 and Phase 2 implemented, including Agent tab dispositions;
-Phase 3 read-only text inspection implemented, remaining capabilities proposed
+Status: Phase 1 and Phase 2 implemented, including tab dispositions and
+temporary control leases; Phase 3 session-tab discovery and read-only text
+inspection implemented, remaining capabilities proposed
 
 ## Objective
 
 Turn the right-side Browser from a display-only preview surface into a reliable,
-session-aware browser controller. Phase 1 makes navigation and tab ownership
+session-aware browser controller. Phase 1 makes navigation and tab selection
 deterministic. Phase 2 adds an acknowledgement path so an agent can distinguish
 a requested navigation from one that actually committed in Electron. The first
-Phase 3 capability adds explicit, bounded, read-only observation of the stable
-Agent tab.
+Phase 3 capabilities list the current session's open tabs and add explicit,
+bounded, read-only observation of a selected tab.
 
 This design is independently implemented on Electron APIs. It borrows general
 product patterns from mature browser automation systems, but does not reuse
@@ -31,24 +32,39 @@ This has three structural causes:
 
 ## User Semantics
 
-Each coding session has one deterministic reusable Agent tab:
+Each coding session has its own open-tab list. A tab ID is stable until that tab
+is closed, but is local to the session and does not record whether the user or
+the Agent originally created it. `tabs_context` exposes this as two views:
+
+```text
+openTabs       -> every open tab in the current session
+controlledTabs -> temporary Agent capabilities attached to those tabs
+selected       -> the Agent-selected controlled tab, when one exists
+```
+
+Control is represented by capability leases (`read`, `navigate`, and future
+`interact`), not permanent Agent/user ownership. A navigation submitted through
+the Browser toolbar releases control for that tab. Passing an explicit `tabID`
+to `inspect_browser` temporarily attaches `read` to any open tab in the current
+session and releases that lease after the inspection finishes.
+
+For navigation compatibility, each coding session can still use one
+deterministic fallback tab:
 
 ```text
 preview:<session-id>
 ```
 
-The default agent action reuses that tab. Its existing `<webview>` stays alive
-so web-to-web navigation preserves back and forward history.
+The default agent action first reuses the Agent-selected tab when it has a
+`navigate` lease, then falls back to the deterministic tab. It does not replace
+an uncontrolled open tab.
 
 ```text
-"Open GitHub"                 -> reuse the session agent tab
+"Open GitHub"                 -> reuse the selected controlled tab or fallback tab
 "Now open Bilibili"          -> reuse the same tab
-"Open Bilibili in a new tab" -> create and select a command-owned Agent tab
-"Open Google in background"  -> create a command-owned Agent tab without selecting it
+"Open Bilibili in a new tab" -> create and select a command tab
+"Open Google in background"  -> create a command tab without selecting it
 ```
-
-Tabs created by the user with the plus button are user-owned. Agent commands
-must never replace a user-owned tab.
 
 The supported dispositions are:
 
@@ -82,11 +98,13 @@ without creating duplicates.
 - Own each `<webview>`, its DOM layout, and the browser runtime registry.
 - Namespace runtime registry entries by workspace and local tab ID while keeping
   the UI and Agent protocol IDs session-local.
-- Route an agent request to its deterministic session tab.
+- Route a default navigation to the selected tab with `navigate` control or to a
+  deterministic fallback tab.
 - Handle inspection requests independently of whether `BrowserView` is mounted,
-  waiting for a restored reusable-tab navigation before observing it.
+  temporarily attaching `read` to an explicit session tab and releasing it when
+  the request finishes.
 - Keep every pending browser command until its result is acknowledged and route
-  new-tab commands to stable command-owned tabs.
+  new-tab commands to stable session-local tabs.
 - Keep desired command state separate from observed page state.
 - Ignore stale Electron events.
 - Resolve localhost checks before issuing a navigation command.
@@ -110,7 +128,6 @@ Extract the tab model and reducer from `BrowserView.tsx` into
 `browserTabs.ts`.
 
 ```ts
-type BrowserTabOwner = 'agent' | 'user'
 type BrowserTargetKind = 'web' | 'workspace-preview'
 
 type DesiredNavigation = {
@@ -132,7 +149,6 @@ type ObservedNavigation = {
 
 type BrowserTab = {
   id: string
-  owner: BrowserTabOwner
   sessionID?: string
   addressDraft: string
   desired?: DesiredNavigation
@@ -158,20 +174,34 @@ current desired revision.
 
 ### Browser runtime bridge
 
-The renderer registry is the only browser runtime. The desktop shell exposes
-`browserMode: 'webview'` and nothing else, so tests drive the shipped bridge
-through a stand-in `<webview>` guest rather than a second adapter:
+The renderer registry is the only browser runtime. Session-local `BrowserTab.id`
+values may repeat across sessions, so they are converted to a branded,
+workspace-scoped runtime ID before any registry operation:
+
+```text
+browserRuntimeTabID(workspaceID, tabID)
+  -> workspace:<encoded-workspace-id>:tab:<encoded-local-tab-id>
+```
+
+The local ID remains the value exposed by the UI and Agent wire protocol. The
+workspace-scoped ID is used only by `register`, `navigate`, `inspect`, `close`,
+`goBack`, and `goForward`, preventing two sessions with a local `tab-1` from
+sharing a runtime entry.
+
+The desktop shell exposes `browserMode: 'webview'` and nothing else, so tests
+drive the shipped bridge through a stand-in `<webview>` guest rather than a
+second adapter:
 
 ```ts
 type BrowserNavigateInput = {
-  tabID: string
+  tabID: BrowserRuntimeTabID
   revision: number
   url: string
   kind: 'web' | 'workspace-preview'
 }
 
 type BrowserRuntimeState = {
-  tabID: string
+  tabID: BrowserRuntimeTabID
   appliedRevision: number
   requestedURL: string
   committedURL: string
@@ -184,9 +214,10 @@ type BrowserRuntimeState = {
 
 type BrowserRuntimeBridge = {
   navigate(input: BrowserNavigateInput): Promise<BrowserRuntimeState>
-  close(tabID: string): Promise<void>
-  goBack(tabID: string): Promise<void>
-  goForward(tabID: string): Promise<void>
+  close(tabID: BrowserRuntimeTabID): Promise<void>
+  goBack(tabID: BrowserRuntimeTabID): Promise<void>
+  goForward(tabID: BrowserRuntimeTabID): Promise<void>
+  inspect(tabID: BrowserRuntimeTabID): Promise<BrowserInspection>
   onState(listener: (state: BrowserRuntimeState) => void): () => void
 }
 ```
@@ -200,7 +231,6 @@ The renderer registry keeps requested and committed state separately:
 
 ```ts
 type BrowserEntry = {
-  tabID: string
   element: BrowserWebviewElement
   operation: number
   appliedRevision: number
@@ -322,8 +352,10 @@ commands. `reuse_agent_tab` supersedes an unfinished navigation in the same
 session tab and reports the older command as cancelled. Foreground and
 background requests receive independent tabs and can finish concurrently.
 
-Every tab keeps its browser controller and webview mounted. Only the active tab
-is visible; inactive tabs can still navigate and report terminal state.
+Every tab in the currently rendered session workspace keeps its browser
+controller and webview mounted. Only the active tab is visible; inactive tabs
+can still navigate and report terminal state. Switching session workspaces
+retains tab metadata but remounts their webviews from the latest committed URL.
 Closing a tab with an unfinished Agent command reports `cancelled`.
 
 A command has exactly one result, so the renderer only reports `committed` for a
@@ -334,15 +366,23 @@ timeout even though the page loaded.
 
 ## Phase 3: Explicit Browser Capabilities
 
-The first implemented capability is `inspect_browser`. It returns the stable
-Agent tab's final HTTP(S) URL, title, page status, applied revision, and at most
-12,000 characters of rendered text.
+The implemented capabilities are `tabs_context` and `inspect_browser`.
+`tabs_context` returns bounded metadata for every open tab in the current
+session, the capabilities currently leased to each controlled tab, and the
+Agent-selected controlled tab. It does not persist tab creation source.
+
+`inspect_browser` returns one open tab's final HTTP(S) URL, title, page status,
+applied revision, and at most 12,000 characters of rendered text. When an
+explicit session-local `tabID` is supplied, the renderer attaches a request-level
+`read` lease to that tab and releases it in a `finally` path after observation.
 
 ```text
 inspect_browser tool
   -> BrowserBroker broadcasts browser_inspect_request
-  -> Renderer inspection controller waits for pending Agent navigation
-  -> The stable Agent webview runs one fixed extractor
+  -> Renderer resolves the explicit tabID or selected controlled tab
+  -> Renderer temporarily attaches read control when needed
+  -> The workspace-scoped runtime entry runs one fixed extractor
+  -> Renderer releases the inspection lease
   -> React POSTs one terminal result
   -> BrowserBroker returns the observation to the tool
 ```
@@ -359,10 +399,10 @@ context cancellation, timeout, transport replacement, duplicates, and late
 results use the same broker lifecycle rules as navigation commands.
 
 The fixed extractor excludes form controls, editable regions, script and style
-content, hidden/inert/ARIA-hidden content, and non-rendered text. The renderer
-registry accepts only `preview:<session-id>` IDs, so user tabs and command-owned
-new tabs cannot be inspected. It rejects the result if the tab or revision
-changes while extraction is running.
+content, hidden/inert/ARIA-hidden content, and non-rendered text. An explicit
+`tabID` must resolve to an open tab in the requesting session; tabs in other
+sessions are neither listed nor attachable. The runtime rejects the result if
+the tab or revision changes while extraction is running.
 
 The page text is untrusted external data. The tool description explicitly tells
 the model not to interpret instructions in the page as system or tool
@@ -378,8 +418,7 @@ Remaining capabilities are proposed and must be added separately:
 - `dev`: console errors and failed network requests for local app testing.
 
 These capabilities use explicit tools. They do not automatically expose page
-content, cookies, local storage, passwords, browsing history, or user-owned tabs
-to the model.
+content, cookies, local storage, passwords, or browsing history to the model.
 
 ## Security
 
@@ -389,8 +428,9 @@ to the model.
 - Browser commands accept only HTTP(S) URLs after product validation.
 - Browser inspection runs fixed product code in the guest main world and checks
   that the applied revision remains unchanged before returning data.
-- User-owned tabs require an explicit user request before agent control is
-  added in a future phase.
+- `tabs_context` exposes only bounded metadata from the requesting session.
+- Explicit inspection may attach only a temporary `read` lease to an open tab
+  in that session; the lease is released after completion or failure.
 - Sensitive form submission, uploads, purchases, messages, permission changes,
   CAPTCHA handling, and authentication actions require task-specific authority.
 
@@ -408,7 +448,8 @@ execution world for inspection.
 - Three rapid commands leave only revision 3 authoritative.
 - A redirect stores requested and committed URLs separately.
 - Closing a tab drops later state events.
-- Agent commands never mutate a user-owned tab.
+- Default Agent navigation never mutates an uncontrolled open tab.
+- Two sessions may both expose `tab-1` without sharing runtime state.
 
 Renderer tests install a stand-in `<webview>` guest — one that attaches
 asynchronously and commits its own `about:blank` document first — so they
@@ -422,6 +463,8 @@ defects that live in that seam.
 - Explicit foreground disposition creates and selects a second tab.
 - Explicit background disposition creates a hidden tab without changing the
   selected tab.
+- `tabs_context` lists all session-local open tabs separately from temporary
+  controlled-tab capabilities and does not expose tab creation source.
 - Multiple pending commands in a history snapshot restore independently.
 - A delayed localhost probe cannot replace a newer public target.
 - Resize and hide/show never call navigate.
@@ -444,10 +487,14 @@ defects that live in that seam.
   inconsistent completed-page state, and enforces the text limit again in Go.
 - Rendered headings and button text are returned while form values, editable
   text, script content, and hidden text are excluded.
-- Inspection still reads the stable Agent tab when a command-owned new tab is
-  active, and duplicate wire events produce exactly one result POST.
-- Inspection handling is independent of `BrowserView`; a closed or absent Agent
-  tab returns a prompt failure without reopening the workbench or navigating.
+- An explicit tab ID temporarily receives `read` control, can be inspected, and
+  loses that request lease afterward; duplicate wire events produce exactly one
+  result POST.
+- Inspection handling is independent of `BrowserView`; an unknown explicit tab
+  ID or unavailable runtime returns a prompt failure without reopening the
+  workbench or navigating.
+- Inspection uses a workspace-scoped runtime ID, so equal local tab IDs in two
+  sessions cannot read each other's pages.
 
 ### End-to-end sequence
 
@@ -471,13 +518,16 @@ none can overwrite the current tab.
    `reuse_agent_tab` for `open_preview`. Completed.
 7. Add `BrowserBroker`, the result endpoint, history restoration, and broker
    tests. Completed.
-8. Add bounded read-only text inspection for the stable Agent tab. Completed.
-9. Add optional screenshot, structured inspection, interaction, and developer
+8. Add session-local tab discovery plus bounded read-only text inspection with
+   temporary explicit-tab read leases. Completed.
+9. Scope browser runtime IDs by workspace and local tab ID. Completed.
+10. Add optional screenshot, structured inspection, interaction, and developer
    capabilities independently.
 
 Agent foreground/background tab dispositions and multi-command reconnect
 recovery were completed as the final Phase 2 delivery. Phase 3 now includes
-read-only page URL, title, state, and visible text through `inspect_browser`.
+session-local tab metadata through `tabs_context` plus read-only page URL,
+title, state, and visible text through `inspect_browser`.
 
 Screenshot, structured page inspection, input, and developer diagnostics remain
 separate future capabilities. Navigation acknowledgement alone does not

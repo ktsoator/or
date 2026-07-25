@@ -13,7 +13,7 @@ import (
 const MaxBrowserInspectionTextRunes = 12_000
 
 type inspectBrowserArgs struct {
-	TabID string `json:"tabID,omitempty" jsonschema:"description=Stable tab ID returned by tabs_context. Omit it only to inspect the selected Agent-controlled tab."`
+	TabID string `json:"tabID,omitempty" jsonschema:"description=Stable session-local tab ID returned by tabs_context. An explicit ID temporarily attaches read access to that open tab for this inspection; omit it to inspect the selected controlled tab."`
 }
 
 type BrowserInspectionStatus string
@@ -33,8 +33,8 @@ const (
 	BrowserPageFailed     BrowserPageStatus = "failed"
 )
 
-// BrowserInspectionResult is a bounded, read-only observation of an
-// Agent-controlled browser tab. It intentionally contains no DOM, storage,
+// BrowserInspectionResult is a bounded, read-only observation of one open tab
+// in the requesting session. It intentionally contains no DOM, storage,
 // cookies, form values, or executable page code.
 type BrowserInspectionResult struct {
 	ID          string
@@ -52,8 +52,9 @@ type BrowserInspector interface {
 	InspectBrowser(context.Context, string) (BrowserInspectionResult, error)
 }
 
-// InspectBrowser returns a product tool that observes an explicit or selected
-// Agent-controlled tab without granting control over user-owned tabs.
+// InspectBrowser returns a product tool that observes an explicit session-local
+// tab or the selected controlled tab. The renderer may attach a request-scoped
+// read lease to an explicit open tab and releases that lease after inspection.
 func InspectBrowser(inspectors ...BrowserInspector) Tool {
 	var inspector BrowserInspector
 	if len(inspectors) > 0 {

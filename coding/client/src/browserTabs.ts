@@ -1,6 +1,6 @@
-export type BrowserTargetKind = 'web' | 'workspace-preview'
+type BrowserTargetKind = 'web' | 'workspace-preview'
 
-export type BrowserNavigationSource = 'agent' | 'address' | 'reload'
+type BrowserNavigationSource = 'agent' | 'address' | 'reload'
 
 export type BrowserNavigationTarget = {
   requestedURL: string
@@ -11,7 +11,7 @@ export type BrowserNavigationTarget = {
   commandID?: string
 }
 
-export type DesiredNavigation = BrowserNavigationTarget & {
+type DesiredNavigation = BrowserNavigationTarget & {
   revision: number
   source: BrowserNavigationSource
 }
@@ -27,8 +27,8 @@ export type ObservedNavigation = {
 }
 
 export type BrowserTab = {
-  // Stable workspace-scoped runtime identity. It is never an array index and
-  // remains unchanged until the tab is closed.
+  // Stable session-local identity exposed to the UI and Agent tools. Runtime
+  // registry keys add the workspace namespace separately.
   id: string
   sessionID?: string
   addressDraft: string

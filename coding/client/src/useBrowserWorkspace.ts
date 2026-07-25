@@ -186,10 +186,8 @@ export function useBrowserWorkspace({
   }, [activeExternalURL])
 
   return {
-    state,
     tabs: state.tabs,
     workspaceID,
-    activeItemID: state.activeItemID,
     conversationTabID: state.conversationTabID,
     conversationActive,
     activeTab,
