@@ -51,10 +51,3 @@ export function isBrowserInspectionText(value: unknown): value is BrowserInspect
   const result = value as { visibleText?: unknown; truncated?: unknown }
   return typeof result.visibleText === 'string' && typeof result.truncated === 'boolean'
 }
-
-export function isAgentBrowserTabID(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    /^preview:[^:]+(?::command:[^:]+)?$/.test(value)
-  )
-}

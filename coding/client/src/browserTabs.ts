@@ -1,7 +1,3 @@
-import type { BrowserDisposition } from './generated/wire'
-
-export type BrowserTabOwner = 'agent' | 'user'
-
 export type BrowserTargetKind = 'web' | 'workspace-preview'
 
 export type BrowserNavigationSource = 'agent' | 'address' | 'reload'
@@ -31,8 +27,9 @@ export type ObservedNavigation = {
 }
 
 export type BrowserTab = {
+  // Stable workspace-scoped runtime identity. It is never an array index and
+  // remains unchanged until the tab is closed.
   id: string
-  owner: BrowserTabOwner
   sessionID?: string
   addressDraft: string
   desired?: DesiredNavigation
@@ -40,11 +37,8 @@ export type BrowserTab = {
   invalidAddress: boolean
 }
 
-export type ActiveBrowserTab = Pick<BrowserTab, 'id' | 'owner' | 'sessionID'>
-
 export type BrowserTabsAction =
-  | { t: 'create_agent_tab'; tabID: string; sessionID: string }
-  | { t: 'create_user_tab'; tabID: string }
+  | { t: 'create_tab'; tabID: string; sessionID?: string }
   | {
       t: 'agent_navigate'
       tabID: string
@@ -90,20 +84,6 @@ export function agentBrowserCommandTabID(
   return `${agentBrowserTabID(sessionID)}:command:${commandID}`
 }
 
-export function browserCommandTabID(
-  sessionID: string | undefined,
-  commandID: string,
-  disposition: BrowserDisposition,
-  activeTab?: ActiveBrowserTab,
-): string {
-  if (disposition !== 'reuse_agent_tab') {
-    return agentBrowserCommandTabID(sessionID, commandID)
-  }
-  return activeTab?.owner === 'agent' && activeTab.sessionID === sessionID
-    ? activeTab.id
-    : agentBrowserTabID(sessionID)
-}
-
 export function browserTabNavigationURL(tab: BrowserTab): string {
   if (!tab.desired) return ''
   if (
@@ -127,27 +107,26 @@ const emptyObservedNavigation = (): ObservedNavigation => ({
 
 export function createBrowserTab({
   id,
-  owner,
   sessionID,
   target,
+  source = 'address',
   initialRevision = 0,
 }: {
   id: string
-  owner: BrowserTabOwner
   sessionID?: string
   target?: BrowserNavigationTarget
+  source?: BrowserNavigationSource
   initialRevision?: number
 }): BrowserTab {
   return {
     id,
-    owner,
     sessionID,
     addressDraft: target?.addressDraft ?? '',
     desired: target
       ? {
           ...target,
           revision: initialRevision,
-          source: owner === 'agent' ? 'agent' : 'address',
+          source,
         }
       : undefined,
     observed: target
@@ -205,19 +184,12 @@ export function browserTabsReducer(
   action: BrowserTabsAction,
 ): BrowserTab[] {
   switch (action.t) {
-    case 'create_agent_tab':
+    case 'create_tab':
       if (tabs.some((tab) => tab.id === action.tabID)) return tabs
       return [
         ...tabs,
-        createBrowserTab({
-          id: action.tabID,
-          owner: 'agent',
-          sessionID: action.sessionID,
-        }),
+        createBrowserTab({ id: action.tabID, sessionID: action.sessionID }),
       ]
-    case 'create_user_tab':
-      if (tabs.some((tab) => tab.id === action.tabID)) return tabs
-      return [...tabs, createBrowserTab({ id: action.tabID, owner: 'user' })]
     case 'agent_navigate': {
       const existing = tabs.find((tab) => tab.id === action.tabID)
       if (!existing) {
@@ -225,24 +197,23 @@ export function browserTabsReducer(
           ...tabs,
           createBrowserTab({
             id: action.tabID,
-            owner: 'agent',
             sessionID: action.sessionID,
             target: action.target,
+            source: 'agent',
           }),
         ]
       }
-      if (existing.owner !== 'agent' || existing.sessionID !== action.sessionID) {
-        return tabs
-      }
       return replaceTab(tabs, action.tabID, (tab) =>
-        submitNavigation(tab, action.target, 'agent'),
+        ({
+          ...submitNavigation(tab, action.target, 'agent'),
+          sessionID: action.sessionID,
+        }),
       )
     }
     case 'submit_navigation':
-      return replaceTab(tabs, action.tabID, (tab) => {
-        if (action.source === 'agent' && tab.owner !== 'agent') return tab
-        return submitNavigation(tab, action.target, action.source)
-      })
+      return replaceTab(tabs, action.tabID, (tab) =>
+        submitNavigation(tab, action.target, action.source),
+      )
     case 'reload':
       return replaceTab(tabs, action.tabID, (tab) => {
         const desired = tab.desired

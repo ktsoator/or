@@ -1,9 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { CircleAlert, PanelTopDashed, X } from 'lucide-react'
-import type { ActiveBrowserTab } from '@/browserTabs'
 import type {
   BrowserCommandState,
+  BrowserInspectionCommandState,
   BrowserResult,
+  BrowserTabsCommandState,
   ModelOption,
   PreviewState,
   WorkspaceSummary,
@@ -12,8 +13,18 @@ import type { SessionThread } from '@/useSession'
 import { cn } from '@/lib/utils'
 import { BrowserView, WorkbenchHeaderActions } from './BrowserView'
 import { useI18n } from '@/i18n'
+import { useBrowserInspectionRequests } from '@/useBrowserInspectionRequests'
+import { useBrowserTabsRequests } from '@/useBrowserTabsRequests'
+import { useBrowserWorkspace } from '@/useBrowserWorkspace'
 
 type WorkbenchMode = 'launcher' | 'browser'
+
+export type BrowserInspectionSource = {
+  sessionID?: string
+  browserCommands: BrowserCommandState[]
+  browserTabsRequests: BrowserTabsCommandState[]
+  browserInspections: BrowserInspectionCommandState[]
+}
 
 export function WorkbenchPanel({
   open,
@@ -30,8 +41,10 @@ export function WorkbenchPanel({
   onCreateConversation,
   onDismissCreationError,
   onCloseConversation,
-  onActiveBrowserTabChange,
   onBrowserResult,
+  browserInspectionSources,
+  onBrowserTabsHandled,
+  onBrowserInspectionHandled,
   onConfigureModel,
   onToggleMaximized,
   toggleControl,
@@ -50,8 +63,10 @@ export function WorkbenchPanel({
   onCreateConversation: () => void
   onDismissCreationError: () => void
   onCloseConversation: () => void
-  onActiveBrowserTabChange: (tab: ActiveBrowserTab | undefined) => void
   onBrowserResult: (sessionID: string, commandID: string, result: BrowserResult) => void
+  browserInspectionSources: BrowserInspectionSource[]
+  onBrowserTabsHandled: (sessionID: string, commandID: string) => void
+  onBrowserInspectionHandled: (sessionID: string, commandID: string) => void
   onConfigureModel: () => void
   onToggleMaximized: () => void
   toggleControl?: ReactNode
@@ -60,6 +75,14 @@ export function WorkbenchPanel({
   const [mode, setMode] = useState<WorkbenchMode>(
     preview || conversation ? 'browser' : 'launcher',
   )
+  const browserWorkspace = useBrowserWorkspace({
+    activatePreview,
+    browserCommands,
+    conversationID: conversation?.session.id,
+    onBrowserResult,
+    preview,
+    sessionID,
+  })
 
   useEffect(() => {
     if (preview || conversation) setMode('browser')
@@ -77,20 +100,29 @@ export function WorkbenchPanel({
       data-testid="workbench-panel"
       aria-label={t('workbench.title')}
     >
+      {browserInspectionSources.map((source, index) => (
+        <BrowserInspectionWorker
+          key={`${source.sessionID ?? 'no-session'}:${index}`}
+          source={source}
+          workspace={browserWorkspace.workspaceForSession(source.sessionID)}
+          attachControl={browserWorkspace.attachControl}
+          releaseControl={browserWorkspace.releaseControl}
+          onBrowserTabsHandled={onBrowserTabsHandled}
+          onInspectionHandled={onBrowserInspectionHandled}
+        />
+      ))}
       {mode === 'browser' ? (
         <BrowserView
-          preview={preview}
-          browserCommands={browserCommands}
-          sessionID={sessionID}
-          activatePreview={activatePreview}
+          workspace={browserWorkspace}
           conversation={conversation}
           creatingConversation={creatingConversation}
           models={models}
           workspaces={workspaces}
           onCloseTab={() => setMode('launcher')}
-          onCloseConversation={onCloseConversation}
-          onActiveBrowserTabChange={onActiveBrowserTabChange}
-          onBrowserResult={onBrowserResult}
+          onCloseConversation={() => {
+            onCloseConversation()
+            if (browserWorkspace.tabs.length === 0) setMode('launcher')
+          }}
           onConfigureModel={onConfigureModel}
           onCreateConversation={onCreateConversation}
           maximized={maximized}
@@ -103,7 +135,10 @@ export function WorkbenchPanel({
           creatingConversation={creatingConversation}
           onCreateConversation={onCreateConversation}
           onToggleMaximized={onToggleMaximized}
-          onOpenBrowser={() => setMode('browser')}
+          onOpenBrowser={() => {
+            if (browserWorkspace.tabs.length === 0) browserWorkspace.newTab()
+            setMode('browser')
+          }}
           toggleControl={toggleControl}
         />
       )}
@@ -129,6 +164,39 @@ export function WorkbenchPanel({
       )}
     </section>
   )
+}
+
+function BrowserInspectionWorker({
+  workspace,
+  attachControl,
+  releaseControl,
+  onBrowserTabsHandled,
+  onInspectionHandled,
+  source,
+}: {
+  workspace: ReturnType<typeof useBrowserWorkspace>['state'] | undefined
+  attachControl: ReturnType<typeof useBrowserWorkspace>['attachControl']
+  releaseControl: ReturnType<typeof useBrowserWorkspace>['releaseControl']
+  onBrowserTabsHandled: (sessionID: string, commandID: string) => void
+  onInspectionHandled: (sessionID: string, commandID: string) => void
+  source: BrowserInspectionSource
+}) {
+  useBrowserTabsRequests({
+    workspace,
+    sessionID: source.sessionID,
+    requests: source.browserTabsRequests,
+    onHandled: onBrowserTabsHandled,
+  })
+  useBrowserInspectionRequests({
+    workspace,
+    sessionID: source.sessionID,
+    browserCommands: source.browserCommands,
+    browserInspections: source.browserInspections,
+    attachControl,
+    releaseControl,
+    onHandled: onInspectionHandled,
+  })
+  return null
 }
 
 function WorkbenchLauncher({

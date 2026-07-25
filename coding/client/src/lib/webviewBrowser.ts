@@ -1,7 +1,6 @@
 import {
   browserInspectionScript,
   browserInspectionTextLimit,
-  isAgentBrowserTabID,
   isBrowserInspectionText,
 } from './browserInspection'
 import type {
@@ -263,13 +262,10 @@ export const webviewBrowserBridge: BrowserRuntimeBridge = {
   },
 
   async inspect(tabID) {
-    if (!isAgentBrowserTabID(tabID)) {
-      throw new TypeError('Agent browser tab ID is invalid')
-    }
     const entry = entries.get(tabID)
-    if (!entry) throw new Error('Agent browser tab is not open')
+    if (!entry) throw new Error('Browser tab is not open')
     if (entry.state.status !== 'ready' || entry.state.appliedRevision < 0) {
-      throw new Error('Agent browser tab is not ready')
+      throw new Error('Browser tab is not ready')
     }
 
     const revision = entry.state.appliedRevision

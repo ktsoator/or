@@ -120,8 +120,12 @@ func (t *sessionTransport) OpenBrowser(
 	return result, err
 }
 
-func (t *sessionTransport) InspectBrowser(ctx context.Context) (tools.BrowserInspectionResult, error) {
-	return t.browser.InspectBrowser(ctx)
+func (t *sessionTransport) InspectBrowser(ctx context.Context, tabID string) (tools.BrowserInspectionResult, error) {
+	return t.browser.InspectBrowser(ctx, tabID)
+}
+
+func (t *sessionTransport) BrowserTabs(ctx context.Context) (tools.BrowserTabsResult, error) {
+	return t.browser.BrowserTabs(ctx)
 }
 
 func (t *sessionTransport) Ask(

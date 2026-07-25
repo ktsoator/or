@@ -3,6 +3,7 @@ import type {
   ApprovalChoice,
   BrowserInspectionResult,
   BrowserResult,
+  BrowserTabsResult,
   DeliveryMode,
   MessageImage,
   QuestionAnswer,
@@ -35,6 +36,11 @@ export type SessionCommands = {
     sessionID: string,
     id: string,
     result: BrowserInspectionResult,
+  ) => Promise<void>
+  reportBrowserTabs: (
+    sessionID: string,
+    id: string,
+    result: BrowserTabsResult,
   ) => Promise<void>
 }
 
@@ -132,6 +138,14 @@ export function createSessionCommands(
         sessionURL(sessionID, `/browser/${encodeURIComponent(id)}/result`),
         jsonRequest('POST', result),
         (status) => `browser result request failed (${status})`,
+      ),
+
+    reportBrowserTabs: (sessionID, id, result) =>
+      requestOK(
+        request,
+        sessionURL(sessionID, `/browser/tabs/${encodeURIComponent(id)}/result`),
+        jsonRequest('POST', result),
+        (status) => `browser tabs result request failed (${status})`,
       ),
 
     reportBrowserInspection: (sessionID, id, result) =>

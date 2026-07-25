@@ -52,8 +52,9 @@ type Options struct {
 	Policy permission.Policy
 	// Approver obtains decisions for calls classified as Ask. Nil denies them.
 	Approver permission.Approver
-	// Browser delivers open_preview commands to the product shell and waits for
-	// a terminal navigation acknowledgement. Nil makes the tool fail closed.
+	// Browser delivers navigation and read-only observation requests to the
+	// product shell and waits for their acknowledgements. Nil makes those tools
+	// fail closed.
 	Browser tools.BrowserController
 	// Asker puts a multiple-choice question to the user and blocks until they
 	// answer. Nil advertises no question tool at all, so a session with nobody

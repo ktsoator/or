@@ -14,10 +14,11 @@ import (
 )
 
 type pendingBrowserInspection struct {
+	tabID    string
 	response chan tools.BrowserInspectionResult
 }
 
-func (b *BrowserBroker) InspectBrowser(ctx context.Context) (tools.BrowserInspectionResult, error) {
+func (b *BrowserBroker) InspectBrowser(ctx context.Context, tabID string) (tools.BrowserInspectionResult, error) {
 	if err := ctx.Err(); err != nil {
 		return tools.BrowserInspectionResult{}, err
 	}
@@ -25,9 +26,9 @@ func (b *BrowserBroker) InspectBrowser(ctx context.Context) (tools.BrowserInspec
 	response := make(chan tools.BrowserInspectionResult, 1)
 
 	b.mu.Lock()
-	b.inspections[id] = pendingBrowserInspection{response: response}
+	b.inspections[id] = pendingBrowserInspection{tabID: tabID, response: response}
 	b.mu.Unlock()
-	b.broadcastInspectionRequest(id)
+	b.broadcastInspectionRequest(id, tabID)
 
 	timer := time.NewTimer(b.timeout)
 	defer timer.Stop()
@@ -67,13 +68,13 @@ func (b *BrowserBroker) finishInspection(id string, result tools.BrowserInspecti
 	return ok
 }
 
-func (b *BrowserBroker) broadcastInspectionRequest(id string) {
-	payload, _ := json.Marshal(browserInspectionRequestEvent(id))
+func (b *BrowserBroker) broadcastInspectionRequest(id, tabID string) {
+	payload, _ := json.Marshal(browserInspectionRequestEvent(id, tabID))
 	b.hub.Broadcast(payload)
 }
 
-func browserInspectionRequestEvent(id string) wireEvent {
-	return wireEvent{Type: wireEventBrowserInspect, ID: id}
+func browserInspectionRequestEvent(id, tabID string) wireEvent {
+	return wireEvent{Type: wireEventBrowserInspect, ID: id, TabID: tabID}
 }
 
 func validBrowserInspectionStatus(status tools.BrowserInspectionStatus) bool {

@@ -27,6 +27,7 @@ type BrowserBroker struct {
 	mu          sync.Mutex
 	pending     map[string]pendingBrowserCommand
 	inspections map[string]pendingBrowserInspection
+	tabContexts map[string]pendingBrowserTabs
 }
 
 type pendingBrowserCommand struct {
@@ -40,6 +41,7 @@ func NewBrowserBroker(hub *Hub) *BrowserBroker {
 		timeout:     browserCommandTimeout,
 		pending:     make(map[string]pendingBrowserCommand),
 		inspections: make(map[string]pendingBrowserInspection),
+		tabContexts: make(map[string]pendingBrowserTabs),
 	}
 }
 
@@ -84,12 +86,15 @@ func (b *BrowserBroker) PendingEvents() []wireEvent {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	events := make([]wireEvent, 0, len(b.pending)+len(b.inspections))
+	events := make([]wireEvent, 0, len(b.pending)+len(b.inspections)+len(b.tabContexts))
 	for id, pending := range b.pending {
 		events = append(events, browserRequestEvent(id, pending.request))
 	}
-	for id := range b.inspections {
-		events = append(events, browserInspectionRequestEvent(id))
+	for id, pending := range b.inspections {
+		events = append(events, browserInspectionRequestEvent(id, pending.tabID))
+	}
+	for id := range b.tabContexts {
+		events = append(events, browserTabsRequestEvent(id))
 	}
 	return events
 }
@@ -107,7 +112,7 @@ func (b *BrowserBroker) Resolve(id string, result tools.BrowserResult) bool {
 func (b *BrowserBroker) HasPending() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return len(b.pending) > 0 || len(b.inspections) > 0
+	return len(b.pending) > 0 || len(b.inspections) > 0 || len(b.tabContexts) > 0
 }
 
 // Close releases every waiter when its session transport is replaced or shut
@@ -118,12 +123,17 @@ func (b *BrowserBroker) Close() {
 	b.pending = make(map[string]pendingBrowserCommand)
 	inspections := b.inspections
 	b.inspections = make(map[string]pendingBrowserInspection)
+	tabContexts := b.tabContexts
+	b.tabContexts = make(map[string]pendingBrowserTabs)
 	b.mu.Unlock()
 	for id, command := range pending {
 		command.response <- tools.BrowserResult{ID: id, Status: tools.BrowserCancelled}
 	}
 	for id, command := range inspections {
 		command.response <- tools.BrowserInspectionResult{ID: id, Status: tools.BrowserInspectionCancelled}
+	}
+	for id, command := range tabContexts {
+		command.response <- tools.BrowserTabsResult{ID: id, Status: tools.BrowserTabsCancelled}
 	}
 }
 

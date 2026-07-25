@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test'
 import {
-  browserCommandTabID,
   browserTabsReducer,
   browserTabNavigationURL,
   createBrowserTab,
@@ -17,7 +16,6 @@ const webTarget = (requestedURL: string): BrowserNavigationTarget => ({
 function agentTab(): BrowserTab {
   return createBrowserTab({
     id: 'preview:session-1',
-    owner: 'agent',
     sessionID: 'session-1',
   })
 }
@@ -50,38 +48,6 @@ function nativeState(
 }
 
 describe('browser tabs reducer', () => {
-  test('reuses the active session Agent tab and keeps new command tab IDs stable', () => {
-    expect(browserCommandTabID('session-1', 'command-1', 'reuse_agent_tab')).toBe(
-      'preview:session-1',
-    )
-    expect(
-      browserCommandTabID('session-1', 'command-1', 'reuse_agent_tab', {
-        id: 'preview:session-1:command:previous-command',
-        owner: 'agent',
-        sessionID: 'session-1',
-      }),
-    ).toBe('preview:session-1:command:previous-command')
-    expect(
-      browserCommandTabID('session-1', 'command-1', 'reuse_agent_tab', {
-        id: 'tab-1',
-        owner: 'user',
-      }),
-    ).toBe('preview:session-1')
-    expect(
-      browserCommandTabID('session-1', 'command-1', 'reuse_agent_tab', {
-        id: 'preview:session-2',
-        owner: 'agent',
-        sessionID: 'session-2',
-      }),
-    ).toBe('preview:session-1')
-    expect(browserCommandTabID('session-1', 'command-1', 'new_foreground_tab')).toBe(
-      'preview:session-1:command:command-1',
-    )
-    expect(browserCommandTabID('session-1', 'command-1', 'new_background_tab')).toBe(
-      'preview:session-1:command:command-1',
-    )
-  })
-
   test('commits the first agent navigation', () => {
     let tabs = navigate([agentTab()], 'https://github.com/')
     expect(tabs[0]?.desired?.revision).toBe(1)
@@ -166,15 +132,22 @@ describe('browser tabs reducer', () => {
     expect(nativeState(tabs, 1, 'https://github.com/', 'GitHub')).toBe(tabs)
   })
 
-  test('never lets an agent command replace a user-owned tab', () => {
-    const userTab = createBrowserTab({ id: 'preview:session-1', owner: 'user' })
-    const tabs = browserTabsReducer([userTab], {
+  test('navigates an existing shared tab without assigning a permanent owner', () => {
+    const openTab = createBrowserTab({ id: 'tab-1' })
+    const tabs = browserTabsReducer([openTab], {
       t: 'agent_navigate',
-      tabID: 'preview:session-1',
+      tabID: 'tab-1',
       sessionID: 'session-1',
       target: webTarget('https://github.com/'),
     })
 
-    expect(tabs).toEqual([userTab])
+    expect(tabs[0]).toMatchObject({
+      id: 'tab-1',
+      sessionID: 'session-1',
+      desired: {
+        requestedURL: 'https://github.com/',
+        source: 'agent',
+      },
+    })
   })
 })

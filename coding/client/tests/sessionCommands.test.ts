@@ -70,6 +70,19 @@ describe('sessionCommands', () => {
       requestedURL: 'https://example.com/start',
       committedURL: 'https://example.com/final',
     })
+    await commands.reportBrowserTabs('session / one', 'tabs / one', {
+      status: 'completed',
+      openTabs: [
+        {
+          tabID: 'stable-tab-1',
+          url: 'https://example.com/final',
+          title: 'Example',
+          status: 'ready',
+        },
+      ],
+      controlledTabs: [{ tabID: 'stable-tab-1', capabilities: ['read'] }],
+      selected: 'stable-tab-1',
+    })
     await commands.reportBrowserInspection('session / one', 'inspection / one', {
       status: 'completed',
       url: 'https://example.com/final',
@@ -87,6 +100,10 @@ describe('sessionCommands', () => {
       ['/api/sessions/session%20%2F%20one/questions/question%20%2F%20one', 'POST'],
       ['/api/sessions/session%20%2F%20one/browser/browser%20%2F%20one/result', 'POST'],
       [
+        '/api/sessions/session%20%2F%20one/browser/tabs/tabs%20%2F%20one/result',
+        'POST',
+      ],
+      [
         '/api/sessions/session%20%2F%20one/browser/inspect/inspection%20%2F%20one/result',
         'POST',
       ],
@@ -101,6 +118,19 @@ describe('sessionCommands', () => {
       committedURL: 'https://example.com/final',
     })
     expect(jsonBody(calls[5])).toEqual({
+      status: 'completed',
+      openTabs: [
+        {
+          tabID: 'stable-tab-1',
+          url: 'https://example.com/final',
+          title: 'Example',
+          status: 'ready',
+        },
+      ],
+      controlledTabs: [{ tabID: 'stable-tab-1', capabilities: ['read'] }],
+      selected: 'stable-tab-1',
+    })
+    expect(jsonBody(calls[6])).toEqual({
       status: 'completed',
       url: 'https://example.com/final',
       title: 'Example',

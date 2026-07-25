@@ -13,6 +13,7 @@ import {
   FolderSearch,
   Globe2,
   LoaderCircle,
+  PanelsTopLeft,
   PencilLine,
   ScrollText,
   Search,
@@ -76,12 +77,14 @@ type ToolKind =
   | 'kill'
   | 'skill'
   | 'browserOpen'
+  | 'browserTabs'
   | 'browserInspect'
 
 function toolPresentation(name: string): { Icon: LucideIcon; kind: ToolKind } {
   const value = name.toLowerCase()
   if (value === 'skill') return { Icon: BookOpenText, kind: 'skill' }
   if (value === 'open_preview') return { Icon: Globe2, kind: 'browserOpen' }
+  if (value === 'tabs_context') return { Icon: PanelsTopLeft, kind: 'browserTabs' }
   if (value === 'inspect_browser') return { Icon: Eye, kind: 'browserInspect' }
   if (value.includes('read') || value.includes('cat')) return { Icon: FileSearch, kind: 'read' }
   if (value.includes('write')) return { Icon: FilePlus2, kind: 'write' }
@@ -116,13 +119,17 @@ function browserTargetLabel(value: string): string {
 }
 
 function browserVerb(
-  kind: 'browserOpen' | 'browserInspect',
+  kind: 'browserOpen' | 'browserTabs' | 'browserInspect',
   status: ToolItem['status'],
   t: ReturnType<typeof useI18n>['t'],
 ): string {
   if (kind === 'browserOpen') {
     if (status === 'error') return t('tool.browserOpenFailed')
     return t(status === 'complete' ? 'tool.browserOpened' : 'tool.browserOpening')
+  }
+  if (kind === 'browserTabs') {
+    if (status === 'error') return t('tool.browserTabsFailed')
+    return t(status === 'complete' ? 'tool.browserTabsChecked' : 'tool.browserTabsChecking')
   }
   if (status === 'error') return t('tool.browserReadFailed')
   return t(status === 'complete' ? 'tool.browserRead' : 'tool.browserReading')
@@ -588,7 +595,8 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
   const { Icon, kind } = toolPresentation(item.name)
   const hint = relativize(rawHint, cwd)
   const command = relativize(rawCommand, cwd)
-  const browserKind = kind === 'browserOpen' || kind === 'browserInspect'
+  const browserKind =
+    kind === 'browserOpen' || kind === 'browserTabs' || kind === 'browserInspect'
   const verb = browserKind
     ? browserVerb(kind, item.status, t)
     : t(`tool.${kind}`)
@@ -600,6 +608,8 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
     item.status === 'preparing' && item.args === undefined
       ? kind === 'browserOpen'
         ? t('tool.browserOpeningPage')
+        : kind === 'browserTabs'
+          ? t('tool.browserTabsChecking')
         : kind === 'browserInspect'
           ? t('tool.browserReadingPage')
           : kind === 'write'
@@ -611,6 +621,8 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
   const target =
     kind === 'browserOpen'
       ? browserTargetLabel(hint) || t('tool.browserPage')
+      : kind === 'browserTabs'
+        ? t('tool.browserTabs')
       : kind === 'browserInspect'
         ? browserTargetLabel(browserResultURL(item.result || '')) || t('tool.browserCurrentPage')
         : kind === 'run'
@@ -619,7 +631,9 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
             ? skillTitle || item.name
             : hint || item.name
   const targetTitle =
-    kind === 'browserInspect'
+    kind === 'browserTabs'
+      ? t('tool.browserTabs')
+      : kind === 'browserInspect'
       ? browserResultURL(item.result || '') || t('tool.browserCurrentPage')
       : kind === 'run'
         ? rawCommand
@@ -631,6 +645,8 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
   const hasDetails =
     kind === 'browserOpen'
       ? false
+      : kind === 'browserTabs'
+        ? Boolean(item.result || item.status === 'error')
       : kind === 'browserInspect'
         ? Boolean(item.result || item.status === 'error')
         : kind === 'read'

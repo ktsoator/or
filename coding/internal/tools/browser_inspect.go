@@ -12,7 +12,9 @@ import (
 
 const MaxBrowserInspectionTextRunes = 12_000
 
-type inspectBrowserArgs struct{}
+type inspectBrowserArgs struct {
+	TabID string `json:"tabID,omitempty" jsonschema:"description=Stable tab ID returned by tabs_context. Omit it only to inspect the selected Agent-controlled tab."`
+}
 
 type BrowserInspectionStatus string
 
@@ -47,11 +49,11 @@ type BrowserInspectionResult struct {
 }
 
 type BrowserInspector interface {
-	InspectBrowser(context.Context) (BrowserInspectionResult, error)
+	InspectBrowser(context.Context, string) (BrowserInspectionResult, error)
 }
 
-// InspectBrowser returns a product tool that observes an Agent-controlled tab
-// selected by the product shell without granting control over user-owned tabs.
+// InspectBrowser returns a product tool that observes an explicit or selected
+// Agent-controlled tab without granting control over user-owned tabs.
 func InspectBrowser(inspectors ...BrowserInspector) Tool {
 	var inspector BrowserInspector
 	if len(inspectors) > 0 {
@@ -62,11 +64,19 @@ func InspectBrowser(inspectors ...BrowserInspector) Tool {
 		AgentTool: agent.AgentTool{
 			Definition: def,
 			Label:      "Inspect browser",
-			Execute: func(ctx context.Context, _ string, _ json.RawMessage, _ func(agent.ToolResult)) (agent.ToolResult, error) {
+			Execute: func(ctx context.Context, _ string, raw json.RawMessage, _ func(agent.ToolResult)) (agent.ToolResult, error) {
+				var in inspectBrowserArgs
+				if err := json.Unmarshal(raw, &in); err != nil {
+					return agent.ToolResult{}, err
+				}
+				tabID := strings.TrimSpace(in.TabID)
+				if len([]rune(tabID)) > 256 {
+					return textResult("Could not inspect browser: browser tab ID is too long"), nil
+				}
 				if inspector == nil {
 					return textResult("Could not inspect browser: browser observation is unavailable"), nil
 				}
-				result, err := inspector.InspectBrowser(ctx)
+				result, err := inspector.InspectBrowser(ctx, tabID)
 				if err != nil {
 					return agent.ToolResult{}, err
 				}

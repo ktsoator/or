@@ -987,7 +987,7 @@ test('a restored right-side preview stays available without taking focus from Ch
   })
 })
 
-test('main and right-side chats keep separate preview tabs and workspace routes', async ({
+test('browser workspaces show only the selected session tabs and restore them on return', async ({
   page,
 }) => {
   const requests = await openDesktopClient(page, {
@@ -1024,6 +1024,7 @@ test('main and right-side chats keep separate preview tabs and workspace routes'
     'aria-selected',
     'true',
   )
+  await expect(workbench.getByRole('tab')).toHaveCount(2)
 
   await page.evaluate(() => {
     const emit = (
@@ -1046,11 +1047,8 @@ test('main and right-side chats keep separate preview tabs and workspace routes'
     })
   })
 
-  await expect(workbench.getByRole('tab')).toHaveCount(3)
-  await expect(workbench.getByRole('tab', { name: 'Main preview' })).toHaveAttribute(
-    'aria-selected',
-    'false',
-  )
+  await expect(workbench.getByRole('tab')).toHaveCount(2)
+  await expect(workbench.getByRole('tab', { name: 'Main preview' })).toHaveCount(0)
   await expect(workbench.getByRole('tab', { name: 'Secondary preview' })).toHaveAttribute(
     'aria-selected',
     'true',
@@ -1066,12 +1064,41 @@ test('main and right-side chats keep separate preview tabs and workspace routes'
   expect(await browserRuntimeView(page, 'preview:secondary-session')).toMatchObject({
     visible: true,
   })
-  expect(await browserRuntimeView(page, 'preview:test-session')).toMatchObject({
-    visible: false,
-  })
+  expect(await browserRuntimeView(page, 'preview:test-session')).toBeUndefined()
   expect(
     requests.filter((request) => request.path.includes('/previews/secondary-grant/index.html')),
   ).toHaveLength(0)
+
+  await page.evaluate(() => {
+    const emit = (
+      window as Window & {
+        __emitSessionSSE?: (sessionID: string, payload: unknown) => void
+      }
+    ).__emitSessionSSE
+    emit?.('test-session', {
+      type: 'tool_end',
+      id: 'main-preview-update',
+      tool: 'open_preview',
+      result: 'Restored preview at /tmp/test-session/web/index.html',
+      preview: {
+        path: '/tmp/test-session/web/index.html',
+        relativePath: 'web/index.html',
+        grantID: 'main-grant',
+        previewPath: 'index.html',
+        title: 'Main preview',
+      },
+    })
+  })
+
+  await expect(workbench.getByRole('tab')).toHaveCount(2)
+  await expect(workbench.getByRole('tab', { name: 'Secondary preview' })).toHaveCount(0)
+  await expect(workbench.getByRole('tab', { name: 'Main preview' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  await expect(workbench.getByRole('textbox', { name: 'Address' })).toHaveValue(
+    '/tmp/test-session/web/index.html',
+  )
 })
 
 test('workbench divider resizes the panel without moving the corner control', async ({
@@ -1784,7 +1811,7 @@ test('AI browser opens foreground and background tabs and reuses the active Agen
   ).toBe(4)
 })
 
-test('AI browser inspection reads the active Agent-owned tab and reports once', async ({
+test('AI browser lists session tabs and explicitly inspects a non-active Agent tab', async ({
   page,
 }) => {
   const requests = await openDesktopClient(page, { existingSession: true })
@@ -1828,10 +1855,55 @@ test('AI browser inspection reads the active Agent-owned tab and reports once', 
 
   await page.evaluate(() => {
     const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
-    emit?.({ type: 'browser_inspect_request', id: 'inspection-1' })
-    emit?.({ type: 'browser_inspect_request', id: 'inspection-1' })
+    emit?.({ type: 'browser_tabs_request', id: 'tabs-1' })
+    emit?.({ type: 'browser_tabs_request', id: 'tabs-1' })
+    emit?.({
+      type: 'browser_inspect_request',
+      id: 'inspection-1',
+      tabID: 'preview:test-session',
+    })
+    emit?.({
+      type: 'browser_inspect_request',
+      id: 'inspection-1',
+      tabID: 'preview:test-session',
+    })
   })
 
+  const tabsResultPath = '/api/sessions/test-session/browser/tabs/tabs-1/result'
+  await expect.poll(() =>
+    requests.filter((request) => request.path === tabsResultPath).length,
+  ).toBe(1)
+  expect(requests.find((request) => request.path === tabsResultPath)).toMatchObject({
+    method: 'POST',
+    body: {
+      status: 'completed',
+      openTabs: [
+        {
+          tabID: 'preview:test-session',
+          url: 'https://github.com/',
+          title: 'github.com',
+          status: 'ready',
+        },
+        {
+          tabID: 'preview:test-session:command:browser-command-tab',
+          url: 'https://www.bilibili.com/',
+          title: 'bilibili.com',
+          status: 'ready',
+        },
+      ],
+      controlledTabs: [
+        {
+          tabID: 'preview:test-session',
+          capabilities: ['read', 'navigate'],
+        },
+        {
+          tabID: 'preview:test-session:command:browser-command-tab',
+          capabilities: ['read', 'navigate'],
+        },
+      ],
+      selected: 'preview:test-session:command:browser-command-tab',
+    },
+  })
   const resultPath =
     '/api/sessions/test-session/browser/inspect/inspection-1/result'
   await expect.poll(() =>
@@ -1841,11 +1913,11 @@ test('AI browser inspection reads the active Agent-owned tab and reports once', 
     method: 'POST',
     body: {
       status: 'completed',
-      url: 'https://www.bilibili.com/',
-      title: 'bilibili.com',
+      url: 'https://github.com/',
+      title: 'github.com',
       pageStatus: 'ready',
       revision: 0,
-      visibleText: 'Visible content for https://www.bilibili.com/',
+      visibleText: 'Visible content for https://github.com/',
       truncated: false,
     },
   })
@@ -1861,10 +1933,12 @@ test('AI browser inspection reads the active Agent-owned tab and reports once', 
         .filter((entry) => entry.inspectCalls > 0)
         .map((entry) => entry.tabID),
     ),
-  ).toEqual(['preview:test-session:command:browser-command-tab'])
+  ).toEqual(['preview:test-session'])
 })
 
-test('AI browser inspection refuses the active user-owned tab', async ({ page }) => {
+test('AI browser temporarily attaches read control to an existing open tab', async ({
+  page,
+}) => {
   const requests = await openDesktopClient(page, { existingSession: true })
   await expect.poll(() =>
     page.evaluate(
@@ -1888,17 +1962,46 @@ test('AI browser inspection refuses the active user-owned tab', async ({ page })
 
   await page.getByTestId('workbench-add-view').click()
   await page.getByRole('menuitem').first().click()
+  await setGuestControls(page, { pageTitle: 'example.com' })
   await page.getByRole('textbox', { name: 'Address' }).fill('https://example.com')
   await page.getByRole('textbox', { name: 'Address' }).press('Enter')
   await expect.poll(async () => (await browserRuntimeView(page, 'tab-1'))?.url).toBe(
     'https://example.com/',
   )
-
   await page.evaluate(() => {
     const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
-    emit?.({ type: 'browser_inspect_request', id: 'inspection-user-tab' })
+    emit?.({ type: 'browser_tabs_request', id: 'tabs-with-user' })
+    emit?.({
+      type: 'browser_inspect_request',
+      id: 'inspection-user-tab',
+      tabID: 'tab-1',
+    })
   })
 
+  const tabsResultPath =
+    '/api/sessions/test-session/browser/tabs/tabs-with-user/result'
+  await expect.poll(() =>
+    requests.filter((request) => request.path === tabsResultPath).length,
+  ).toBe(1)
+  expect(requests.find((request) => request.path === tabsResultPath)?.body).toMatchObject({
+    status: 'completed',
+    openTabs: [
+      {
+        tabID: 'preview:test-session',
+      },
+      {
+        tabID: 'tab-1',
+        url: 'https://example.com/',
+      },
+    ],
+    controlledTabs: [
+      {
+        tabID: 'preview:test-session',
+        capabilities: ['read', 'navigate'],
+      },
+    ],
+    selected: 'preview:test-session',
+  })
   const resultPath =
     '/api/sessions/test-session/browser/inspect/inspection-user-tab/result'
   await expect.poll(() =>
@@ -1907,20 +2010,49 @@ test('AI browser inspection refuses the active user-owned tab', async ({ page })
   expect(requests.find((request) => request.path === resultPath)).toMatchObject({
     method: 'POST',
     body: {
-      status: 'failed',
-      revision: 0,
-      error: 'Current browser tab is user-owned and cannot be inspected',
+      status: 'completed',
+      url: 'https://example.com/',
+      title: 'example.com',
+      pageStatus: 'ready',
+      revision: 1,
+      visibleText: 'Visible content for https://example.com/',
+      truncated: false,
     },
   })
   expect(
     await page.evaluate(() =>
-      Array.from(document.querySelectorAll('webview')).reduce(
-        (calls, element) =>
-          calls + ((element as HTMLElement & { inspectCalls?: number }).inspectCalls ?? 0),
-        0,
-      ),
+      Array.from(document.querySelectorAll('[data-browser-tab-id]'))
+        .map((host) => ({
+          tabID: host.getAttribute('data-browser-tab-id'),
+          inspectCalls:
+            (host.querySelector('webview') as (HTMLElement & { inspectCalls?: number }) | null)
+              ?.inspectCalls ?? 0,
+        }))
+        .filter((entry) => entry.inspectCalls > 0)
+        .map((entry) => entry.tabID),
     ),
-  ).toBe(0)
+  ).toEqual(['tab-1'])
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({ type: 'browser_tabs_request', id: 'tabs-after-inspection' })
+  })
+  const afterInspectionPath =
+    '/api/sessions/test-session/browser/tabs/tabs-after-inspection/result'
+  await expect.poll(() =>
+    requests.filter((request) => request.path === afterInspectionPath).length,
+  ).toBe(1)
+  expect(requests.find((request) => request.path === afterInspectionPath)?.body)
+    .toMatchObject({
+      controlledTabs: [
+        {
+          tabID: 'preview:test-session',
+          capabilities: ['read', 'navigate'],
+        },
+      ],
+      selected: 'preview:test-session',
+    })
+  await expect(page.locator('[data-browser-tab-id]')).toHaveCount(2)
 })
 
 test('AI browser inspection fails promptly without reopening a closed Agent tab', async ({
@@ -1949,7 +2081,7 @@ test('AI browser inspection fails promptly without reopening a closed Agent tab'
     body: {
       status: 'failed',
       revision: 0,
-      error: 'Agent browser tab is not open',
+      error: 'Browser tab is not open',
     },
   })
   await expect(page.getByTestId('browser-view')).toHaveCount(0)
@@ -1995,19 +2127,42 @@ test('browser tools use page-focused labels and keep inspection text collapsed',
     const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
     emit?.({
       type: 'tool_start',
+      id: 'tabs-context-ui',
+      tool: 'tabs_context',
+      args: {},
+    })
+  })
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'tool_start',
       id: 'inspect-browser-ui',
       tool: 'inspect_browser',
       args: {},
     })
   })
   const stepSummary = page.getByText(
-    'Opened a browser page, read a browser page',
+    'Opened a browser page, checked browser tabs, read a browser page',
     { exact: true },
   )
   await expect(stepSummary).toBeVisible()
   await stepSummary.click()
+  await expect(page.getByText('Checking', { exact: true })).toBeVisible()
+  await expect(page.getByText('browser tabs', { exact: true })).toBeVisible()
   await expect(page.getByText('Reading', { exact: true })).toBeVisible()
   await expect(page.getByText('current page', { exact: true })).toBeVisible()
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'tool_end',
+      id: 'tabs-context-ui',
+      tool: 'tabs_context',
+      result: '{"tabs":[]}',
+    })
+  })
+  await expect(page.getByText('Checked', { exact: true })).toBeVisible()
 
   await page.evaluate(() => {
     const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE

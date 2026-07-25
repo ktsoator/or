@@ -534,6 +534,7 @@ func (s *Server) mountSessions(r gin.IRouter) {
 	one.POST("/approvals/:approvalID", s.handleApproval)
 	one.POST("/questions/:questionID", s.handleQuestion)
 	one.POST("/browser/:commandID/result", s.handleBrowserResult)
+	one.POST("/browser/tabs/:commandID/result", s.handleBrowserTabsResult)
 	one.POST("/browser/inspect/:commandID/result", s.handleBrowserInspectionResult)
 	one.POST("/abort", s.handleAbort)
 	one.POST("/compact", s.handleCompact)
