@@ -218,17 +218,29 @@ func (e *engine) executePrepared(prepared preparedToolCall) (result ToolResult) 
 		}
 	}()
 
-	onUpdate := func(partial ToolResult) {
+	var progressMu sync.Mutex
+	acceptingProgress := true
+	defer func() {
+		progressMu.Lock()
+		acceptingProgress = false
+		progressMu.Unlock()
+	}()
+	onProgress := func(progress ToolProgress) {
+		progressMu.Lock()
+		defer progressMu.Unlock()
+		if !acceptingProgress {
+			return
+		}
 		e.emit(AgentEvent{
 			Type:       ToolUpdate,
 			ToolCallID: prepared.call.ID,
 			ToolName:   prepared.call.Name,
 			Args:       prepared.validated,
-			Result:     partial,
+			Progress:   progress,
 		})
 	}
 
-	out, err := prepared.tool.Execute(e.ctx, prepared.call.ID, prepared.rawArgs, onUpdate)
+	out, err := prepared.tool.Execute(e.ctx, prepared.call.ID, prepared.rawArgs, onProgress)
 	if err != nil {
 		// Preserve the tool's own content and structured data when it supplied
 		// them, then normalize the Go error into the shared outcome contract.

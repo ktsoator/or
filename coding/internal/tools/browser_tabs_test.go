@@ -33,7 +33,7 @@ func TestBrowserTabsReturnsStableSessionTabMetadata(t *testing.T) {
 			{TabID: "stable-tab-1", Capabilities: []BrowserControlCapability{BrowserControlRead, BrowserControlNavigate}},
 		},
 		Selected: "stable-tab-1",
-	}}).Execute(context.Background(), "tabs-call", json.RawMessage(`{}`), func(agent.ToolResult) {})
+	}}).Execute(context.Background(), "tabs-call", json.RawMessage(`{}`), func(agent.ToolProgress) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestBrowserTabsUsesNullSelectionWhenNoTabIsControlled(t *testing.T) {
 	result, err := BrowserTabs(resultBrowserTabsProvider{result: BrowserTabsResult{
 		Status:   BrowserTabsCompleted,
 		OpenTabs: []BrowserOpenTab{},
-	}}).Execute(context.Background(), "tabs-call", json.RawMessage(`{}`), func(agent.ToolResult) {})
+	}}).Execute(context.Background(), "tabs-call", json.RawMessage(`{}`), func(agent.ToolProgress) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestBrowserTabsReportsUnavailableProvider(t *testing.T) {
 		context.Background(),
 		"tabs-call",
 		json.RawMessage(`{}`),
-		func(agent.ToolResult) {},
+		func(agent.ToolProgress) {},
 	)
 	if err != nil {
 		t.Fatal(err)

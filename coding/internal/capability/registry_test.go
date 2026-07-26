@@ -14,7 +14,7 @@ import (
 func testTool(name string) tools.Tool {
 	return tools.Tool{AgentTool: agent.AgentTool{
 		Definition: llm.ToolDefinition{Name: name},
-		Execute: func(context.Context, string, json.RawMessage, func(agent.ToolResult)) (agent.ToolResult, error) {
+		Execute: func(context.Context, string, json.RawMessage, func(agent.ToolProgress)) (agent.ToolResult, error) {
 			return agent.ToolResult{}, nil
 		},
 	}}

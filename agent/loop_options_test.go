@@ -40,7 +40,7 @@ func TestRunLoopPrepareArgumentsRewritesBeforeValidation(t *testing.T) {
 		PrepareArguments: func(map[string]any) map[string]any {
 			return map[string]any{"text": "prepared"}
 		},
-		Execute: func(_ context.Context, _ string, args json.RawMessage, _ func(ToolResult)) (ToolResult, error) {
+		Execute: func(_ context.Context, _ string, args json.RawMessage, _ func(ToolProgress)) (ToolResult, error) {
 			executed = true
 			var parsed echoArgs
 			_ = json.Unmarshal(args, &parsed)

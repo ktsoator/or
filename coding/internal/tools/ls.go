@@ -24,7 +24,7 @@ func LS(root string, ops FileOps) Tool {
 		AgentTool: agent.AgentTool{
 			Definition: def,
 			Label:      "LS",
-			Execute: func(ctx context.Context, _ string, raw json.RawMessage, _ func(agent.ToolResult)) (agent.ToolResult, error) {
+			Execute: func(ctx context.Context, _ string, raw json.RawMessage, _ func(agent.ToolProgress)) (agent.ToolResult, error) {
 				var in lsArgs
 				if err := json.Unmarshal(raw, &in); err != nil {
 					return agent.ToolResult{}, err

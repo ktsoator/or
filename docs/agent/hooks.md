@@ -40,7 +40,7 @@ result field by field; a nil field keeps the executed value.
 
 ```go
 AfterToolCall: func(c agent.AfterToolCallCtx) *agent.AfterToolCallResult {
-	if c.IsError {
+	if c.Result.Outcome.Failed() {
 		stop := true
 		return &agent.AfterToolCallResult{Terminate: &stop} // end the run on any tool error
 	}
@@ -48,10 +48,10 @@ AfterToolCall: func(c agent.AfterToolCallCtx) *agent.AfterToolCallResult {
 },
 ```
 
-`AfterToolCallResult` overrides `Content`, `Details`, `IsError`, and `Terminate`.
-Setting `Terminate` on every result in a batch stops the run after it. Both hooks
-run in source order and never concurrently, even when the tools themselves run in
-parallel — see [Tools](tools.md#execution-order).
+`AfterToolCallResult` overrides `Content`, the complete `Outcome`, and
+`Terminate`. Setting `Terminate` on every result in a batch stops the run after
+it. Both hooks run in source order and never concurrently, even when the tools
+themselves run in parallel — see [Tools](tools.md#execution-order).
 
 ## Switching models between turns
 

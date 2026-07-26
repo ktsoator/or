@@ -264,18 +264,10 @@ func displayAssistantText(assistant *llm.AssistantMessage) string {
 // eventToolResultText extracts text blocks from a tool result. Binary and
 // structured blocks remain available to the lower-level agent but are omitted
 // from the current text-oriented product shells.
-func eventToolResultText(result any) string {
-	toolResult, ok := result.(agent.ToolResult)
-	if !ok {
-		return ""
-	}
-	return toolResultContentText(toolResult.Content)
+func eventToolResultText(result agent.ToolResult) string {
+	return toolResultContentText(result.Content)
 }
 
-func eventToolOutcome(result any) agent.ToolOutcome {
-	toolResult, ok := result.(agent.ToolResult)
-	if !ok {
-		return agent.ToolOutcome{Status: agent.ToolOutcomeFailed, ErrorCode: "tool_result_invalid"}
-	}
-	return toolResult.Outcome
+func eventToolOutcome(result agent.ToolResult) agent.ToolOutcome {
+	return result.Outcome
 }

@@ -35,7 +35,7 @@ func Grep(root string, ops FileOps) Tool {
 		AgentTool: agent.AgentTool{
 			Definition: def,
 			Label:      "Grep",
-			Execute: func(ctx context.Context, _ string, raw json.RawMessage, _ func(agent.ToolResult)) (agent.ToolResult, error) {
+			Execute: func(ctx context.Context, _ string, raw json.RawMessage, _ func(agent.ToolProgress)) (agent.ToolResult, error) {
 				var in grepArgs
 				if err := json.Unmarshal(raw, &in); err != nil {
 					return agent.ToolResult{}, err

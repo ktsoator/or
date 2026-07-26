@@ -55,7 +55,7 @@ type weatherArgs struct {
 func main() {
 	weather := agent.AgentTool{
 		Definition: llm.MustTool[weatherArgs]("get_weather", "Get the current weather for a city"),
-		Execute: func(ctx context.Context, callID string, args json.RawMessage, onUpdate func(agent.ToolResult)) (agent.ToolResult, error) {
+		Execute: func(ctx context.Context, callID string, args json.RawMessage, onProgress func(agent.ToolProgress)) (agent.ToolResult, error) {
 			var in weatherArgs
 			if err := json.Unmarshal(args, &in); err != nil {
 				return agent.ToolResult{}, err

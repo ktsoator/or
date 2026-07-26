@@ -346,10 +346,7 @@ func (s *Session) captureOutcomes() {
 		if ev.Type != agent.ToolEnd {
 			return
 		}
-		result, ok := ev.Result.(agent.ToolResult)
-		if !ok {
-			return
-		}
+		result := ev.Result
 		payload, ok := encodeOutcome(result.Outcome)
 		if !ok {
 			return

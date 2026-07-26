@@ -38,8 +38,9 @@ type AgentEvent struct {
 	ToolCallID  string
 	ToolName    string
 	Args        any                  // 校验后的工具参数，在工具事件上
-	Result      any                  // （部分）ToolResult，在工具事件上
-	IsError     bool
+	Progress    ToolProgress         // 非终态进度，在 ToolUpdate 上设置
+	Result      ToolResult           // 终态结果，在 ToolEnd 上设置
+	IsError     bool                 // 在 ToolEnd 上由 Result.Outcome 推导
 	Messages    []AgentMessage       // 追加的消息，在 AgentEnd 上设置
 }
 ```
@@ -51,7 +52,7 @@ type AgentEvent struct {
 | `AgentStart` / `AgentEnd` | 运行边界 | `AgentEnd.Messages` —— 本次运行追加的全部内容 |
 | `TurnStart` / `TurnEnd` | 一轮 assistant 响应及其工具 | `TurnEnd.ToolResults` |
 | `MessageStart` / `MessageUpdate` / `MessageEnd` | 一条消息进入、流式、完成 | `MessageUpdate.LLMEvent` —— 底层 `llm.Event` |
-| `ToolStart` / `ToolUpdate` / `ToolEnd` | 一个工具在执行 | `ToolName`、`Args`、`Result`、`IsError` |
+| `ToolStart` / `ToolUpdate` / `ToolEnd` | 一个工具在执行 | `ToolUpdate.Progress`；`ToolEnd.Result`、`ToolEnd.IsError` |
 
 `MessageUpdate` 在 `LLMEvent` 里携带原始 `llm.Event`，所以你能区分文本增量、推理增量和
 工具调用增量，并从 `event.Message` 读取目前为止拼装出的部分消息。
@@ -71,6 +72,9 @@ AgentStart
   ... 模型继续调用工具时，又一个 TurnStart ...
 AgentEnd
 ```
+
+每个被接受的工具调用恰好发出一个 `ToolEnd`。在这个终态事件之前可以有零到多个
+`ToolUpdate`，但终态事件之后不会再有进度更新。
 
 一个不调用任何工具、也没有留下引导消息的回合，会在 `TurnEnd` 之后结束运行。
 `AgentEnd.Messages` 与无状态 `RunLoop` 返回的切片相同——即本次运行追加进 transcript 的

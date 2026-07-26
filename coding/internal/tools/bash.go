@@ -32,7 +32,7 @@ func Bash(root string, ops ExecOps, tasks *TaskManager) Tool {
 		AgentTool: agent.AgentTool{
 			Definition: def,
 			Label:      "Bash",
-			Execute: func(ctx context.Context, _ string, raw json.RawMessage, _ func(agent.ToolResult)) (agent.ToolResult, error) {
+			Execute: func(ctx context.Context, _ string, raw json.RawMessage, _ func(agent.ToolProgress)) (agent.ToolResult, error) {
 				var in bashArgs
 				if err := json.Unmarshal(raw, &in); err != nil {
 					return agent.ToolResult{}, err

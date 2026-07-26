@@ -99,7 +99,7 @@ func TestCapabilityVetoRunsBeforeCorePermission(t *testing.T) {
 func capabilityTestTool(name string, onExecute func()) tools.Tool {
 	return tools.Tool{AgentTool: agent.AgentTool{
 		Definition: llm.MustTool[struct{}](name, "Test capability tool"),
-		Execute: func(context.Context, string, json.RawMessage, func(agent.ToolResult)) (agent.ToolResult, error) {
+		Execute: func(context.Context, string, json.RawMessage, func(agent.ToolProgress)) (agent.ToolResult, error) {
 			if onExecute != nil {
 				onExecute()
 			}

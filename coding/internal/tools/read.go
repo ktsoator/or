@@ -46,7 +46,7 @@ func Read(root string, ops FileOps, files *FileStateStore, trustedPaths ...func(
 		AgentTool: agent.AgentTool{
 			Definition: def,
 			Label:      "Read",
-			Execute: func(ctx context.Context, _ string, raw json.RawMessage, _ func(agent.ToolResult)) (agent.ToolResult, error) {
+			Execute: func(ctx context.Context, _ string, raw json.RawMessage, _ func(agent.ToolProgress)) (agent.ToolResult, error) {
 				var in readArgs
 				if err := json.Unmarshal(raw, &in); err != nil {
 					return agent.ToolResult{}, err

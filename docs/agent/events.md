@@ -41,8 +41,9 @@ type AgentEvent struct {
 	ToolCallID  string
 	ToolName    string
 	Args        any                  // validated tool arguments, on tool events
-	Result      any                  // (partial) ToolResult, on tool events
-	IsError     bool
+	Progress    ToolProgress         // non-terminal update, set on ToolUpdate
+	Result      ToolResult           // terminal result, set on ToolEnd
+	IsError     bool                 // derived from Result.Outcome on ToolEnd
 	Messages    []AgentMessage       // appended messages, set on AgentEnd
 }
 ```
@@ -54,7 +55,7 @@ Fields are populated according to `Type`; unrelated fields are zero.
 | `AgentStart` / `AgentEnd` | run boundaries | `AgentEnd.Messages` — everything the run appended |
 | `TurnStart` / `TurnEnd` | one assistant response and its tools | `TurnEnd.ToolResults` |
 | `MessageStart` / `MessageUpdate` / `MessageEnd` | a message entering, streaming, completing | `MessageUpdate.LLMEvent` — the underlying `llm.Event` |
-| `ToolStart` / `ToolUpdate` / `ToolEnd` | one tool executing | `ToolName`, `Args`, `Result`, `IsError` |
+| `ToolStart` / `ToolUpdate` / `ToolEnd` | one tool executing | `ToolUpdate.Progress`; `ToolEnd.Result`, `ToolEnd.IsError` |
 
 `MessageUpdate` carries the raw `llm.Event` in `LLMEvent`, so you can distinguish
 text deltas from reasoning deltas and tool-call deltas, and read the partial
@@ -75,6 +76,9 @@ AgentStart
   ... another TurnStart while the model keeps calling tools ...
 AgentEnd
 ```
+
+Each accepted tool call emits exactly one `ToolEnd`. It may emit zero or more
+`ToolUpdate` events before that terminal event, but never after it.
 
 A turn that calls no tools and leaves no steering messages ends the run after
 `TurnEnd`. `AgentEnd.Messages` is the same slice the stateless `RunLoop` returns —

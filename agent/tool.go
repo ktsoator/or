@@ -34,6 +34,16 @@ func (o ToolOutcome) Failed() bool {
 	return o.Status != "" && o.Status != ToolOutcomeSuccess
 }
 
+// ToolProgress is a non-terminal update emitted while a tool is running. It
+// cannot report completion, failure, cancellation, timeout, or termination;
+// those belong exclusively to the ToolResult returned by Execute.
+type ToolProgress struct {
+	// Content is incremental text or image content for progress consumers.
+	Content []llm.ToolResultContent
+	// Data is arbitrary structured progress data for runtimes and product shells.
+	Data any
+}
+
 // ToolResult is what a tool returns to the model, with a machine-readable
 // outcome and an optional early-termination hint.
 type ToolResult struct {
@@ -70,9 +80,9 @@ type AgentTool struct {
 	PrepareArguments func(arguments map[string]any) map[string]any
 	// Execute runs the tool. It reports failure by returning an error, which the
 	// engine turns into an error tool result so one failing tool does not abort
-	// the run. onUpdate streams partial results and is valid only for the
-	// duration of the call.
-	Execute func(ctx context.Context, callID string, args json.RawMessage, onUpdate func(ToolResult)) (ToolResult, error)
+	// the run. onProgress emits non-terminal updates and is valid only for the
+	// duration of the call; updates after Execute returns are ignored.
+	Execute func(ctx context.Context, callID string, args json.RawMessage, onProgress func(ToolProgress)) (ToolResult, error)
 	// ExecutionMode overrides the loop default for this tool. Empty inherits it.
 	ExecutionMode ExecutionMode
 }

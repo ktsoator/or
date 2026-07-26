@@ -78,7 +78,7 @@ func BrowserTabs(providers ...BrowserTabsProvider) Tool {
 		AgentTool: agent.AgentTool{
 			Definition: def,
 			Label:      "List browser tabs",
-			Execute: func(ctx context.Context, _ string, _ json.RawMessage, _ func(agent.ToolResult)) (agent.ToolResult, error) {
+			Execute: func(ctx context.Context, _ string, _ json.RawMessage, _ func(agent.ToolProgress)) (agent.ToolResult, error) {
 				if provider == nil {
 					return failedResult("browser_unavailable", "Could not list browser tabs: browser observation is unavailable", nil), nil
 				}

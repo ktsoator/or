@@ -12,7 +12,7 @@ type AgentTool struct {
 	Definition       llm.ToolDefinition
 	Label            string
 	PrepareArguments func(arguments map[string]any) map[string]any
-	Execute          func(ctx context.Context, callID string, args json.RawMessage, onUpdate func(ToolResult)) (ToolResult, error)
+	Execute          func(ctx context.Context, callID string, args json.RawMessage, onProgress func(ToolProgress)) (ToolResult, error)
 	ExecutionMode    ExecutionMode
 }
 ```
@@ -32,7 +32,7 @@ type searchArgs struct {
 
 search := agent.AgentTool{
 	Definition: llm.MustTool[searchArgs]("search_docs", "Search the documentation"),
-	Execute: func(ctx context.Context, callID string, args json.RawMessage, onUpdate func(agent.ToolResult)) (agent.ToolResult, error) {
+	Execute: func(ctx context.Context, callID string, args json.RawMessage, onProgress func(agent.ToolProgress)) (agent.ToolResult, error) {
 		var in searchArgs
 		if err := json.Unmarshal(args, &in); err != nil {
 			return agent.ToolResult{}, err
@@ -72,24 +72,34 @@ PrepareArguments: func(arguments map[string]any) map[string]any {
 ```go
 type ToolResult struct {
 	Content   []llm.ToolResultContent // 模型看到的内容
-	Details   any                     // 给日志或 UI 的结构化数据；不发给模型
+	Outcome   ToolOutcome             // 终态状态和机器可读数据
 	Terminate bool                    // 提示本批结束后停止运行
+}
+
+type ToolOutcome struct {
+	Status    ToolOutcomeStatus // success、failed、cancelled 或 timeout
+	ErrorCode string
+	ExitCode  *int
+	Data      any
 }
 ```
 
 - `Content` 是模型下一轮读到的答案——文本，以及对视觉模型而言的图片。
-- `Details` 是挂在 `ToolEnd` 事件上、供日志或 UI 渲染的任意结构化数据。模型看不到它。
+- `Outcome` 是唯一终态。它的 `Data` 是挂在 `ToolEnd` 上、供日志或 UI 渲染的任意
+  结构化数据，模型看不到它。只返回 Content 的简单工具可以留空 status，引擎会将其
+  归一化为 `success`。
 - `Terminate` 请求提前停止。只有当一批里**每个**结果都设了 `Terminate`，这批才会停止
   运行，所以单个工具无法单方面结束一次还调用了其它工具的运行。
 
 ## 失败不中断运行
 
-工具通过返回 error 来报告失败；引擎把它转成一个错误结果（设上 `IsError`）并继续，所以
-单个失败的工具不会结束运行。会 panic 的工具也以同样方式被恢复成错误结果，而不是让进程
-崩溃。这一点对并发运行的工具同样成立——它们各自跑在独立的 goroutine 上。
+工具通过 failed outcome 或返回 error 来报告失败；引擎把它归一化为错误结果（`IsError`
+由 outcome 推导）并继续，所以单个失败的工具不会结束运行。会 panic 的工具也以同样方式
+被恢复成错误结果，而不是让进程崩溃。这一点对并发运行的工具同样成立——它们各自跑在
+独立的 goroutine 上。
 
 ```go
-Execute: func(ctx context.Context, callID string, args json.RawMessage, onUpdate func(agent.ToolResult)) (agent.ToolResult, error) {
+Execute: func(ctx context.Context, callID string, args json.RawMessage, onProgress func(agent.ToolProgress)) (agent.ToolResult, error) {
 	if err := doWork(ctx); err != nil {
 		return agent.ToolResult{}, err // 变成错误结果；循环继续
 	}
@@ -102,19 +112,21 @@ Execute: func(ctx context.Context, callID string, args json.RawMessage, onUpdate
 
 ## 流式进度
 
-`onUpdate` 回调在工具运行时以 `ToolUpdate` 事件发出一个部分 `ToolResult`——用于进度条、
-转圈或流式输出。它仅在该次调用期间有效。
+`onProgress` 回调在工具运行时以 `ToolUpdate` 事件发出非终态的 `ToolProgress`——用于
+进度条、转圈或流式输出。它不能携带 outcome，也不能终止运行。该回调仅在 `Execute`
+期间有效；`Execute` 返回后的迟到进度会被忽略。
 
 ```go
-Execute: func(ctx context.Context, callID string, args json.RawMessage, onUpdate func(agent.ToolResult)) (agent.ToolResult, error) {
-	onUpdate(agent.ToolResult{Details: "connecting"})
+Execute: func(ctx context.Context, callID string, args json.RawMessage, onProgress func(agent.ToolProgress)) (agent.ToolResult, error) {
+	onProgress(agent.ToolProgress{Data: "connecting"})
 	rows := query(ctx)
-	onUpdate(agent.ToolResult{Details: fmt.Sprintf("%d rows", len(rows))})
+	onProgress(agent.ToolProgress{Data: fmt.Sprintf("%d rows", len(rows))})
 	return agent.ToolResult{Content: format(rows)}, nil
 },
 ```
 
-订阅 `ToolUpdate` 来渲染进度——见[事件与状态](events.md)。
+订阅 `ToolUpdate` 并读取 `event.Progress` 来渲染进度。返回的
+`ToolResult.Outcome` 只会出现在 `ToolEnd` 上——见[事件与状态](events.md)。
 
 ## 执行顺序
 

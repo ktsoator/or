@@ -109,7 +109,7 @@ func executeBrowserInspectionWithArgs(t *testing.T, tool Tool, args json.RawMess
 		context.Background(),
 		"inspection-call",
 		args,
-		func(agent.ToolResult) {},
+		func(agent.ToolProgress) {},
 	)
 	if err != nil {
 		t.Fatal(err)

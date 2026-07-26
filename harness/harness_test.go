@@ -80,7 +80,7 @@ func noopTool() agent.AgentTool { return namedTool("noop") }
 func namedTool(name string) agent.AgentTool {
 	return agent.AgentTool{
 		Definition: llm.MustTool[struct{}](name, name+" tool"),
-		Execute: func(context.Context, string, json.RawMessage, func(agent.ToolResult)) (agent.ToolResult, error) {
+		Execute: func(context.Context, string, json.RawMessage, func(agent.ToolProgress)) (agent.ToolResult, error) {
 			return agent.ToolResult{Content: []llm.ToolResultContent{&llm.TextContent{Text: "done"}}}, nil
 		},
 	}

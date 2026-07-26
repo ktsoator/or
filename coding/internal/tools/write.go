@@ -36,7 +36,7 @@ func Write(root string, ops FileOps, files *FileStateStore) Tool {
 			Definition:    def,
 			Label:         "Write",
 			ExecutionMode: agent.ExecutionSequential,
-			Execute: func(ctx context.Context, _ string, raw json.RawMessage, _ func(agent.ToolResult)) (agent.ToolResult, error) {
+			Execute: func(ctx context.Context, _ string, raw json.RawMessage, _ func(agent.ToolProgress)) (agent.ToolResult, error) {
 				var in writeArgs
 				if err := json.Unmarshal(raw, &in); err != nil {
 					return agent.ToolResult{}, err

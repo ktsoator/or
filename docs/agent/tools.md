@@ -14,7 +14,7 @@ type AgentTool struct {
 	Definition       llm.ToolDefinition
 	Label            string
 	PrepareArguments func(arguments map[string]any) map[string]any
-	Execute          func(ctx context.Context, callID string, args json.RawMessage, onUpdate func(ToolResult)) (ToolResult, error)
+	Execute          func(ctx context.Context, callID string, args json.RawMessage, onProgress func(ToolProgress)) (ToolResult, error)
 	ExecutionMode    ExecutionMode
 }
 ```
@@ -35,7 +35,7 @@ type searchArgs struct {
 
 search := agent.AgentTool{
 	Definition: llm.MustTool[searchArgs]("search_docs", "Search the documentation"),
-	Execute: func(ctx context.Context, callID string, args json.RawMessage, onUpdate func(agent.ToolResult)) (agent.ToolResult, error) {
+	Execute: func(ctx context.Context, callID string, args json.RawMessage, onProgress func(agent.ToolProgress)) (agent.ToolResult, error) {
 		var in searchArgs
 		if err := json.Unmarshal(args, &in); err != nil {
 			return agent.ToolResult{}, err
@@ -77,29 +77,39 @@ PrepareArguments: func(arguments map[string]any) map[string]any {
 ```go
 type ToolResult struct {
 	Content   []llm.ToolResultContent // what the model sees
-	Details   any                     // structured data for logs or UI; not sent to the model
+	Outcome   ToolOutcome             // terminal status and machine-readable data
 	Terminate bool                    // hint to stop the run after this batch
+}
+
+type ToolOutcome struct {
+	Status    ToolOutcomeStatus // success, failed, cancelled, or timeout
+	ErrorCode string
+	ExitCode  *int
+	Data      any
 }
 ```
 
 - `Content` is the answer the model reads on the next turn — text and, for
   vision models, images.
-- `Details` is arbitrary structured data attached to the `ToolEnd` event for
-  logging or UI rendering. The model never sees it.
+- `Outcome` is the only terminal state. Its `Data` is arbitrary structured data
+  attached to `ToolEnd` for logging or UI rendering; the model never sees it.
+  An empty status is normalized to `success` for simple tools that return only
+  content.
 - `Terminate` requests an early stop. A tool batch stops the run only when *every*
   result in it sets `Terminate`, so one tool cannot unilaterally end a run that
   also called other tools.
 
 ## Failure never aborts the run
 
-A tool reports failure by returning an error; the engine turns it into an error
-result (`IsError` set) and continues, so one failing tool does not end the run.
+A tool reports failure with a failed outcome or by returning an error; the
+engine normalizes it into an error result (`IsError` is derived from the
+outcome) and continues, so one failing tool does not end the run.
 A tool that panics is recovered the same way — into an error result — rather than
 crashing the process. This holds even for tools running concurrently, which run
 on their own goroutines.
 
 ```go
-Execute: func(ctx context.Context, callID string, args json.RawMessage, onUpdate func(agent.ToolResult)) (agent.ToolResult, error) {
+Execute: func(ctx context.Context, callID string, args json.RawMessage, onProgress func(agent.ToolProgress)) (agent.ToolResult, error) {
 	if err := doWork(ctx); err != nil {
 		return agent.ToolResult{}, err // becomes an error result; the loop continues
 	}
@@ -113,20 +123,23 @@ results.
 
 ## Streaming progress
 
-The `onUpdate` callback emits a partial `ToolResult` as a `ToolUpdate` event while
-the tool runs — for a progress bar, a spinner, or streamed output. It is valid
-only for the duration of the call.
+The `onProgress` callback emits a non-terminal `ToolProgress` as a `ToolUpdate`
+event while the tool runs — for a progress bar, a spinner, or streamed output.
+It cannot carry an outcome or terminate the run. The callback is valid only for
+the duration of `Execute`; late updates after `Execute` returns are ignored.
 
 ```go
-Execute: func(ctx context.Context, callID string, args json.RawMessage, onUpdate func(agent.ToolResult)) (agent.ToolResult, error) {
-	onUpdate(agent.ToolResult{Details: "connecting"})
+Execute: func(ctx context.Context, callID string, args json.RawMessage, onProgress func(agent.ToolProgress)) (agent.ToolResult, error) {
+	onProgress(agent.ToolProgress{Data: "connecting"})
 	rows := query(ctx)
-	onUpdate(agent.ToolResult{Details: fmt.Sprintf("%d rows", len(rows))})
+	onProgress(agent.ToolProgress{Data: fmt.Sprintf("%d rows", len(rows))})
 	return agent.ToolResult{Content: format(rows)}, nil
 },
 ```
 
-Subscribe to `ToolUpdate` to render progress — see [Events and state](events.md).
+Subscribe to `ToolUpdate` and read `event.Progress` to render progress. The
+returned `ToolResult.Outcome` appears only on `ToolEnd` — see
+[Events and state](events.md).
 
 ## Execution order
 

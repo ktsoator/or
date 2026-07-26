@@ -24,7 +24,7 @@ const (
 	MessageEnd AgentEventType = "message_end"
 	// ToolStart marks the start of a tool execution.
 	ToolStart AgentEventType = "tool_execution_start"
-	// ToolUpdate carries a partial tool result streamed during execution.
+	// ToolUpdate carries non-terminal progress streamed during execution.
 	ToolUpdate AgentEventType = "tool_execution_update"
 	// ToolEnd marks a finished tool execution.
 	ToolEnd AgentEventType = "tool_execution_end"
@@ -47,8 +47,10 @@ type AgentEvent struct {
 	ToolName   string
 	// Args is the validated tool arguments on tool execution events.
 	Args any
-	// Result is the (possibly partial) tool result on tool execution events.
-	Result any
+	// Progress is populated only on ToolUpdate.
+	Progress ToolProgress
+	// Result is the terminal result populated only on ToolEnd.
+	Result ToolResult
 	// IsError is the model-facing compatibility projection of Result.Outcome.
 	// ToolEnd consumers should use the outcome as the source of truth.
 	IsError bool

@@ -30,14 +30,14 @@ type weatherArgs struct {
 func main() {
 	weather := agent.AgentTool{
 		Definition: llm.MustTool[weatherArgs]("get_weather", "Get a weather forecast for a city"),
-		Execute: func(ctx context.Context, callID string, args json.RawMessage, onUpdate func(agent.ToolResult)) (agent.ToolResult, error) {
+		Execute: func(ctx context.Context, callID string, args json.RawMessage, onProgress func(agent.ToolProgress)) (agent.ToolResult, error) {
 			var in weatherArgs
 			if err := json.Unmarshal(args, &in); err != nil {
 				return agent.ToolResult{}, err
 			}
 
-			onUpdate(agent.ToolResult{Outcome: agent.ToolOutcome{Status: agent.ToolOutcomeSuccess, Data: "connecting"}})
-			onUpdate(agent.ToolResult{Outcome: agent.ToolOutcome{Status: agent.ToolOutcomeSuccess, Data: "reading forecast"}})
+			onProgress(agent.ToolProgress{Data: "connecting"})
+			onProgress(agent.ToolProgress{Data: "reading forecast"})
 
 			result := fmt.Sprintf("%s: sunny, around 25C for the next %d days", in.City, in.Days)
 			return agent.ToolResult{
@@ -78,9 +78,7 @@ func main() {
 		case agent.ToolStart:
 			fmt.Printf("\n[tool] %s %v\n", event.ToolName, event.Args)
 		case agent.ToolUpdate:
-			if result, ok := event.Result.(agent.ToolResult); ok {
-				fmt.Printf("[tool update] %v\n", result.Outcome.Data)
-			}
+			fmt.Printf("[tool progress] %v\n", event.Progress.Data)
 		case agent.ToolEnd:
 			fmt.Printf("[tool done] %s error=%v\n", event.ToolName, event.IsError)
 		case agent.AgentEnd:

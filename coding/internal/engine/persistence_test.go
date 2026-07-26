@@ -124,7 +124,7 @@ func TestSessionCheckpointsCompleteToolBatchBeforeNextModelRequest(t *testing.T)
 				_ context.Context,
 				_ string,
 				args json.RawMessage,
-				_ func(agent.ToolResult),
+				_ func(agent.ToolProgress),
 			) (agent.ToolResult, error) {
 				var parsed checkpointToolArgs
 				if err := json.Unmarshal(args, &parsed); err != nil {

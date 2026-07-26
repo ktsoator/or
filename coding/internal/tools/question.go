@@ -88,7 +88,7 @@ func AskUserQuestion(asker Asker) Tool {
 				ctx context.Context,
 				_ string,
 				raw json.RawMessage,
-				_ func(agent.ToolResult),
+				_ func(agent.ToolProgress),
 			) (agent.ToolResult, error) {
 				var in askUserQuestionArgs
 				if err := json.Unmarshal(raw, &in); err != nil {

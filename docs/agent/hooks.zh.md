@@ -38,7 +38,7 @@ BeforeToolCall: func(c agent.BeforeToolCallCtx) (block bool, reason string) {
 
 ```go
 AfterToolCall: func(c agent.AfterToolCallCtx) *agent.AfterToolCallResult {
-	if c.IsError {
+	if c.Result.Outcome.Failed() {
 		stop := true
 		return &agent.AfterToolCallResult{Terminate: &stop} // 任一工具出错就结束运行
 	}
@@ -46,9 +46,9 @@ AfterToolCall: func(c agent.AfterToolCallCtx) *agent.AfterToolCallResult {
 },
 ```
 
-`AfterToolCallResult` 可覆盖 `Content`、`Details`、`IsError` 和 `Terminate`。给一批里
-每个结果都设上 `Terminate`，该批之后即停止运行。两个钩子都按源序运行、绝不并发，即使
-工具本身并行运行也是如此——见[工具](tools.md#执行顺序)。
+`AfterToolCallResult` 可覆盖 `Content`、完整的 `Outcome` 和 `Terminate`。给一批里每个
+结果都设上 `Terminate`，该批之后即停止运行。两个钩子都按源序运行、绝不并发，即使工具
+本身并行运行也是如此——见[工具](tools.md#执行顺序)。
 
 ## 回合间的模型切换
 

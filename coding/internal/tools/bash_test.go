@@ -37,7 +37,7 @@ func TestBashReturnsExitCodeInToolOutcome(t *testing.T) {
 				context.Background(),
 				"bash-call",
 				json.RawMessage(`{"command":"test command"}`),
-				func(agent.ToolResult) {},
+				func(agent.ToolProgress) {},
 			)
 			if err != nil {
 				t.Fatal(err)

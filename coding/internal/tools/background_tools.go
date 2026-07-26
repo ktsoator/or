@@ -21,7 +21,7 @@ func TaskStop(tasks *TaskManager) Tool {
 		AgentTool: agent.AgentTool{
 			Definition: def,
 			Label:      "Stop task",
-			Execute: func(_ context.Context, _ string, raw json.RawMessage, _ func(agent.ToolResult)) (agent.ToolResult, error) {
+			Execute: func(_ context.Context, _ string, raw json.RawMessage, _ func(agent.ToolProgress)) (agent.ToolResult, error) {
 				var in taskStopArgs
 				if err := json.Unmarshal(raw, &in); err != nil {
 					return agent.ToolResult{}, err

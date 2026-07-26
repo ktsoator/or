@@ -129,7 +129,7 @@ func resultText(content []llm.ToolResultContent) string {
 func echoTool(execute func()) AgentTool {
 	return AgentTool{
 		Definition: llm.MustTool[echoArgs]("echo", "Echo text back"),
-		Execute: func(_ context.Context, _ string, args json.RawMessage, _ func(ToolResult)) (ToolResult, error) {
+		Execute: func(_ context.Context, _ string, args json.RawMessage, _ func(ToolProgress)) (ToolResult, error) {
 			if execute != nil {
 				execute()
 			}
@@ -292,7 +292,7 @@ func TestRunLoopToolTerminateStopsLoop(t *testing.T) {
 	}}
 	stopTool := AgentTool{
 		Definition: llm.MustTool[struct{}]("stop", "Stop the run"),
-		Execute: func(_ context.Context, _ string, _ json.RawMessage, _ func(ToolResult)) (ToolResult, error) {
+		Execute: func(_ context.Context, _ string, _ json.RawMessage, _ func(ToolProgress)) (ToolResult, error) {
 			return ToolResult{
 				Content:   []llm.ToolResultContent{&llm.TextContent{Text: "stopping"}},
 				Terminate: true,
@@ -445,7 +445,7 @@ func TestRunLoopRecoversFromCallbackPanic(t *testing.T) {
 func TestRunLoopRecoversFromToolPanic(t *testing.T) {
 	panicTool := AgentTool{
 		Definition: llm.MustTool[echoArgs]("echo", "echo"),
-		Execute: func(context.Context, string, json.RawMessage, func(ToolResult)) (ToolResult, error) {
+		Execute: func(context.Context, string, json.RawMessage, func(ToolProgress)) (ToolResult, error) {
 			panic("tool boom")
 		},
 	}
@@ -473,7 +473,7 @@ func TestRunLoopSequentialAbortSkipsRemainingTools(t *testing.T) {
 	tool := AgentTool{
 		Definition:    llm.MustTool[echoArgs]("echo", "echo"),
 		ExecutionMode: ExecutionSequential,
-		Execute: func(_ context.Context, callID string, _ json.RawMessage, _ func(ToolResult)) (ToolResult, error) {
+		Execute: func(_ context.Context, callID string, _ json.RawMessage, _ func(ToolProgress)) (ToolResult, error) {
 			if callID == "a" {
 				cancel() // cancel the run after the first tool runs
 			}

@@ -72,7 +72,7 @@ func TestOpenPreviewPassesTabDisposition(t *testing.T) {
 				context.Background(),
 				"preview-call",
 				json.RawMessage(test.raw),
-				func(agent.ToolResult) {},
+				func(agent.ToolProgress) {},
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -227,7 +227,7 @@ func TestOpenPreviewUsesCommittedRedirectInToolResult(t *testing.T) {
 		context.Background(),
 		"preview-call",
 		json.RawMessage(`{"url":"https://example.com/start"}`),
-		func(agent.ToolResult) {},
+		func(agent.ToolProgress) {},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -263,7 +263,7 @@ func TestOpenPreviewPersistsControllerWorkspaceGrant(t *testing.T) {
 		context.Background(),
 		"preview-call",
 		json.RawMessage(`{"url":"web/index.html"}`),
-		func(agent.ToolResult) {},
+		func(agent.ToolProgress) {},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -282,7 +282,7 @@ func TestOpenPreviewDoesNotPersistFailedNavigation(t *testing.T) {
 		context.Background(),
 		"preview-call",
 		json.RawMessage(`{"url":"https://unavailable.invalid"}`),
-		func(agent.ToolResult) {},
+		func(agent.ToolProgress) {},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -314,6 +314,6 @@ func executePreviewIn(t *testing.T, root, input string) (agent.ToolResult, error
 		context.Background(),
 		"preview-call",
 		json.RawMessage(input),
-		func(agent.ToolResult) {},
+		func(agent.ToolProgress) {},
 	)
 }

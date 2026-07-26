@@ -41,7 +41,7 @@ func newTool(
 	return agent.AgentTool{
 		Definition: llm.MustTool[skillCallArgs](ToolName, toolDescription),
 		Label:      "Skill",
-		Execute: func(_ context.Context, _ string, raw json.RawMessage, _ func(agent.ToolResult)) (agent.ToolResult, error) {
+		Execute: func(_ context.Context, _ string, raw json.RawMessage, _ func(agent.ToolProgress)) (agent.ToolResult, error) {
 			var in skillCallArgs
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return agent.ToolResult{}, err
