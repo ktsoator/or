@@ -13,6 +13,8 @@ export type WireEventType =
   | "turn_discard"
   | "compaction_start"
   | "compaction_end"
+  | "task_started"
+  | "task_notification"
   | "approval_request"
   | "approval_resolved"
   | "approval_cancelled"
@@ -32,6 +34,12 @@ export type WireEventType =
 export type DeltaKind =
   | "text"
   | "thinking"
+
+export type TaskStatus =
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "stopped"
 
 export type DeliveryMode =
   | "steer"
@@ -189,6 +197,22 @@ export type ContextUsage = {
   measured: boolean
 }
 
+export type BackgroundTask = {
+  id: string
+  command: string
+  description?: string
+  status: TaskStatus
+  outputPath: string
+  exitCode?: number
+  startedAt: string
+  completedAt?: string
+}
+
+export type TaskOutputResponse = {
+  content: string
+  truncated: boolean
+}
+
 export type QuestionOption = {
   label: string
   description: string
@@ -239,12 +263,14 @@ export type WireEvent = {
   startedAt?: string
   completedAt?: string
   durationMs?: number
+  task?: BackgroundTask
 }
 
 export type HistoryResponse = {
   events: WireEvent[]
   queue: WireEvent[]
   context: ContextUsage
+  tasks: BackgroundTask[]
   running: boolean
   eventSeq: number
   title: string

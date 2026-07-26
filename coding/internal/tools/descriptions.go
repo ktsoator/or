@@ -101,21 +101,21 @@ Usage:
 - If edit or write requires a prior read, call read and retry the same tool.
 - A non-zero exit code is reported as output, not as a failure, so you can react to it.
 - Always set description to a short active-voice summary of the command (about 5-10 words); it is shown in the UI in place of the raw command.
-- For a long-lived process that does not exit on its own — a dev server, a watcher, a database — set run_in_background instead of waiting for it. bash returns a shell id immediately; read its output with bash_output and stop it with kill_bash. Never wait on such a command in the foreground.`,
+- For a long-lived process that does not exit on its own — a dev server, a watcher, a database — set run_in_background instead of waiting for it. bash returns a task id and managed output path immediately. Completion is reported automatically; read the output file only when logs are needed, and stop it with task_stop. Do not poll. Never wait on such a command in the foreground.`,
 	guidelines: []string{
 		"Never bypass a `read`, `edit`, or `write` error with `bash`; satisfy the requested precondition and retry the same tool.",
 		"Set `bash`'s `description` to a short active-voice summary of each command; it is what the UI shows instead of the raw command.",
-		"Start long-lived processes (servers, watchers) with `bash` `run_in_background`, then inspect them with `bash_output` and stop them with `kill_bash`; never run them in the foreground.",
+		"Start long-lived processes (servers, watchers) with `bash` `run_in_background`; wait for automatic completion notifications, read the returned output file only when needed, and stop them with `task_stop`. Do not poll.",
 	},
 }
 
-var bashOutputText = toolText{
-	description: `Read new output from a background shell started by bash with run_in_background.
+var taskStopText = toolText{
+	description: `Stop a managed background task started by bash with run_in_background.
 
 Usage:
-- shell_id is the id bash returned when the command was started.
-- Each call returns only the output produced since the previous call, plus whether the shell is still running and, once finished, its exit code.
-- Poll after starting a background server to confirm it came up, or to collect logs while other work proceeds.`,
+- task_id is the id bash returned when the task was started.
+- The task's complete output remains available at the path returned by bash until the coding session closes.
+- Completed tasks do not need to be stopped.`,
 }
 
 var openPreviewText = toolText{
@@ -125,7 +125,7 @@ Usage:
 - For a public website, pass its complete http or https URL. Public URLs open directly in the Browser view and are not fetched by the agent runtime.
 - For a static HTML page, pass its absolute workspace path directly. Workspace-relative paths and file:// URLs inside the workspace are also accepted. Do not start a server for static HTML.
 - For an application that requires a runtime or dev server, url must be a complete http or https URL on localhost, 127.0.0.1, ::1, or a wildcard loopback listener such as 0.0.0.0.
-- Start required long-lived development servers with bash run_in_background, then use bash_output to confirm the server is running before opening its URL.
+- Start required long-lived development servers with bash run_in_background. Read the returned output file when startup logs are needed, then open the URL; do not poll for output.
 - Use this when the user asks to open a website or when a web interface is ready for inspection. Do not call it for API servers or test runners.
 - title is optional and should be a short name for the page.
 - disposition defaults to reuse_agent_tab, which reuses the currently selected Agent-controlled tab and falls back to the session's stable Agent tab. Use new_foreground_tab only when the user asks for a new tab, and new_background_tab only when the user explicitly asks to open it in the background.`,
@@ -184,13 +184,4 @@ Usage:
 	guidelines: []string{
 		"Ask with `ask_user_question` only when the decision is the user's to make; anything the workspace can answer, answer with a tool.",
 	},
-}
-
-var killBashText = toolText{
-	description: `Stop a background shell started by bash with run_in_background, terminating its whole process group.
-
-Usage:
-- shell_id is the id bash returned when the command was started.
-- Stopping an already-finished shell is a no-op.
-- Kill a background server or watcher once you are done with it so it does not keep holding its port.`,
 }

@@ -35,26 +35,30 @@ func (t Tool) Accesses(args map[string]any) []permission.Access {
 // Name returns the tool's advertised name.
 func (t Tool) Name() string { return t.Definition.Name }
 
-// CodingTools returns the default v1 tool set rooted at the given workspace
-// directory and backed by ops. One file-state store is shared by Read, Edit,
-// and Write for this tool-set lifetime. Pass LocalOps{} for the local filesystem
-// and shell. Background shells started by this set are abandoned when it is
-// discarded; use CodingToolsWithShells when the caller needs to stop them.
-func CodingTools(root string, ops Ops) []Tool {
-	set, _ := CodingToolsWithShells(root, ops)
-	return set
+// CoreToolsWithTasks returns the filesystem and shell tools that make up the
+// coding product's core capability. Browser tools are assembled separately so
+// the engine can register them as an optional capability without coupling that
+// distinction to the reusable agent package.
+func CoreToolsWithTasks(root string, ops Ops) ([]Tool, *TaskManager) {
+	files := NewFileStateStore()
+	tasks := NewTaskManager()
+	return []Tool{
+		Read(root, ops, files, tasks.OwnsOutputPath),
+		Grep(root, ops),
+		Glob(root, ops),
+		LS(root, ops),
+		Edit(root, ops, files),
+		Write(root, ops, files),
+		Bash(root, ops, tasks),
+		TaskStop(tasks),
+	}, tasks
 }
 
-// CodingToolsWithShells is CodingTools plus the BackgroundShells manager backing
-// the bash run_in_background workflow, so the caller can Shutdown any long-lived
-// processes when the session ends.
-func CodingToolsWithShells(
-	root string,
-	ops Ops,
-	browserControllers ...BrowserController,
-) ([]Tool, *BackgroundShells) {
-	files := NewFileStateStore()
-	shells := NewBackgroundShells()
+// BrowserTools returns the browser bridge tools. The tools are present even
+// when the controller is nil; in that configuration they fail closed,
+// preserving the default session contract while making the capability boundary
+// explicit.
+func BrowserTools(root string, browserControllers ...BrowserController) []Tool {
 	var inspectors []BrowserInspector
 	var tabProviders []BrowserTabsProvider
 	if len(browserControllers) > 0 {
@@ -66,19 +70,10 @@ func CodingToolsWithShells(
 		}
 	}
 	return []Tool{
-		Read(root, ops, files),
-		Grep(root, ops),
-		Glob(root, ops),
-		LS(root, ops),
-		Edit(root, ops, files),
-		Write(root, ops, files),
-		Bash(root, ops, shells),
-		BashOutput(shells),
 		OpenPreview(root, browserControllers...),
 		BrowserTabs(tabProviders...),
 		InspectBrowser(inspectors...),
-		KillBash(shells),
-	}, shells
+	}
 }
 
 // AgentTools extracts the executable agent.AgentTool from each Tool, for handing
@@ -104,7 +99,7 @@ func commandAccess(args map[string]any) []permission.Access {
 }
 
 // InternalAccess describes a tool that only interacts with state already owned
-// by the coding session, such as buffered shell output or loaded skill text.
+// by the coding session, such as managed task state or loaded skill text.
 func InternalAccess(map[string]any) []permission.Access {
 	return []permission.Access{{Action: permission.Internal}}
 }

@@ -27,6 +27,8 @@ const (
 	CompactionStarted    EventType = "compaction_started"
 	CompactionCompleted  EventType = "compaction_completed"
 	CompactionFailed     EventType = "compaction_failed"
+	TaskStarted          EventType = "task_started"
+	TaskCompleted        EventType = "task_completed"
 	RunCompleted         EventType = "run_completed"
 )
 
@@ -60,6 +62,9 @@ type Event struct {
 	// on live events but absent when history is replayed.
 	ToolDetails any
 	IsError     bool
+
+	// BackgroundTask contains the latest lifecycle state for task events.
+	BackgroundTask BackgroundTask
 
 	// Usage is one assistant request's consumption on MessageCompleted and the
 	// aggregate consumption on RunCompleted. Product adapters may accumulate

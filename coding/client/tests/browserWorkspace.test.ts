@@ -75,6 +75,49 @@ describe('browser workspace reducer', () => {
     expect(state.activeItemID).toBe('tab-1')
   })
 
+  test('opens one task view, switches tasks, and closes without stopping task state', () => {
+    let state = createBrowserWorkspaceState({
+      initialTab: createBrowserTab({ id: 'tab-1' }),
+      conversationTabID: 'conversation:session-1',
+      activeItemID: 'conversation:session-1',
+    })
+    state = browserWorkspaceReducer(state, {
+      t: 'open_tasks',
+      taskTabID: 'tasks:session-1',
+      taskID: 'task-1',
+    })
+    expect(state).toMatchObject({
+      taskTabID: 'tasks:session-1',
+      selectedTaskID: 'task-1',
+      activeItemID: 'tasks:session-1',
+    })
+    expect(selectedBrowserTab(state)).toBeUndefined()
+
+    state = browserWorkspaceReducer(state, { t: 'select_task', taskID: 'task-2' })
+    expect(state.selectedTaskID).toBe('task-2')
+    expect(state.taskTabID).toBe('tasks:session-1')
+
+    state = browserWorkspaceReducer(state, { t: 'close_tasks' })
+    expect(state.taskTabID).toBeUndefined()
+    expect(state.selectedTaskID).toBeUndefined()
+    expect(state.activeItemID).toBe('conversation:session-1')
+  })
+
+  test('keeps the task view available when the last browser tab closes', () => {
+    let state = createBrowserWorkspaceState({
+      initialTab: createBrowserTab({ id: 'tab-1' }),
+    })
+    state = browserWorkspaceReducer(state, {
+      t: 'open_tasks',
+      taskTabID: 'tasks:session-1',
+    })
+    state = browserWorkspaceReducer(state, { t: 'select_item', itemID: 'tab-1' })
+    state = browserWorkspaceReducer(state, { t: 'close_tab', tabID: 'tab-1' })
+
+    expect(state.tabs).toEqual([])
+    expect(state.activeItemID).toBe('tasks:session-1')
+  })
+
   test('keeps UI selection separate from the Agent navigation target', () => {
     let state = createBrowserWorkspaceState()
     const firstTabID = browserWorkspaceCommandTabID(

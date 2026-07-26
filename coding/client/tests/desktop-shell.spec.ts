@@ -118,6 +118,7 @@ async function openDesktopClient(
     browserResultFailures?: number
     existingSession?: boolean
     historyEvents?: unknown[]
+    backgroundTasks?: unknown[]
     secondarySession?: boolean
     secondaryHistoryEvents?: unknown[]
     modelName?: string
@@ -420,6 +421,23 @@ async function openDesktopClient(
       return
     }
 
+    if (/\/api\/sessions\/[^/]+\/tasks\/[^/]+\/output$/.test(path) && method === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          content: 'server listening on http://127.0.0.1:8080\nrequest completed',
+          truncated: false,
+        }),
+      })
+      return
+    }
+
+    if (/\/api\/sessions\/[^/]+\/tasks\/[^/]+\/stop$/.test(path) && method === 'POST') {
+      await route.fulfill({ status: 204 })
+      return
+    }
+
     if (path === '/api/sessions/test-session/previews/test-grant/index.html' && method === 'GET') {
       await route.fulfill({
         status: 200,
@@ -459,6 +477,7 @@ async function openDesktopClient(
     if (path === '/api/sessions/test-session/history') {
       body = {
         events: options.historyEvents ?? [],
+        tasks: options.backgroundTasks ?? [],
         queue: [],
         context: {},
         running: false,
@@ -683,7 +702,7 @@ test('workbench opens before a preview and launches Browser without hiding Chat'
       .getByRole('menuitem', { name: 'Browser' })
       .evaluate((element) => element.getBoundingClientRect().height),
   ).toBe(30)
-  await expect(addViewMenu.getByRole('menuitem')).toHaveCount(2)
+  await expect(addViewMenu.getByRole('menuitem')).toHaveCount(3)
   await expect(addViewMenu.getByRole('menuitem', { name: 'Chat' })).toBeEnabled()
   await addViewMenu.getByRole('menuitem', { name: 'Browser' }).click()
   await expect(page.getByRole('tab')).toHaveCount(2)
@@ -762,6 +781,91 @@ test('workbench opens before a preview and launches Browser without hiding Chat'
   expect(toggleAfterClose).not.toBeNull()
   expect(toggleAfterClose!.x).toBeCloseTo(togglePosition!.x, 1)
   expect(toggleAfterClose!.y).toBeCloseTo(togglePosition!.y, 1)
+})
+
+test('background tasks open in one persistent workbench tab with responsive logs', async ({
+  page,
+}) => {
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    backgroundTasks: [
+      {
+        id: 'task-dev-server',
+        command: 'bun run dev',
+        description: 'Development server',
+        status: 'running',
+        outputPath: '/tmp/task-dev-server.log',
+        startedAt: '2026-07-22T00:00:00Z',
+      },
+      {
+        id: 'task-tests',
+        command: 'bun test',
+        description: 'Unit tests',
+        status: 'succeeded',
+        outputPath: '/tmp/task-tests.log',
+        exitCode: 0,
+        startedAt: '2026-07-21T23:59:00Z',
+        completedAt: '2026-07-21T23:59:03Z',
+      },
+    ],
+  })
+
+  await page.getByTestId('conversation-actions-trigger').click()
+  const taskSubmenu = page.getByRole('menuitem', { name: /Background tasks/ })
+  await taskSubmenu.focus()
+  await taskSubmenu.press('ArrowRight')
+  await page.getByRole('menuitem', { name: /Development server/ }).press('Enter')
+
+  const workbench = page.getByTestId('workbench-panel')
+  const taskView = workbench.getByTestId('background-tasks-view')
+  await expect(workbench).toBeVisible()
+  await expect(workbench.getByRole('tab', { name: /Background tasks/ })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  await expect(taskView.getByRole('heading', { name: 'Development server' })).toBeVisible()
+  await expect(taskView.getByRole('button', { name: /Unit tests/ })).toBeVisible()
+  await expect(taskView.getByText('server listening on http://127.0.0.1:8080')).toBeVisible()
+
+  const list = taskView.locator('.background-tasks-list')
+  const output = taskView.locator('pre')
+  const [narrowListBox, narrowOutputBox] = await Promise.all([
+    list.boundingBox(),
+    output.boundingBox(),
+  ])
+  expect(narrowListBox).not.toBeNull()
+  expect(narrowOutputBox).not.toBeNull()
+  expect(narrowOutputBox!.y).toBeGreaterThan(narrowListBox!.y)
+
+  await workbench.getByRole('button', { name: 'Maximize workbench' }).click()
+  const [wideListBox, wideOutputBox] = await Promise.all([
+    list.boundingBox(),
+    output.boundingBox(),
+  ])
+  expect(wideListBox).not.toBeNull()
+  expect(wideOutputBox).not.toBeNull()
+  expect(wideOutputBox!.x).toBeGreaterThan(wideListBox!.x)
+
+  await workbench.getByRole('button', { name: 'Close background tasks' }).click()
+  await expect(taskView).toHaveCount(0)
+  expect(
+    requests.some(
+      (request) =>
+        request.method === 'POST' &&
+        request.path === '/api/sessions/test-session/tasks/task-dev-server/stop',
+    ),
+  ).toBe(false)
+
+  await workbench.getByRole('button', { name: 'Add view' }).click()
+  await page.getByRole('menuitem', { name: 'Background tasks' }).click()
+  await expect(workbench.getByTestId('background-tasks-view')).toBeVisible()
+  await expect.poll(() =>
+    requests.filter(
+      (request) =>
+        request.method === 'GET' &&
+        request.path === '/api/sessions/test-session/tasks/task-dev-server/output',
+    ).length,
+  ).toBeGreaterThan(0)
 })
 
 test('Add view creates a chat directly in the right panel', async ({ page }) => {
@@ -1024,7 +1128,7 @@ test('browser workspaces show only the selected session tabs and restore them on
     'aria-selected',
     'true',
   )
-  await expect(workbench.getByRole('tab')).toHaveCount(2)
+  await expect(workbench.getByRole('tab')).toHaveCount(1)
 
   await page.evaluate(() => {
     const emit = (
@@ -1090,7 +1194,7 @@ test('browser workspaces show only the selected session tabs and restore them on
     })
   })
 
-  await expect(workbench.getByRole('tab')).toHaveCount(2)
+  await expect(workbench.getByRole('tab')).toHaveCount(1)
   await expect(workbench.getByRole('tab', { name: 'Secondary preview' })).toHaveCount(0)
   await expect(workbench.getByRole('tab', { name: 'Main preview' })).toHaveAttribute(
     'aria-selected',

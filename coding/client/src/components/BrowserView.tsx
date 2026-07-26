@@ -1,5 +1,6 @@
 import type { FormEvent, ReactNode } from 'react'
 import {
+  Activity,
   ArrowLeft,
   ArrowRight,
   LoaderCircle,
@@ -25,6 +26,11 @@ import { browserRuntimeTabID } from '@/browserRuntime'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 import { BrowserSurface } from './BrowserSurface'
+import {
+  BackgroundTasksView,
+  type WorkbenchTaskSource,
+} from './BackgroundTasksView'
+import { ConversationActionsMenu } from './ConversationActionsMenu'
 import { ConversationView } from './ConversationView'
 
 function addressTitle(url: string): string {
@@ -38,6 +44,7 @@ function addressTitle(url: string): string {
 export function BrowserView({
   workspace,
   conversation,
+  taskSource,
   creatingConversation,
   models,
   workspaces,
@@ -51,6 +58,7 @@ export function BrowserView({
 }: {
   workspace: BrowserWorkspaceController
   conversation?: SessionThread
+  taskSource?: WorkbenchTaskSource
   creatingConversation: boolean
   models: ModelOption[]
   workspaces: WorkspaceSummary[]
@@ -63,11 +71,16 @@ export function BrowserView({
   toggleControl?: ReactNode
 }) {
   const { t } = useI18n()
+  const runningTaskCount =
+    taskSource?.tasks.filter((task) => task.status === 'running').length ?? 0
   const {
     tabs,
     workspaceID,
     conversationTabID,
     conversationActive,
+    taskTabID,
+    selectedTaskID,
+    tasksActive,
     activeTab,
     activeDesired,
     activeObserved,
@@ -199,6 +212,55 @@ export function BrowserView({
               </button>
             </div>
           )}
+          {taskTabID && taskSource && (
+            <div
+              className={cn(
+                'group flex h-8 min-w-[7rem] max-w-[11rem] shrink-0 items-center rounded-md border transition-colors',
+                tasksActive
+                  ? 'border-stone-200/80 bg-white text-stone-800 shadow-sm'
+                  : 'border-transparent text-stone-500 hover:bg-stone-100/80 hover:text-stone-800',
+              )}
+              data-testid="background-tasks-tab"
+              data-active={tasksActive}
+            >
+              <button
+                className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 self-stretch px-2.5 text-left text-[0.8125rem] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-stone-400"
+                type="button"
+                role="tab"
+                aria-selected={tasksActive}
+                title={t('tasks.title')}
+                onClick={() => selectItem(taskTabID)}
+              >
+                <Activity
+                  className={cn(
+                    'size-3.5 shrink-0 text-stone-400',
+                    runningTaskCount > 0 && 'text-emerald-600',
+                  )}
+                  aria-hidden="true"
+                />
+                <span className="min-w-0 flex-1 truncate">{t('tasks.title')}</span>
+                {runningTaskCount > 0 && (
+                  <span className="text-[0.625rem] tabular-nums text-emerald-600">
+                    {runningTaskCount}
+                  </span>
+                )}
+              </button>
+              <button
+                className={cn(
+                  'mr-1 grid size-5 shrink-0 cursor-pointer place-items-center rounded text-stone-400 transition-[opacity,color,background-color] hover:bg-stone-100 hover:text-stone-800 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-stone-400 group-hover:opacity-100 group-focus-within:opacity-100',
+                  tasksActive ? 'opacity-100' : 'opacity-0',
+                )}
+                type="button"
+                title={t('tasks.close')}
+                aria-label={t('tasks.close')}
+                onClick={() => {
+                  if (workspace.closeTasks()) onCloseTab()
+                }}
+              >
+                <X className="size-3.5" aria-hidden="true" />
+              </button>
+            </div>
+          )}
         </div>
         <WorkbenchHeaderActions
           maximized={maximized}
@@ -206,6 +268,16 @@ export function BrowserView({
           onOpenBrowser={newTab}
           creatingConversation={creatingConversation}
           onCreateConversation={onCreateConversation}
+          conversationActions={
+            conversationActive && conversation ? (
+              <ConversationActionsMenu
+                sessionID={conversation.session.id}
+                tasks={conversation.tasks}
+                onSelectTask={workspace.openTasks}
+              />
+            ) : undefined
+          }
+          onOpenTasks={taskSource ? workspace.openTasks : undefined}
           toggleControl={toggleControl}
         />
       </div>
@@ -216,6 +288,13 @@ export function BrowserView({
           models={models}
           workspaces={workspaces}
           onConfigureModel={onConfigureModel}
+        />
+      )}
+      {tasksActive && taskSource && (
+        <BackgroundTasksView
+          {...taskSource}
+          selectedTaskID={selectedTaskID}
+          onSelectTask={workspace.selectTask}
         />
       )}
       {activeTab && (
@@ -332,15 +411,19 @@ export function WorkbenchHeaderActions({
   maximized,
   onToggleMaximized,
   onOpenBrowser,
+  onOpenTasks,
   creatingConversation,
   onCreateConversation,
+  conversationActions,
   toggleControl,
 }: {
   maximized: boolean
   onToggleMaximized: () => void
   onOpenBrowser: () => void
+  onOpenTasks?: () => void
   creatingConversation: boolean
   onCreateConversation: () => void
+  conversationActions?: ReactNode
   toggleControl?: ReactNode
 }) {
   const { t } = useI18n()
@@ -348,6 +431,7 @@ export function WorkbenchHeaderActions({
 
   return (
     <div className="window-titlebar-controls ml-1 flex h-[44px] shrink-0 items-center gap-0.5 self-start">
+      {conversationActions}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild>
           <button
@@ -369,6 +453,13 @@ export function WorkbenchHeaderActions({
             className="z-[120] min-w-[15.5rem] animate-[fade-in_110ms_ease-out] rounded-2xl border border-stone-200 bg-white p-1 text-[0.875rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
           >
             <WorkbenchMenuItem icon={Globe2} label={t('view.browser')} onSelect={onOpenBrowser} />
+            {onOpenTasks && (
+              <WorkbenchMenuItem
+                icon={Activity}
+                label={t('tasks.title')}
+                onSelect={onOpenTasks}
+              />
+            )}
             <WorkbenchMenuItem
               icon={MessageSquare}
               label={t('workbench.chat')}

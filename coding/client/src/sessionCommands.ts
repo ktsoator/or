@@ -7,6 +7,7 @@ import type {
   DeliveryMode,
   MessageImage,
   QuestionAnswer,
+  TaskOutputResponse,
 } from './types'
 
 export type PromptInput = {
@@ -31,6 +32,8 @@ export type SessionCommands = {
   removeQueuedMessage: (sessionID: string, id: string) => Promise<void>
   resolveApproval: (sessionID: string, id: string, choice: ApprovalChoice) => Promise<void>
   resolveQuestion: (sessionID: string, id: string, answers: QuestionAnswer[]) => Promise<void>
+  stopTask: (sessionID: string, id: string) => Promise<void>
+  readTaskOutput: (sessionID: string, id: string) => Promise<TaskOutputResponse>
   reportBrowserResult: (sessionID: string, id: string, result: BrowserResult) => Promise<void>
   reportBrowserInspection: (
     sessionID: string,
@@ -57,8 +60,17 @@ async function requestOK(
   init: RequestInit,
   fallback: (status: number) => string,
 ): Promise<void> {
+  await requestResponse(request, url, init, fallback)
+}
+
+async function requestResponse(
+  request: SessionRequest,
+  url: string,
+  init: RequestInit,
+  fallback: (status: number) => string,
+): Promise<Response> {
   const response = await request(url, init)
-  if (response.ok) return
+  if (response.ok) return response
 
   let message = fallback(response.status)
   let code: string | undefined
@@ -131,6 +143,24 @@ export function createSessionCommands(
         jsonRequest('POST', { answers }),
         () => 'request failed',
       ),
+
+    stopTask: (sessionID, id) =>
+      requestOK(
+        request,
+        sessionURL(sessionID, `/tasks/${encodeURIComponent(id)}/stop`),
+        { method: 'POST' },
+        (status) => `stop background task failed (${status})`,
+      ),
+
+    readTaskOutput: async (sessionID, id) => {
+      const response = await requestResponse(
+        request,
+        sessionURL(sessionID, `/tasks/${encodeURIComponent(id)}/output`),
+        { method: 'GET', cache: 'no-store' },
+        (status) => `read background task output failed (${status})`,
+      )
+      return (await response.json()) as TaskOutputResponse
+    },
 
     reportBrowserResult: (sessionID, id, result) =>
       requestOK(

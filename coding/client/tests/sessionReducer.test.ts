@@ -19,6 +19,70 @@ function thread(state: ThreadsState) {
 }
 
 describe('threadsReducer event sequences', () => {
+  test('records task completion without changing run state and de-duplicates replay', () => {
+    const runningTask = {
+      id: 'task_1',
+      command: 'bun run dev',
+      description: 'Run development server',
+      status: 'running' as const,
+      outputPath: '/tmp/coding-tasks/task_1.log',
+      startedAt: '2026-07-25T11:59:00Z',
+    }
+    const notification = {
+      type: 'task_notification' as const,
+      task: {
+        ...runningTask,
+        status: 'succeeded' as const,
+        exitCode: 0,
+        completedAt: '2026-07-25T12:00:00Z',
+      },
+    }
+    const state = reduce([
+      { t: 'running', sessionID, running: false },
+      { t: 'wire', sessionID, ev: { type: 'task_started', task: runningTask } },
+      { t: 'wire', sessionID, ev: notification },
+      { t: 'wire', sessionID, ev: notification },
+    ])
+
+    expect(thread(state).running).toBe(false)
+    expect(thread(state).items).toEqual([
+      {
+        kind: 'task',
+        id: 'task-task_1',
+        taskID: 'task_1',
+        status: 'succeeded',
+        command: 'bun run dev',
+        description: 'Run development server',
+        outputPath: '/tmp/coding-tasks/task_1.log',
+        exitCode: 0,
+        completedAt: '2026-07-25T12:00:00Z',
+      },
+    ])
+    expect(thread(state).tasks.task_1).toEqual(notification.task)
+  })
+
+  test('restores running background tasks from a history snapshot', () => {
+    const task = {
+      id: 'task_4',
+      command: 'go run ./cmd/server',
+      description: 'Start API server',
+      status: 'running' as const,
+      outputPath: '/tmp/coding-tasks/task_4.log',
+      startedAt: '2026-07-25T12:00:00Z',
+    }
+    const state = reduce([
+      {
+        t: 'reset',
+        sessionID,
+        history: { running: false, events: [], tasks: [task] },
+      },
+    ])
+
+    expect(thread(state).tasks).toEqual({ task_4: task })
+    expect(thread(state).items).toEqual([])
+    expect(thread(state).running).toBe(false)
+  })
+
   test('reconciles optimistic queue messages with acknowledgements and consumption', () => {
     let state = reduce([
       {

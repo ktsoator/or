@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CircleAlert, LoaderCircle } from 'lucide-react'
+import { CircleAlert, CircleCheck, CircleStop, CircleX, LoaderCircle } from 'lucide-react'
 import type { Item } from '@/types'
 import { useI18n } from '@/i18n'
 import { formatMessageTime } from '@/lib/time'
@@ -101,6 +101,8 @@ export function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
       return <Thinking item={item} />
     case 'tool':
       return <ToolCard item={item} cwd={cwd} />
+    case 'task':
+      return <TaskCompletion item={item} />
     case 'error':
       return (
         <div
@@ -115,6 +117,36 @@ export function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
         </div>
       )
   }
+}
+
+function TaskCompletion({ item }: { item: Extract<Item, { kind: 'task' }> }) {
+  const { t } = useI18n()
+  const Icon =
+    item.status === 'succeeded' ? CircleCheck : item.status === 'stopped' ? CircleStop : CircleX
+  const label =
+    item.status === 'succeeded'
+      ? t('task.succeeded')
+      : item.status === 'stopped'
+        ? t('task.stopped')
+        : t('task.failed', { code: item.exitCode })
+
+  return (
+    <div
+      className="my-1 flex min-w-0 animate-[fade-in_160ms_ease-out] items-center gap-2 py-0.5 text-[0.8125rem] leading-5 text-stone-500"
+      title={item.outputPath}
+    >
+      <Icon
+        className={
+          item.status === 'failed' ? 'size-3.5 shrink-0 text-rose-500' : 'size-3.5 shrink-0 text-stone-400'
+        }
+        aria-hidden="true"
+      />
+      <span className="shrink-0">{label}</span>
+      <code className="min-w-0 overflow-hidden font-mono text-[0.75rem] text-stone-400 text-ellipsis whitespace-nowrap">
+    {item.description || item.command || item.taskID}
+      </code>
+    </div>
+  )
 }
 
 function RunDuration({ item }: { item: Extract<Item, { kind: 'run' }> }) {

@@ -11,14 +11,16 @@ import type {
 } from '@/types'
 import type { SessionThread } from '@/useSession'
 import type { BrowserWorkspaceState } from '@/browserWorkspace'
+import type { WorkbenchTaskRequest } from '@/useBrowserWorkspace'
 import { cn } from '@/lib/utils'
 import { BrowserView, WorkbenchHeaderActions } from './BrowserView'
+import type { WorkbenchTaskSource } from './BackgroundTasksView'
 import { useI18n } from '@/i18n'
 import { useBrowserInspectionRequests } from '@/useBrowserInspectionRequests'
 import { useBrowserTabsRequests } from '@/useBrowserTabsRequests'
 import { useBrowserWorkspace } from '@/useBrowserWorkspace'
 
-type WorkbenchMode = 'launcher' | 'browser'
+type WorkbenchMode = 'launcher' | 'views'
 
 export type BrowserInspectionSource = {
   sessionID?: string
@@ -34,6 +36,8 @@ export function WorkbenchPanel({
   sessionID,
   activatePreview,
   conversation,
+  taskRequest,
+  taskSources,
   models,
   workspaces,
   maximized,
@@ -56,6 +60,8 @@ export function WorkbenchPanel({
   sessionID?: string
   activatePreview: boolean
   conversation?: SessionThread
+  taskRequest?: WorkbenchTaskRequest
+  taskSources: WorkbenchTaskSource[]
   models: ModelOption[]
   workspaces: WorkspaceSummary[]
   maximized: boolean
@@ -73,21 +79,28 @@ export function WorkbenchPanel({
   toggleControl?: ReactNode
 }) {
   const { t } = useI18n()
+  const workspaceSessionID = sessionID ?? conversation?.session.id
+  const workspaceConversation =
+    conversation?.session.id === workspaceSessionID ? conversation : undefined
   const [mode, setMode] = useState<WorkbenchMode>(
-    preview || conversation ? 'browser' : 'launcher',
+    preview || workspaceConversation || taskRequest ? 'views' : 'launcher',
   )
   const browserWorkspace = useBrowserWorkspace({
     activatePreview,
     browserCommands,
-    conversationID: conversation?.session.id,
+    conversationID: workspaceConversation?.session.id,
     onBrowserResult,
     preview,
-    sessionID,
+    sessionID: workspaceSessionID,
+    taskRequest,
   })
+  const taskSource = taskSources.find(
+    (source) => source.sessionID === browserWorkspace.workspaceID,
+  )
 
   useEffect(() => {
-    if (preview || conversation) setMode('browser')
-  }, [conversation, preview])
+    if (preview || workspaceConversation || taskRequest) setMode('views')
+  }, [preview, taskRequest, workspaceConversation])
 
   return (
     <section
@@ -112,17 +125,20 @@ export function WorkbenchPanel({
           onInspectionHandled={onBrowserInspectionHandled}
         />
       ))}
-      {mode === 'browser' ? (
+      {mode === 'views' ? (
         <BrowserView
           workspace={browserWorkspace}
-          conversation={conversation}
+          conversation={workspaceConversation}
+          taskSource={taskSource}
           creatingConversation={creatingConversation}
           models={models}
           workspaces={workspaces}
           onCloseTab={() => setMode('launcher')}
           onCloseConversation={() => {
             onCloseConversation()
-            if (browserWorkspace.tabs.length === 0) setMode('launcher')
+            if (browserWorkspace.tabs.length === 0 && !browserWorkspace.taskTabID) {
+              setMode('launcher')
+            }
           }}
           onConfigureModel={onConfigureModel}
           onCreateConversation={onCreateConversation}
@@ -138,8 +154,14 @@ export function WorkbenchPanel({
           onToggleMaximized={onToggleMaximized}
           onOpenBrowser={() => {
             if (browserWorkspace.tabs.length === 0) browserWorkspace.newTab()
-            setMode('browser')
+            setMode('views')
           }}
+          onOpenTasks={taskSource
+            ? () => {
+                browserWorkspace.openTasks()
+                setMode('views')
+              }
+            : undefined}
           toggleControl={toggleControl}
         />
       )}
@@ -206,6 +228,7 @@ function WorkbenchLauncher({
   onCreateConversation,
   onToggleMaximized,
   onOpenBrowser,
+  onOpenTasks,
   toggleControl,
 }: {
   maximized: boolean
@@ -213,6 +236,7 @@ function WorkbenchLauncher({
   onCreateConversation: () => void
   onToggleMaximized: () => void
   onOpenBrowser: () => void
+  onOpenTasks?: () => void
   toggleControl?: ReactNode
 }) {
   const { t } = useI18n()
@@ -229,6 +253,7 @@ function WorkbenchLauncher({
           onCreateConversation={onCreateConversation}
           onToggleMaximized={onToggleMaximized}
           onOpenBrowser={onOpenBrowser}
+          onOpenTasks={onOpenTasks}
           toggleControl={toggleControl}
         />
       </div>

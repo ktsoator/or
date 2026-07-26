@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ktsoator/or/agent"
+	"github.com/ktsoator/or/coding/internal/capability"
 	"github.com/ktsoator/or/coding/internal/compaction"
 	"github.com/ktsoator/or/coding/internal/modelcontext"
 	"github.com/ktsoator/or/coding/internal/permission"
@@ -60,6 +61,11 @@ type Options struct {
 	// answer. Nil advertises no question tool at all, so a session with nobody
 	// at the keyboard never sees one it cannot use.
 	Asker tools.Asker
+	// Capabilities extend the coding product with tools, stable prompt sections,
+	// and tool hooks. They are registered after built-in capabilities, so an
+	// explicit Replace contribution can override a built-in tool. Permissions
+	// remain authoritative for every contributed tool.
+	Capabilities []capability.Definition
 	// Store persists the transcript and seeds it on construction. Nil disables
 	// persistence.
 	Store transcript.Store
@@ -96,7 +102,8 @@ type Session struct {
 	tools                  []tools.Tool
 	toolByName             map[string]tools.Tool
 	authorizer             *permission.Service
-	shells                 *tools.BackgroundShells
+	tasks                  *tools.TaskManager
+	taskUnsubscribe        func()
 	cwd                    string
 	skillRegistry          *skills.DynamicRegistry
 	skillLoader            func() []skills.Skill
@@ -106,6 +113,7 @@ type Session struct {
 	contextRevision        string
 	pendingContextRevision string
 	modelContext           *modelcontext.Manager
+	promptSections         []string
 
 	maxRetries    int
 	contextWindow int64
@@ -148,29 +156,50 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		cwd = abs
 	}
 
-	toolSet := opts.Tools
-	var shells *tools.BackgroundShells
-	if toolSet == nil {
-		toolSet, shells = tools.CodingToolsWithShells(cwd, tools.LocalOps{}, opts.Browser)
-	}
-
 	initialSkills := opts.Skills
 	if opts.SkillLoader != nil {
 		initialSkills = opts.SkillLoader()
 	}
 	initialRegistry := skills.NewRegistry(initialSkills)
 	dynamicSkills := skills.NewDynamicRegistry(initialRegistry)
-	// The tool schema and closure have session lifetime even when no skill is
-	// currently installed. Only the immutable registry behind the closure moves.
-	toolSet = upsertTool(toolSet, tools.Tool{
+
+	registry := capability.NewRegistry()
+	var tasks *tools.TaskManager
+	if opts.Tools == nil {
+		coreTools, coreTasks := tools.CoreToolsWithTasks(cwd, tools.LocalOps{})
+		tasks = coreTasks
+		if err := registerTools(registry, "coding.core-tools", coreTools, false); err != nil {
+			return nil, err
+		}
+		if err := registerTools(registry, "coding.browser", tools.BrowserTools(cwd, opts.Browser), false); err != nil {
+			return nil, err
+		}
+	} else if err := registerTools(registry, "coding.configured-tools", opts.Tools, false); err != nil {
+		return nil, err
+	}
+	// The skill tool's schema and closure have session lifetime even when no
+	// skill is installed. Only the immutable registry behind the closure moves.
+	if err := registerTools(registry, "coding.skills", []tools.Tool{{
 		AgentTool: dynamicSkills.Tool(),
 		AccessFor: tools.InternalAccess,
-	})
+	}}, true); err != nil {
+		return nil, err
+	}
 	// The question tool needs a surface that can reach the user, which only the
 	// product shell has. A session without one advertises no question tool.
 	if opts.Asker != nil {
-		toolSet = upsertTool(toolSet, tools.AskUserQuestion(opts.Asker))
+		if err := registerTools(registry, "coding.ask-user", []tools.Tool{tools.AskUserQuestion(opts.Asker)}, true); err != nil {
+			return nil, err
+		}
 	}
+	for _, definition := range opts.Capabilities {
+		if err := registry.Register(definition); err != nil {
+			return nil, fmt.Errorf("register coding capability %q: %w", definition.Manifest.ID, err)
+		}
+	}
+	toolSet := registry.Tools()
+	capabilityBeforeToolCall := registry.BeforeToolCall()
+	capabilityAfterToolCall := registry.AfterToolCall()
 
 	authorizer, err := permission.NewService(cwd, opts.Policy, opts.Approver)
 	if err != nil {
@@ -219,8 +248,9 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		tools:          toolSet,
 		toolByName:     toolsByName(toolSet),
 		authorizer:     authorizer,
-		shells:         shells,
+		tasks:          tasks,
 		cwd:            cwd,
+		promptSections: registry.PromptSections(),
 		skillRegistry:  dynamicSkills,
 		skillLoader:    opts.SkillLoader,
 		skillRevision:  initialRegistry.Revision(),
@@ -249,6 +279,21 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		s.skillRevision,
 		s.buildSkillListing(),
 	)
+	if s.tasks != nil {
+		s.taskUnsubscribe = s.tasks.Subscribe(func(state tools.TaskState) {
+			if state.Status != tools.TaskRunning {
+				s.modelContext.StageTaskStatus(renderTaskStatus(s.tasks.Completed()))
+			}
+			eventType := TaskCompleted
+			if state.Status == tools.TaskRunning {
+				eventType = TaskStarted
+			}
+			s.dispatchEvent(Event{
+				Type:           eventType,
+				BackgroundTask: projectBackgroundTask(state),
+			})
+		})
+	}
 
 	agentOpts := agent.Options{
 		SystemPrompt:  s.buildSystemPrompt(opts.Instructions),
@@ -260,6 +305,11 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		StreamFn:      s.modelStreamFn(opts.StreamFn),
 		GetAPIKey:     opts.GetAPIKey,
 		BeforeToolCall: func(bc agent.BeforeToolCallCtx) (bool, string) {
+			if capabilityBeforeToolCall != nil {
+				if block, reason := capabilityBeforeToolCall(bc); block {
+					return true, reason
+				}
+			}
 			args, _ := bc.Args.(map[string]any)
 			var accesses []permission.Access
 			if t, ok := s.toolByName[bc.ToolCall.Name]; ok {
@@ -273,6 +323,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 			})
 			return decision.Behavior != permission.Allow, decision.Reason
 		},
+		AfterToolCall:   capabilityAfterToolCall,
 		PrepareNextTurn: s.prepareNextTurn,
 	}
 	s.agent = agent.New(agentOpts)
@@ -632,14 +683,17 @@ func (s *Session) CancelQueuedMessage(handle QueueHandle) bool {
 // Abort cancels an in-progress run.
 func (s *Session) Abort() { s.agent.Abort() }
 
-// Close releases resources the session owns. It stops any background shells the
+// Close releases resources the session owns. It stops any background tasks the
 // default tool set started so long-lived processes do not outlive the session.
 // It does not abort an in-progress run; call Abort first if one may be active.
 // Close is safe to call more than once, and a no-op when the session was built
 // with a caller-supplied tool set.
 func (s *Session) Close() {
-	if s.shells != nil {
-		s.shells.Shutdown()
+	if s.taskUnsubscribe != nil {
+		s.taskUnsubscribe()
+	}
+	if s.tasks != nil {
+		s.tasks.Shutdown()
 	}
 }
 
@@ -740,9 +794,10 @@ func (s *Session) buildSystemPrompt(instructions string) string {
 		infos[i] = prompt.ToolInfo{Name: t.Name(), Guidelines: t.Guidelines}
 	}
 	return prompt.BuildSystem(prompt.SystemOptions{
-		Instructions:  instructions,
-		WorkspaceRoot: s.cwd,
-		Tools:         infos,
+		Instructions:       instructions,
+		WorkspaceRoot:      s.cwd,
+		Tools:              infos,
+		AdditionalSections: s.promptSections,
 	})
 }
 
@@ -892,15 +947,18 @@ func promptSkillDelta(delta skills.Delta) prompt.SkillsDelta {
 	}
 }
 
-func upsertTool(toolSet []tools.Tool, builtIn tools.Tool) []tools.Tool {
-	result := append([]tools.Tool(nil), toolSet...)
-	for index := range result {
-		if result[index].Name() == builtIn.Name() {
-			result[index] = builtIn
-			return result
-		}
+func registerTools(registry *capability.Registry, id string, toolSet []tools.Tool, replace bool) error {
+	contributions := make([]capability.ToolContribution, len(toolSet))
+	for index, tool := range toolSet {
+		contributions[index] = capability.ToolContribution{Tool: tool, Replace: replace}
 	}
-	return append(result, builtIn)
+	if err := registry.Register(capability.Definition{
+		Manifest: capability.Manifest{ID: id, Version: "1"},
+		Tools:    contributions,
+	}); err != nil {
+		return fmt.Errorf("register coding capability %q: %w", id, err)
+	}
+	return nil
 }
 
 // toolsByName indexes the tool set by advertised name for access description.

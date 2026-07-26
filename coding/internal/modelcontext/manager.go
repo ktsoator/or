@@ -20,6 +20,7 @@ const (
 	SkillListing  AttachmentKind = "skill_listing"
 	SkillsUpdate  AttachmentKind = "skills_update"
 	ContextUpdate AttachmentKind = "context_update"
+	TaskStatus    AttachmentKind = "task_status"
 
 	Prefix       Placement = "prefix"
 	AfterCurrent Placement = "after-current"
@@ -57,6 +58,8 @@ type State struct {
 	StagedSkillsRevision  string
 	ActiveContextRevision string
 	StagedContextRevision string
+	ActiveTaskRevision    string
+	StagedTaskRevision    string
 }
 
 type trackedAttachment struct {
@@ -132,6 +135,7 @@ type Manager struct {
 	listing *trackedAttachment
 	skills  updateSlot
 	context updateSlot
+	tasks   updateSlot
 }
 
 // New constructs an epoch from independently rendered Base Context and initial
@@ -147,6 +151,7 @@ func New(
 		epoch:   epoch,
 		skills:  updateSlot{kind: SkillsUpdate},
 		context: updateSlot{kind: ContextUpdate},
+		tasks:   updateSlot{kind: TaskStatus},
 	}
 	if baseRendered != "" {
 		if baseRevision == "" {
@@ -232,6 +237,17 @@ func (m *Manager) CancelStagedContextUpdate() {
 	m.mu.Unlock()
 }
 
+// StageTaskStatus prepares the latest bounded background-task snapshot for the
+// next provider request. Each snapshot replaces the previous one entirely.
+func (m *Manager) StageTaskStatus(rendered string) {
+	if m == nil || rendered == "" {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.tasks.stage(m.epoch, revisionOf(rendered), rendered)
+}
+
 // PrepareStep creates a detached provider input. Prefix attachments come before
 // canonical messages; the latest context and skills updates come after them.
 // Attachments remain provider-visible on every request but appear in Pending only
@@ -246,7 +262,7 @@ func (m *Manager) PrepareStep(input llm.Context) PreparedStep {
 
 	prepared := PreparedStep{Input: cloneContext(input)}
 	prefix := compactAttachments(m.base, m.listing)
-	suffix := compactAttachments(m.context.current(), m.skills.current())
+	suffix := compactAttachments(m.context.current(), m.skills.current(), m.tasks.current())
 
 	messages := make([]llm.Message, 0, len(prefix)+len(input.Messages)+len(suffix))
 	for _, attachment := range prefix {
@@ -284,6 +300,7 @@ func (m *Manager) Commit(prepared PreparedStep) {
 			m.listing.committed = true
 		case m.skills.commit(pending.ID):
 		case m.context.commit(pending.ID):
+		case m.tasks.commit(pending.ID):
 		}
 	}
 }
@@ -312,6 +329,7 @@ func (m *Manager) State() State {
 	}
 	state.ActiveSkillsRevision, state.StagedSkillsRevision = m.skills.revisions()
 	state.ActiveContextRevision, state.StagedContextRevision = m.context.revisions()
+	state.ActiveTaskRevision, state.StagedTaskRevision = m.tasks.revisions()
 	return state
 }
 

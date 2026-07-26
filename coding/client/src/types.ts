@@ -7,6 +7,7 @@ import type {
   MessageImage,
   PreviewRequest,
   Question,
+  TaskStatus,
   Usage,
 } from './generated/wire'
 
@@ -44,7 +45,7 @@ export type ThreadSnapshot = Pick<HistoryResponse, 'events' | 'running'> &
   Partial<
     Pick<
       HistoryResponse,
-      'queue' | 'context' | 'eventSeq' | 'title' | 'aiTitle' | 'customTitle'
+      'queue' | 'context' | 'tasks' | 'eventSeq' | 'title' | 'aiTitle' | 'customTitle'
     >
   >
 
@@ -151,6 +152,17 @@ export type QuestionItem = {
   questions: Question[]
 }
 export type ErrorItem = { kind: 'error'; id: string; text: string }
+export type TaskItem = {
+  kind: 'task'
+  id: string
+  taskID: string
+  status: Exclude<TaskStatus, 'running'>
+  command: string
+  description?: string
+  outputPath: string
+  exitCode: number
+  completedAt?: string
+}
 
 export type Item =
   | UserItem
@@ -160,6 +172,7 @@ export type Item =
   | ToolItem
   | ApprovalItem
   | QuestionItem
+  | TaskItem
   | ErrorItem
 
 export type ConnectionStatus = 'connecting' | 'ready' | 'disconnected'

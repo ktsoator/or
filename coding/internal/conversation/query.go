@@ -15,6 +15,7 @@ type Snapshot struct {
 	History      []engine.HistoryItem
 	Queue        []Event
 	ContextUsage engine.ContextUsage
+	Tasks        []engine.BackgroundTask
 	Running      bool
 	Title        string
 	AITitle      string
@@ -38,11 +39,34 @@ func (m *Manager) Snapshot(id string) (Snapshot, error) {
 		History:      runtime.session.History(),
 		Queue:        runtime.pendingEvents(),
 		ContextUsage: runtime.session.ContextUsage(),
+		Tasks:        runtime.session.Tasks(),
 		Running:      runtime.live.Load(),
 		Title:        title.Title,
 		AITitle:      title.AITitle,
 		CustomTitle:  title.CustomTitle,
 	}, nil
+}
+
+// StopTask terminates one background task owned by the conversation.
+func (m *Manager) StopTask(sessionID, taskID string) error {
+	m.mu.RLock()
+	runtime, ok := m.sessions[sessionID]
+	m.mu.RUnlock()
+	if !ok {
+		return os.ErrNotExist
+	}
+	return runtime.session.StopTask(taskID)
+}
+
+// TaskOutput returns a bounded tail of one conversation task's logs.
+func (m *Manager) TaskOutput(sessionID, taskID string) (engine.TaskOutput, error) {
+	m.mu.RLock()
+	runtime, ok := m.sessions[sessionID]
+	m.mu.RUnlock()
+	if !ok {
+		return engine.TaskOutput{}, os.ErrNotExist
+	}
+	return runtime.session.TaskOutput(taskID)
 }
 
 // WorkspacePath returns the tool root owned by one conversation.

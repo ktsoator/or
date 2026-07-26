@@ -28,6 +28,8 @@ export type BrowserWorkspaceState = {
   tabs: BrowserTab[]
   activeItemID: string
   conversationTabID?: string
+  taskTabID?: string
+  selectedTaskID?: string
   agentSelectedTabID?: string
   nextUserTabSequence: number
   controlLeases: Record<string, BrowserControlLease>
@@ -42,6 +44,9 @@ type BrowserWorkspaceRegistryState = {
 export type BrowserWorkspaceAction =
   | { t: 'select_item'; itemID: string }
   | { t: 'sync_conversation'; conversationTabID?: string }
+  | { t: 'open_tasks'; taskTabID: string; taskID?: string }
+  | { t: 'select_task'; taskID: string }
+  | { t: 'close_tasks' }
   | { t: 'create_user_tab' }
   | { t: 'close_tab'; tabID: string }
   | { t: 'tab_action'; action: BrowserTabsAction }
@@ -159,7 +164,33 @@ export function browserWorkspaceReducer(
         conversationTabID: undefined,
         activeItemID:
           previous && state.activeItemID === previous
-            ? state.tabs[0]?.id ?? ''
+            ? state.taskTabID ?? state.tabs[0]?.id ?? ''
+            : state.activeItemID,
+      }
+    }
+
+    case 'open_tasks':
+      return {
+        ...state,
+        taskTabID: action.taskTabID,
+        selectedTaskID: action.taskID ?? state.selectedTaskID,
+        activeItemID: action.taskTabID,
+      }
+
+    case 'select_task':
+      return action.taskID === state.selectedTaskID
+        ? state
+        : { ...state, selectedTaskID: action.taskID }
+
+    case 'close_tasks': {
+      if (!state.taskTabID) return state
+      return {
+        ...state,
+        taskTabID: undefined,
+        selectedTaskID: undefined,
+        activeItemID:
+          state.activeItemID === state.taskTabID
+            ? state.conversationTabID ?? state.tabs.at(-1)?.id ?? ''
             : state.activeItemID,
       }
     }
@@ -194,7 +225,7 @@ export function browserWorkspaceReducer(
             : state.agentSelectedTabID,
         activeItemID:
           state.activeItemID === action.tabID
-            ? next?.id ?? state.conversationTabID ?? ''
+            ? next?.id ?? state.conversationTabID ?? state.taskTabID ?? ''
             : state.activeItemID,
       }
     }
@@ -299,7 +330,12 @@ export function browserWorkspaceReducer(
 export function selectedBrowserTab(
   state: BrowserWorkspaceState,
 ): BrowserTab | undefined {
-  if (state.activeItemID === state.conversationTabID) return undefined
+  if (
+    state.activeItemID === state.conversationTabID ||
+    state.activeItemID === state.taskTabID
+  ) {
+    return undefined
+  }
   return state.tabs.find((tab) => tab.id === state.activeItemID) ?? state.tabs[0]
 }
 

@@ -30,6 +30,9 @@ type SystemOptions struct {
 	WorkspaceRoot string
 	// Tools are the active tools' prompt contributions, in advertise order.
 	Tools []ToolInfo
+	// AdditionalSections are stable instructions contributed by coding-layer
+	// capabilities. They are appended in registration order.
+	AdditionalSections []string
 }
 
 // DefaultInstructions is the baseline preamble used when
@@ -112,6 +115,15 @@ func BuildSystem(opts SystemOptions) string {
 	if hasTool(opts.Tools, "skill") {
 		b.WriteString("\n\n")
 		b.WriteString(skillProtocol)
+	}
+
+	for _, section := range opts.AdditionalSections {
+		section = strings.TrimSpace(section)
+		if section == "" {
+			continue
+		}
+		b.WriteString("\n\n")
+		b.WriteString(section)
 	}
 
 	b.WriteString("\n\n")

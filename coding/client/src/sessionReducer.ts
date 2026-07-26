@@ -1,5 +1,6 @@
 import type {
   ApprovalItem,
+  BackgroundTask,
   BrowserCommandState,
   BrowserInspectionCommandState,
   BrowserResult,
@@ -13,6 +14,7 @@ import type {
   PreviewState,
   QueuedMessage,
   QuestionItem,
+  TaskItem,
   ThreadSnapshot,
   Usage,
   WireEvent,
@@ -20,6 +22,7 @@ import type {
 
 export type ThreadState = {
   items: Item[]
+  tasks: Record<string, BackgroundTask>
   queue: QueuedMessage[]
   responseUsage: Usage
   contextUsage?: ContextUsage
@@ -86,6 +89,7 @@ const emptyUsage = (): Usage => ({
 
 export const createThreadState = (): ThreadState => ({
   items: [],
+  tasks: {},
   queue: [],
   responseUsage: emptyUsage(),
   contextUsage: undefined,
@@ -139,6 +143,9 @@ export function threadsReducer(state: ThreadsState, action: ThreadAction): Threa
         status: current.status,
         running: action.history.running,
         loaded: true,
+        tasks: Object.fromEntries(
+          (action.history.tasks ?? []).map((task) => [task.id, task]),
+        ),
       }
       for (const ev of action.history.events) next = reduceWire(next, ev)
       for (const ev of action.history.queue ?? []) next = reduceWire(next, ev)
@@ -318,6 +325,7 @@ export function threadsReducer(state: ThreadsState, action: ThreadAction): Threa
 
 export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
   let items = state.items
+  let tasks = state.tasks
   let queue = state.queue
   let responseUsage = state.responseUsage
   let contextUsage = state.contextUsage
@@ -765,6 +773,36 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
       break
     }
 
+    case 'task_started':
+    case 'task_notification': {
+      if (!ev.task) break
+      const backgroundTask = ev.task
+      tasks = { ...tasks, [backgroundTask.id]: backgroundTask }
+      if (ev.type === 'task_started' || backgroundTask.status === 'running') break
+      const status: TaskItem['status'] =
+        backgroundTask.status === 'stopped'
+          ? 'stopped'
+          : backgroundTask.status === 'succeeded'
+            ? 'succeeded'
+            : 'failed'
+      const task: TaskItem = {
+        kind: 'task',
+        id: `task-${backgroundTask.id}`,
+        taskID: backgroundTask.id,
+        status,
+        command: backgroundTask.command,
+        description: backgroundTask.description,
+        outputPath: backgroundTask.outputPath,
+        exitCode: backgroundTask.exitCode ?? 0,
+        completedAt: backgroundTask.completedAt,
+      }
+      const index = items.findIndex(
+        (item) => item.kind === 'task' && item.taskID === backgroundTask.id,
+      )
+      items = index >= 0 ? replaceAt(items, index, task) : [...items, task]
+      break
+    }
+
     case 'message_end':
       completeThinking()
       responseUsage = mergeUsage(responseUsage, ev.usage)
@@ -929,6 +967,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
   return {
     ...state,
     items,
+    tasks,
     queue,
     responseUsage,
     contextUsage,

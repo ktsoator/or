@@ -35,6 +35,7 @@ import { useSession } from './useSession'
 import type { SessionSummary } from './types'
 import { cn } from './lib/utils'
 import { Composer } from './components/Composer'
+import { ConversationActionsMenu } from './components/ConversationActionsMenu'
 import { StepGroup } from './components/StepGroup'
 import {
   AutoCompactionStatus,
@@ -48,10 +49,12 @@ import { SettingsPage, type SettingsSection } from './components/SettingsPage'
 import { SkillsPage } from './components/SkillsPage'
 import { WorkspacePickerDialog } from './components/WorkspacePickerDialog'
 import { WorkbenchPanel } from './components/WorkbenchPanel'
+import type { WorkbenchTaskSource } from './components/BackgroundTasksView'
 import { SidebarToggleButton } from './components/SidebarToggleButton'
 import { useI18n } from './i18n'
 import { useSidebarLayout } from './useSidebarLayout'
 import { useWorkbenchLayout } from './useWorkbenchLayout'
+import type { WorkbenchTaskRequest } from './useBrowserWorkspace'
 
 function wheelDeltaInPixels(event: WheelEvent, pageHeight: number) {
   if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) return event.deltaY * 16
@@ -62,6 +65,8 @@ function wheelDeltaInPixels(event: WheelEvent, pageHeight: number) {
 export default function App() {
   const { t } = useI18n()
   const [secondarySessionID, setSecondarySessionID] = useState<string>()
+  const [workbenchTaskRequest, setWorkbenchTaskRequest] =
+    useState<WorkbenchTaskRequest>()
   const {
     sessions,
     workspaces,
@@ -69,6 +74,7 @@ export default function App() {
     activeSession,
     activeSessionID,
     items,
+    tasks,
     queuedMessages,
     contextUsage,
     preview,
@@ -101,6 +107,8 @@ export default function App() {
     send,
     removeQueuedMessage,
     stop,
+    stopTask,
+    readTaskOutput,
     resolveApproval,
     resolveQuestion,
     queueBrowserResult,
@@ -190,11 +198,15 @@ export default function App() {
     ? workbenchPreviewSessionID ?? activeSessionID
     : undefined
   const workbenchBrowserSessionID =
-    workbenchPreviewOwnerID ?? secondaryThread?.session.id ?? activeSessionID ?? draft?.id
+    workbenchPreviewOwnerID ??
+    workbenchTaskRequest?.sessionID ??
+    secondaryThread?.session.id ??
+    activeSessionID ??
+    draft?.id
   const workbenchBrowserCommands =
-    secondaryThread && workbenchPreviewOwnerID === secondaryThread.session.id
+    secondaryThread && workbenchBrowserSessionID === secondaryThread.session.id
       ? secondaryThread.browserCommands
-      : workbenchPreviewOwnerID === activeSessionID
+      : workbenchBrowserSessionID === activeSessionID
         ? browserCommands
         : []
   const activateWorkbenchPreview = workbenchPreviewOwnerID === activeSessionID
@@ -202,6 +214,22 @@ export default function App() {
     : secondaryThread && workbenchPreviewOwnerID === secondaryThread.session.id
       ? secondaryThread.previewOpen
       : false
+  const workbenchTaskSources: WorkbenchTaskSource[] = activeSessionID
+    ? [{
+        sessionID: activeSessionID,
+        tasks,
+        onStopTask: stopTask,
+        onReadTaskOutput: readTaskOutput,
+      }]
+    : []
+  if (secondaryThread && secondaryThread.session.id !== activeSessionID) {
+    workbenchTaskSources.push({
+      sessionID: secondaryThread.session.id,
+      tasks: secondaryThread.tasks,
+      onStopTask: secondaryThread.stopTask,
+      onReadTaskOutput: secondaryThread.readTaskOutput,
+    })
+  }
   useEffect(() => {
     if (
       secondarySessionID &&
@@ -210,7 +238,14 @@ export default function App() {
     ) {
       setSecondarySessionID(undefined)
     }
-  }, [loading, secondarySessionID, sessions])
+    if (
+      workbenchTaskRequest &&
+      !loading &&
+      !sessions.some((session) => session.id === workbenchTaskRequest.sessionID)
+    ) {
+      setWorkbenchTaskRequest(undefined)
+    }
+  }, [loading, secondarySessionID, sessions, workbenchTaskRequest])
 
   useEffect(() => {
     if (draft || selectedWorkspacePath) return
@@ -288,12 +323,14 @@ export default function App() {
     const session = sessions.find((candidate) => candidate.id === id)
     if (session) setSelectedWorkspacePath(session.scope === 'project' ? session.workspacePath : undefined)
     selectSession(id)
+    setWorkbenchTaskRequest(undefined)
     closeMobileSessions()
   }
 
   const openSessionInWorkbench = (id: string) => {
     if (!sessions.some((session) => session.id === id)) return
     setWorkbenchCreateError('')
+    setWorkbenchTaskRequest(undefined)
     setSecondarySessionID(id)
     showSessionInWorkbench(id)
     closeMobileSessions()
@@ -301,6 +338,7 @@ export default function App() {
 
   const createSessionInWorkbench = async () => {
     setWorkbenchCreateError('')
+    setWorkbenchTaskRequest(undefined)
     try {
       const created = await createChatSession()
       setSecondarySessionID(created.id)
@@ -315,7 +353,20 @@ export default function App() {
   const addSession = (workspacePath?: string, projectScoped = false) => {
     setSelectedWorkspacePath(projectScoped ? workspacePath : undefined)
     startDraft(workspacePath, projectScoped)
+    setWorkbenchTaskRequest(undefined)
     closeMobileSessions()
+  }
+
+  const openTaskInWorkbench = (taskID: string) => {
+    if (!activeSessionID) return
+    setWorkbenchCreateError('')
+    setSecondarySessionID(undefined)
+    setWorkbenchTaskRequest((current) => ({
+      sessionID: activeSessionID,
+      taskID,
+      revision: (current?.revision ?? 0) + 1,
+    }))
+    showSessionInWorkbench(activeSessionID)
   }
 
   const requestDelete = (session: SessionSummary) => {
@@ -340,6 +391,9 @@ export default function App() {
     try {
       await deleteSession(deleteTarget.id)
       if (secondarySessionID === deleteTarget.id) setSecondarySessionID(undefined)
+      if (workbenchTaskRequest?.sessionID === deleteTarget.id) {
+        setWorkbenchTaskRequest(undefined)
+      }
       removePinnedSession(deleteTarget.id)
       setDeleteTarget(undefined)
       closeMobileSessions()
@@ -811,6 +865,13 @@ export default function App() {
               </span>
             </div>
           </div>
+          {!draft && activeSession && (
+            <ConversationActionsMenu
+              sessionID={activeSession.id}
+              tasks={tasks}
+              onSelectTask={openTaskInWorkbench}
+            />
+          )}
           {!workbenchOwnsToggle && workbenchToggleControl}
         </header>
 
@@ -915,6 +976,8 @@ export default function App() {
             sessionID={workbenchBrowserSessionID}
             activatePreview={activateWorkbenchPreview}
             conversation={secondaryThread}
+            taskRequest={workbenchTaskRequest}
+            taskSources={workbenchTaskSources}
             models={models}
             workspaces={workspaces}
             maximized={workbenchMaximized}

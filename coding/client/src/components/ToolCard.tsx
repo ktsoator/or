@@ -147,7 +147,7 @@ function argHint(args: unknown): string {
     record.command ??
     record.cmd ??
     record.url ??
-    record.shell_id
+    record.task_id
   return typeof value === 'string' ? value : ''
 }
 
@@ -485,59 +485,6 @@ function InspectPreview({ output, failed }: { output: string; failed: boolean })
   )
 }
 
-type ShellStatus = { running: boolean; exitCode: number; command: string }
-
-// parseBackgroundStatus recognizes the header line bash_output emits, e.g.
-// "[bg_1: running] go run ." or "[bg_1: exited with code 0] ...", so the status
-// can be shown as a badge instead of raw text and the body kept clean.
-function parseBackgroundStatus(output: string): { status: ShellStatus | null; body: string } {
-  const newline = output.indexOf('\n')
-  const firstLine = newline >= 0 ? output.slice(0, newline) : output
-  const match = /^\[\S+: (running|exited with code (-?\d+))\] ?(.*)$/.exec(firstLine)
-  if (!match) return { status: null, body: output }
-  const running = match[1] === 'running'
-  return {
-    status: { running, exitCode: running ? 0 : Number(match[2] ?? 0), command: match[3] ?? '' },
-    body: newline >= 0 ? output.slice(newline + 1) : '',
-  }
-}
-
-function ShellStatusBadge({ status }: { status: ShellStatus }) {
-  const { t } = useI18n()
-  const ok = !status.running && status.exitCode === 0
-  return (
-    <span className="flex min-w-0 items-center gap-2">
-      <span
-        className={cn(
-          'size-1.5 shrink-0 rounded-full',
-          status.running ? 'animate-pulse bg-emerald-500' : ok ? 'bg-stone-400' : 'bg-rose-500',
-        )}
-        aria-hidden="true"
-      />
-      <span
-        className={cn(
-          'shrink-0 text-[0.6875rem] font-medium tracking-wide uppercase',
-          status.running ? 'text-emerald-700' : ok ? 'text-stone-500' : 'text-rose-600',
-        )}
-      >
-        {status.running
-          ? t('tool.bgRunning')
-          : ok
-            ? t('tool.bgExited')
-            : t('tool.bgExitedCode', { code: status.exitCode })}
-      </span>
-      {status.command && (
-        <code
-          className="min-w-0 overflow-hidden font-mono text-[var(--tool-detail-font-size)] text-stone-400 text-ellipsis whitespace-nowrap"
-          title={status.command}
-        >
-          {status.command}
-        </code>
-      )}
-    </span>
-  )
-}
-
 function ShellPreview({
   command,
   output,
@@ -548,8 +495,7 @@ function ShellPreview({
   failed: boolean
 }) {
   const { t } = useI18n()
-  const { status, body } = parseBackgroundStatus(output)
-  const log = status ? body : output
+  const log = output
   return (
     <div
       className={cn(
@@ -558,16 +504,10 @@ function ShellPreview({
       )}
     >
       <div className="flex min-h-7 items-start gap-2 px-2.5 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-4.5 font-normal">
-        {status ? (
-          <ShellStatusBadge status={status} />
-        ) : (
-          <>
-            <span className="shrink-0 text-stone-400 select-none">$</span>
-            <code className="min-w-0 flex-1 overflow-auto whitespace-pre-wrap text-stone-700">
-              {command}
-            </code>
-          </>
-        )}
+        <span className="shrink-0 text-stone-400 select-none">$</span>
+        <code className="min-w-0 flex-1 overflow-auto whitespace-pre-wrap text-stone-700">
+          {command}
+        </code>
         {log && <CopyButton value={log} className="ml-auto -mr-0.5" />}
       </div>
       {log && (

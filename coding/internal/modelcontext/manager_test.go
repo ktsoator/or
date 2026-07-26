@@ -220,6 +220,38 @@ func TestContextAndSkillUpdatesProjectTogether(t *testing.T) {
 	}
 }
 
+func TestTaskStatusSnapshotReplacesPreviousSnapshot(t *testing.T) {
+	manager := New(9, "", "base", "", "")
+	canonical := llm.Context{Messages: []llm.Message{llm.UserText("question")}}
+	manager.Commit(manager.PrepareStep(canonical))
+
+	manager.StageTaskStatus("tasks: one")
+	first := manager.PrepareStep(canonical)
+	if got := messageTexts(t, first.Input.Messages); !equalStrings(
+		got,
+		[]string{"base", "question", "tasks: one"},
+	) {
+		t.Fatalf("first task projection = %v", got)
+	}
+	if len(first.Pending) != 1 || first.Pending[0].Kind != TaskStatus {
+		t.Fatalf("task pending = %#v", first.Pending)
+	}
+	manager.Commit(first)
+
+	manager.StageTaskStatus("tasks: one and two")
+	latest := manager.PrepareStep(canonical)
+	if got := messageTexts(t, latest.Input.Messages); !equalStrings(
+		got,
+		[]string{"base", "question", "tasks: one and two"},
+	) {
+		t.Fatalf("latest task projection retained obsolete snapshot: %v", got)
+	}
+	state := manager.State()
+	if state.ActiveTaskRevision == "" || state.StagedTaskRevision == "" {
+		t.Fatalf("task state = %#v", state)
+	}
+}
+
 func userText(t *testing.T, message llm.Message) string {
 	t.Helper()
 	user, ok := message.(*llm.UserMessage)
