@@ -19,6 +19,7 @@ import (
 var outputNames = map[string]string{
 	"wireEventType":                "WireEventType",
 	"wireDeltaKind":                "DeltaKind",
+	"wireToolOutcomeStatus":        "ToolOutcomeStatus",
 	"wireTaskStatus":               "TaskStatus",
 	"wireDeliveryMode":             "DeliveryMode",
 	"wireBrowserDisposition":       "BrowserDisposition",
@@ -50,6 +51,8 @@ var outputNames = map[string]string{
 	"wireQuestionOption":           "QuestionOption",
 	"wireQuestion":                 "Question",
 	"wireQuestionAnswer":           "QuestionAnswer",
+	"wireQuestionAnswers":          "QuestionAnswers",
+	"wireToolOutcome":              "ToolOutcome",
 	"wireEvent":                    "WireEvent",
 	"wireHistoryResponse":          "HistoryResponse",
 }
@@ -57,6 +60,7 @@ var outputNames = map[string]string{
 var outputOrder = []string{
 	"wireEventType",
 	"wireDeltaKind",
+	"wireToolOutcomeStatus",
 	"wireTaskStatus",
 	"wireDeliveryMode",
 	"wireBrowserDisposition",
@@ -88,6 +92,8 @@ var outputOrder = []string{
 	"wireQuestionOption",
 	"wireQuestion",
 	"wireQuestionAnswer",
+	"wireQuestionAnswers",
+	"wireToolOutcome",
 	"wireEvent",
 	"wireHistoryResponse",
 }

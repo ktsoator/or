@@ -145,9 +145,12 @@ func TestQuestionReturnsAnswersToTheModelAndTheProductShell(t *testing.T) {
 		}
 	}
 
-	details, ok := result.Details.(QuestionAnswers)
+	details, ok := result.Outcome.Data.(QuestionAnswers)
 	if !ok {
-		t.Fatalf("details = %T, want QuestionAnswers", result.Details)
+		t.Fatalf("outcome data = %T, want QuestionAnswers", result.Outcome.Data)
+	}
+	if result.Outcome.Status != agent.ToolOutcomeSuccess {
+		t.Fatalf("outcome status = %q, want success", result.Outcome.Status)
 	}
 	if len(details.Questions) != 2 || len(details.Answers) != 2 {
 		t.Fatalf("details = %#v, want both questions and both answers", details)
@@ -192,7 +195,7 @@ func TestQuestionAlignsAnswersToTheQuestionsAsked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	details := result.Details.(QuestionAnswers)
+	details := result.Outcome.Data.(QuestionAnswers)
 	if len(details.Answers) != 2 ||
 		details.Answers[0].Question != "First" ||
 		details.Answers[1].Question != "Second" {
@@ -212,7 +215,7 @@ func TestQuestionSurfacesAskerFailureWithoutFabricatingAnswers(t *testing.T) {
 	if !errors.Is(err, cancelled) {
 		t.Fatalf("error = %v, want the asker's failure", err)
 	}
-	if len(result.Content) != 0 || result.Details != nil {
+	if len(result.Content) != 0 || result.Outcome.Data != nil {
 		t.Fatalf("a failed question produced a result: %#v", result)
 	}
 }

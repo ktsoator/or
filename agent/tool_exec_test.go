@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -127,4 +128,119 @@ func TestExecuteToolCallsSequentialToolForcesBatch(t *testing.T) {
 	if maxActive != 1 {
 		t.Fatalf("max concurrent tools = %d, want 1 (sequential tool forces batch)", maxActive)
 	}
+}
+
+func TestExecutePreparedNormalizesToolOutcomes(t *testing.T) {
+	exitCode := 9
+	tests := []struct {
+		name      string
+		result    ToolResult
+		err       error
+		want      ToolOutcome
+		wantError bool
+	}{
+		{
+			name:   "zero value is success",
+			result: ToolResult{Outcome: ToolOutcome{Data: "structured"}},
+			want:   ToolOutcome{Status: ToolOutcomeSuccess, Data: "structured"},
+		},
+		{
+			name: "explicit failure",
+			result: ToolResult{Outcome: ToolOutcome{
+				Status:    ToolOutcomeFailed,
+				ErrorCode: "command_exit_nonzero",
+				ExitCode:  &exitCode,
+				Data:      "diagnostic",
+			}},
+			want: ToolOutcome{
+				Status:    ToolOutcomeFailed,
+				ErrorCode: "command_exit_nonzero",
+				ExitCode:  &exitCode,
+				Data:      "diagnostic",
+			},
+			wantError: true,
+		},
+		{
+			name:      "failure gets a stable default code",
+			result:    ToolResult{Outcome: ToolOutcome{Status: ToolOutcomeFailed}},
+			want:      ToolOutcome{Status: ToolOutcomeFailed, ErrorCode: "tool_failed"},
+			wantError: true,
+		},
+		{
+			name:      "deadline error is timeout",
+			err:       context.DeadlineExceeded,
+			want:      ToolOutcome{Status: ToolOutcomeTimeout, ErrorCode: "tool_execution_timeout"},
+			wantError: true,
+		},
+		{
+			name:      "cancel error is cancelled",
+			err:       context.Canceled,
+			want:      ToolOutcome{Status: ToolOutcomeCancelled, ErrorCode: "tool_execution_cancelled"},
+			wantError: true,
+		},
+		{
+			name:      "ordinary error is failed",
+			err:       errors.New("boom"),
+			want:      ToolOutcome{Status: ToolOutcomeFailed, ErrorCode: "tool_execution_failed"},
+			wantError: true,
+		},
+		{
+			name:      "unknown status is failed",
+			result:    ToolResult{Outcome: ToolOutcome{Status: "unexpected"}},
+			want:      ToolOutcome{Status: ToolOutcomeFailed, ErrorCode: "invalid_tool_outcome"},
+			wantError: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			tool := AgentTool{Execute: func(context.Context, string, json.RawMessage, func(ToolResult)) (ToolResult, error) {
+				return test.result, test.err
+			}}
+			engine := engine{ctx: context.Background(), emit: func(AgentEvent) {}}
+			got := engine.executePrepared(preparedToolCall{
+				call: llm.ToolCall{ID: "call-1", Name: "test"},
+				tool: &tool,
+			})
+			if got.Outcome.Status != test.want.Status ||
+				got.Outcome.ErrorCode != test.want.ErrorCode ||
+				got.Outcome.Data != test.want.Data ||
+				!sameOptionalInt(got.Outcome.ExitCode, test.want.ExitCode) {
+				t.Fatalf("outcome = %#v, want %#v", got.Outcome, test.want)
+			}
+			if got.Outcome.Failed() != test.wantError {
+				t.Fatalf("outcome failed = %v, want %v", got.Outcome.Failed(), test.wantError)
+			}
+		})
+	}
+}
+
+func TestFinishProjectsOutcomeFailureToModelAndEvents(t *testing.T) {
+	var events []AgentEvent
+	engine := engine{
+		emit: func(event AgentEvent) { events = append(events, event) },
+	}
+	outcome := ToolOutcome{Status: ToolOutcomeTimeout, ErrorCode: "browser_navigation_timeout"}
+	message, _ := engine.finish(
+		llm.ToolCall{ID: "call-1", Name: "open_preview"},
+		ToolResult{Outcome: outcome},
+	)
+
+	if !message.IsError {
+		t.Fatal("timeout outcome was not projected as an LLM tool error")
+	}
+	if len(events) != 3 || events[0].Type != ToolEnd || !events[0].IsError {
+		t.Fatalf("events = %#v, want an error ToolEnd followed by message events", events)
+	}
+	result, ok := events[0].Result.(ToolResult)
+	if !ok || result.Outcome != outcome {
+		t.Fatalf("tool end result = %#v, want outcome %#v", events[0].Result, outcome)
+	}
+}
+
+func sameOptionalInt(left, right *int) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
 }

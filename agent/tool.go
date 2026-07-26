@@ -7,13 +7,41 @@ import (
 	"github.com/ktsoator/or/llm"
 )
 
-// ToolResult is what a tool returns to the model, with optional structured
-// details for logging or UI and an optional early-termination hint.
+// ToolOutcomeStatus is the terminal state of one tool execution.
+type ToolOutcomeStatus string
+
+const (
+	ToolOutcomeSuccess   ToolOutcomeStatus = "success"
+	ToolOutcomeFailed    ToolOutcomeStatus = "failed"
+	ToolOutcomeCancelled ToolOutcomeStatus = "cancelled"
+	ToolOutcomeTimeout   ToolOutcomeStatus = "timeout"
+)
+
+// ToolOutcome is the machine-readable result of one tool execution. Content is
+// still what the model reads; Outcome is what runtimes and product shells use
+// for status, error handling, and structured rendering.
+type ToolOutcome struct {
+	Status    ToolOutcomeStatus
+	ErrorCode string
+	ExitCode  *int
+	Data      any
+}
+
+// Failed reports whether the outcome should be sent to the model as an error
+// tool result. The zero value is a successful outcome for backwards-compatible
+// tool implementations.
+func (o ToolOutcome) Failed() bool {
+	return o.Status != "" && o.Status != ToolOutcomeSuccess
+}
+
+// ToolResult is what a tool returns to the model, with a machine-readable
+// outcome and an optional early-termination hint.
 type ToolResult struct {
 	// Content is the text or image content returned to the model.
 	Content []llm.ToolResultContent
-	// Details is arbitrary structured data for logs or UI rendering.
-	Details any
+	// Outcome is the source of truth for terminal status and structured data. An
+	// empty Status is normalized to success by the execution engine.
+	Outcome ToolOutcome
 	// Terminate hints that the run should stop after the current tool batch. A
 	// batch stops the run only when every result in it sets Terminate.
 	Terminate bool

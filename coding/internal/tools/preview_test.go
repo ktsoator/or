@@ -94,12 +94,15 @@ func TestOpenPreviewReturnsStructuredLocalURL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	details, ok := result.Details.(PreviewRequest)
+	details, ok := result.Outcome.Data.(PreviewRequest)
 	if !ok {
-		t.Fatalf("Details = %#v, want PreviewRequest", result.Details)
+		t.Fatalf("Outcome.Data = %#v, want PreviewRequest", result.Outcome.Data)
+	}
+	if result.Outcome.Status != agent.ToolOutcomeSuccess {
+		t.Fatalf("Outcome.Status = %q, want success", result.Outcome.Status)
 	}
 	if details.URL != server.URL+"/app" || details.Title != "Local app" {
-		t.Fatalf("Details = %#v", details)
+		t.Fatalf("Outcome.Data = %#v", details)
 	}
 }
 
@@ -121,12 +124,12 @@ func TestOpenPreviewReturnsStructuredWorkspaceHTMLPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	details, ok := result.Details.(PreviewRequest)
+	details, ok := result.Outcome.Data.(PreviewRequest)
 	if !ok {
-		t.Fatalf("Details = %#v, want PreviewRequest", result.Details)
+		t.Fatalf("Outcome.Data = %#v, want PreviewRequest", result.Outcome.Data)
 	}
 	if details.Path != canonicalPath || details.RelativePath != "web/index.html" || details.URL != "" || details.Title != "Static page" {
-		t.Fatalf("Details = %#v", details)
+		t.Fatalf("Outcome.Data = %#v", details)
 	}
 }
 
@@ -146,9 +149,9 @@ func TestOpenPreviewAcceptsWorkspaceFileURL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	details, ok := result.Details.(PreviewRequest)
+	details, ok := result.Outcome.Data.(PreviewRequest)
 	if !ok || details.Path != canonicalPath || details.RelativePath != "index.html" {
-		t.Fatalf("Details = %#v", result.Details)
+		t.Fatalf("Outcome.Data = %#v", result.Outcome.Data)
 	}
 }
 
@@ -163,8 +166,8 @@ func TestOpenPreviewRejectsFileOutsideWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Details != nil {
-		t.Fatalf("Details = %#v, want nil", result.Details)
+	if result.Outcome.Data != nil || result.Outcome.Status != agent.ToolOutcomeFailed || result.Outcome.ErrorCode != "preview_invalid" {
+		t.Fatalf("Outcome = %#v, want preview_invalid failure without data", result.Outcome)
 	}
 	text, ok := result.Content[0].(*llm.TextContent)
 	if !ok || !strings.Contains(text.Text, "inside the workspace") {
@@ -194,8 +197,8 @@ func TestOpenPreviewRejectsStoppedLocalServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Details != nil {
-		t.Fatalf("Details = %#v, want nil", result.Details)
+	if result.Outcome.Data != nil || result.Outcome.Status != agent.ToolOutcomeFailed || result.Outcome.ErrorCode != "preview_invalid" {
+		t.Fatalf("Outcome = %#v, want preview_invalid failure without data", result.Outcome)
 	}
 	text, ok := result.Content[0].(*llm.TextContent)
 	if !ok || !strings.Contains(text.Text, "local server is not reachable") {
@@ -209,9 +212,9 @@ func TestOpenPreviewAcceptsExternalURLWithoutProbingIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	details, ok := result.Details.(PreviewRequest)
+	details, ok := result.Outcome.Data.(PreviewRequest)
 	if !ok || details.URL != address || details.Title != "Search" {
-		t.Fatalf("Details = %#v, want external PreviewRequest", result.Details)
+		t.Fatalf("Outcome.Data = %#v, want external PreviewRequest", result.Outcome.Data)
 	}
 }
 
@@ -233,8 +236,8 @@ func TestOpenPreviewUsesCommittedRedirectInToolResult(t *testing.T) {
 	if !ok || !strings.Contains(text.Text, "https://example.com/final") {
 		t.Fatalf("result = %#v", result.Content)
 	}
-	if _, ok := result.Details.(PreviewRequest); !ok {
-		t.Fatalf("Details = %#v, want PreviewRequest", result.Details)
+	if _, ok := result.Outcome.Data.(PreviewRequest); !ok {
+		t.Fatalf("Outcome.Data = %#v, want PreviewRequest", result.Outcome.Data)
 	}
 }
 
@@ -265,9 +268,9 @@ func TestOpenPreviewPersistsControllerWorkspaceGrant(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	details, ok := result.Details.(PreviewRequest)
+	details, ok := result.Outcome.Data.(PreviewRequest)
 	if !ok || details.GrantID != "grant" || details.PreviewPath != "index.html" {
-		t.Fatalf("Details = %#v", result.Details)
+		t.Fatalf("Outcome.Data = %#v", result.Outcome.Data)
 	}
 }
 
@@ -288,8 +291,8 @@ func TestOpenPreviewDoesNotPersistFailedNavigation(t *testing.T) {
 	if !ok || !strings.Contains(text.Text, "ERR_NAME_NOT_RESOLVED") {
 		t.Fatalf("result = %#v", result.Content)
 	}
-	if result.Details != nil {
-		t.Fatalf("Details = %#v, want nil", result.Details)
+	if result.Outcome.Data != nil || result.Outcome.Status != agent.ToolOutcomeFailed || result.Outcome.ErrorCode != "browser_navigation_failed" {
+		t.Fatalf("Outcome = %#v, want browser_navigation_failed without data", result.Outcome)
 	}
 }
 

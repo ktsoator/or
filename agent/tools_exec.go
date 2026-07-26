@@ -1,7 +1,9 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -53,7 +55,7 @@ func (e *engine) executeSequential(current Context, assistant llm.AssistantMessa
 			// tools, but still answer each call so every tool call has a result
 			// and the transcript stays valid for any later request.
 			e.emit(AgentEvent{Type: ToolStart, ToolCallID: call.ID, ToolName: call.Name, Args: call.Arguments})
-			message, terminate = e.finishError(call, "tool execution aborted")
+			message, terminate = e.finishError(call, ToolOutcomeCancelled, "tool_execution_cancelled", "tool execution aborted")
 		} else {
 			message, terminate = e.runTool(current, assistant, call)
 		}
@@ -84,8 +86,7 @@ func (e *engine) executeParallel(current Context, assistant llm.AssistantMessage
 		wait.Add(1)
 		go func(index int) {
 			defer wait.Done()
-			result, isError := e.executePrepared(prepared[index])
-			executed[index] = executedToolCall{result: result, isError: isError}
+			executed[index] = executedToolCall{result: e.executePrepared(prepared[index])}
 		}(index)
 	}
 	wait.Wait()
@@ -97,9 +98,9 @@ func (e *engine) executeParallel(current Context, assistant llm.AssistantMessage
 		var message llm.ToolResultMessage
 		var terminate bool
 		if prepared[index].errText != "" {
-			message, terminate = e.finishError(prepared[index].call, prepared[index].errText)
+			message, terminate = e.finishError(prepared[index].call, ToolOutcomeFailed, prepared[index].errorCode, prepared[index].errText)
 		} else {
-			message, terminate = e.finalize(current, assistant, prepared[index], executed[index].result, executed[index].isError)
+			message, terminate = e.finalize(current, assistant, prepared[index], executed[index].result)
 		}
 		messages = append(messages, message)
 		if !terminate {
@@ -117,10 +118,10 @@ func (e *engine) runTool(current Context, assistant llm.AssistantMessage, call l
 
 	prepared := e.preflight(current, assistant, call)
 	if prepared.errText != "" {
-		return e.finishError(call, prepared.errText)
+		return e.finishError(call, ToolOutcomeFailed, prepared.errorCode, prepared.errText)
 	}
-	result, isError := e.executePrepared(prepared)
-	return e.finalize(current, assistant, prepared, result, isError)
+	result := e.executePrepared(prepared)
+	return e.finalize(current, assistant, prepared, result)
 }
 
 // preparedToolCall is the result of preflighting one tool call. A non-empty
@@ -130,13 +131,13 @@ type preparedToolCall struct {
 	tool      *AgentTool
 	validated map[string]any
 	rawArgs   json.RawMessage
+	errorCode string
 	errText   string
 }
 
 // executedToolCall is the raw outcome of one Execute call.
 type executedToolCall struct {
-	result  ToolResult
-	isError bool
+	result ToolResult
 }
 
 // preflight resolves the tool, validates arguments, and runs BeforeToolCall. It
@@ -147,10 +148,12 @@ func (e *engine) preflight(current Context, assistant llm.AssistantMessage, call
 
 	tool := findTool(current.Tools, call.Name)
 	if tool == nil {
+		prepared.errorCode = "unknown_tool"
 		prepared.errText = fmt.Sprintf("unknown tool %q", call.Name)
 		return prepared
 	}
 	if tool.Execute == nil {
+		prepared.errorCode = "tool_unavailable"
 		prepared.errText = fmt.Sprintf("tool %q has no Execute function", call.Name)
 		return prepared
 	}
@@ -163,6 +166,7 @@ func (e *engine) preflight(current Context, assistant llm.AssistantMessage, call
 
 	validated, err := llm.ValidateToolArguments(tool.Definition, call)
 	if err != nil {
+		prepared.errorCode = "invalid_arguments"
 		prepared.errText = fmt.Sprintf("invalid tool arguments: %v", err)
 		return prepared
 	}
@@ -179,6 +183,7 @@ func (e *engine) preflight(current Context, assistant llm.AssistantMessage, call
 			if reason == "" {
 				reason = "tool call blocked"
 			}
+			prepared.errorCode = "tool_blocked"
 			prepared.errText = reason
 			return prepared
 		}
@@ -186,6 +191,7 @@ func (e *engine) preflight(current Context, assistant llm.AssistantMessage, call
 
 	rawArgs, err := json.Marshal(validated)
 	if err != nil {
+		prepared.errorCode = "argument_encoding_failed"
 		prepared.errText = fmt.Sprintf("encode tool arguments: %v", err)
 		return prepared
 	}
@@ -199,14 +205,16 @@ func (e *engine) preflight(current Context, assistant llm.AssistantMessage, call
 // executePrepared runs a preflighted tool. It is safe to call concurrently for
 // distinct calls: it reads only the prepared value and emits through the event
 // channel, which is concurrency-safe.
-func (e *engine) executePrepared(prepared preparedToolCall) (result ToolResult, isError bool) {
+func (e *engine) executePrepared(prepared preparedToolCall) (result ToolResult) {
 	// A panicking tool becomes an error result rather than crashing the process.
 	// This recover lives here, not only on the loop goroutine, because parallel
 	// batches run Execute on separate goroutines that the loop cannot recover.
 	defer func() {
 		if r := recover(); r != nil {
-			result = ToolResult{Content: []llm.ToolResultContent{&llm.TextContent{Text: fmt.Sprintf("tool %q panicked: %v", prepared.call.Name, r)}}}
-			isError = true
+			result = ToolResult{
+				Content: []llm.ToolResultContent{&llm.TextContent{Text: fmt.Sprintf("tool %q panicked: %v", prepared.call.Name, r)}},
+				Outcome: ToolOutcome{Status: ToolOutcomeFailed, ErrorCode: "tool_panicked"},
+			}
 		}
 	}()
 
@@ -222,51 +230,50 @@ func (e *engine) executePrepared(prepared preparedToolCall) (result ToolResult, 
 
 	out, err := prepared.tool.Execute(e.ctx, prepared.call.ID, prepared.rawArgs, onUpdate)
 	if err != nil {
-		// Preserve the tool's own content and structured details when it supplied
-		// them, so a failing tool can still report a rich reason to product shells.
-		res := ToolResult{Content: out.Content, Details: out.Details}
-		if res.Content == nil {
-			res.Content = []llm.ToolResultContent{&llm.TextContent{Text: err.Error()}}
+		// Preserve the tool's own content and structured data when it supplied
+		// them, then normalize the Go error into the shared outcome contract.
+		if out.Content == nil {
+			out.Content = []llm.ToolResultContent{&llm.TextContent{Text: err.Error()}}
 		}
-		return res, true
+		out.Outcome = outcomeForError(out.Outcome, err)
+		return out
 	}
-	return out, false
+	out.Outcome = normalizeOutcome(out.Outcome)
+	return out
 }
 
 // finalize applies AfterToolCall and emits the end-of-tool and result-message
 // events. It must run in source order so AfterToolCall is not invoked
 // concurrently.
-func (e *engine) finalize(current Context, assistant llm.AssistantMessage, prepared preparedToolCall, result ToolResult, isError bool) (llm.ToolResultMessage, bool) {
+func (e *engine) finalize(current Context, assistant llm.AssistantMessage, prepared preparedToolCall, result ToolResult) (llm.ToolResultMessage, bool) {
 	if e.cfg.AfterToolCall != nil {
 		override := e.cfg.AfterToolCall(AfterToolCallCtx{
 			AssistantMessage: assistant,
 			ToolCall:         prepared.call,
 			Args:             prepared.validated,
 			Result:           result,
-			IsError:          isError,
 			Context:          current,
 		})
 		if override != nil {
 			if override.Content != nil {
 				result.Content = override.Content
 			}
-			if override.Details != nil {
-				result.Details = override.Details
-			}
-			if override.IsError != nil {
-				isError = *override.IsError
+			if override.Outcome != nil {
+				result.Outcome = normalizeOutcome(*override.Outcome)
 			}
 			if override.Terminate != nil {
 				result.Terminate = *override.Terminate
 			}
 		}
 	}
-	return e.finish(prepared.call, result, isError)
+	return e.finish(prepared.call, result)
 }
 
 // finish emits the end-of-tool and result-message events and returns the result
 // message with its terminate hint.
-func (e *engine) finish(call llm.ToolCall, result ToolResult, isError bool) (llm.ToolResultMessage, bool) {
+func (e *engine) finish(call llm.ToolCall, result ToolResult) (llm.ToolResultMessage, bool) {
+	result.Outcome = normalizeOutcome(result.Outcome)
+	isError := result.Outcome.Failed()
 	message := llm.ToolResultMessage{
 		ToolCallID: call.ID,
 		ToolName:   call.Name,
@@ -281,8 +288,59 @@ func (e *engine) finish(call llm.ToolCall, result ToolResult, isError bool) (llm
 
 // finishError finalizes a tool call that failed before or during execution. An
 // error result never terminates the run.
-func (e *engine) finishError(call llm.ToolCall, text string) (llm.ToolResultMessage, bool) {
-	return e.finish(call, ToolResult{Content: []llm.ToolResultContent{&llm.TextContent{Text: text}}}, true)
+func (e *engine) finishError(call llm.ToolCall, status ToolOutcomeStatus, code, text string) (llm.ToolResultMessage, bool) {
+	return e.finish(call, ToolResult{
+		Content: []llm.ToolResultContent{&llm.TextContent{Text: text}},
+		Outcome: ToolOutcome{Status: status, ErrorCode: code},
+	})
+}
+
+func normalizeOutcome(outcome ToolOutcome) ToolOutcome {
+	switch outcome.Status {
+	case "":
+		outcome.Status = ToolOutcomeSuccess
+	case ToolOutcomeSuccess:
+	case ToolOutcomeFailed:
+		if outcome.ErrorCode == "" {
+			outcome.ErrorCode = "tool_failed"
+		}
+	case ToolOutcomeCancelled:
+		if outcome.ErrorCode == "" {
+			outcome.ErrorCode = "tool_cancelled"
+		}
+	case ToolOutcomeTimeout:
+		if outcome.ErrorCode == "" {
+			outcome.ErrorCode = "tool_timeout"
+		}
+	default:
+		outcome.Status = ToolOutcomeFailed
+		if outcome.ErrorCode == "" {
+			outcome.ErrorCode = "invalid_tool_outcome"
+		}
+	}
+	return outcome
+}
+
+func outcomeForError(outcome ToolOutcome, err error) ToolOutcome {
+	outcome = normalizeOutcome(outcome)
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		outcome.Status = ToolOutcomeTimeout
+		if outcome.ErrorCode == "" {
+			outcome.ErrorCode = "tool_execution_timeout"
+		}
+	case errors.Is(err, context.Canceled):
+		outcome.Status = ToolOutcomeCancelled
+		if outcome.ErrorCode == "" {
+			outcome.ErrorCode = "tool_execution_cancelled"
+		}
+	default:
+		outcome.Status = ToolOutcomeFailed
+		if outcome.ErrorCode == "" {
+			outcome.ErrorCode = "tool_execution_failed"
+		}
+	}
+	return outcome
 }
 
 func findTool(tools []AgentTool, name string) *AgentTool {

@@ -24,7 +24,7 @@ type openPreviewArgs struct {
 }
 
 // PreviewRequest is the structured UI intent emitted by open_preview. Product
-// shells act on it live, and the details sidecar retains it so a reopened
+// shells act on it live, and ToolOutcome.Data retains it so a reopened
 // conversation can offer the same preview again.
 type PreviewRequest struct {
 	URL          string
@@ -102,7 +102,7 @@ func OpenPreview(root string, controllers ...BrowserController) Tool {
 				}
 				preview, err := resolvePreviewRequest(ctx, root, in.URL)
 				if err != nil {
-					return textResult(fmt.Sprintf("Could not open preview: %v", err)), nil
+					return failedResult("preview_invalid", fmt.Sprintf("Could not open preview: %v", err), nil), nil
 				}
 				preview.Title = strings.TrimSpace(in.Title)
 				destination := preview.URL
@@ -110,11 +110,11 @@ func OpenPreview(root string, controllers ...BrowserController) Tool {
 					destination = preview.Path
 				}
 				if controller == nil {
-					return textResult("Could not open preview: browser confirmation is unavailable"), nil
+					return failedResult("browser_unavailable", "Could not open preview: browser confirmation is unavailable", nil), nil
 				}
 				disposition, err := normalizeBrowserDisposition(in.Disposition)
 				if err != nil {
-					return textResult(fmt.Sprintf("Could not open preview: %v", err)), nil
+					return failedResult("browser_disposition_invalid", fmt.Sprintf("Could not open preview: %v", err), nil), nil
 				}
 				result, err := controller.OpenBrowser(ctx, BrowserRequest{
 					Preview:     preview,
@@ -158,13 +158,13 @@ func browserToolResult(destination string, preview PreviewRequest, result Browse
 		if detail == "" {
 			detail = "navigation failed"
 		}
-		return textResult(fmt.Sprintf("Could not open preview at %s: %s", destination, detail))
+		return failedResult("browser_navigation_failed", fmt.Sprintf("Could not open preview at %s: %s", destination, detail), nil)
 	case BrowserTimeout:
-		return textResult("The browser did not confirm the navigation")
+		return timeoutResult("browser_navigation_timeout", "The browser did not confirm the navigation", nil)
 	case BrowserCancelled:
-		return textResult("The browser navigation was cancelled")
+		return cancelledResult("browser_navigation_cancelled", "The browser navigation was cancelled", nil)
 	default:
-		return textResult("Could not open preview: browser returned an invalid result")
+		return failedResult("browser_result_invalid", "Could not open preview: browser returned an invalid result", nil)
 	}
 }
 

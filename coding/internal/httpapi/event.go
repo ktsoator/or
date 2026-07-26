@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/llm"
@@ -55,7 +56,7 @@ func ProjectEvent(ev engine.Event) ([]byte, bool) {
 		out = wireEvent{Type: wireEventToolStart, ID: ev.ToolCallID, Tool: ev.ToolName, Args: ev.ToolArgs}
 
 	case engine.ToolFinished:
-		out = wireEvent{Type: wireEventToolEnd, ID: ev.ToolCallID, Tool: ev.ToolName, Result: wireToolResult(ev.ToolName, ev.ToolResult), Change: fileChangePayload(ev.ToolDetails), Preview: previewPayload(ev.ToolDetails), IsError: ev.IsError}
+		out = wireEvent{Type: wireEventToolEnd, ID: ev.ToolCallID, Tool: ev.ToolName, Result: wireToolResult(ev.ToolName, ev.ToolResult), Outcome: projectToolOutcome(ev.ToolOutcome)}
 
 	case engine.MessageCompleted:
 		out = wireEvent{
@@ -188,9 +189,7 @@ func ProjectHistory(items []engine.HistoryItem) []wireEvent {
 				ID:      item.ToolCallID,
 				Tool:    item.ToolName,
 				Result:  wireToolResult(item.ToolName, item.ToolResult),
-				Change:  fileChangePayload(item.ToolDetails),
-				Preview: previewPayload(item.ToolDetails),
-				IsError: item.IsError,
+				Outcome: projectToolOutcome(item.ToolOutcome),
 			})
 
 		case engine.HistoryUsage:
@@ -270,7 +269,37 @@ func wireToolResult(tool, result string) string {
 	return firstLines(result, 12)
 }
 
-// fileChangePayload converts a tool's structured Details into the browser wire
+func projectToolOutcome(outcome agent.ToolOutcome) *wireToolOutcome {
+	status := wireToolOutcomeStatus(outcome.Status)
+	if status == "" {
+		status = wireToolOutcomeSuccess
+	}
+	return &wireToolOutcome{
+		Status:    status,
+		ErrorCode: outcome.ErrorCode,
+		ExitCode:  outcome.ExitCode,
+		Data:      projectToolData(outcome.Data),
+	}
+}
+
+func projectToolData(data any) any {
+	switch value := data.(type) {
+	case tools.FileChange, tools.MutationFailure:
+		return fileChangePayload(value)
+	case tools.PreviewRequest:
+		return previewPayload(value)
+	case tools.QuestionAnswers:
+		answers := make([]wireQuestionAnswer, 0, len(value.Answers))
+		for _, answer := range value.Answers {
+			answers = append(answers, wireQuestionAnswer{Question: answer.Question, Values: answer.Values})
+		}
+		return wireQuestionAnswers{Questions: projectQuestions(value.Questions), Answers: answers}
+	default:
+		return data
+	}
+}
+
+// fileChangePayload converts structured ToolOutcome.Data into the browser wire
 // shape, tagged so the client can tell a successful change from a failure.
 // It returns nil for tools that produced no structured result.
 func fileChangePayload(details any) wireChange {

@@ -35,6 +35,12 @@ export type DeltaKind =
   | "text"
   | "thinking"
 
+export type ToolOutcomeStatus =
+  | "success"
+  | "failed"
+  | "cancelled"
+  | "timeout"
+
 export type TaskStatus =
   | "running"
   | "succeeded"
@@ -230,6 +236,18 @@ export type QuestionAnswer = {
   values: string[]
 }
 
+export type QuestionAnswers = {
+  questions: Question[]
+  answers: QuestionAnswer[]
+}
+
+export type ToolOutcome = {
+  status: ToolOutcomeStatus
+  errorCode?: string
+  exitCode?: number
+  data?: unknown
+}
+
 export type WireEvent = {
   type: WireEventType
   kind?: DeltaKind
@@ -237,9 +255,9 @@ export type WireEvent = {
   tool?: string
   args?: unknown
   result?: string
+  outcome?: ToolOutcome
   toolContentIndex?: number
   bytes?: number
-  change?: Change
   preview?: PreviewRequest
   isError?: boolean
   text?: string

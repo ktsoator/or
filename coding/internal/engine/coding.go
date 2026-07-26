@@ -72,9 +72,10 @@ type Options struct {
 	// Compactor creates checkpoint summaries. Nil uses a native, tool-free LLM
 	// request configured from StreamFn, StreamOptions, and GetAPIKey.
 	Compactor compaction.Compactor
-	// DetailsStore persists recognized structured tool results out of band, keyed
-	// by tool-call ID, so a reloaded session restores rich rendering and preview
-	// targets. Nil replays history as plain text.
+	// DetailsStore persists machine-readable tool outcomes out of band, keyed by
+	// tool-call ID, so a reloaded session restores status, error metadata, rich
+	// rendering, and preview targets. Nil derives legacy status from the
+	// transcript and replays without structured data.
 	DetailsStore transcript.DetailsStore
 	// Instructions overrides the base system-prompt preamble. Empty uses
 	// prompt.DefaultInstructions.
@@ -133,8 +134,8 @@ type Session struct {
 	usageStart   int
 
 	detailsStore transcript.DetailsStore
-	detailsMu    sync.Mutex
-	details      map[string]any // tool-call ID -> decoded structured Details
+	outcomeMu    sync.Mutex
+	outcomes     map[string]agent.ToolOutcome // tool-call ID -> terminal outcome
 
 	eventMu        sync.Mutex
 	eventListeners map[int]func(Event)
@@ -230,15 +231,15 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		maxRetries = *opts.MaxRetries
 	}
 
-	details := map[string]any{}
+	outcomes := map[string]agent.ToolOutcome{}
 	if opts.DetailsStore != nil {
 		stored, err := opts.DetailsStore.Load(ctx)
 		if err != nil {
 			return nil, err
 		}
 		for id, raw := range stored {
-			if d := decodeDetails(raw); d != nil {
-				details[id] = d
+			if outcome, ok := decodeOutcome(raw); ok {
+				outcomes[id] = outcome
 			}
 		}
 	}
@@ -261,7 +262,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		entries:        append([]transcript.Entry(nil), entries...),
 		usageStart:     usageStart,
 		detailsStore:   opts.DetailsStore,
-		details:        details,
+		outcomes:       outcomes,
 		eventListeners: make(map[int]func(Event)),
 	}
 	if s.compactor == nil {
@@ -327,7 +328,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		PrepareNextTurn: s.prepareNextTurn,
 	}
 	s.agent = agent.New(agentOpts)
-	s.captureDetails()
+	s.captureOutcomes()
 	s.agent.Subscribe(func(ev agent.AgentEvent) {
 		if projected, ok := projectAgentEvent(ev); ok {
 			s.dispatchEvent(projected)
@@ -337,41 +338,41 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	return s, nil
 }
 
-// captureDetails subscribes to tool completions and retains each tool's
-// structured Details in memory, persisting it to the DetailsStore so a later
-// reload can restore it. It is registered once, for the session's lifetime.
-func (s *Session) captureDetails() {
+// captureOutcomes subscribes to tool completions and retains each terminal
+// outcome in memory, persisting it to the sidecar so reload restores status,
+// error metadata, and structured data. It is registered once per session.
+func (s *Session) captureOutcomes() {
 	s.agent.Subscribe(func(ev agent.AgentEvent) {
 		if ev.Type != agent.ToolEnd {
 			return
 		}
 		result, ok := ev.Result.(agent.ToolResult)
-		if !ok || result.Details == nil {
-			return
-		}
-		payload, ok := encodeDetails(result.Details)
 		if !ok {
 			return
 		}
-		s.detailsMu.Lock()
-		s.details[ev.ToolCallID] = result.Details
-		s.detailsMu.Unlock()
+		payload, ok := encodeOutcome(result.Outcome)
+		if !ok {
+			return
+		}
+		s.outcomeMu.Lock()
+		s.outcomes[ev.ToolCallID] = result.Outcome
+		s.outcomeMu.Unlock()
 		if s.detailsStore != nil {
 			// Persist out of band; a failure here must not disrupt the run, and the
-			// live event already carried the Details to any subscriber.
+			// live event already carried the outcome to any subscriber.
 			_ = s.detailsStore.Put(context.Background(), ev.ToolCallID, payload)
 		}
 	})
 }
 
-// snapshotDetails returns a copy of the captured tool-call details, safe to read
-// while a run is appending more.
-func (s *Session) snapshotDetails() map[string]any {
-	s.detailsMu.Lock()
-	defer s.detailsMu.Unlock()
-	out := make(map[string]any, len(s.details))
-	for id, d := range s.details {
-		out[id] = d
+// snapshotOutcomes returns a copy of the captured outcomes, safe to read while
+// a run is appending more.
+func (s *Session) snapshotOutcomes() map[string]agent.ToolOutcome {
+	s.outcomeMu.Lock()
+	defer s.outcomeMu.Unlock()
+	out := make(map[string]agent.ToolOutcome, len(s.outcomes))
+	for id, outcome := range s.outcomes {
+		out[id] = outcome
 	}
 	return out
 }

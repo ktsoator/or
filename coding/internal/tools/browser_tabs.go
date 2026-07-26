@@ -80,7 +80,7 @@ func BrowserTabs(providers ...BrowserTabsProvider) Tool {
 			Label:      "List browser tabs",
 			Execute: func(ctx context.Context, _ string, _ json.RawMessage, _ func(agent.ToolResult)) (agent.ToolResult, error) {
 				if provider == nil {
-					return textResult("Could not list browser tabs: browser observation is unavailable"), nil
+					return failedResult("browser_unavailable", "Could not list browser tabs: browser observation is unavailable", nil), nil
 				}
 				result, err := provider.BrowserTabs(ctx)
 				if err != nil {
@@ -119,7 +119,7 @@ func browserTabsToolResult(result BrowserTabsResult) agent.ToolResult {
 			Selected:       selected,
 		}, "", "  ")
 		if err != nil {
-			return textResult("Could not list browser tabs: browser returned an invalid result")
+			return failedResult("browser_tabs_result_invalid", "Could not list browser tabs: browser returned an invalid result", nil)
 		}
 		return textResult(string(encoded))
 	case BrowserTabsFailed:
@@ -127,12 +127,12 @@ func browserTabsToolResult(result BrowserTabsResult) agent.ToolResult {
 		if detail == "" {
 			detail = "browser tab listing failed"
 		}
-		return textResult("Could not list browser tabs: " + detail)
+		return failedResult("browser_tabs_failed", "Could not list browser tabs: "+detail, nil)
 	case BrowserTabsTimeout:
-		return textResult("The browser did not return its open tabs")
+		return timeoutResult("browser_tabs_timeout", "The browser did not return its open tabs", nil)
 	case BrowserTabsCancelled:
-		return textResult("The browser tab listing was cancelled")
+		return cancelledResult("browser_tabs_cancelled", "The browser tab listing was cancelled", nil)
 	default:
-		return textResult("Could not list browser tabs: browser returned an invalid result")
+		return failedResult("browser_tabs_result_invalid", "Could not list browser tabs: browser returned an invalid result", nil)
 	}
 }

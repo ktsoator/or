@@ -72,10 +72,10 @@ func InspectBrowser(inspectors ...BrowserInspector) Tool {
 				}
 				tabID := strings.TrimSpace(in.TabID)
 				if len([]rune(tabID)) > 256 {
-					return textResult("Could not inspect browser: browser tab ID is too long"), nil
+					return failedResult("browser_tab_id_invalid", "Could not inspect browser: browser tab ID is too long", nil), nil
 				}
 				if inspector == nil {
-					return textResult("Could not inspect browser: browser observation is unavailable"), nil
+					return failedResult("browser_unavailable", "Could not inspect browser: browser observation is unavailable", nil), nil
 				}
 				result, err := inspector.InspectBrowser(ctx, tabID)
 				if err != nil {
@@ -114,12 +114,12 @@ func browserInspectionToolResult(result BrowserInspectionResult) agent.ToolResul
 		if detail == "" {
 			detail = "page observation failed"
 		}
-		return textResult("Could not inspect browser: " + detail)
+		return failedResult("browser_inspection_failed", "Could not inspect browser: "+detail, nil)
 	case BrowserInspectionTimeout:
-		return textResult("The browser did not return an inspection result")
+		return timeoutResult("browser_inspection_timeout", "The browser did not return an inspection result", nil)
 	case BrowserInspectionCancelled:
-		return textResult("The browser inspection was cancelled")
+		return cancelledResult("browser_inspection_cancelled", "The browser inspection was cancelled", nil)
 	default:
-		return textResult("Could not inspect browser: browser returned an invalid result")
+		return failedResult("browser_inspection_result_invalid", "Could not inspect browser: browser returned an invalid result", nil)
 	}
 }

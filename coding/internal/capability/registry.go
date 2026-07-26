@@ -226,13 +226,9 @@ func (r *Registry) AfterToolCall() func(agent.AfterToolCallCtx) *agent.AfterTool
 				ctx.Result.Content = override.Content
 				combined.Content = override.Content
 			}
-			if override.Details != nil {
-				ctx.Result.Details = override.Details
-				combined.Details = override.Details
-			}
-			if override.IsError != nil {
-				ctx.IsError = *override.IsError
-				combined.IsError = override.IsError
+			if override.Outcome != nil {
+				ctx.Result.Outcome = *override.Outcome
+				combined.Outcome = override.Outcome
 			}
 			if override.Terminate != nil {
 				ctx.Result.Terminate = *override.Terminate

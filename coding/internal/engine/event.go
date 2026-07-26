@@ -56,12 +56,9 @@ type Event struct {
 	ToolContentIndex int
 	ToolInputBytes   int
 	ToolResult       string
-	// ToolDetails is the tool's structured result (for example a tools.FileChange
-	// or tools.MutationFailure), when it produced one. Product shells render it;
-	// ToolResult remains the text fallback. It is not persisted, so it is present
-	// on live events but absent when history is replayed.
-	ToolDetails any
-	IsError     bool
+	// ToolOutcome is the source of truth for status, error metadata, and
+	// structured product data. ToolResult remains the model-facing text fallback.
+	ToolOutcome agent.ToolOutcome
 
 	// BackgroundTask contains the latest lifecycle state for task events.
 	BackgroundTask BackgroundTask
@@ -135,8 +132,7 @@ func projectAgentEvent(ev agent.AgentEvent) (Event, bool) {
 			ToolCallID:  ev.ToolCallID,
 			ToolName:    ev.ToolName,
 			ToolResult:  eventToolResultText(ev.Result),
-			ToolDetails: eventToolResultDetails(ev.Result),
-			IsError:     ev.IsError,
+			ToolOutcome: eventToolOutcome(ev.Result),
 		}, true
 
 	case agent.MessageEnd:
@@ -276,13 +272,10 @@ func eventToolResultText(result any) string {
 	return toolResultContentText(toolResult.Content)
 }
 
-// eventToolResultDetails returns a tool's structured result, when it produced
-// one. It is the source of truth product shells render; unlike Content it is not
-// persisted, so it is available only on live events.
-func eventToolResultDetails(result any) any {
+func eventToolOutcome(result any) agent.ToolOutcome {
 	toolResult, ok := result.(agent.ToolResult)
 	if !ok {
-		return nil
+		return agent.ToolOutcome{Status: agent.ToolOutcomeFailed, ErrorCode: "tool_result_invalid"}
 	}
-	return toolResult.Details
+	return toolResult.Outcome
 }

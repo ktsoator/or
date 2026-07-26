@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/conversation"
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/tools"
@@ -155,21 +156,32 @@ func TestProjectEventIncludesLivePreviewRequest(t *testing.T) {
 		Type:       engine.ToolFinished,
 		ToolCallID: "preview-call",
 		ToolName:   "open_preview",
-		ToolDetails: tools.PreviewRequest{
-			URL:   "http://localhost:3000",
-			Title: "Local app",
+		ToolOutcome: agent.ToolOutcome{
+			Status: agent.ToolOutcomeSuccess,
+			Data: tools.PreviewRequest{
+				URL:   "http://localhost:3000",
+				Title: "Local app",
+			},
 		},
 	})
 	if !ok {
 		t.Fatal("preview tool event was not projected")
 	}
 
-	var event wireEvent
+	var event struct {
+		Outcome struct {
+			Status wireToolOutcomeStatus `json:"status"`
+			Data   wirePreview           `json:"data"`
+		} `json:"outcome"`
+	}
 	if err := json.Unmarshal(data, &event); err != nil {
 		t.Fatal(err)
 	}
-	if event.Preview == nil || event.Preview.URL != "http://localhost:3000" || event.Preview.Title != "Local app" {
-		t.Fatalf("preview = %#v", event.Preview)
+	if event.Outcome.Status != wireToolOutcomeSuccess {
+		t.Fatalf("outcome = %#v", event.Outcome)
+	}
+	if event.Outcome.Data.URL != "http://localhost:3000" || event.Outcome.Data.Title != "Local app" {
+		t.Fatalf("outcome data = %#v", event.Outcome.Data)
 	}
 }
 
@@ -178,24 +190,32 @@ func TestProjectEventIncludesWorkspacePreviewPath(t *testing.T) {
 		Type:       engine.ToolFinished,
 		ToolCallID: "preview-call",
 		ToolName:   "open_preview",
-		ToolDetails: tools.PreviewRequest{
-			Path:         "/workspace/web/index.html",
-			RelativePath: "web/index.html",
-			Title:        "Static page",
-			GrantID:      "preview-grant",
-			PreviewPath:  "index.html",
+		ToolOutcome: agent.ToolOutcome{
+			Status: agent.ToolOutcomeSuccess,
+			Data: tools.PreviewRequest{
+				Path:         "/workspace/web/index.html",
+				RelativePath: "web/index.html",
+				Title:        "Static page",
+				GrantID:      "preview-grant",
+				PreviewPath:  "index.html",
+			},
 		},
 	})
 	if !ok {
 		t.Fatal("preview tool event was not projected")
 	}
 
-	var event wireEvent
+	var event struct {
+		Outcome struct {
+			Data wirePreview `json:"data"`
+		} `json:"outcome"`
+	}
 	if err := json.Unmarshal(data, &event); err != nil {
 		t.Fatal(err)
 	}
-	if event.Preview == nil || event.Preview.Path != "/workspace/web/index.html" || event.Preview.RelativePath != "web/index.html" || event.Preview.Title != "Static page" || event.Preview.GrantID != "preview-grant" || event.Preview.PreviewPath != "index.html" || event.Preview.URL != "" {
-		t.Fatalf("preview = %#v", event.Preview)
+	preview := event.Outcome.Data
+	if preview.Path != "/workspace/web/index.html" || preview.RelativePath != "web/index.html" || preview.Title != "Static page" || preview.GrantID != "preview-grant" || preview.PreviewPath != "index.html" || preview.URL != "" {
+		t.Fatalf("outcome data = %#v", event.Outcome.Data)
 	}
 }
 
@@ -204,19 +224,22 @@ func TestProjectEventIncludesStructuredFileChange(t *testing.T) {
 		Type:       engine.ToolFinished,
 		ToolCallID: "write-call",
 		ToolName:   "write",
-		ToolDetails: tools.FileChange{
-			Path:      "main.go",
-			Kind:      tools.ChangeUpdate,
-			Additions: 2,
-			Deletions: 1,
-			Bytes:     42,
-			Hunks: []tools.Hunk{{
-				OldStart: 3,
-				OldLines: 1,
-				NewStart: 3,
-				NewLines: 2,
-				Lines:    []string{"-old", "+new", "+line"},
-			}},
+		ToolOutcome: agent.ToolOutcome{
+			Status: agent.ToolOutcomeSuccess,
+			Data: tools.FileChange{
+				Path:      "main.go",
+				Kind:      tools.ChangeUpdate,
+				Additions: 2,
+				Deletions: 1,
+				Bytes:     42,
+				Hunks: []tools.Hunk{{
+					OldStart: 3,
+					OldLines: 1,
+					NewStart: 3,
+					NewLines: 2,
+					Lines:    []string{"-old", "+new", "+line"},
+				}},
+			},
 		},
 	})
 	if !ok {
@@ -224,19 +247,59 @@ func TestProjectEventIncludesStructuredFileChange(t *testing.T) {
 	}
 
 	var event struct {
-		Change wireFileChangePayload `json:"change"`
+		Outcome struct {
+			Data wireFileChangePayload `json:"data"`
+		} `json:"outcome"`
 	}
 	if err := json.Unmarshal(data, &event); err != nil {
 		t.Fatal(err)
 	}
-	if event.Change.ChangeType != wireChangeFile || event.Change.Operation != wireFileUpdate {
-		t.Fatalf("change = %#v", event.Change)
+	change := event.Outcome.Data
+	if change.ChangeType != wireChangeFile || change.Operation != wireFileUpdate {
+		t.Fatalf("change = %#v", change)
 	}
-	if event.Change.Path != "main.go" || event.Change.Additions != 2 || event.Change.Deletions != 1 || event.Change.Bytes != 42 {
-		t.Fatalf("change = %#v", event.Change)
+	if change.Path != "main.go" || change.Additions != 2 || change.Deletions != 1 || change.Bytes != 42 {
+		t.Fatalf("change = %#v", change)
 	}
-	if len(event.Change.Hunks) != 1 || len(event.Change.Hunks[0].Lines) != 3 {
-		t.Fatalf("hunks = %#v", event.Change.Hunks)
+	if len(change.Hunks) != 1 || len(change.Hunks[0].Lines) != 3 {
+		t.Fatalf("hunks = %#v", change.Hunks)
+	}
+}
+
+func TestProjectEventIncludesFailedToolOutcomeMetadata(t *testing.T) {
+	exitCode := 2
+	data, ok := ProjectEvent(engine.Event{
+		Type:       engine.ToolFinished,
+		ToolCallID: "bash-call",
+		ToolName:   "bash",
+		ToolResult: "exit status 2",
+		ToolOutcome: agent.ToolOutcome{
+			Status:    agent.ToolOutcomeFailed,
+			ErrorCode: "command_exit_nonzero",
+			ExitCode:  &exitCode,
+			Data:      map[string]any{"stderr": "compile failed"},
+		},
+	})
+	if !ok {
+		t.Fatal("failed tool event was not projected")
+	}
+
+	var event struct {
+		Outcome struct {
+			Status    wireToolOutcomeStatus `json:"status"`
+			ErrorCode string                `json:"errorCode"`
+			ExitCode  *int                  `json:"exitCode"`
+			Data      map[string]any        `json:"data"`
+		} `json:"outcome"`
+	}
+	if err := json.Unmarshal(data, &event); err != nil {
+		t.Fatal(err)
+	}
+	if event.Outcome.Status != wireToolOutcomeFailed ||
+		event.Outcome.ErrorCode != "command_exit_nonzero" ||
+		event.Outcome.ExitCode == nil || *event.Outcome.ExitCode != 2 ||
+		event.Outcome.Data["stderr"] != "compile failed" {
+		t.Fatalf("outcome = %#v", event.Outcome)
 	}
 }
 
@@ -245,17 +308,20 @@ func TestProjectHistoryRestoresPreviewRequest(t *testing.T) {
 		Type:       engine.HistoryToolResult,
 		ToolCallID: "preview-call",
 		ToolName:   "open_preview",
-		ToolDetails: tools.PreviewRequest{
-			Path:         "/workspace/web/index.html",
-			RelativePath: "web/index.html",
-			Title:        "Static page",
+		ToolOutcome: agent.ToolOutcome{
+			Status: agent.ToolOutcomeSuccess,
+			Data: tools.PreviewRequest{
+				Path:         "/workspace/web/index.html",
+				RelativePath: "web/index.html",
+				Title:        "Static page",
+			},
 		},
 	}})
 	if len(events) != 1 {
 		t.Fatalf("events = %#v, want one event", events)
 	}
-	preview := events[0].Preview
-	if preview == nil || preview.Path != "/workspace/web/index.html" || preview.RelativePath != "web/index.html" || preview.Title != "Static page" {
-		t.Fatalf("history preview = %#v", preview)
+	preview, ok := events[0].Outcome.Data.(*wirePreview)
+	if !ok || preview.Path != "/workspace/web/index.html" || preview.RelativePath != "web/index.html" || preview.Title != "Static page" {
+		t.Fatalf("history outcome data = %#v", events[0].Outcome.Data)
 	}
 }

@@ -12,11 +12,13 @@ import (
 	"sync"
 )
 
-// DetailsStore persists per-tool structured results out of band from the
+// DetailsStore persists machine-readable tool outcomes out of band from the
 // transcript, keyed by tool-call ID. The transcript itself carries only the
-// model-facing text; recognized structured Details live here so a reloaded
-// session can restore the same rich rendering and preview targets it showed
-// live. A nil DetailsStore disables this and history replays as plain text.
+// model-facing result and legacy IsError bit; status, error metadata, exit code,
+// and structured data live here so a reloaded session restores the same state
+// it showed live. The name is retained because existing sessions use a
+// .details.jsonl sidecar. A nil DetailsStore makes history derive status from
+// the transcript and replay without structured data.
 type DetailsStore interface {
 	// Load returns every stored payload keyed by tool-call ID.
 	Load(ctx context.Context) (map[string]json.RawMessage, error)

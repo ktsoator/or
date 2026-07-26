@@ -99,7 +99,7 @@ Usage:
 - Do not use bash as a substitute for read, grep, glob, ls, edit, or write.
 - Create or replace files with write, not echo or printf redirection, tee, or heredocs. Modify existing files with edit, not sed -i, awk, or perl.
 - If edit or write requires a prior read, call read and retry the same tool.
-- A non-zero exit code is reported as output, not as a failure, so you can react to it.
+- A non-zero exit code returns a failed tool outcome while preserving command output and the exact exit code, so inspect the output and react to it.
 - Always set description to a short active-voice summary of the command (about 5-10 words); it is shown in the UI in place of the raw command.
 - For a long-lived process that does not exit on its own — a dev server, a watcher, a database — set run_in_background instead of waiting for it. bash returns a task id and managed output path immediately. Completion is reported automatically; read the output file only when logs are needed, and stop it with task_stop. Do not poll. Never wait on such a command in the foreground.`,
 	guidelines: []string{

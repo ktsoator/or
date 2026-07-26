@@ -53,18 +53,16 @@ type AfterToolCallCtx struct {
 	ToolCall         llm.ToolCall
 	Args             any
 	Result           ToolResult
-	IsError          bool
 	Context          Context
 }
 
 // AfterToolCallResult overrides parts of an executed tool result. Each field
 // overrides the corresponding result value only when set; a nil field keeps the
-// original. Content replaces the whole content slice when non-nil; Details
-// replaces the details when non-nil.
+// original. Content replaces the whole content slice when non-nil; Outcome
+// replaces the complete machine-readable outcome when non-nil.
 type AfterToolCallResult struct {
 	Content   []llm.ToolResultContent
-	Details   any
-	IsError   *bool
+	Outcome   *ToolOutcome
 	Terminate *bool
 }
 

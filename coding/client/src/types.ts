@@ -8,6 +8,7 @@ import type {
   PreviewRequest,
   Question,
   TaskStatus,
+  ToolOutcome,
   Usage,
 } from './generated/wire'
 
@@ -137,6 +138,7 @@ export type ToolItem = {
   toolContentIndex?: number
   generatedBytes?: number
   result?: string
+  outcome?: ToolOutcome
   change?: Change
 }
 export type ApprovalChoice = 'allow_once' | 'deny'

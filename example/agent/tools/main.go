@@ -37,10 +37,10 @@ func main() {
 			result := fmt.Sprintf("%s: sunny, around 25C for the next %d days", in.City, in.Days)
 			return agent.ToolResult{
 				Content: []llm.ToolResultContent{&llm.TextContent{Text: result}},
-				Details: map[string]any{
+				Outcome: agent.ToolOutcome{Status: agent.ToolOutcomeSuccess, Data: map[string]any{
 					"city": in.City,
 					"days": in.Days,
-				},
+				}},
 			}, nil
 		},
 	}
