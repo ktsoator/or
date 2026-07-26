@@ -55,6 +55,15 @@ const (
 	wireDeltaThinking wireDeltaKind = "thinking"
 )
 
+type wireToolOutcomeStatus string
+
+const (
+	wireToolOutcomeSuccess   wireToolOutcomeStatus = "success"
+	wireToolOutcomeFailed    wireToolOutcomeStatus = "failed"
+	wireToolOutcomeCancelled wireToolOutcomeStatus = "cancelled"
+	wireToolOutcomeTimeout   wireToolOutcomeStatus = "timeout"
+)
+
 type wireDeliveryMode string
 
 const (
@@ -201,6 +210,20 @@ type wireQuestionAnswer struct {
 	Values   []string `json:"values"`
 }
 
+type wireQuestionAnswers struct {
+	Questions []wireQuestion       `json:"questions"`
+	Answers   []wireQuestionAnswer `json:"answers"`
+}
+
+// wireToolOutcome is the single terminal contract for a tool call. Data is
+// JSON-shaped and may contain a built-in DTO or capability-defined payload.
+type wireToolOutcome struct {
+	Status    wireToolOutcomeStatus `json:"status"`
+	ErrorCode string                `json:"errorCode,omitempty"`
+	ExitCode  *int                  `json:"exitCode,omitempty"`
+	Data      any                   `json:"data,omitempty"`
+}
+
 // wireEvent is the JSON shape streamed to the browser. Fields are populated
 // according to Type; the rest stay zero and are omitted.
 type wireEvent struct {
@@ -209,18 +232,16 @@ type wireEvent struct {
 	Kind  wireDeltaKind `json:"kind,omitempty"`
 	Delta string        `json:"delta,omitempty"`
 	// tool events (ID correlates tool_start with tool_end)
-	Tool   string `json:"tool,omitempty"`
-	Args   any    `json:"args,omitempty"`
-	Result string `json:"result,omitempty"`
+	Tool    string           `json:"tool,omitempty"`
+	Args    any              `json:"args,omitempty"`
+	Result  string           `json:"result,omitempty"`
+	Outcome *wireToolOutcome `json:"outcome,omitempty"`
 	// ToolContentIndex correlates tool argument events before every provider has
 	// supplied a stable tool-call ID. Bytes is the size of one argument delta.
-	ToolContentIndex *int `json:"toolContentIndex,omitempty"`
-	Bytes            int  `json:"bytes,omitempty"`
-	// Change is the structured file-change result or failure, when the tool
-	// produced one, for rich rendering.
-	Change  wireChange   `json:"change,omitempty"`
-	Preview *wirePreview `json:"preview,omitempty"`
-	IsError bool         `json:"isError,omitempty"`
+	ToolContentIndex *int         `json:"toolContentIndex,omitempty"`
+	Bytes            int          `json:"bytes,omitempty"`
+	Preview          *wirePreview `json:"preview,omitempty"`
+	IsError          bool         `json:"isError,omitempty"`
 	// message_end fallback text (used when nothing streamed)
 	Text   string      `json:"text,omitempty"`
 	Images []wireImage `json:"images,omitempty"`

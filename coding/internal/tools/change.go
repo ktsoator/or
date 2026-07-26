@@ -1,8 +1,8 @@
 package tools
 
 // This file defines the structured results the mutating tools attach to
-// agent.ToolResult.Details. The model-facing Content stays a short text summary
-// derived from these values; the product reads Details to render a
+// agent.ToolResult.Outcome.Data. The model-facing Content stays a short text
+// summary derived from these values; the product reads the outcome data to render a
 // file-change row and an expandable diff instead of parsing the summary text.
 
 // ChangeKind reports whether a write created a new file or updated an existing

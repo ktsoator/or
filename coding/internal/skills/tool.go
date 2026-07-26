@@ -50,7 +50,7 @@ func newTool(
 			s, ok := lookup(name)
 			if !ok {
 				msg := unknownSkillMessage(name, names())
-				return textResult(msg), fmt.Errorf("%s", msg)
+				return failedTextResult("skill_not_found", msg), fmt.Errorf("%s", msg)
 			}
 			return textResult(formatLoadedSkill(s, in.Arguments)), nil
 		},
@@ -77,5 +77,13 @@ func unknownSkillMessage(name string, valid []string) string {
 func textResult(text string) agent.ToolResult {
 	return agent.ToolResult{
 		Content: []llm.ToolResultContent{&llm.TextContent{Text: text}},
+		Outcome: agent.ToolOutcome{Status: agent.ToolOutcomeSuccess},
+	}
+}
+
+func failedTextResult(code, text string) agent.ToolResult {
+	return agent.ToolResult{
+		Content: []llm.ToolResultContent{&llm.TextContent{Text: text}},
+		Outcome: agent.ToolOutcome{Status: agent.ToolOutcomeFailed, ErrorCode: code},
 	}
 }

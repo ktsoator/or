@@ -22,10 +22,10 @@ type bashArgs struct {
 }
 
 // Bash returns a tool that runs a shell command in the workspace directory and
-// returns its combined output and exit code. A non-zero exit is reported to the
-// model as content, not as a failure, so the model can react to it. When tasks
-// is non-nil, run_in_background starts a managed task and returns its id and
-// output path instead of blocking.
+// returns its combined output and exit code. A non-zero exit is a failed tool
+// outcome that still preserves output for the model and the exact exit code for
+// runtimes. When tasks is non-nil, run_in_background starts a managed task and
+// returns its id and output path instead of blocking.
 func Bash(root string, ops ExecOps, tasks *TaskManager) Tool {
 	def := llm.MustTool[bashArgs]("bash", bashText.description)
 	return Tool{
@@ -40,11 +40,11 @@ func Bash(root string, ops ExecOps, tasks *TaskManager) Tool {
 
 				if in.RunInBackground {
 					if tasks == nil {
-						return textResult("background execution is not available in this session"), nil
+						return failedResult("background_unavailable", "background execution is not available in this session", nil), nil
 					}
 					info, err := tasks.Start(in.Command, in.Description, root)
 					if err != nil {
-						return textResult(fmt.Sprintf("command failed to start: %v", err)), err
+						return failedResult("command_start_failed", fmt.Sprintf("command failed to start: %v", err), nil), err
 					}
 					return textResult(fmt.Sprintf(
 						"Started background task %s.\nOutput: %s\nCompletion will be reported automatically. Read the output file when logs are needed; stop it with task_stop(task_id=%q).",
@@ -61,7 +61,7 @@ func Bash(root string, ops ExecOps, tasks *TaskManager) Tool {
 
 				result, err := ops.Exec(runCtx, in.Command, root)
 				if err != nil {
-					return textResult(fmt.Sprintf("command failed to run: %v", err)), err
+					return failedResult("command_execution_failed", fmt.Sprintf("command failed to run: %v", err), nil), err
 				}
 
 				var b strings.Builder
@@ -69,7 +69,16 @@ func Bash(root string, ops ExecOps, tasks *TaskManager) Tool {
 				if result.ExitCode != 0 {
 					fmt.Fprintf(&b, "\n\n[exit code: %d]", result.ExitCode)
 				}
-				return textResult(b.String()), nil
+				switch runCtx.Err() {
+				case context.DeadlineExceeded:
+					return commandResult(agent.ToolOutcomeTimeout, "command_timeout", b.String(), result.ExitCode), nil
+				case context.Canceled:
+					return commandResult(agent.ToolOutcomeCancelled, "command_cancelled", b.String(), result.ExitCode), nil
+				}
+				if result.ExitCode != 0 {
+					return commandResult(agent.ToolOutcomeFailed, "command_exit_nonzero", b.String(), result.ExitCode), nil
+				}
+				return commandResult(agent.ToolOutcomeSuccess, "", b.String(), result.ExitCode), nil
 			},
 		},
 		AccessFor:  commandAccess,

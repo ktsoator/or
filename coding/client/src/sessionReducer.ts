@@ -6,16 +6,19 @@ import type {
   BrowserResult,
   BrowserResultOutboxEntry,
   BrowserTabsCommandState,
+  Change,
   ConnectionStatus,
   ContextUsage,
   DeliveryMode,
   Item,
   MessageImage,
+  PreviewRequest,
   PreviewState,
   QueuedMessage,
   QuestionItem,
   TaskItem,
   ThreadSnapshot,
+  ToolOutcome,
   Usage,
   WireEvent,
 } from './types'
@@ -40,6 +43,29 @@ export type ThreadState = {
 }
 
 export type ThreadsState = Record<string, ThreadState>
+
+function recordOf(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null
+    ? (value as Record<string, unknown>)
+    : undefined
+}
+
+function outcomeChange(outcome: ToolOutcome | undefined): Change | undefined {
+  const data = recordOf(outcome?.data)
+  return data?.changeType === 'file' || data?.changeType === 'failure'
+    ? (data as Change)
+    : undefined
+}
+
+function outcomePreview(
+  tool: string | undefined,
+  outcome: ToolOutcome | undefined,
+): PreviewRequest | undefined {
+  if (tool !== 'open_preview') return undefined
+  const data = recordOf(outcome?.data)
+  if (!data || (typeof data.url !== 'string' && typeof data.path !== 'string')) return undefined
+  return data as PreviewRequest
+}
 
 export type ThreadAction =
   | { t: 'reset'; sessionID: string; history: ThreadSnapshot }
@@ -684,10 +710,19 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
             (!ev.tool || it.name === ev.tool),
         )
       }
+      const outcome: ToolOutcome = ev.outcome ?? {
+        status: ev.isError ? 'failed' : 'success',
+        ...(ev.isError ? { errorCode: 'legacy_tool_error' } : {}),
+      }
+      const structuredChange = outcomeChange(outcome)
+      const structuredPreview = outcomePreview(ev.tool, outcome)
       const patch = {
-        status: (ev.isError ? 'error' : 'complete') as 'error' | 'complete',
+        status: (outcome.status === 'success' ? 'complete' : 'error') as
+          | 'error'
+          | 'complete',
         result: ev.result,
-        change: ev.change,
+        outcome,
+        change: structuredChange,
       }
       if (idx >= 0) {
         const cur = items[idx] as Extract<Item, { kind: 'tool' }>
@@ -698,25 +733,25 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
           { kind: 'tool', id: ev.id ?? nextId(), name: ev.tool ?? 'tool', args: undefined, ...patch },
         ]
       }
-      if (ev.preview?.url || ev.preview?.path) {
+      if (structuredPreview?.url || structuredPreview?.path) {
         const sameTarget =
-          preview?.url === ev.preview.url &&
-          preview?.path === ev.preview.path &&
-          preview?.relativePath === ev.preview.relativePath
+          preview?.url === structuredPreview.url &&
+          preview?.path === structuredPreview.path &&
+          preview?.relativePath === structuredPreview.relativePath
         const pendingCommand = preview?.commandID
           ? browserCommands.some((command) => command.commandID === preview?.commandID)
           : false
         preview = sameTarget && (preview?.commandID || preview?.disposition)
           ? pendingCommand
-            ? { ...ev.preview, ...preview }
+            ? { ...structuredPreview, ...preview }
             : {
-                ...ev.preview,
+                ...structuredPreview,
                 disposition: preview.disposition,
                 revision: preview.revision,
               }
-          : { ...ev.preview, revision: (preview?.revision ?? 0) + 1 }
+          : { ...structuredPreview, revision: (preview?.revision ?? 0) + 1 }
         previewOpen = preview.disposition !== 'new_background_tab'
-      } else if (ev.change?.changeType === 'file' && preview?.path) {
+      } else if (structuredChange?.changeType === 'file' && preview?.path) {
         preview = {
           ...preview,
           revision: preview.revision + 1,

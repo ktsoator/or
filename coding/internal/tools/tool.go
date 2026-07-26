@@ -108,23 +108,68 @@ func InternalAccess(map[string]any) []permission.Access {
 func textResult(text string) agent.ToolResult {
 	return agent.ToolResult{
 		Content: []llm.ToolResultContent{&llm.TextContent{Text: text}},
+		Outcome: agent.ToolOutcome{Status: agent.ToolOutcomeSuccess},
 	}
 }
 
-// resultWith builds a ToolResult whose model-facing text is derived from a
-// structured Details value. The text is what the model reads; Details is the
+// resultWith builds a successful ToolResult whose model-facing text is derived
+// from structured outcome data. The text is what the model reads; Data is the
 // source of truth product shells render.
-func resultWith(text string, details any) agent.ToolResult {
+func resultWith(text string, data any) agent.ToolResult {
 	return agent.ToolResult{
 		Content: []llm.ToolResultContent{&llm.TextContent{Text: text}},
-		Details: details,
+		Outcome: agent.ToolOutcome{Status: agent.ToolOutcomeSuccess, Data: data},
+	}
+}
+
+func failedResult(code, text string, data any) agent.ToolResult {
+	return agent.ToolResult{
+		Content: []llm.ToolResultContent{&llm.TextContent{Text: text}},
+		Outcome: agent.ToolOutcome{
+			Status:    agent.ToolOutcomeFailed,
+			ErrorCode: code,
+			Data:      data,
+		},
+	}
+}
+
+func cancelledResult(code, text string, data any) agent.ToolResult {
+	return agent.ToolResult{
+		Content: []llm.ToolResultContent{&llm.TextContent{Text: text}},
+		Outcome: agent.ToolOutcome{
+			Status:    agent.ToolOutcomeCancelled,
+			ErrorCode: code,
+			Data:      data,
+		},
+	}
+}
+
+func timeoutResult(code, text string, data any) agent.ToolResult {
+	return agent.ToolResult{
+		Content: []llm.ToolResultContent{&llm.TextContent{Text: text}},
+		Outcome: agent.ToolOutcome{
+			Status:    agent.ToolOutcomeTimeout,
+			ErrorCode: code,
+			Data:      data,
+		},
+	}
+}
+
+func commandResult(status agent.ToolOutcomeStatus, code, text string, exitCode int) agent.ToolResult {
+	return agent.ToolResult{
+		Content: []llm.ToolResultContent{&llm.TextContent{Text: text}},
+		Outcome: agent.ToolOutcome{
+			Status:    status,
+			ErrorCode: code,
+			ExitCode:  &exitCode,
+		},
 	}
 }
 
 // mutationFailure builds a failed edit/write result carrying both the text
 // detail the model reads and a structured MutationFailure product shells render.
 func mutationFailure(path, reason, detail string) agent.ToolResult {
-	return resultWith(detail, MutationFailure{Path: path, Reason: reason, Detail: detail})
+	return failedResult(reason, detail, MutationFailure{Path: path, Reason: reason, Detail: detail})
 }
 
 // resolve turns a possibly-relative tool argument path into an absolute path

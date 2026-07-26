@@ -49,7 +49,8 @@ type AgentEvent struct {
 	Args any
 	// Result is the (possibly partial) tool result on tool execution events.
 	Result any
-	// IsError reports whether a finished tool result is an error.
+	// IsError is the model-facing compatibility projection of Result.Outcome.
+	// ToolEnd consumers should use the outcome as the source of truth.
 	IsError bool
 
 	// Messages carries the messages the run appended, set on AgentEnd.

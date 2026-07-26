@@ -27,7 +27,7 @@ func TaskStop(tasks *TaskManager) Tool {
 					return agent.ToolResult{}, err
 				}
 				if err := tasks.Stop(in.TaskID); err != nil {
-					return textResult(err.Error()), nil
+					return failedResult("task_not_found", err.Error(), nil), nil
 				}
 				return textResult(fmt.Sprintf("Stopped background task %s.", in.TaskID)), nil
 			},

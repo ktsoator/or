@@ -41,10 +41,9 @@ type HistoryItem struct {
 	ToolName   string
 	ToolArgs   any
 	ToolResult string
-	// ToolDetails is a recognized structured tool result restored from the
-	// DetailsStore. It is nil when history replays as plain text.
-	ToolDetails any
-	IsError     bool
+	// ToolOutcome is restored from the sidecar. Histories written before the
+	// outcome contract derive success/failed from the model-facing IsError bit.
+	ToolOutcome agent.ToolOutcome
 
 	// Usage is populated for HistoryUsage and aggregates every assistant model
 	// request that contributed to the preceding final response.
@@ -61,7 +60,7 @@ type HistoryItem struct {
 func (s *Session) History() []HistoryItem {
 	_, activeStartedAt, activeEntryStart := s.activeRunState()
 	entries, persistedLen := s.snapshotTranscriptState()
-	details := s.snapshotDetails()
+	outcomes := s.snapshotOutcomes()
 
 	active := s.agent.Snapshot().Messages
 	var messages []agent.AgentMessage
@@ -75,25 +74,25 @@ func (s *Session) History() []HistoryItem {
 				Type: transcript.RunEntry,
 				Run:  &transcript.Run{FirstEntryID: firstEntryID, StartedAt: activeStartedAt},
 			})
-			items := projectEntryHistory(entries, details)
-			return append(items, projectHistory(messages, details)...)
+			items := projectEntryHistory(entries, outcomes)
+			return append(items, projectHistory(messages, outcomes)...)
 		}
-		items := projectEntryHistory(entries, details)
-		return append(items, projectRunHistory(messages, details, activeStartedAt, time.Time{})...)
+		items := projectEntryHistory(entries, outcomes)
+		return append(items, projectRunHistory(messages, outcomes, activeStartedAt, time.Time{})...)
 	}
 
-	items := projectEntryHistory(entries, details)
+	items := projectEntryHistory(entries, outcomes)
 	if len(messages) > 0 {
-		items = append(items, projectHistory(messages, details)...)
+		items = append(items, projectHistory(messages, outcomes)...)
 	}
 	return items
 }
 
-func projectEntryHistory(entries []transcript.Entry, details map[string]any) []HistoryItem {
+func projectEntryHistory(entries []transcript.Entry, outcomes map[string]agent.ToolOutcome) []HistoryItem {
 	var items []HistoryItem
 	var pending []transcript.Entry
 	flushMessages := func(entries []transcript.Entry) {
-		items = append(items, projectHistory(entryMessages(entries), details)...)
+		items = append(items, projectHistory(entryMessages(entries), outcomes)...)
 	}
 
 	for _, entry := range entries {
@@ -122,7 +121,7 @@ func projectEntryHistory(entries []transcript.Entry, details map[string]any) []H
 			}
 			flushMessages(pending[:first])
 			items = append(items, projectRunHistory(
-				entryMessages(pending[first:]), details, entry.Run.StartedAt, entry.Run.CompletedAt,
+				entryMessages(pending[first:]), outcomes, entry.Run.StartedAt, entry.Run.CompletedAt,
 			)...)
 			pending = nil
 		}
@@ -133,11 +132,11 @@ func projectEntryHistory(entries []transcript.Entry, details map[string]any) []H
 
 func projectRunHistory(
 	messages []agent.AgentMessage,
-	details map[string]any,
+	outcomes map[string]agent.ToolOutcome,
 	startedAt time.Time,
 	completedAt time.Time,
 ) []HistoryItem {
-	projected := projectHistory(messages, details)
+	projected := projectHistory(messages, outcomes)
 	if !completedAt.IsZero() {
 		for index := len(projected) - 1; index >= 0; index-- {
 			if projected[index].Type == HistoryAssistant && projected[index].FinalResponse {
@@ -165,7 +164,7 @@ func entryMessages(entries []transcript.Entry) []agent.AgentMessage {
 	return messages
 }
 
-func projectHistory(messages []agent.AgentMessage, details map[string]any) []HistoryItem {
+func projectHistory(messages []agent.AgentMessage, outcomes map[string]agent.ToolOutcome) []HistoryItem {
 	var items []HistoryItem
 	var usage llm.Usage
 	flushUsage := func() {
@@ -201,13 +200,20 @@ func projectHistory(messages []agent.AgentMessage, details map[string]any) []His
 			}
 
 		case *llm.ToolResultMessage:
+			outcome, ok := outcomes[message.ToolCallID]
+			if !ok {
+				outcome.Status = agent.ToolOutcomeSuccess
+				if message.IsError {
+					outcome.Status = agent.ToolOutcomeFailed
+					outcome.ErrorCode = "legacy_tool_error"
+				}
+			}
 			items = append(items, HistoryItem{
 				Type:        HistoryToolResult,
 				ToolCallID:  message.ToolCallID,
 				ToolName:    message.ToolName,
 				ToolResult:  toolResultContentText(message.Content),
-				ToolDetails: details[message.ToolCallID],
-				IsError:     message.IsError,
+				ToolOutcome: outcome,
 			})
 		}
 	}

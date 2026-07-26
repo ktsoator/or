@@ -3,33 +3,62 @@ package engine
 import (
 	"encoding/json"
 
+	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/tools"
 )
 
-// This file (de)serializes the structured Details a tool attaches to its result
-// so they can be persisted out of band and restored when a session reloads. Only
-// the known coding-tool result types are handled; anything else is skipped and
-// simply falls back to text on reload.
+// Tool outcomes live in the existing details sidecar so transcript messages
+// remain provider-neutral. Legacy detail-only records are decoded as successful
+// outcomes, allowing existing sessions to keep their rich rendering.
 
 const (
+	kindToolOutcome     = "tool_outcome"
 	kindFileChange      = "file_change"
 	kindMutationFailure = "mutation_failure"
 	kindPreview         = "preview"
 	kindQuestionAnswers = "question_answers"
+	kindGenericData     = "generic"
 )
 
-// detailsEnvelope tags a persisted payload with its concrete type so decode can
-// reconstruct the same Go value the live event carried.
 type detailsEnvelope struct {
 	Kind string          `json:"kind"`
 	Data json.RawMessage `json:"data"`
 }
 
-// encodeDetails serializes a tool's Details into a tagged payload. It reports
-// false for values it does not recognize, which callers skip.
-func encodeDetails(details any) (json.RawMessage, bool) {
-	var kind string
-	switch details.(type) {
+type persistedToolOutcome struct {
+	Status    agent.ToolOutcomeStatus `json:"status"`
+	ErrorCode string                  `json:"errorCode,omitempty"`
+	ExitCode  *int                    `json:"exitCode,omitempty"`
+	DataKind  string                  `json:"dataKind,omitempty"`
+	Data      json.RawMessage         `json:"data,omitempty"`
+}
+
+func encodeOutcome(outcome agent.ToolOutcome) (json.RawMessage, bool) {
+	if outcome.Status == "" {
+		outcome.Status = agent.ToolOutcomeSuccess
+	}
+	dataKind, data := encodeOutcomeData(outcome.Data)
+	persisted := persistedToolOutcome{
+		Status:    outcome.Status,
+		ErrorCode: outcome.ErrorCode,
+		ExitCode:  outcome.ExitCode,
+		DataKind:  dataKind,
+		Data:      data,
+	}
+	payload, err := json.Marshal(persisted)
+	if err != nil {
+		return nil, false
+	}
+	raw, err := json.Marshal(detailsEnvelope{Kind: kindToolOutcome, Data: payload})
+	return raw, err == nil
+}
+
+func encodeOutcomeData(data any) (string, json.RawMessage) {
+	if data == nil {
+		return "", nil
+	}
+	kind := kindGenericData
+	switch data.(type) {
 	case tools.FileChange:
 		kind = kindFileChange
 	case tools.MutationFailure:
@@ -38,54 +67,74 @@ func encodeDetails(details any) (json.RawMessage, bool) {
 		kind = kindPreview
 	case tools.QuestionAnswers:
 		kind = kindQuestionAnswers
-	default:
-		return nil, false
 	}
-	data, err := json.Marshal(details)
+	raw, err := json.Marshal(data)
 	if err != nil {
-		return nil, false
+		// Status metadata is still durable even when an extension supplied data
+		// that cannot be represented as JSON.
+		return "", nil
 	}
-	raw, err := json.Marshal(detailsEnvelope{Kind: kind, Data: data})
-	if err != nil {
-		return nil, false
-	}
-	return raw, true
+	return kind, raw
 }
 
-// decodeDetails reconstructs a tool's Details from a tagged payload. It returns
-// nil for an unrecognized or malformed payload, leaving history to fall back to
-// text.
-func decodeDetails(raw json.RawMessage) any {
+func decodeOutcome(raw json.RawMessage) (agent.ToolOutcome, bool) {
 	var env detailsEnvelope
 	if err := json.Unmarshal(raw, &env); err != nil {
+		return agent.ToolOutcome{}, false
+	}
+	if env.Kind != kindToolOutcome {
+		data := decodeOutcomeData(env.Kind, env.Data)
+		if data == nil {
+			return agent.ToolOutcome{}, false
+		}
+		return agent.ToolOutcome{Status: agent.ToolOutcomeSuccess, Data: data}, true
+	}
+
+	var persisted persistedToolOutcome
+	if err := json.Unmarshal(env.Data, &persisted); err != nil {
+		return agent.ToolOutcome{}, false
+	}
+	if persisted.Status == "" {
+		persisted.Status = agent.ToolOutcomeSuccess
+	}
+	return agent.ToolOutcome{
+		Status:    persisted.Status,
+		ErrorCode: persisted.ErrorCode,
+		ExitCode:  persisted.ExitCode,
+		Data:      decodeOutcomeData(persisted.DataKind, persisted.Data),
+	}, true
+}
+
+func decodeOutcomeData(kind string, raw json.RawMessage) any {
+	if len(raw) == 0 {
 		return nil
 	}
-	switch env.Kind {
+	switch kind {
 	case kindFileChange:
-		var v tools.FileChange
-		if err := json.Unmarshal(env.Data, &v); err != nil {
-			return nil
+		var value tools.FileChange
+		if json.Unmarshal(raw, &value) == nil {
+			return value
 		}
-		return v
 	case kindMutationFailure:
-		var v tools.MutationFailure
-		if err := json.Unmarshal(env.Data, &v); err != nil {
-			return nil
+		var value tools.MutationFailure
+		if json.Unmarshal(raw, &value) == nil {
+			return value
 		}
-		return v
 	case kindPreview:
-		var v tools.PreviewRequest
-		if err := json.Unmarshal(env.Data, &v); err != nil {
-			return nil
+		var value tools.PreviewRequest
+		if json.Unmarshal(raw, &value) == nil {
+			return value
 		}
-		return v
 	case kindQuestionAnswers:
-		var v tools.QuestionAnswers
-		if err := json.Unmarshal(env.Data, &v); err != nil {
-			return nil
+		var value tools.QuestionAnswers
+		if json.Unmarshal(raw, &value) == nil {
+			return value
 		}
-		return v
-	default:
-		return nil
+	case kindGenericData:
+		var value any
+		if json.Unmarshal(raw, &value) == nil {
+			return value
+		}
 	}
+	return nil
 }

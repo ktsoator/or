@@ -1058,12 +1058,15 @@ test('a restored right-side preview stays available without taking focus from Ch
         id: 'restored-preview',
         tool: 'open_preview',
         result: 'Opened preview at /tmp/secondary-session/web/index.html',
-        preview: {
-          path: '/tmp/secondary-session/web/index.html',
-          relativePath: 'web/index.html',
-          grantID: 'secondary-grant',
-          previewPath: 'index.html',
-          title: 'Saved preview',
+        outcome: {
+          status: 'success',
+          data: {
+            path: '/tmp/secondary-session/web/index.html',
+            relativePath: 'web/index.html',
+            grantID: 'secondary-grant',
+            previewPath: 'index.html',
+            title: 'Saved preview',
+          },
         },
       },
     ],
@@ -1113,12 +1116,15 @@ test('browser workspaces show only the selected session tabs and restore them on
       id: 'main-preview',
       tool: 'open_preview',
       result: 'Opened preview at /tmp/test-session/web/index.html',
-      preview: {
-        path: '/tmp/test-session/web/index.html',
-        relativePath: 'web/index.html',
-        grantID: 'main-grant',
-        previewPath: 'index.html',
-        title: 'Main preview',
+      outcome: {
+        status: 'success',
+        data: {
+          path: '/tmp/test-session/web/index.html',
+          relativePath: 'web/index.html',
+          grantID: 'main-grant',
+          previewPath: 'index.html',
+          title: 'Main preview',
+        },
       },
     })
   })
@@ -1141,12 +1147,15 @@ test('browser workspaces show only the selected session tabs and restore them on
       id: 'secondary-preview',
       tool: 'open_preview',
       result: 'Opened preview at /tmp/secondary-session/web/index.html',
-      preview: {
-        path: '/tmp/secondary-session/web/index.html',
-        relativePath: 'web/index.html',
-        grantID: 'secondary-grant',
-        previewPath: 'index.html',
-        title: 'Secondary preview',
+      outcome: {
+        status: 'success',
+        data: {
+          path: '/tmp/secondary-session/web/index.html',
+          relativePath: 'web/index.html',
+          grantID: 'secondary-grant',
+          previewPath: 'index.html',
+          title: 'Secondary preview',
+        },
       },
     })
   })
@@ -1184,12 +1193,15 @@ test('browser workspaces show only the selected session tabs and restore them on
       id: 'main-preview-update',
       tool: 'open_preview',
       result: 'Restored preview at /tmp/test-session/web/index.html',
-      preview: {
-        path: '/tmp/test-session/web/index.html',
-        relativePath: 'web/index.html',
-        grantID: 'main-grant',
-        previewPath: 'index.html',
-        title: 'Main preview',
+      outcome: {
+        status: 'success',
+        data: {
+          path: '/tmp/test-session/web/index.html',
+          relativePath: 'web/index.html',
+          grantID: 'main-grant',
+          previewPath: 'index.html',
+          title: 'Main preview',
+        },
       },
     })
   })
@@ -1376,7 +1388,10 @@ test('manual and AI workbench opens cover Chat when the layout is constrained', 
       id: 'narrow-preview',
       tool: 'open_preview',
       result: 'Opened preview at http://127.0.0.1:4310',
-      preview: { url: 'http://127.0.0.1:4310', title: 'Narrow preview' },
+      outcome: {
+        status: 'success',
+        data: { url: 'http://127.0.0.1:4310', title: 'Narrow preview' },
+      },
     })
   })
 
@@ -1463,7 +1478,10 @@ test('AI preview tool opens Browser in the workbench beside Chat', async ({ page
       id: 'preview-call',
       tool: 'open_preview',
       result: 'Opened preview at http://127.0.0.1:4310',
-      preview: { url: 'http://127.0.0.1:4310', title: 'Local app' },
+      outcome: {
+        status: 'success',
+        data: { url: 'http://127.0.0.1:4310', title: 'Local app' },
+      },
     })
   })
 
@@ -1496,7 +1514,10 @@ test('AI preview tool opens Browser in the workbench beside Chat', async ({ page
       id: 'preview-call-2',
       tool: 'open_preview',
       result: 'Updated preview at http://127.0.0.1:4310',
-      preview: { url: 'http://127.0.0.1:4310', title: 'Updated app' },
+      outcome: {
+        status: 'success',
+        data: { url: 'http://127.0.0.1:4310', title: 'Updated app' },
+      },
     })
   })
   await expect(page.getByRole('tab')).toHaveCount(2)
@@ -1545,7 +1566,10 @@ test('AI preview tool opens a public website inside the Browser', async ({ page 
       id: 'public-preview',
       tool: 'open_preview',
       result: 'Opened preview at https://www.google.com',
-      preview: { url: 'https://www.google.com', title: 'Google' },
+      outcome: {
+        status: 'success',
+        data: { url: 'https://www.google.com', title: 'Google' },
+      },
     })
   })
 
@@ -1626,7 +1650,10 @@ test('AI browser request reports the committed Electron navigation exactly once'
       id: 'preview-call-1',
       tool: 'open_preview',
       result: 'Opened preview at https://github.com/',
-      preview: { url: 'https://github.com', title: 'GitHub' },
+      outcome: {
+        status: 'success',
+        data: { url: 'https://github.com', title: 'GitHub' },
+      },
     })
   })
   await page.waitForTimeout(50)
@@ -1891,7 +1918,10 @@ test('AI browser opens foreground and background tabs and reuses the active Agen
       id: 'preview-foreground',
       tool: 'open_preview',
       result: 'Opened preview at https://www.bilibili.com/',
-      preview: { url: 'https://www.bilibili.com', title: 'Bilibili' },
+      outcome: {
+        status: 'success',
+        data: { url: 'https://www.bilibili.com', title: 'Bilibili' },
+      },
     })
   })
   await expect(page.getByRole('tab', { name: 'Bilibili' })).toHaveCount(1)
@@ -2325,7 +2355,10 @@ test('browser tools use page-focused labels and keep inspection text collapsed',
       id: 'open-browser-ui',
       tool: 'open_preview',
       result: 'Opened preview at https://github.com/',
-      preview: { url: 'https://github.com/', title: 'GitHub' },
+      outcome: {
+        status: 'success',
+        data: { url: 'https://github.com/', title: 'GitHub' },
+      },
     })
   })
   await expect(page.getByText('Opened', { exact: true })).toBeVisible()
@@ -2416,7 +2449,10 @@ test('AI browser applies the latest agent navigation and never renavigates on hi
       id: 'github-preview',
       tool: 'open_preview',
       result: 'Opened preview at https://github.com',
-      preview: { url: 'https://github.com', title: 'GitHub' },
+      outcome: {
+        status: 'success',
+        data: { url: 'https://github.com', title: 'GitHub' },
+      },
     })
   })
   await expect.poll(async () =>
@@ -2430,7 +2466,10 @@ test('AI browser applies the latest agent navigation and never renavigates on hi
       id: 'bilibili-preview',
       tool: 'open_preview',
       result: 'Opened preview at https://www.bilibili.com',
-      preview: { url: 'https://www.bilibili.com', title: 'Bilibili' },
+      outcome: {
+        status: 'success',
+        data: { url: 'https://www.bilibili.com', title: 'Bilibili' },
+      },
     })
   })
   await expect.poll(async () =>
@@ -2526,14 +2565,17 @@ test('streaming tool input shows write progress without duplicating the tool row
       id: 'write-call',
       tool: 'write',
       result: 'Created src/main.go',
-      change: {
-        changeType: 'file',
-        path: 'src/main.go',
-        op: 'create',
-        additions: 3,
-        deletions: 0,
-        bytes: 13,
-        hunks: [],
+      outcome: {
+        status: 'success',
+        data: {
+          changeType: 'file',
+          path: 'src/main.go',
+          op: 'create',
+          additions: 3,
+          deletions: 0,
+          bytes: 13,
+          hunks: [],
+        },
       },
     })
     emit?.({
@@ -2570,12 +2612,15 @@ test('AI preview opens workspace HTML directly without starting or probing a ser
       id: 'preview-static',
       tool: 'open_preview',
       result: 'Opened preview at /tmp/test-session/web/index.html',
-      preview: {
-        path: '/tmp/test-session/web/index.html',
-        relativePath: 'web/index.html',
-        grantID: 'test-grant',
-        previewPath: 'index.html',
-        title: 'Static page',
+      outcome: {
+        status: 'success',
+        data: {
+          path: '/tmp/test-session/web/index.html',
+          relativePath: 'web/index.html',
+          grantID: 'test-grant',
+          previewPath: 'index.html',
+          title: 'Static page',
+        },
       },
     })
   })
@@ -2611,14 +2656,17 @@ test('AI preview opens workspace HTML directly without starting or probing a ser
       id: 'edit-static',
       tool: 'edit',
       result: 'Updated web/index.html',
-      change: {
-        changeType: 'file',
-        path: 'web/index.html',
-        op: 'update',
-        additions: 1,
-        deletions: 1,
-        bytes: 128,
-        hunks: [],
+      outcome: {
+        status: 'success',
+        data: {
+          changeType: 'file',
+          path: 'web/index.html',
+          op: 'update',
+          additions: 1,
+          deletions: 1,
+          bytes: 128,
+          hunks: [],
+        },
       },
     })
   })

@@ -306,6 +306,53 @@ describe('threadsReducer event sequences', () => {
     )
   })
 
+  test('keeps terminal tool outcome metadata as the UI source of truth', () => {
+    const state = reduce([
+      {
+        t: 'wire',
+        sessionID,
+        ev: {
+          type: 'tool_start',
+          id: 'bash-1',
+          tool: 'bash',
+          args: { command: 'go test ./...' },
+        },
+      },
+      {
+        t: 'wire',
+        sessionID,
+        ev: {
+          type: 'tool_end',
+          id: 'bash-1',
+          tool: 'bash',
+          result: 'exit status 2',
+          outcome: {
+            status: 'failed',
+            errorCode: 'command_exit_nonzero',
+            exitCode: 2,
+            data: { stderr: 'compile failed' },
+          },
+        },
+      },
+    ])
+
+    expect(thread(state).items).toContainEqual({
+      kind: 'tool',
+      id: 'bash-1',
+      name: 'bash',
+      args: { command: 'go test ./...' },
+      status: 'error',
+      result: 'exit status 2',
+      outcome: {
+        status: 'failed',
+        errorCode: 'command_exit_nonzero',
+        exitCode: 2,
+        data: { stderr: 'compile failed' },
+      },
+      change: undefined,
+    })
+  })
+
   test('adds, resolves, and cancels approvals without ending the run', () => {
     let state = reduce([
       {
@@ -425,7 +472,10 @@ describe('threadsReducer event sequences', () => {
           id: 'preview-call',
           tool: 'open_preview',
           result: 'Opened preview at https://example.com/final',
-          preview: { url: 'https://example.com/start', title: 'Example' },
+          outcome: {
+            status: 'success',
+            data: { url: 'https://example.com/start', title: 'Example' },
+          },
         },
       },
     ])
@@ -518,7 +568,10 @@ describe('threadsReducer event sequences', () => {
           id: 'preview-call',
           tool: 'open_preview',
           result: 'Opened preview at https://example.com/',
-          preview: { url: 'https://example.com/', title: 'Example' },
+          outcome: {
+            status: 'success',
+            data: { url: 'https://example.com/', title: 'Example' },
+          },
         },
       },
     ], state)

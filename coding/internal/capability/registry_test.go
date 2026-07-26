@@ -94,7 +94,8 @@ func TestRegistryComposesToolHooksInRegistrationOrder(t *testing.T) {
 			return false, ""
 		},
 		AfterToolCall: func(agent.AfterToolCallCtx) *agent.AfterToolCallResult {
-			return &agent.AfterToolCallResult{Details: "first"}
+			outcome := agent.ToolOutcome{Status: agent.ToolOutcomeSuccess, Data: "first"}
+			return &agent.AfterToolCallResult{Outcome: &outcome}
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -109,11 +110,15 @@ func TestRegistryComposesToolHooksInRegistrationOrder(t *testing.T) {
 			return true, "blocked"
 		},
 		AfterToolCall: func(ctx agent.AfterToolCallCtx) *agent.AfterToolCallResult {
-			if ctx.Result.Details != "first" {
-				t.Fatalf("second hook details = %#v", ctx.Result.Details)
+			if ctx.Result.Outcome.Data != "first" {
+				t.Fatalf("second hook outcome = %#v", ctx.Result.Outcome)
 			}
-			isError := true
-			return &agent.AfterToolCallResult{Details: "second", IsError: &isError}
+			outcome := agent.ToolOutcome{
+				Status:    agent.ToolOutcomeFailed,
+				ErrorCode: "hook_rejected",
+				Data:      "second",
+			}
+			return &agent.AfterToolCallResult{Outcome: &outcome}
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -130,7 +135,10 @@ func TestRegistryComposesToolHooksInRegistrationOrder(t *testing.T) {
 	}
 
 	override := registry.AfterToolCall()(agent.AfterToolCallCtx{})
-	if override == nil || override.Details != "second" || override.IsError == nil || !*override.IsError {
+	if override == nil || override.Outcome == nil ||
+		override.Outcome.Status != agent.ToolOutcomeFailed ||
+		override.Outcome.ErrorCode != "hook_rejected" ||
+		override.Outcome.Data != "second" {
 		t.Fatalf("after override = %#v", override)
 	}
 }

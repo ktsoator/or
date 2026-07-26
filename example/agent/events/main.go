@@ -36,16 +36,16 @@ func main() {
 				return agent.ToolResult{}, err
 			}
 
-			onUpdate(agent.ToolResult{Details: "connecting"})
-			onUpdate(agent.ToolResult{Details: "reading forecast"})
+			onUpdate(agent.ToolResult{Outcome: agent.ToolOutcome{Status: agent.ToolOutcomeSuccess, Data: "connecting"}})
+			onUpdate(agent.ToolResult{Outcome: agent.ToolOutcome{Status: agent.ToolOutcomeSuccess, Data: "reading forecast"}})
 
 			result := fmt.Sprintf("%s: sunny, around 25C for the next %d days", in.City, in.Days)
 			return agent.ToolResult{
 				Content: []llm.ToolResultContent{&llm.TextContent{Text: result}},
-				Details: map[string]any{
+				Outcome: agent.ToolOutcome{Status: agent.ToolOutcomeSuccess, Data: map[string]any{
 					"city": in.City,
 					"days": in.Days,
-				},
+				}},
 			}, nil
 		},
 	}
@@ -79,7 +79,7 @@ func main() {
 			fmt.Printf("\n[tool] %s %v\n", event.ToolName, event.Args)
 		case agent.ToolUpdate:
 			if result, ok := event.Result.(agent.ToolResult); ok {
-				fmt.Printf("[tool update] %v\n", result.Details)
+				fmt.Printf("[tool update] %v\n", result.Outcome.Data)
 			}
 		case agent.ToolEnd:
 			fmt.Printf("[tool done] %s error=%v\n", event.ToolName, event.IsError)
