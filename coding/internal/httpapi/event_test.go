@@ -89,6 +89,67 @@ func TestProjectEventIncludesToolInputProgress(t *testing.T) {
 	}
 }
 
+func TestProjectEventIncludesTaskCompletion(t *testing.T) {
+	completedAt := time.Date(2026, time.July, 25, 12, 0, 0, 0, time.UTC)
+	exitCode := 1
+	data, ok := ProjectEvent(engine.Event{
+		Type: engine.TaskCompleted,
+		BackgroundTask: engine.BackgroundTask{
+			ID:          "task_2",
+			Status:      "failed",
+			OutputPath:  "/tmp/coding-tasks/task_2.log",
+			Command:     "go test ./...",
+			ExitCode:    &exitCode,
+			CompletedAt: completedAt,
+		},
+	})
+	if !ok {
+		t.Fatal("task completion event was not projected")
+	}
+
+	var event wireEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		t.Fatal(err)
+	}
+	if event.Type != wireEventTaskNotification || event.Task == nil ||
+		event.Task.ID != "task_2" || event.Task.Status != wireTaskFailed ||
+		event.Task.ExitCode == nil || *event.Task.ExitCode != 1 ||
+		event.Task.OutputPath != "/tmp/coding-tasks/task_2.log" ||
+		event.Task.CompletedAt != completedAt.Format(time.RFC3339Nano) {
+		t.Fatalf("event = %#v", event)
+	}
+}
+
+func TestProjectEventIncludesTaskStart(t *testing.T) {
+	startedAt := time.Date(2026, time.July, 25, 11, 59, 0, 0, time.UTC)
+	data, ok := ProjectEvent(engine.Event{
+		Type: engine.TaskStarted,
+		BackgroundTask: engine.BackgroundTask{
+			ID:          "task_1",
+			Command:     "bun run dev",
+			Description: "Start development server",
+			Status:      "running",
+			OutputPath:  "/tmp/coding-tasks/task_1.log",
+			StartedAt:   startedAt,
+		},
+	})
+	if !ok {
+		t.Fatal("task start event was not projected")
+	}
+
+	var event wireEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		t.Fatal(err)
+	}
+	if event.Type != wireEventTaskStarted || event.Task == nil ||
+		event.Task.ID != "task_1" || event.Task.Status != wireTaskRunning ||
+		event.Task.Description != "Start development server" ||
+		event.Task.StartedAt != startedAt.Format(time.RFC3339Nano) ||
+		event.Task.ExitCode != nil || event.Task.CompletedAt != "" {
+		t.Fatalf("event = %#v", event)
+	}
+}
+
 func TestProjectEventIncludesLivePreviewRequest(t *testing.T) {
 	data, ok := ProjectEvent(engine.Event{
 		Type:       engine.ToolFinished,

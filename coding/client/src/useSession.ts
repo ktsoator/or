@@ -20,6 +20,7 @@ import {
 import type {
   ApprovalChoice,
   ApprovalItem,
+  BackgroundTask,
   BrowserCommandState,
   BrowserInspectionCommandState,
   BrowserResult,
@@ -39,6 +40,7 @@ import type {
   QuestionItem,
   SessionSummary,
   ThreadSnapshot,
+  TaskOutputResponse,
   WorkspaceSummary,
   ThinkingLevel,
   WireEvent,
@@ -53,6 +55,7 @@ export type Session = {
   activeSession?: SessionSummary
   activeSessionID?: string
   items: Item[]
+  tasks: BackgroundTask[]
   queuedMessages: QueuedMessage[]
   contextUsage?: ContextUsage
   preview?: PreviewState
@@ -85,6 +88,8 @@ export type Session = {
   send: (text: string, images: MessageImage[], delivery?: DeliveryMode) => Promise<boolean>
   removeQueuedMessage: (id: string) => Promise<void>
   stop: () => void
+  stopTask: (id: string) => Promise<void>
+  readTaskOutput: (id: string) => Promise<TaskOutputResponse>
   resolveApproval: (id: string, choice: ApprovalChoice) => Promise<void>
   resolveQuestion: (id: string, answers: QuestionAnswer[]) => Promise<void>
   queueBrowserResult: (sessionID: string, id: string, result: BrowserResult) => void
@@ -96,6 +101,7 @@ export type Session = {
 export type SessionThread = {
   session: SessionSummary
   items: Item[]
+  tasks: BackgroundTask[]
   queuedMessages: QueuedMessage[]
   contextUsage?: ContextUsage
   preview?: PreviewState
@@ -114,6 +120,8 @@ export type SessionThread = {
   send: (text: string, images: MessageImage[], delivery?: DeliveryMode) => Promise<boolean>
   removeQueuedMessage: (id: string) => Promise<void>
   stop: () => void
+  stopTask: (id: string) => Promise<void>
+  readTaskOutput: (id: string) => Promise<TaskOutputResponse>
   resolveApproval: (id: string, choice: ApprovalChoice) => Promise<void>
   resolveQuestion: (id: string, answers: QuestionAnswer[]) => Promise<void>
   updateSettings: (provider: string, model: string, thinkingLevel: ThinkingLevel) => Promise<void>
@@ -757,6 +765,12 @@ export function useSession(secondarySessionID?: string): Session {
     if (activeSessionID) stopSession(activeSessionID)
   }
 
+  const stopBackgroundTask = (sessionID: string, id: string) =>
+    sessionCommands.stopTask(sessionID, id)
+
+  const readBackgroundTaskOutput = (sessionID: string, id: string) =>
+    sessionCommands.readTaskOutput(sessionID, id)
+
   const removeSessionQueuedMessage = async (sessionID: string, id: string) => {
     const targetThread = threads[sessionID]
     if (!targetThread) return
@@ -835,6 +849,7 @@ export function useSession(secondarySessionID?: string): Session {
           secondaryState?.items.filter(
             (item) => item.kind !== 'approval' && item.kind !== 'question',
           ) ?? [],
+        tasks: Object.values(secondaryState?.tasks ?? {}),
         queuedMessages: secondaryState?.queue ?? [],
         contextUsage: secondaryState?.contextUsage,
         preview: secondaryState?.preview,
@@ -855,6 +870,8 @@ export function useSession(secondarySessionID?: string): Session {
         removeQueuedMessage: (id: string) =>
           removeSessionQueuedMessage(secondarySession.id, id),
         stop: () => stopSession(secondarySession.id),
+        stopTask: (id: string) => stopBackgroundTask(secondarySession.id, id),
+        readTaskOutput: (id: string) => readBackgroundTaskOutput(secondarySession.id, id),
         resolveApproval: (id: string, choice: ApprovalChoice) =>
           resolveSessionApproval(secondarySession.id, id, choice),
         resolveQuestion: (id: string, answers: QuestionAnswer[]) =>
@@ -874,6 +891,7 @@ export function useSession(secondarySessionID?: string): Session {
     activeSession,
     activeSessionID,
     items,
+    tasks: Object.values(thread?.tasks ?? {}),
     queuedMessages: thread?.queue ?? [],
     contextUsage: thread?.contextUsage,
     preview: thread?.preview,
@@ -906,6 +924,14 @@ export function useSession(secondarySessionID?: string): Session {
     send,
     removeQueuedMessage,
     stop,
+    stopTask: (id: string) => {
+      if (!activeSessionID) return Promise.reject(new Error('no active session'))
+      return stopBackgroundTask(activeSessionID, id)
+    },
+    readTaskOutput: (id: string) => {
+      if (!activeSessionID) return Promise.reject(new Error('no active session'))
+      return readBackgroundTaskOutput(activeSessionID, id)
+    },
     resolveApproval,
     resolveQuestion,
     queueBrowserResult,

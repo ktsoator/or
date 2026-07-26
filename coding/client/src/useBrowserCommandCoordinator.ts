@@ -143,7 +143,7 @@ export function useBrowserCommandCoordinator({
     reportCancelled(current.tabs.find((tab) => tab.id === tabID))
     void closeBrowser(browserRuntimeTabID(workspaceID, tabID))
     dispatch({ t: 'close_tab', tabID })
-    return current.tabs.length === 1 && !current.conversationTabID
+    return current.tabs.length === 1 && !current.conversationTabID && !current.taskTabID
   }, [dispatch, reportCancelled, workspaceID])
 
   const runtimeStateReceived = useCallback((

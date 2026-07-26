@@ -18,15 +18,15 @@ type bashArgs struct {
 	Command         string `json:"command" jsonschema:"description=The bash command to run,minLength=1"`
 	Description     string `json:"description,omitempty" jsonschema:"description=A short active-voice summary of what this command does (about 5-10 words), such as 'Install dependencies' or 'Run the test suite'. Shown in the UI in place of the raw command; always set it."`
 	Timeout         int    `json:"timeout,omitempty" jsonschema:"description=Timeout in seconds; defaults to 120,minimum=1"`
-	RunInBackground bool   `json:"run_in_background,omitempty" jsonschema:"description=Run the command in the background and return immediately with a shell id, instead of waiting for it to exit. Use this for long-lived processes such as dev servers. Read its output later with bash_output and stop it with kill_bash."`
+	RunInBackground bool   `json:"run_in_background,omitempty" jsonschema:"description=Run the command as a managed background task and return its task id and output file immediately. Completion is reported automatically. Read the returned output path for logs and use task_stop to stop it. Do not poll."`
 }
 
 // Bash returns a tool that runs a shell command in the workspace directory and
 // returns its combined output and exit code. A non-zero exit is reported to the
-// model as content, not as a failure, so the model can react to it. When shells
-// is non-nil, run_in_background starts long-lived commands detached and returns a
-// shell id instead of blocking.
-func Bash(root string, ops ExecOps, shells *BackgroundShells) Tool {
+// model as content, not as a failure, so the model can react to it. When tasks
+// is non-nil, run_in_background starts a managed task and returns its id and
+// output path instead of blocking.
+func Bash(root string, ops ExecOps, tasks *TaskManager) Tool {
 	def := llm.MustTool[bashArgs]("bash", bashText.description)
 	return Tool{
 		AgentTool: agent.AgentTool{
@@ -39,16 +39,16 @@ func Bash(root string, ops ExecOps, shells *BackgroundShells) Tool {
 				}
 
 				if in.RunInBackground {
-					if shells == nil {
+					if tasks == nil {
 						return textResult("background execution is not available in this session"), nil
 					}
-					id, err := shells.Start(in.Command, root)
+					info, err := tasks.Start(in.Command, in.Description, root)
 					if err != nil {
 						return textResult(fmt.Sprintf("command failed to start: %v", err)), err
 					}
 					return textResult(fmt.Sprintf(
-						"Started background shell %s.\nRead new output with bash_output(shell_id=%q); stop it with kill_bash(shell_id=%q).",
-						id, id, id,
+						"Started background task %s.\nOutput: %s\nCompletion will be reported automatically. Read the output file when logs are needed; stop it with task_stop(task_id=%q).",
+						info.ID, info.OutputPath, info.ID,
 					)), nil
 				}
 

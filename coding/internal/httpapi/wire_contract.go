@@ -20,6 +20,8 @@ const (
 	wireEventTurnDiscard       wireEventType = "turn_discard"
 	wireEventCompactionStart   wireEventType = "compaction_start"
 	wireEventCompactionEnd     wireEventType = "compaction_end"
+	wireEventTaskStarted       wireEventType = "task_started"
+	wireEventTaskNotification  wireEventType = "task_notification"
 	wireEventApprovalRequest   wireEventType = "approval_request"
 	wireEventApprovalResolved  wireEventType = "approval_resolved"
 	wireEventApprovalCancelled wireEventType = "approval_cancelled"
@@ -35,6 +37,15 @@ const (
 	wireEventQuestionRequest   wireEventType = "question_request"
 	wireEventQuestionResolved  wireEventType = "question_resolved"
 	wireEventQuestionCancelled wireEventType = "question_cancelled"
+)
+
+type wireTaskStatus string
+
+const (
+	wireTaskRunning   wireTaskStatus = "running"
+	wireTaskSucceeded wireTaskStatus = "succeeded"
+	wireTaskFailed    wireTaskStatus = "failed"
+	wireTaskStopped   wireTaskStatus = "stopped"
 )
 
 type wireDeltaKind string
@@ -241,6 +252,8 @@ type wireEvent struct {
 	StartedAt   string `json:"startedAt,omitempty"`
 	CompletedAt string `json:"completedAt,omitempty"`
 	DurationMS  *int64 `json:"durationMs,omitempty"`
+	// task_started / task_notification
+	Task *wireBackgroundTask `json:"task,omitempty"`
 }
 
 type wireImage struct {
@@ -321,13 +334,30 @@ type wireContextUsage struct {
 	Measured      bool   `json:"measured"`
 }
 
+type wireBackgroundTask struct {
+	ID          string         `json:"id"`
+	Command     string         `json:"command"`
+	Description string         `json:"description,omitempty"`
+	Status      wireTaskStatus `json:"status"`
+	OutputPath  string         `json:"outputPath"`
+	ExitCode    *int           `json:"exitCode,omitempty"`
+	StartedAt   string         `json:"startedAt"`
+	CompletedAt string         `json:"completedAt,omitempty"`
+}
+
+type wireTaskOutputResponse struct {
+	Content   string `json:"content"`
+	Truncated bool   `json:"truncated"`
+}
+
 type wireHistoryResponse struct {
-	Events      []wireEvent      `json:"events"`
-	Queue       []wireEvent      `json:"queue"`
-	Context     wireContextUsage `json:"context"`
-	Running     bool             `json:"running"`
-	EventSeq    uint64           `json:"eventSeq"`
-	Title       string           `json:"title"`
-	AITitle     string           `json:"aiTitle,omitempty"`
-	CustomTitle string           `json:"customTitle,omitempty"`
+	Events      []wireEvent          `json:"events"`
+	Queue       []wireEvent          `json:"queue"`
+	Context     wireContextUsage     `json:"context"`
+	Tasks       []wireBackgroundTask `json:"tasks"`
+	Running     bool                 `json:"running"`
+	EventSeq    uint64               `json:"eventSeq"`
+	Title       string               `json:"title"`
+	AITitle     string               `json:"aiTitle,omitempty"`
+	CustomTitle string               `json:"customTitle,omitempty"`
 }

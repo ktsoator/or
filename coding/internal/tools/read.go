@@ -40,7 +40,7 @@ type ReadResult struct {
 // Read returns a tool that reads a UTF-8 text file and returns its contents with
 // 1-based line numbers, optionally windowed by offset and limit. Output is
 // capped to keep a large file from filling the context window.
-func Read(root string, ops FileOps, files *FileStateStore) Tool {
+func Read(root string, ops FileOps, files *FileStateStore, trustedPaths ...func(string) bool) Tool {
 	def := llm.MustTool[readArgs]("read", readText.description)
 	return Tool{
 		AgentTool: agent.AgentTool{
@@ -84,8 +84,21 @@ func Read(root string, ops FileOps, files *FileStateStore) Tool {
 				return textResult(formatReadResult(result)), nil
 			},
 		},
-		AccessFor:  pathAccess(permission.Read),
+		AccessFor:  readAccess(root, trustedPaths...),
 		Guidelines: readText.guidelines,
+	}
+}
+
+func readAccess(root string, trustedPaths ...func(string) bool) func(map[string]any) []permission.Access {
+	return func(args map[string]any) []permission.Access {
+		path, _ := args["path"].(string)
+		resolved := resolve(root, path)
+		for _, trusted := range trustedPaths {
+			if trusted != nil && trusted(resolved) {
+				return InternalAccess(args)
+			}
+		}
+		return []permission.Access{{Action: permission.Read, Path: path}}
 	}
 }
 

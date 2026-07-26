@@ -165,6 +165,21 @@ describe('sessionCommands', () => {
     }
   })
 
+  test('stops background tasks and reads their bounded output', async () => {
+    const { calls, commands } = recordingRequest(() =>
+      Response.json({ content: 'server ready', truncated: true }),
+    )
+
+    await commands.stopTask('session / one', 'task / one')
+    const output = await commands.readTaskOutput('session / one', 'task / one')
+
+    expect(calls.map((call) => [call.url, call.init.method])).toEqual([
+      ['/api/sessions/session%20%2F%20one/tasks/task%20%2F%20one/stop', 'POST'],
+      ['/api/sessions/session%20%2F%20one/tasks/task%20%2F%20one/output', 'GET'],
+    ])
+    expect(output).toEqual({ content: 'server ready', truncated: true })
+  })
+
   test('uses a command-specific fallback for non-JSON failures', async () => {
     const { commands } = recordingRequest(
       () => new Response('bad gateway', { status: 502, headers: { 'Content-Type': 'text/plain' } }),

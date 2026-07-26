@@ -291,6 +291,30 @@
   color: #cf222e;
 }
 
+.background-tasks-view {
+  container: background-tasks / inline-size;
+}
+
+.background-tasks-layout {
+  grid-template-rows: minmax(7.5rem, 34%) minmax(0, 1fr);
+}
+
+.background-tasks-list {
+  border-bottom-width: 1px;
+}
+
+@container background-tasks (min-width: 680px) {
+  .background-tasks-layout {
+    grid-template-columns: minmax(11rem, 14rem) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .background-tasks-list {
+    border-right-width: 1px;
+    border-bottom-width: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     scroll-behavior: auto !important;

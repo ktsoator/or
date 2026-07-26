@@ -90,6 +90,16 @@ func ProjectEvent(ev engine.Event) ([]byte, bool) {
 		}
 		out = wireEvent{Type: wireEventCompactionEnd, IsError: true, Text: ev.Error}
 
+	case engine.TaskStarted, engine.TaskCompleted:
+		eventType := wireEventTaskNotification
+		if ev.Type == engine.TaskStarted {
+			eventType = wireEventTaskStarted
+		}
+		out = wireEvent{
+			Type: eventType,
+			Task: projectBackgroundTask(ev.BackgroundTask),
+		}
+
 	case engine.RunCompleted:
 		out = wireEvent{
 			Type:       wireEventDone,
@@ -107,6 +117,27 @@ func ProjectEvent(ev engine.Event) ([]byte, bool) {
 		return nil, false
 	}
 	return data, true
+}
+
+func projectBackgroundTask(task engine.BackgroundTask) *wireBackgroundTask {
+	return &wireBackgroundTask{
+		ID:          task.ID,
+		Command:     task.Command,
+		Description: task.Description,
+		Status:      wireTaskStatus(task.Status),
+		OutputPath:  task.OutputPath,
+		ExitCode:    task.ExitCode,
+		StartedAt:   formatEventTime(task.StartedAt),
+		CompletedAt: formatEventTime(task.CompletedAt),
+	}
+}
+
+func projectBackgroundTasks(tasks []engine.BackgroundTask) []wireBackgroundTask {
+	projected := make([]wireBackgroundTask, 0, len(tasks))
+	for _, task := range tasks {
+		projected = append(projected, *projectBackgroundTask(task))
+	}
+	return projected
 }
 
 func intPointer(value int) *int {

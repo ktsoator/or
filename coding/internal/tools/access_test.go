@@ -1,14 +1,21 @@
 package tools
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/ktsoator/or/coding/internal/permission"
 )
 
 func TestBuiltInToolsDescribeAccess(t *testing.T) {
-	toolSet, shells := CodingToolsWithShells(t.TempDir(), LocalOps{})
-	defer shells.Shutdown()
+	root := t.TempDir()
+	toolSet, tasks := CoreToolsWithTasks(root, LocalOps{})
+	defer tasks.Shutdown()
+	background, err := tasks.Start("true", "Run test task", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	toolSet = append(toolSet, BrowserTools(root)...)
 	byName := make(map[string]Tool, len(toolSet))
 	for _, tool := range toolSet {
 		byName[tool.Name()] = tool
@@ -28,12 +35,13 @@ func TestBuiltInToolsDescribeAccess(t *testing.T) {
 		{tool: "edit", args: map[string]any{"path": "main.go"}, action: permission.Write, path: "main.go"},
 		{tool: "write", args: map[string]any{"path": "main.go"}, action: permission.Write, path: "main.go"},
 		{tool: "bash", args: map[string]any{"command": "pwd"}, action: permission.Execute, command: "pwd"},
-		{tool: "bash_output", args: map[string]any{}, action: permission.Internal},
+		{tool: "read", args: map[string]any{"path": background.OutputPath}, action: permission.Internal},
+		{tool: "read", args: map[string]any{"path": filepath.Join(filepath.Dir(background.OutputPath), "other.log")}, action: permission.Read, path: filepath.Join(filepath.Dir(background.OutputPath), "other.log")},
 		{tool: "open_preview", args: map[string]any{}, action: permission.Internal},
 		{tool: "open_preview", args: map[string]any{"url": "web/index.html"}, action: permission.Read, path: "web/index.html"},
 		{tool: "tabs_context", args: map[string]any{}, action: permission.Internal},
 		{tool: "inspect_browser", args: map[string]any{}, action: permission.Internal},
-		{tool: "kill_bash", args: map[string]any{}, action: permission.Internal},
+		{tool: "task_stop", args: map[string]any{}, action: permission.Internal},
 	}
 	for _, test := range tests {
 		t.Run(test.tool, func(t *testing.T) {

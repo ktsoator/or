@@ -140,7 +140,7 @@ func (m *Manager) Delete(id string) error {
 	}
 	m.mu.Unlock()
 
-	// Stop any background shells the session started before its files go away.
+	// Stop any background tasks the session started before its files go away.
 	runtime.close()
 
 	for _, path := range staged {

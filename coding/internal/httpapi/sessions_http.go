@@ -214,6 +214,7 @@ func (s *Server) handleHistory(c *gin.Context) {
 	var events []wireEvent
 	var queue []wireEvent
 	var contextUsage wireContextUsage
+	var tasks []wireBackgroundTask
 	var running bool
 	var title string
 	var aiTitle string
@@ -231,6 +232,7 @@ func (s *Server) handleHistory(c *gin.Context) {
 		events = append(events, transport.questions.PendingEvents()...)
 		queue = projectQueue(snapshot.Queue)
 		contextUsage = projectContextUsage(snapshot.ContextUsage)
+		tasks = projectBackgroundTasks(snapshot.Tasks)
 		running = snapshot.Running
 		title = snapshot.Title
 		aiTitle = snapshot.AITitle
@@ -250,12 +252,44 @@ func (s *Server) handleHistory(c *gin.Context) {
 		Events:      events,
 		Queue:       queue,
 		Context:     contextUsage,
+		Tasks:       tasks,
 		Running:     running,
 		EventSeq:    eventSeq,
 		Title:       title,
 		AITitle:     aiTitle,
 		CustomTitle: customTitle,
 	})
+}
+
+func (s *Server) handleStopTask(c *gin.Context) {
+	err := s.conversations.StopTask(c.Param("sessionID"), c.Param("taskID"))
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+	case errors.Is(err, tools.ErrTaskNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": "background task not found"})
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	default:
+		c.Status(http.StatusNoContent)
+	}
+}
+
+func (s *Server) handleTaskOutput(c *gin.Context) {
+	output, err := s.conversations.TaskOutput(c.Param("sessionID"), c.Param("taskID"))
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+	case errors.Is(err, tools.ErrTaskNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": "background task not found"})
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	default:
+		c.JSON(http.StatusOK, wireTaskOutputResponse{
+			Content:   output.Content,
+			Truncated: output.Truncated,
+		})
+	}
 }
 
 // handleEvents streams run events to one browser over Server-Sent Events until
@@ -533,6 +567,8 @@ func (s *Server) mountSessions(r gin.IRouter) {
 	one.DELETE("/queue/:messageID", s.handleRemoveQueuedMessage)
 	one.POST("/approvals/:approvalID", s.handleApproval)
 	one.POST("/questions/:questionID", s.handleQuestion)
+	one.POST("/tasks/:taskID/stop", s.handleStopTask)
+	one.GET("/tasks/:taskID/output", s.handleTaskOutput)
 	one.POST("/browser/:commandID/result", s.handleBrowserResult)
 	one.POST("/browser/tabs/:commandID/result", s.handleBrowserTabsResult)
 	one.POST("/browser/inspect/:commandID/result", s.handleBrowserInspectionResult)

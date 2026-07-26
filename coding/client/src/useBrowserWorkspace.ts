@@ -37,6 +37,16 @@ export function conversationWorkbenchTabID(sessionID?: string): string | undefin
   return sessionID ? `conversation:${sessionID}` : undefined
 }
 
+export function backgroundTasksWorkbenchTabID(sessionID?: string): string | undefined {
+  return sessionID ? `tasks:${sessionID}` : undefined
+}
+
+export type WorkbenchTaskRequest = {
+  sessionID: string
+  taskID?: string
+  revision: number
+}
+
 export function useBrowserWorkspace({
   activatePreview,
   browserCommands,
@@ -44,6 +54,7 @@ export function useBrowserWorkspace({
   onBrowserResult,
   preview,
   sessionID,
+  taskRequest,
 }: {
   activatePreview: boolean
   browserCommands: BrowserCommandState[]
@@ -51,6 +62,7 @@ export function useBrowserWorkspace({
   onBrowserResult: (sessionID: string, commandID: string, result: BrowserResult) => void
   preview?: PreviewState
   sessionID?: string
+  taskRequest?: WorkbenchTaskRequest
 }) {
   const conversationTabID = conversationWorkbenchTabID(conversationID)
   const workspaceID = sessionID ?? conversationID ?? 'unknown'
@@ -101,6 +113,15 @@ export function useBrowserWorkspace({
     dispatch({ t: 'sync_conversation', conversationTabID })
   }, [conversationTabID, dispatch, workspaceID])
 
+  useEffect(() => {
+    if (!taskRequest || taskRequest.sessionID !== workspaceID) return
+    dispatch({
+      t: 'open_tasks',
+      taskTabID: backgroundTasksWorkbenchTabID(workspaceID)!,
+      taskID: taskRequest.taskID,
+    })
+  }, [dispatch, taskRequest, workspaceID])
+
   const coordinator = useBrowserCommandCoordinator({
     activatePreview,
     browserCommands,
@@ -113,6 +134,7 @@ export function useBrowserWorkspace({
   })
   const activeTab = selectedBrowserTab(state)
   const conversationActive = state.activeItemID === state.conversationTabID
+  const tasksActive = state.activeItemID === state.taskTabID
   const activeDesired = activeTab?.desired
   const activeObserved = activeTab?.observed
   const activeNavigationURL = activeTab ? browserTabNavigationURL(activeTab) : ''
@@ -190,6 +212,9 @@ export function useBrowserWorkspace({
     workspaceID,
     conversationTabID: state.conversationTabID,
     conversationActive,
+    taskTabID: state.taskTabID,
+    selectedTaskID: state.selectedTaskID,
+    tasksActive,
     activeTab,
     activeDesired,
     activeObserved,
@@ -199,6 +224,16 @@ export function useBrowserWorkspace({
     releaseControl,
     browserRuntime: hasBrowserRuntime(),
     selectItem: (itemID: string) => dispatch({ t: 'select_item', itemID }),
+    openTasks: (taskID?: string) => dispatch({
+      t: 'open_tasks',
+      taskTabID: backgroundTasksWorkbenchTabID(workspaceID)!,
+      taskID,
+    }),
+    selectTask: (taskID: string) => dispatch({ t: 'select_task', taskID }),
+    closeTasks: () => {
+      dispatch({ t: 'close_tasks' })
+      return state.tabs.length === 0 && !state.conversationTabID
+    },
     newTab: () => dispatch({ t: 'create_user_tab' }),
     closeTab: coordinator.closeTab,
     reload,
