@@ -157,8 +157,8 @@ export function useSession(secondarySessionID?: string): Session {
   )
   useBrowserResultOutbox(threads, acknowledgeBrowserResult)
 
-  const applySessionWire = useCallback((sessionID: string, wire: WireEvent) => {
-    dispatch({ t: 'wire', sessionID, ev: wire })
+  const applySessionWire = useCallback((sessionID: string, wire: WireEvent, eventSeq?: number) => {
+    dispatch({ t: 'wire', sessionID, ev: wire, serverEventSeq: eventSeq })
     dispatchSessionStore({ t: 'sessionWire', sessionID, event: wire })
   }, [])
 
@@ -273,20 +273,32 @@ export function useSession(secondarySessionID?: string): Session {
     if (activeSessionID) localStorage.setItem(selectedSessionKey, activeSessionID)
   }, [activeSessionID])
 
+  const thread = activeSessionID ? threads[activeSessionID] : undefined
+  const activeCheckpoint = thread?.loaded ? { eventSeq: thread.serverEventSeq } : undefined
+  const connectedSecondarySessionID =
+    secondarySessionID && secondarySessionID !== activeSessionID
+      ? secondarySessionID
+      : undefined
+  const secondaryConnectionThread = connectedSecondarySessionID
+    ? threads[connectedSecondarySessionID]
+    : undefined
+  const secondaryCheckpoint = secondaryConnectionThread?.loaded
+    ? { eventSeq: secondaryConnectionThread.serverEventSeq }
+    : undefined
+
   useSessionConnection(activeSessionID, {
     onWire: applySessionWire,
     onSnapshot: applySessionSnapshot,
     onStatus: applyPrimarySessionStatus,
-  })
+  }, activeCheckpoint)
   useSessionConnection(
-    secondarySessionID && secondarySessionID !== activeSessionID
-      ? secondarySessionID
-      : undefined,
+    connectedSecondarySessionID,
     {
       onWire: applySessionWire,
       onSnapshot: applySessionSnapshot,
       onStatus: applySessionStatus,
     },
+    secondaryCheckpoint,
   )
 
   const activeSession = sessions.find((session) => session.id === activeSessionID)
@@ -618,7 +630,6 @@ export function useSession(secondarySessionID?: string): Session {
     return compactSessionContext(activeSessionID)
   }
 
-  const thread = activeSessionID ? threads[activeSessionID] : undefined
   const activeSessionRunning = activeSession?.running
 
   const startSessionPrompt = useCallback(

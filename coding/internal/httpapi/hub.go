@@ -31,10 +31,20 @@ func NewHub() *Hub {
 // Broadcast sends data to every connected client, skipping any whose buffer is
 // full.
 func (h *Hub) Broadcast(data []byte) {
+	h.broadcast(data, nil)
+}
+
+// broadcast applies update and publishes data while holding the same lock used
+// by snapshot. Session transports use update to keep their resumable UI state
+// at exactly the same sequence boundary as the SSE frame.
+func (h *Hub) broadcast(data []byte, update func()) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.closed {
 		return
+	}
+	if update != nil {
+		update()
 	}
 	h.sequence++
 	frame := hubFrame{sequence: h.sequence, data: append([]byte(nil), data...)}
@@ -65,7 +75,7 @@ func (h *Hub) add(after uint64) (chan hubFrame, bool) {
 		return ch, false
 	}
 	if after > h.sequence {
-		after = 0
+		return nil, true
 	}
 	if len(h.events) > 0 && after+1 < h.events[0].sequence {
 		return nil, true

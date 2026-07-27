@@ -1,11 +1,15 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { sessionURL } from './api'
 import type { ConnectionStatus, HistoryResponse, ThreadSnapshot, WireEvent } from './types'
 
 export type SessionConnectionHandlers = {
-  onWire: (sessionID: string, event: WireEvent) => void
+  onWire: (sessionID: string, event: WireEvent, eventSeq?: number) => void
   onSnapshot: (sessionID: string, history: ThreadSnapshot) => void
   onStatus: (sessionID: string, status: ConnectionStatus) => void
+}
+
+export type SessionConnectionCheckpoint = {
+  eventSeq: number
 }
 
 export type SessionEventSource = {
@@ -29,6 +33,7 @@ export function startSessionConnection(
   sessionID: string,
   handlers: SessionConnectionHandlers,
   dependencies: SessionConnectionDependencies = browserDependencies,
+  checkpoint?: SessionConnectionCheckpoint,
 ): () => void {
   let active = true
   let events: SessionEventSource | null = null
@@ -66,7 +71,7 @@ export function startSessionConnection(
           void restoreHistory(false)
           return
         }
-        handlers.onWire(sessionID, wire)
+        handlers.onWire(sessionID, wire, parseEventSequence(event.lastEventId))
       } catch {
         handlers.onWire(sessionID, {
           type: 'error',
@@ -106,7 +111,12 @@ export function startSessionConnection(
     }
   }
 
-  void restoreHistory(true)
+  if (checkpoint) {
+    updateStatus('connecting')
+    connect(checkpoint.eventSeq)
+  } else {
+    void restoreHistory(true)
+  }
 
   return () => {
     active = false
@@ -118,11 +128,25 @@ export function startSessionConnection(
 export function useSessionConnection(
   sessionID: string | undefined,
   handlers: SessionConnectionHandlers,
+  checkpoint?: SessionConnectionCheckpoint,
 ) {
   const { onWire, onSnapshot, onStatus } = handlers
+  const checkpointRef = useRef(checkpoint)
+  checkpointRef.current = checkpoint
 
   useEffect(() => {
     if (!sessionID) return
-    return startSessionConnection(sessionID, { onWire, onSnapshot, onStatus })
+    return startSessionConnection(
+      sessionID,
+      { onWire, onSnapshot, onStatus },
+      browserDependencies,
+      checkpointRef.current,
+    )
   }, [onSnapshot, onStatus, onWire, sessionID])
+}
+
+function parseEventSequence(value: string): number | undefined {
+  if (!value.trim()) return undefined
+  const parsed = Number(value)
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined
 }

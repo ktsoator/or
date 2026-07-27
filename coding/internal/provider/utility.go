@@ -203,10 +203,5 @@ func utilitySelectionEmpty(selection UtilityModelSelection) bool {
 }
 
 func utilitySelectionFromRoute(route ModelRoute) UtilityModelSelection {
-	return UtilityModelSelection{
-		Provider:     route.Provider,
-		Model:        route.Model,
-		ConnectionID: route.ConnectionID,
-		KeyID:        route.KeyID,
-	}
+	return UtilityModelSelection(route)
 }

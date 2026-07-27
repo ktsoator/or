@@ -81,19 +81,28 @@ type sessionTransport struct {
 	broker    *ApprovalBroker
 	browser   *BrowserBroker
 	questions *QuestionBroker
+	activeRun activeRunHistory
 	closeOnce sync.Once
 }
 
 func (t *sessionTransport) Publish(event conversation.Event) {
-	if data, ok := projectSessionEvent(event); ok {
-		t.hub.Broadcast(data)
+	if projected, ok := projectSessionWireEvent(event); ok {
+		t.publish(projected)
 	}
 }
 
 func (t *sessionTransport) PublishAgent(event engine.Event) {
-	if data, ok := ProjectEvent(event); ok {
-		t.hub.Broadcast(data)
+	if projected, ok := projectEvent(event); ok {
+		t.publish(projected)
 	}
+}
+
+func (t *sessionTransport) publish(event wireEvent) {
+	data, err := json.Marshal(event)
+	if err != nil {
+		return
+	}
+	t.hub.broadcast(data, func() { t.activeRun.apply(event) })
 }
 
 func (t *sessionTransport) Decide(ctx context.Context, req permission.ApprovalRequest) (permission.ApprovalResponse, error) {
@@ -153,6 +162,15 @@ func (t *sessionTransport) Close() {
 // It is the counterpart to ProjectEvent: that one projects events coming up
 // from the agent, this one projects events the session layer raises itself.
 func projectSessionEvent(event conversation.Event) ([]byte, bool) {
+	out, ok := projectSessionWireEvent(event)
+	if !ok {
+		return nil, false
+	}
+	data, err := json.Marshal(out)
+	return data, err == nil
+}
+
+func projectSessionWireEvent(event conversation.Event) (wireEvent, bool) {
 	var out wireEvent
 	switch e := event.(type) {
 	case conversation.MessageAccepted:
@@ -188,10 +206,9 @@ func projectSessionEvent(event conversation.Event) ([]byte, bool) {
 			TitleGenerationAttemptedAt: e.Generation.AttemptedAt,
 		}
 	default:
-		return nil, false
+		return wireEvent{}, false
 	}
-	data, err := json.Marshal(out)
-	return data, err == nil
+	return out, true
 }
 
 // projectQueue maps the queue snapshot the history endpoint returns.

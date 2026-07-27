@@ -68,6 +68,16 @@ func (s *Session) History() []HistoryItem {
 		messages = active[persistedLen:]
 	}
 	if !activeStartedAt.IsZero() {
+		// persistNewRun writes the completed Run entry before RunCompleted is
+		// dispatched. A concurrent history request in that short window must not
+		// append a second, apparently still-open run.
+		if containsRunStartedAt(entries, activeStartedAt) {
+			items := projectEntryHistory(entries, outcomes)
+			if len(messages) > 0 {
+				items = append(items, projectHistory(messages, outcomes)...)
+			}
+			return items
+		}
 		firstEntryID := firstMessageFrom(entries, activeEntryStart)
 		if firstEntryID != "" {
 			entries = append(entries, transcript.Entry{
@@ -86,6 +96,15 @@ func (s *Session) History() []HistoryItem {
 		items = append(items, projectHistory(messages, outcomes)...)
 	}
 	return items
+}
+
+func containsRunStartedAt(entries []transcript.Entry, startedAt time.Time) bool {
+	for _, entry := range entries {
+		if entry.Type == transcript.RunEntry && entry.Run != nil && entry.Run.StartedAt.Equal(startedAt) {
+			return true
+		}
+	}
+	return false
 }
 
 func projectEntryHistory(entries []transcript.Entry, outcomes map[string]agent.ToolOutcome) []HistoryItem {

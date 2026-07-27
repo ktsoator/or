@@ -29,22 +29,19 @@ func TestHubReplaysFramesAfterSnapshot(t *testing.T) {
 	}
 }
 
-func TestHubTreatsFutureSequenceAsFreshConnection(t *testing.T) {
+func TestHubRequiresSyncForFutureSequence(t *testing.T) {
 	hub := NewHub()
 	hub.Broadcast([]byte(`{"type":"current"}`))
 
 	ch, syncRequired := hub.add(100)
-	if syncRequired {
-		t.Fatal("unexpected sync requirement")
-	}
-	defer hub.remove(ch)
-	select {
-	case frame := <-ch:
-		if frame.sequence != 1 || string(frame.data) != `{"type":"current"}` {
-			t.Fatalf("frame = %#v", frame)
+	if !syncRequired {
+		if ch != nil {
+			hub.remove(ch)
 		}
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for replay after sequence reset")
+		t.Fatal("expected future cursor to require history sync")
+	}
+	if ch != nil {
+		t.Fatal("future cursor unexpectedly registered a client")
 	}
 }
 

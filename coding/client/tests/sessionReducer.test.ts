@@ -19,6 +19,39 @@ function thread(state: ThreadsState) {
 }
 
 describe('threadsReducer event sequences', () => {
+  test('tracks the server event cursor and ignores duplicate replay', () => {
+    const state = reduce([
+      {
+        t: 'reset',
+        sessionID,
+        history: { running: true, events: [], eventSeq: 10 },
+      },
+      {
+        t: 'wire',
+        sessionID,
+        serverEventSeq: 11,
+        ev: { type: 'delta', kind: 'text', delta: 'kept once' },
+      },
+      {
+        t: 'wire',
+        sessionID,
+        serverEventSeq: 11,
+        ev: { type: 'delta', kind: 'text', delta: 'duplicate' },
+      },
+      {
+        t: 'wire',
+        sessionID,
+        serverEventSeq: 9,
+        ev: { type: 'delta', kind: 'text', delta: 'stale' },
+      },
+    ])
+
+    expect(thread(state).serverEventSeq).toBe(11)
+    expect(thread(state).items).toContainEqual(
+      expect.objectContaining({ kind: 'assistant', markdown: 'kept once' }),
+    )
+  })
+
   test('records task completion without changing run state and de-duplicates replay', () => {
     const runningTask = {
       id: 'task_1',

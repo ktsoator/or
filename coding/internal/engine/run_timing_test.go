@@ -81,6 +81,43 @@ func TestSessionPersistsAndReplaysRunTiming(t *testing.T) {
 	}
 }
 
+func TestHistoryDoesNotDuplicateRunAfterCompletedEntryIsPersisted(t *testing.T) {
+	ctx := context.Background()
+	session, err := New(ctx, Options{
+		Model:    llm.Model{Provider: "test", ID: "model"},
+		Tools:    []tools.Tool{},
+		Store:    &transcript.Memory{},
+		StreamFn: fixedResponse("answer"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := session.Prompt(ctx, "question"); err != nil {
+		t.Fatal(err)
+	}
+
+	entries := session.Entries()
+	completedRun := entries[len(entries)-1].Run
+	if completedRun == nil {
+		t.Fatalf("last entry = %#v, want completed run", entries[len(entries)-1])
+	}
+	// Recreate the interval after persistNewRun and before the deferred active
+	// run state is cleared.
+	session.setRunState(ctx, completedRun.StartedAt, 0)
+	defer session.clearRunState()
+
+	history := session.History()
+	runs := 0
+	for _, item := range history {
+		if item.Type == HistoryRun {
+			runs++
+		}
+	}
+	if runs != 1 {
+		t.Fatalf("history contains %d runs, want one: %#v", runs, history)
+	}
+}
+
 func TestHistoryIncludesRunBeforeContinueAddsAMessage(t *testing.T) {
 	ctx := context.Background()
 	entered := make(chan struct{})
