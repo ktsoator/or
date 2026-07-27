@@ -2,16 +2,16 @@
 
 内置模型清单和协议实现是两套独立信息。`GetModels` 返回清单中收录的模型；只有模型的 `Protocol` 已在当前进程注册协议适配器时，请求才能被路由。使用 `GetRunnableModels` 构建运行时模型列表。
 
-<!-- catalog-stats: total=821 runnable=743 openai-completions=481 anthropic-messages=262 openai-responses=45 google-generative-ai=12 mistral-conversations=21 -->
+<!-- catalog-stats: total=820 runnable=749 openai-completions=487 anthropic-messages=262 openai-responses=30 google-generative-ai=20 mistral-conversations=21 -->
 
 ## 协议状态
 
 | 协议 | 收录模型数 | 状态 | 注册方式 | 说明 |
 |---|---:|---|---|---|
-| `openai-completions` | 481 | 已实现 | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Chat Completions 及兼容服务 |
+| `openai-completions` | 487 | 已实现 | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Chat Completions 及兼容服务 |
 | `anthropic-messages` | 262 | 已实现 | `_ "github.com/ktsoator/or/llm/anthropic"` | Anthropic Messages 及兼容服务 |
-| `openai-responses` | 45 | 仅收录 | 无 | 当前没有协议适配器；内置模型清单中的 OpenAI 模型使用该协议 |
-| `google-generative-ai` | 12 | 仅收录 | 无 | 当前没有协议适配器 |
+| `openai-responses` | 30 | 仅收录 | 无 | 当前没有协议适配器；内置模型清单中的 OpenAI 模型使用该协议 |
+| `google-generative-ai` | 20 | 仅收录 | 无 | 当前没有协议适配器 |
 | `mistral-conversations` | 21 | 仅收录 | 无 | 当前没有协议适配器 |
 
 导入 `github.com/ktsoator/or/llm/all` 会注册两个已实现协议。它不会为三个仅收录协议增加实现。
@@ -35,26 +35,26 @@ runnable := llm.GetRunnableModels("openai") // 当前为空
 
 | 提供方 ID | 模型数 | 协议 | 凭证变量 |
 |---|---:|---|---|
-| `anthropic` | 12 | Anthropic Messages | `ANTHROPIC_OAUTH_TOKEN` 或 `ANTHROPIC_API_KEY` |
+| `anthropic` | 13 | Anthropic Messages | `ANTHROPIC_OAUTH_TOKEN` 或 `ANTHROPIC_API_KEY` |
 | `cerebras` | 3 | OpenAI Completions | `CEREBRAS_API_KEY` |
 | `deepseek` | 4 | OpenAI Completions | `DEEPSEEK_API_KEY` |
-| `fireworks` | 16 | Anthropic Messages | `FIREWORKS_API_KEY` |
-| `github-copilot` | 17 | 两种已实现协议 | `COPILOT_GITHUB_TOKEN` |
-| `google` | 12 | Google Generative AI | `GEMINI_API_KEY` |
+| `fireworks` | 14 | Anthropic Messages | `FIREWORKS_API_KEY` |
+| `github-copilot` | 18 | 两种已实现协议 | `COPILOT_GITHUB_TOKEN` |
+| `google` | 20 | Google Generative AI | `GEMINI_API_KEY` |
 | `groq` | 7 | OpenAI Completions | `GROQ_API_KEY` |
-| `huggingface` | 49 | OpenAI Completions | `HF_TOKEN` |
+| `huggingface` | 50 | OpenAI Completions | `HF_TOKEN` |
 | `kimi-coding` | 4 | Anthropic Messages | `KIMI_API_KEY` |
 | `minimax` | 7 | Anthropic Messages | `MINIMAX_API_KEY` |
 | `minimax-cn` | 7 | Anthropic Messages | `MINIMAX_CN_API_KEY` |
 | `mistral` | 21 | Mistral Conversations | `MISTRAL_API_KEY` |
-| `moonshotai` | 9 | OpenAI Completions | `MOONSHOT_API_KEY` |
-| `moonshotai-cn` | 9 | OpenAI Completions | `MOONSHOT_API_KEY` |
-| `nvidia` | 45 | OpenAI Completions | `NVIDIA_API_KEY` |
-| `openai` | 45 | OpenAI Responses | `OPENAI_API_KEY` |
-| `opencode` | 32 | 两种已实现协议 | `OPENCODE_API_KEY` |
-| `opencode-go` | 13 | 两种已实现协议 | `OPENCODE_API_KEY` |
-| `openrouter` | 268 | OpenAI Completions | `OPENROUTER_API_KEY` |
-| `together` | 20 | OpenAI Completions | `TOGETHER_API_KEY` |
+| `moonshotai` | 10 | OpenAI Completions | `MOONSHOT_API_KEY` |
+| `moonshotai-cn` | 10 | OpenAI Completions | `MOONSHOT_API_KEY` |
+| `nvidia` | 43 | OpenAI Completions | `NVIDIA_API_KEY` |
+| `openai` | 30 | OpenAI Responses | `OPENAI_API_KEY` |
+| `opencode` | 33 | 两种已实现协议 | `OPENCODE_API_KEY` |
+| `opencode-go` | 15 | 两种已实现协议 | `OPENCODE_API_KEY` |
+| `openrouter` | 274 | OpenAI Completions | `OPENROUTER_API_KEY` |
+| `together` | 16 | OpenAI Completions | `TOGETHER_API_KEY` |
 | `vercel-ai-gateway` | 192 | Anthropic Messages | `AI_GATEWAY_API_KEY` |
 | `xai` | 5 | OpenAI Completions | `XAI_API_KEY` |
 | `xiaomi` | 3 | OpenAI Completions | `XIAOMI_API_KEY` 或 `MIMO_API_KEY` |

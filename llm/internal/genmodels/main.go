@@ -445,7 +445,7 @@ func applyOverrides(models []model) {
 			m.Compat.ForceAdaptiveThinking = boolp(true)
 		}
 		id := strings.ToLower(m.ID)
-		if m.Protocol == "anthropic-messages" && (strings.Contains(id, "opus-4-7") || strings.Contains(id, "opus-4.7") || strings.Contains(id, "opus-4-8") || strings.Contains(id, "opus-4.8")) {
+		if m.Protocol == "anthropic-messages" && disablesAnthropicTemperature(id) {
 			m.Compat.Kind = "anthropic"
 			m.Compat.SupportsTemperature = boolp(false)
 		}
@@ -465,7 +465,17 @@ func applyOverrides(models []model) {
 
 func isAdaptiveAnthropic(id string) bool {
 	id = strings.ToLower(id)
-	for _, marker := range []string{"opus-4-6", "opus-4.6", "opus-4-7", "opus-4.7", "opus-4-8", "opus-4.8", "sonnet-4-6", "sonnet-4.6", "fable-5"} {
+	for _, marker := range []string{"opus-4-6", "opus-4.6", "opus-4-7", "opus-4.7", "opus-4-8", "opus-4.8", "opus-5", "sonnet-4-6", "sonnet-4.6", "fable-5"} {
+		if strings.Contains(id, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func disablesAnthropicTemperature(id string) bool {
+	id = strings.ToLower(id)
+	for _, marker := range []string{"opus-4-7", "opus-4.7", "opus-4-8", "opus-4.8", "opus-5", "fable-5"} {
 		if strings.Contains(id, marker) {
 			return true
 		}

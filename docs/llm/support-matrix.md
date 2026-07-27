@@ -2,16 +2,16 @@
 
 The model catalog and protocol implementations are independent. `GetModels` returns catalog entries. A request is routable only when the current process has registered an adapter for the model's `Protocol`. Use `GetRunnableModels` for runtime model lists.
 
-<!-- catalog-stats: total=821 runnable=743 openai-completions=481 anthropic-messages=262 openai-responses=45 google-generative-ai=12 mistral-conversations=21 -->
+<!-- catalog-stats: total=820 runnable=749 openai-completions=487 anthropic-messages=262 openai-responses=30 google-generative-ai=20 mistral-conversations=21 -->
 
 ## Protocol status
 
 | Protocol | Catalog models | Status | Registration | Meaning |
 |---|---:|---|---|---|
-| `openai-completions` | 481 | Implemented | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Chat Completions and compatible endpoints |
+| `openai-completions` | 487 | Implemented | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Chat Completions and compatible endpoints |
 | `anthropic-messages` | 262 | Implemented | `_ "github.com/ktsoator/or/llm/anthropic"` | Anthropic Messages and compatible endpoints |
-| `openai-responses` | 45 | Catalog only | None | No adapter; official OpenAI catalog models use this protocol |
-| `google-generative-ai` | 12 | Catalog only | None | No adapter |
+| `openai-responses` | 30 | Catalog only | None | No adapter; official OpenAI catalog models use this protocol |
+| `google-generative-ai` | 20 | Catalog only | None | No adapter |
 | `mistral-conversations` | 21 | Catalog only | None | No adapter |
 
 Importing `github.com/ktsoator/or/llm/all` registers the two implemented protocols. It does not implement the three catalog-only protocols.
@@ -35,26 +35,26 @@ The current catalog contains the following provider IDs. Counts come from `llm/c
 
 | Provider ID | Models | Protocol | Credential variables |
 |---|---:|---|---|
-| `anthropic` | 12 | Anthropic Messages | `ANTHROPIC_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` |
+| `anthropic` | 13 | Anthropic Messages | `ANTHROPIC_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` |
 | `cerebras` | 3 | OpenAI Completions | `CEREBRAS_API_KEY` |
 | `deepseek` | 4 | OpenAI Completions | `DEEPSEEK_API_KEY` |
-| `fireworks` | 16 | Anthropic Messages | `FIREWORKS_API_KEY` |
-| `github-copilot` | 17 | Both implemented protocols | `COPILOT_GITHUB_TOKEN` |
-| `google` | 12 | Google Generative AI | `GEMINI_API_KEY` |
+| `fireworks` | 14 | Anthropic Messages | `FIREWORKS_API_KEY` |
+| `github-copilot` | 18 | Both implemented protocols | `COPILOT_GITHUB_TOKEN` |
+| `google` | 20 | Google Generative AI | `GEMINI_API_KEY` |
 | `groq` | 7 | OpenAI Completions | `GROQ_API_KEY` |
-| `huggingface` | 49 | OpenAI Completions | `HF_TOKEN` |
+| `huggingface` | 50 | OpenAI Completions | `HF_TOKEN` |
 | `kimi-coding` | 4 | Anthropic Messages | `KIMI_API_KEY` |
 | `minimax` | 7 | Anthropic Messages | `MINIMAX_API_KEY` |
 | `minimax-cn` | 7 | Anthropic Messages | `MINIMAX_CN_API_KEY` |
 | `mistral` | 21 | Mistral Conversations | `MISTRAL_API_KEY` |
-| `moonshotai` | 9 | OpenAI Completions | `MOONSHOT_API_KEY` |
-| `moonshotai-cn` | 9 | OpenAI Completions | `MOONSHOT_API_KEY` |
-| `nvidia` | 45 | OpenAI Completions | `NVIDIA_API_KEY` |
-| `openai` | 45 | OpenAI Responses | `OPENAI_API_KEY` |
-| `opencode` | 32 | Both implemented protocols | `OPENCODE_API_KEY` |
-| `opencode-go` | 13 | Both implemented protocols | `OPENCODE_API_KEY` |
-| `openrouter` | 268 | OpenAI Completions | `OPENROUTER_API_KEY` |
-| `together` | 20 | OpenAI Completions | `TOGETHER_API_KEY` |
+| `moonshotai` | 10 | OpenAI Completions | `MOONSHOT_API_KEY` |
+| `moonshotai-cn` | 10 | OpenAI Completions | `MOONSHOT_API_KEY` |
+| `nvidia` | 43 | OpenAI Completions | `NVIDIA_API_KEY` |
+| `openai` | 30 | OpenAI Responses | `OPENAI_API_KEY` |
+| `opencode` | 33 | Both implemented protocols | `OPENCODE_API_KEY` |
+| `opencode-go` | 15 | Both implemented protocols | `OPENCODE_API_KEY` |
+| `openrouter` | 274 | OpenAI Completions | `OPENROUTER_API_KEY` |
+| `together` | 16 | OpenAI Completions | `TOGETHER_API_KEY` |
 | `vercel-ai-gateway` | 192 | Anthropic Messages | `AI_GATEWAY_API_KEY` |
 | `xai` | 5 | OpenAI Completions | `XAI_API_KEY` |
 | `xiaomi` | 3 | OpenAI Completions | `XIAOMI_API_KEY` or `MIMO_API_KEY` |
