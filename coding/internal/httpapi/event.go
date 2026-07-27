@@ -29,6 +29,18 @@ func projectContextUsage(usage engine.ContextUsage) wireContextUsage {
 
 // ProjectEvent maps a UI-neutral coding event to the HTTP wire protocol.
 func ProjectEvent(ev engine.Event) ([]byte, bool) {
+	out, ok := projectEvent(ev)
+	if !ok {
+		return nil, false
+	}
+	data, err := json.Marshal(out)
+	if err != nil {
+		return nil, false
+	}
+	return data, true
+}
+
+func projectEvent(ev engine.Event) (wireEvent, bool) {
 	var out wireEvent
 	switch ev.Type {
 	case engine.RunStarted:
@@ -75,19 +87,19 @@ func ProjectEvent(ev engine.Event) ([]byte, bool) {
 
 	case engine.CompactionStarted:
 		if !ev.Automatic {
-			return nil, false
+			return wireEvent{}, false
 		}
 		out = wireEvent{Type: wireEventCompactionStart}
 
 	case engine.CompactionCompleted:
 		if !ev.Automatic {
-			return nil, false
+			return wireEvent{}, false
 		}
 		out = wireEvent{Type: wireEventCompactionEnd}
 
 	case engine.CompactionFailed:
 		if !ev.Automatic {
-			return nil, false
+			return wireEvent{}, false
 		}
 		out = wireEvent{Type: wireEventCompactionEnd, IsError: true, Text: ev.Error}
 
@@ -110,14 +122,9 @@ func ProjectEvent(ev engine.Event) ([]byte, bool) {
 		}
 
 	default:
-		return nil, false
+		return wireEvent{}, false
 	}
-
-	data, err := json.Marshal(out)
-	if err != nil {
-		return nil, false
-	}
-	return data, true
+	return out, true
 }
 
 func projectBackgroundTask(task engine.BackgroundTask) *wireBackgroundTask {

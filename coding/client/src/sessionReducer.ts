@@ -38,6 +38,7 @@ export type ThreadState = {
   running: boolean
   autoCompacting: boolean
   status: ConnectionStatus
+  serverEventSeq: number
   seq: number
   loaded: boolean
 }
@@ -69,7 +70,7 @@ function outcomePreview(
 
 export type ThreadAction =
   | { t: 'reset'; sessionID: string; history: ThreadSnapshot }
-  | { t: 'wire'; sessionID: string; ev: WireEvent }
+  | { t: 'wire'; sessionID: string; ev: WireEvent; serverEventSeq?: number }
   | { t: 'status'; sessionID: string; status: ConnectionStatus }
   | { t: 'running'; sessionID: string; running: boolean }
   | {
@@ -128,6 +129,7 @@ export const createThreadState = (): ThreadState => ({
   running: false,
   autoCompacting: false,
   status: 'connecting',
+  serverEventSeq: 0,
   seq: 0,
   loaded: false,
 })
@@ -168,6 +170,7 @@ export function threadsReducer(state: ThreadsState, action: ThreadAction): Threa
         ...createThreadState(),
         status: current.status,
         running: action.history.running,
+        serverEventSeq: action.history.eventSeq ?? 0,
         loaded: true,
         tasks: Object.fromEntries(
           (action.history.tasks ?? []).map((task) => [task.id, task]),
@@ -341,9 +344,22 @@ export function threadsReducer(state: ThreadsState, action: ThreadAction): Threa
         ),
       }
       break
-    case 'wire':
+    case 'wire': {
+      if (
+        action.serverEventSeq !== undefined &&
+        action.serverEventSeq <= current.serverEventSeq
+      ) {
+        return state
+      }
       next = reduceWire(current, action.ev)
+      if (
+        action.serverEventSeq !== undefined &&
+        action.serverEventSeq > current.serverEventSeq
+      ) {
+        next = { ...next, serverEventSeq: action.serverEventSeq }
+      }
       break
+    }
   }
 
   return { ...state, [action.sessionID]: next }

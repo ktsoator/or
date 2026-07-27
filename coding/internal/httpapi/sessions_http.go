@@ -228,6 +228,7 @@ func (s *Server) handleHistory(c *gin.Context) {
 			return
 		}
 		events = ProjectHistory(snapshot.History)
+		events = mergeActiveRunHistory(events, transport.activeRun.snapshot())
 		events = append(events, transport.broker.PendingEvents()...)
 		events = append(events, transport.browser.PendingEvents()...)
 		events = append(events, transport.questions.PendingEvents()...)

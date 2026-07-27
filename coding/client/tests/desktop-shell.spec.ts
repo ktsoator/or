@@ -118,6 +118,8 @@ async function openDesktopClient(
     browserResultFailures?: number
     existingSession?: boolean
     historyEvents?: unknown[]
+    historyRunning?: boolean
+    historyEventSeq?: number
     backgroundTasks?: unknown[]
     secondarySession?: boolean
     secondaryHistoryEvents?: unknown[]
@@ -480,8 +482,8 @@ async function openDesktopClient(
         tasks: options.backgroundTasks ?? [],
         queue: [],
         context: {},
-        running: false,
-        eventSeq: 0,
+        running: options.historyRunning ?? false,
+        eventSeq: options.historyEventSeq ?? 0,
       }
     }
     if (path === '/api/sessions/secondary-session/history') {
@@ -2592,6 +2594,69 @@ test('streaming tool input shows write progress without duplicating the tool row
     emit?.({ type: 'done' })
   })
   await expect(page.getByText('Preparing file content')).toHaveCount(0)
+})
+
+test('history restores in-flight assistant text and tool input after reload', async ({ page }) => {
+  await openDesktopClient(page, {
+    existingSession: true,
+    historyRunning: true,
+    historyEventSeq: 44,
+    historyEvents: [
+      { type: 'user_message', text: 'Update the file' },
+      { type: 'run_start', startedAt: '2026-07-27T12:00:00Z' },
+      { type: 'delta', kind: 'text', delta: 'Restored partial answer' },
+      { type: 'tool_input_start', tool: 'write', toolContentIndex: 0 },
+      {
+        type: 'tool_input_delta',
+        tool: 'write',
+        toolContentIndex: 0,
+        bytes: 1536,
+      },
+    ],
+  })
+
+  await expect(page.getByText('Restored partial answer')).toBeVisible()
+  await expect(page.getByText('Preparing file content')).toBeVisible()
+  await expect(page.getByText('1.5 KB')).toBeVisible()
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'tool_input_end',
+      id: 'restored-write',
+      tool: 'write',
+      toolContentIndex: 0,
+      args: { path: 'README.md', content: 'updated' },
+    })
+    emit?.({ type: 'message_end', text: 'Restored partial answer' })
+    emit?.({
+      type: 'tool_start',
+      id: 'restored-write',
+      tool: 'write',
+      args: { path: 'README.md', content: 'updated' },
+    })
+    emit?.({
+      type: 'tool_end',
+      id: 'restored-write',
+      tool: 'write',
+      result: 'Updated README.md',
+      outcome: {
+        status: 'success',
+        data: {
+          changeType: 'file',
+          path: 'README.md',
+          op: 'update',
+          additions: 1,
+          deletions: 0,
+          bytes: 7,
+          hunks: [],
+        },
+      },
+    })
+  })
+
+  await expect(page.getByText('Restored partial answer')).toHaveCount(1)
+  await expect(page.getByText('README.md', { exact: true })).toHaveCount(1)
 })
 
 test('AI preview opens workspace HTML directly without starting or probing a server', async ({

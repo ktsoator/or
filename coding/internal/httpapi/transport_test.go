@@ -3,8 +3,10 @@ package httpapi
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/ktsoator/or/coding/internal/conversation"
+	"github.com/ktsoator/or/coding/internal/engine"
 )
 
 func TestSessionTransportsRemovesClosedTransport(t *testing.T) {
@@ -69,4 +71,37 @@ func TestProjectTitleGenerationEvent(t *testing.T) {
 		event.TitleGenerationModel != "gpt-4o-mini" {
 		t.Fatalf("projected event = %#v", event)
 	}
+}
+
+func TestSessionTransportPublishesAndSnapshotsOneActiveRun(t *testing.T) {
+	transport := &sessionTransport{hub: NewHub()}
+	transport.PublishAgent(engine.Event{
+		Type:      engine.RunStarted,
+		StartedAt: mustEventTime(t, "2026-07-27T12:00:00Z"),
+	})
+	transport.PublishAgent(engine.Event{Type: engine.TextDelta, Delta: "partial answer"})
+
+	var active activeRunSnapshot
+	sequence := transport.hub.snapshot(func() { active = transport.activeRun.snapshot() })
+	if sequence != 2 || len(active.events) != 2 {
+		t.Fatalf("sequence = %d, active events = %#v", sequence, active.events)
+	}
+	if active.events[1].Type != wireEventDelta || active.events[1].Delta != "partial answer" {
+		t.Fatalf("streaming event = %#v", active.events[1])
+	}
+
+	transport.PublishAgent(engine.Event{Type: engine.RunCompleted})
+	transport.hub.snapshot(func() { active = transport.activeRun.snapshot() })
+	if active.startedAt != "" || len(active.events) != 0 {
+		t.Fatalf("active run survived completion: %#v", active)
+	}
+}
+
+func mustEventTime(t *testing.T, value string) time.Time {
+	t.Helper()
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return parsed
 }
