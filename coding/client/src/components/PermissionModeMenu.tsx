@@ -1,8 +1,10 @@
-import { Check, ChevronDown, Eye, Hand, PencilLine, ShieldCheck } from 'lucide-react'
+import { Check, ChevronDown, Eye, Hand, PencilLine } from 'lucide-react'
 import { DropdownMenu } from 'radix-ui'
 import type { LucideIcon } from 'lucide-react'
 import type { PermissionMode } from '@/types'
 import { useI18n } from '@/i18n'
+import { cn } from '@/lib/utils'
+import { composerMenuTriggerClass } from './composerControlStyles'
 
 type ModeOption = {
   value: PermissionMode
@@ -53,6 +55,7 @@ export function PermissionModeMenu({
 }) {
   const { t } = useI18n()
   const selected = options.find((option) => option.value === value) ?? options[0]
+  const SelectedIcon = selected.icon
 
   return (
     <DropdownMenu.Root>
@@ -60,12 +63,12 @@ export function PermissionModeMenu({
         <button
           data-testid="permission-mode-trigger"
           type="button"
-          className="group inline-flex h-9 min-w-0 max-w-[10rem] cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[0.875rem] font-medium text-stone-500 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:bg-[rgb(241,241,241)] data-[state=open]:bg-[rgb(237,237,237)] disabled:cursor-not-allowed disabled:opacity-40 max-sm:px-2"
+          className={cn(composerMenuTriggerClass, 'max-w-[10rem] max-sm:px-2')}
           aria-label={t('permission.choose')}
           title={t(selected.labelKey)}
           disabled={disabled}
         >
-          <ShieldCheck className="size-4 shrink-0 text-stone-500" aria-hidden="true" />
+          <SelectedIcon className="size-4 shrink-0" aria-hidden="true" />
           <span
             data-testid="permission-mode-label"
             className="min-w-0 truncate @max-[390px]:hidden max-sm:hidden"

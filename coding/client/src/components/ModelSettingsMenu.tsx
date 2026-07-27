@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 import { ProviderIcon } from '@/components/ProviderIdentity'
 import { providerName } from '@/lib/provider'
+import { composerMenuTriggerClass } from './composerControlStyles'
 
 export function ModelSettingsMenu({
   models,
@@ -92,7 +93,10 @@ export function ModelSettingsMenu({
         <button
           data-testid="model-settings-trigger"
           type="button"
-          className="group inline-flex h-9 min-w-0 max-w-[15.5rem] cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[0.875rem] font-medium outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:bg-[rgb(241,241,241)] data-[state=open]:bg-[rgb(237,237,237)] disabled:cursor-not-allowed disabled:opacity-40 max-sm:max-w-[8rem] max-sm:px-2"
+          className={cn(
+            composerMenuTriggerClass,
+            'max-w-[15.5rem] max-sm:max-w-[8rem] max-sm:px-2',
+          )}
           aria-label={t('model.settings')}
           disabled={unavailable}
         >
