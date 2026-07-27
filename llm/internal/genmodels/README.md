@@ -22,9 +22,12 @@ The generator draws on several public catalog layers:
 
 These are catalog aggregators, not authoritative model vendors. Provider API
 documentation remains the source of truth when metadata conflicts. Local
-normalization and compatibility overrides live in `main.go` and should stay
-small and explicit.
+normalization and compatibility overrides live in `provider_*.go` and
+`overrides.go` and should stay small and explicit. Source-specific fetching is
+kept in `source_*.go`, while `render.go` owns deterministic catalog output.
 
-Only models whose protocol is implemented by the Go package are emitted.
-Currently those protocols are `openai-completions` and `anthropic-messages`.
-The generated JSON is grouped by provider at the top level.
+The catalog includes models for the implemented `openai-completions` and
+`anthropic-messages` protocols, plus selected catalog-only protocols planned
+for future adapters. Use the public runtime model APIs to distinguish catalog
+entries from runnable models. The generated JSON is sorted by provider and
+model ID.

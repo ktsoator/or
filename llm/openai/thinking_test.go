@@ -213,6 +213,78 @@ func TestApplyThinkingDeepSeekOffMappedToNil(t *testing.T) {
 	}
 }
 
+func TestOpenCodeThinkingOffPayloads(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider string
+		modelID  string
+		field    string
+		want     any
+	}{
+		{
+			name:     "opencode go deepseek",
+			provider: "opencode-go", modelID: "deepseek-v4-flash",
+			field: "thinking", want: map[string]any{"type": "disabled"},
+		},
+		{
+			name:     "opencode kimi",
+			provider: "opencode", modelID: "kimi-k2.6",
+			field: "thinking", want: map[string]any{"type": "disabled"},
+		},
+		{
+			name:     "opencode go kimi",
+			provider: "opencode-go", modelID: "kimi-k2.6",
+			field: "thinking", want: map[string]any{"type": "disabled"},
+		},
+		{
+			name:     "opencode go qwen",
+			provider: "opencode-go", modelID: "qwen3.6-plus",
+			field: "enable_thinking", want: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			model, ok := llm.LookupModel(test.provider, test.modelID)
+			if !ok {
+				t.Fatalf("model %s/%s is missing from the catalog", test.provider, test.modelID)
+			}
+			params := oai.ChatCompletionNewParams{}
+			applyThinking(&params, model, resolveCompat(model), resolveEffort(model, llm.ModelThinkingOff))
+
+			extras := extraFields(t, params)
+			if got := extras[test.field]; !reflect.DeepEqual(got, test.want) {
+				t.Fatalf("%s = %#v, want %#v", test.field, got, test.want)
+			}
+			if _, present := extras["reasoning_effort"]; present {
+				t.Fatalf("reasoning_effort must be absent when thinking is off: %#v", extras)
+			}
+		})
+	}
+}
+
+func TestOpenCodeAlwaysThinkingModelsExcludeOff(t *testing.T) {
+	tests := []struct {
+		provider string
+		modelID  string
+	}{
+		{provider: "opencode-go", modelID: "glm-5.2"},
+		{provider: "opencode", modelID: "grok-build-0.1"},
+	}
+
+	for _, test := range tests {
+		model, ok := llm.LookupModel(test.provider, test.modelID)
+		if !ok {
+			t.Fatalf("model %s/%s is missing from the catalog", test.provider, test.modelID)
+		}
+		for _, level := range llm.SupportedThinkingLevels(model) {
+			if level == llm.ModelThinkingOff {
+				t.Errorf("%s/%s unexpectedly supports thinking off", test.provider, test.modelID)
+			}
+		}
+	}
+}
+
 func TestApplyThinkingOpenRouterEnabled(t *testing.T) {
 	model := reasoningModel(nil)
 	params := oai.ChatCompletionNewParams{}

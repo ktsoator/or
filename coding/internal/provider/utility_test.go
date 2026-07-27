@@ -70,11 +70,11 @@ func TestIsUtilityModelEligible(t *testing.T) {
 }
 
 func TestOpenCodeReasoningModelCanBeUsedWithThinkingOff(t *testing.T) {
-	model, ok := llm.LookupModel("opencode", "deepseek-v4-flash")
+	model, ok := llm.LookupModel("opencode-go", "deepseek-v4-flash")
 	if !ok {
-		t.Fatal("OpenCode DeepSeek V4 Flash is missing from the catalog")
+		t.Fatal("OpenCode Go DeepSeek V4 Flash is missing from the catalog")
 	}
 	if !IsUtilityModelEligible(model) {
-		t.Fatal("OpenCode DeepSeek V4 Flash should be eligible when thinking is disabled")
+		t.Fatal("OpenCode Go DeepSeek V4 Flash should be eligible when thinking is disabled")
 	}
 }
