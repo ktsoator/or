@@ -27,6 +27,7 @@ export type WireEventType =
   | "done"
   | "sync_required"
   | "title_update"
+  | "title_generation_update"
   | "question_request"
   | "question_resolved"
   | "question_cancelled"
@@ -46,6 +47,13 @@ export type TaskStatus =
   | "succeeded"
   | "failed"
   | "stopped"
+
+export type TitleGenerationStatus =
+  | "idle"
+  | "generating"
+  | "succeeded"
+  | "failed"
+  | "unavailable"
 
 export type DeliveryMode =
   | "steer"
@@ -278,6 +286,12 @@ export type WireEvent = {
   title?: string
   aiTitle?: string
   customTitle?: string
+  titleGenerationStatus?: TitleGenerationStatus
+  titleGenerationProvider?: string
+  titleGenerationModel?: string
+  titleGenerationErrorCode?: string
+  titleGenerationError?: string
+  titleGenerationAttemptedAt?: string
   startedAt?: string
   completedAt?: string
   durationMs?: number
@@ -294,4 +308,10 @@ export type HistoryResponse = {
   title: string
   aiTitle?: string
   customTitle?: string
+  titleGenerationStatus: TitleGenerationStatus
+  titleGenerationProvider?: string
+  titleGenerationModel?: string
+  titleGenerationErrorCode?: string
+  titleGenerationError?: string
+  titleGenerationAttemptedAt?: string
 }

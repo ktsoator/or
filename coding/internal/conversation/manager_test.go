@@ -12,6 +12,7 @@ import (
 
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/permission"
+	"github.com/ktsoator/or/coding/internal/titlegen"
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/usage"
 	"github.com/ktsoator/or/coding/internal/workspace"
@@ -37,6 +38,12 @@ func (*testTransport) HasPendingQuestion() bool { return false }
 
 type recordingTransport struct {
 	events chan Event
+}
+
+type titleGeneratorFunc func(context.Context, string) (titlegen.Result, error)
+
+func (f titleGeneratorFunc) Generate(ctx context.Context, prompt string) (titlegen.Result, error) {
+	return f(ctx, prompt)
 }
 
 func (t *recordingTransport) Publish(event Event)     { t.events <- event }
@@ -152,16 +159,20 @@ func TestManagerGeneratesTitleBeforeAssistantResponseCompletes(t *testing.T) {
 
 	started := make(chan string, 1)
 	release := make(chan struct{})
-	manager.generateTitle = func(ctx context.Context, _ llm.Model, prompt string) (string, error) {
+	manager.generateTitle = titleGeneratorFunc(func(ctx context.Context, prompt string) (titlegen.Result, error) {
 		started <- prompt
 		select {
 		case <-release:
-			return "Inspect parser behavior", nil
+			return titlegen.Result{
+				Title:    "Inspect parser behavior",
+				Provider: "utility-provider",
+				Model:    "utility-model",
+			}, nil
 		case <-ctx.Done():
-			return "", ctx.Err()
+			return titlegen.Result{}, ctx.Err()
 		}
-	}
-	events := make(chan Event, 1)
+	})
+	events := make(chan Event, 4)
 	runtime.transport = &recordingTransport{events: events}
 
 	manager.handleSessionEvent(created.ID, runtime, engine.Event{
@@ -183,21 +194,129 @@ func TestManagerGeneratesTitleBeforeAssistantResponseCompletes(t *testing.T) {
 	})
 	close(release)
 
-	select {
-	case event := <-events:
-		changed, ok := event.(TitleChanged)
-		if !ok {
-			t.Fatalf("event type = %T, want TitleChanged", event)
+	deadline := time.After(time.Second)
+	for {
+		select {
+		case event := <-events:
+			changed, ok := event.(TitleChanged)
+			if !ok {
+				continue
+			}
+			if changed.Title != "Inspect parser behavior" || changed.AITitle != "Inspect parser behavior" {
+				t.Fatalf("title event = %+v", changed)
+			}
+			goto titlePublished
+		case <-deadline:
+			t.Fatal("title was not published after an interrupted response")
 		}
-		if changed.Title != "Inspect parser behavior" || changed.AITitle != "Inspect parser behavior" {
-			t.Fatalf("title event = %+v", changed)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("title was not published after an interrupted response")
 	}
 
-	if got := manager.List()[0]; got.Title != "Inspect parser behavior" || got.AITitle != "Inspect parser behavior" {
+titlePublished:
+
+	if got := manager.List()[0]; got.Title != "Inspect parser behavior" ||
+		got.AITitle != "Inspect parser behavior" ||
+		got.TitleGeneration.Status != TitleGenerationSucceeded ||
+		got.TitleGeneration.Provider != "utility-provider" ||
+		got.TitleGeneration.Model != "utility-model" {
 		t.Fatalf("conversation summary = %+v", got)
+	}
+}
+
+func TestManagerTitleFailureKeepsPromptFallbackAndExposesState(t *testing.T) {
+	dataDir := t.TempDir()
+	model, thinking := testCatalogModel(t)
+	manager := newTestManager(t, dataDir)
+	created, err := manager.Create("", t.TempDir(), ScopeProject, model, thinking, permission.ModeAsk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime, ok := manager.runtime(created.ID)
+	if !ok {
+		t.Fatal("created conversation not found")
+	}
+	manager.mu.Lock()
+	runtime.record.Title = titleFromPrompt("Investigate flaky title generation")
+	runtime.record.AutoTitle = false
+	manager.mu.Unlock()
+	manager.generateTitle = titleGeneratorFunc(func(context.Context, string) (titlegen.Result, error) {
+		return titlegen.Result{Provider: "utility-provider", Model: "utility-model"}, errors.New("secret upstream detail")
+	})
+	events := make(chan Event, 4)
+	runtime.transport = &recordingTransport{events: events}
+
+	manager.handleSessionEvent(created.ID, runtime, engine.Event{
+		Type: engine.UserMessageCompleted,
+		Text: "Investigate flaky title generation",
+	})
+
+	deadline := time.After(time.Second)
+	for {
+		select {
+		case event := <-events:
+			changed, ok := event.(TitleGenerationChanged)
+			if !ok || changed.Generation.Status == TitleGenerationGenerating {
+				continue
+			}
+			if changed.Generation.Status != TitleGenerationFailed ||
+				changed.Generation.ErrorCode != titlegen.CodeRequestFailed ||
+				changed.Generation.Error == "secret upstream detail" {
+				t.Fatalf("title generation state = %+v", changed.Generation)
+			}
+			goto failurePublished
+		case <-deadline:
+			t.Fatal("title failure was not published")
+		}
+	}
+
+failurePublished:
+	got := manager.List()[0]
+	if got.Title != "Investigate flaky title generation" || got.AITitle != "" {
+		t.Fatalf("fallback title was replaced: %+v", got)
+	}
+}
+
+func TestManagerCustomTitleWinsOverLateUtilityTitle(t *testing.T) {
+	dataDir := t.TempDir()
+	model, thinking := testCatalogModel(t)
+	manager := newTestManager(t, dataDir)
+	created, err := manager.Create("", t.TempDir(), ScopeProject, model, thinking, permission.ModeAsk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime, ok := manager.runtime(created.ID)
+	if !ok {
+		t.Fatal("created conversation not found")
+	}
+	started := make(chan struct{})
+	release := make(chan struct{})
+	manager.generateTitle = titleGeneratorFunc(func(ctx context.Context, _ string) (titlegen.Result, error) {
+		close(started)
+		select {
+		case <-release:
+			return titlegen.Result{Title: "Late generated title"}, nil
+		case <-ctx.Done():
+			return titlegen.Result{}, ctx.Err()
+		}
+	})
+	runtime.transport = &recordingTransport{events: make(chan Event, 8)}
+	manager.handleSessionEvent(created.ID, runtime, engine.Event{
+		Type: engine.UserMessageCompleted,
+		Text: "Generate a title",
+	})
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("title generation did not start")
+	}
+	if _, err := manager.Rename(created.ID, "My custom title"); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	manager.tasks.Wait()
+
+	got := manager.List()[0]
+	if got.Title != "My custom title" || got.CustomTitle != "My custom title" || got.AITitle != "" {
+		t.Fatalf("late generated title won: %+v", got)
 	}
 }
 

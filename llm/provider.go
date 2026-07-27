@@ -149,12 +149,14 @@ func (provider *Provider) EnvKeys() []string {
 //	APIKey:  StreamOptions.APIKey > override.APIKey > EnvKeys via
 //	         StreamOptions.Env > override.Env > process environment;
 //	         DisableEnv removes the final environment lookup layer
-//	BaseURL: override.BaseURL > Model.BaseURL
+//	BaseURL: StreamOptions.BaseURL > override.BaseURL > Model.BaseURL
 //	Headers: StreamOptions.Headers > override.Headers > spec.Headers >
 //	         Model.Headers (per key; adapters merge StreamOptions.Headers
 //	         over Model.Headers, so spec and override fold into the model)
 func (provider *Provider) resolve(model Model, options StreamOptions, override ProviderOverride) (Model, StreamOptions) {
-	if override.BaseURL != nil {
+	if strings.TrimSpace(options.BaseURL) != "" {
+		model.BaseURL = strings.TrimSpace(options.BaseURL)
+	} else if override.BaseURL != nil {
 		model.BaseURL = *override.BaseURL
 	}
 

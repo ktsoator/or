@@ -177,6 +177,16 @@ func projectSessionEvent(event conversation.Event) ([]byte, bool) {
 			AITitle:     e.AITitle,
 			CustomTitle: e.CustomTitle,
 		}
+	case conversation.TitleGenerationChanged:
+		out = wireEvent{
+			Type:                       wireEventTitleGeneration,
+			TitleGenerationStatus:      wireTitleGenerationStatus(e.Generation.Status),
+			TitleGenerationProvider:    e.Generation.Provider,
+			TitleGenerationModel:       e.Generation.Model,
+			TitleGenerationErrorCode:   e.Generation.ErrorCode,
+			TitleGenerationError:       e.Generation.Error,
+			TitleGenerationAttemptedAt: e.Generation.AttemptedAt,
+		}
 	default:
 		return nil, false
 	}

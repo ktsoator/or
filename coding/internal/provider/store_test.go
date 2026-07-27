@@ -1,7 +1,9 @@
 package provider
 
 import (
+	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/ktsoator/or/llm"
@@ -413,8 +415,209 @@ func registryWithProvider(t *testing.T) *llm.ProviderRegistry {
 func testModel() llm.Model {
 	return llm.Model{
 		ID:       "test-model",
+		Name:     "Test Model",
 		Provider: "test-provider",
 		Protocol: llm.ProtocolOpenAICompletions,
 		BaseURL:  "https://catalog.example.com/v1",
+		Input:    []llm.ModelInput{llm.Text},
+	}
+}
+
+func TestUtilityModelUsesRequestScopedRouteWithoutChangingActiveConnection(t *testing.T) {
+	store := newTestStore(t, nil)
+	_, err := store.Replace("test-provider", Update{
+		ActiveConnectionID: OfficialConnectionID,
+		Connections: []ConnectionUpdate{
+			{
+				ID:          OfficialConnectionID,
+				ActiveKeyID: "main",
+				Keys:        []KeyUpdate{{ID: "main", Name: "Main", APIKey: "main-secret"}},
+			},
+			{
+				ID:          "utility",
+				Name:        "Utility gateway",
+				BaseURL:     "https://utility.example.com/v1",
+				ActiveKeyID: "small",
+				Keys:        []KeyUpdate{{ID: "small", Name: "Small", APIKey: "utility-secret"}},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = store.SetUtilityModel(UtilityModelSelection{
+		Provider:     "test-provider",
+		Model:        "test-model",
+		ConnectionID: "utility",
+		KeyID:        "small",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	route, err := store.ResolveUtilityModel()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if route.Options.APIKey != "utility-secret" || route.Options.BaseURL != "https://utility.example.com/v1" {
+		t.Fatalf("utility options = %#v", route.Options)
+	}
+	resolved, options := store.registry.ResolveRequest(testModel(), llm.StreamOptions{})
+	if resolved.BaseURL != "https://catalog.example.com/v1" || options.APIKey != "main-secret" {
+		t.Fatalf("active route changed: model=%#v options=%#v", resolved, options)
+	}
+}
+
+func TestRemovingUtilityCredentialClearsSelection(t *testing.T) {
+	store := newTestStore(t, nil)
+	_, err := store.Replace("test-provider", Update{
+		ActiveConnectionID: OfficialConnectionID,
+		Connections: []ConnectionUpdate{
+			{ID: OfficialConnectionID},
+			{
+				ID:          "utility",
+				Name:        "Utility gateway",
+				BaseURL:     "https://utility.example.com/v1",
+				ActiveKeyID: "small",
+				Keys:        []KeyUpdate{{ID: "small", Name: "Small", APIKey: "utility-secret"}},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = store.SetUtilityModel(UtilityModelSelection{
+		Provider:     "test-provider",
+		Model:        "test-model",
+		ConnectionID: "utility",
+		KeyID:        "small",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = store.Save("test-provider", Update{
+		Connections: []ConnectionUpdate{
+			{ID: OfficialConnectionID},
+			{ID: "utility", Name: "Utility gateway", BaseURL: "https://utility.example.com/v1"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := store.UtilityModel(); ok {
+		t.Fatalf("utility selection = %#v, want unconfigured", got)
+	}
+}
+
+func TestStoreMigratesLegacyAutomaticUtilityModelToFixedSelection(t *testing.T) {
+	dir := t.TempDir()
+	writeLegacyUtilitySettings(t, dir, `{"mode":"auto"}`, true)
+
+	store, err := NewStore(dir, registryWithProvider(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection, ok := store.UtilityModel()
+	if !ok {
+		t.Fatal("utility model was not migrated")
+	}
+	want := UtilityModelSelection{
+		Provider:     "test-provider",
+		Model:        "test-model",
+		ConnectionID: OfficialConnectionID,
+		KeyID:        "work",
+	}
+	if selection != want {
+		t.Fatalf("utility selection = %#v, want %#v", selection, want)
+	}
+	assertCurrentUtilitySettings(t, dir, &want)
+}
+
+func TestStoreMigratesLegacyAutomaticUtilityModelWithoutCandidateToUnconfigured(t *testing.T) {
+	dir := t.TempDir()
+	writeLegacyUtilitySettings(t, dir, `{"mode":"auto"}`, false)
+
+	store, err := NewStore(dir, registryWithProvider(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if selection, ok := store.UtilityModel(); ok {
+		t.Fatalf("utility selection = %#v, want unconfigured", selection)
+	}
+	assertCurrentUtilitySettings(t, dir, nil)
+}
+
+func TestStoreMigratesLegacyCustomUtilityModelToFixedSelection(t *testing.T) {
+	dir := t.TempDir()
+	legacySelection := `{
+    "mode": "custom",
+    "provider": "test-provider",
+    "model": "test-model",
+    "connectionId": "official",
+    "keyId": "work"
+  }`
+	writeLegacyUtilitySettings(t, dir, legacySelection, true)
+
+	store, err := NewStore(dir, registryWithProvider(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := UtilityModelSelection{
+		Provider:     "test-provider",
+		Model:        "test-model",
+		ConnectionID: OfficialConnectionID,
+		KeyID:        "work",
+	}
+	if selection, ok := store.UtilityModel(); !ok || selection != want {
+		t.Fatalf("utility selection = %#v, %v, want %#v", selection, ok, want)
+	}
+	assertCurrentUtilitySettings(t, dir, &want)
+}
+
+func writeLegacyUtilitySettings(t *testing.T, dir, utilityModel string, withKey bool) {
+	t.Helper()
+	keyFields := ""
+	if withKey {
+		keyFields = `,"activeKeyId":"work","keys":[{"id":"work","name":"Work","apiKey":"secret"}]`
+	}
+	data := []byte(`{
+  "version": 3,
+  "utilityModel": ` + utilityModel + `,
+  "providers": {
+    "test-provider": {
+      "activeConnectionId": "official",
+      "connections": [{"id":"official"` + keyFields + `}]
+    }
+  }
+}`)
+	if err := os.WriteFile(dir+"/providers.json", data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertCurrentUtilitySettings(t *testing.T, dir string, want *UtilityModelSelection) {
+	t.Helper()
+	data, err := os.ReadFile(dir + "/providers.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), `"mode"`) {
+		t.Fatalf("migrated settings retain legacy mode: %s", data)
+	}
+	var file profileFile
+	if err := json.Unmarshal(data, &file); err != nil {
+		t.Fatal(err)
+	}
+	if file.Version != fileVersion {
+		t.Fatalf("settings version = %d, want %d", file.Version, fileVersion)
+	}
+	if want == nil {
+		if file.UtilityModel != nil {
+			t.Fatalf("persisted utility selection = %#v, want omitted", file.UtilityModel)
+		}
+		return
+	}
+	if file.UtilityModel == nil || *file.UtilityModel != *want {
+		t.Fatalf("persisted utility selection = %#v, want %#v", file.UtilityModel, want)
 	}
 }

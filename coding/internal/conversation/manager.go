@@ -9,6 +9,7 @@ import (
 
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/permission"
+	"github.com/ktsoator/or/coding/internal/titlegen"
 	"github.com/ktsoator/or/coding/internal/usage"
 	"github.com/ktsoator/or/coding/internal/workspace"
 	"github.com/ktsoator/or/llm"
@@ -28,7 +29,7 @@ type Manager struct {
 	// newTransport builds each session's link to its viewers. The delivery
 	// layer supplies it, so this package never names a transport type.
 	newTransport  NewTransport
-	generateTitle titleGenerator
+	generateTitle titlegen.Generator
 
 	mu        sync.RWMutex
 	sessions  map[string]*sessionRuntime
@@ -40,10 +41,11 @@ type Manager struct {
 
 // Options supplies the product services and storage root owned by a Manager.
 type Options struct {
-	DataDir      string
-	Usage        *usage.Store
-	Workspaces   *workspace.Registry
-	NewTransport NewTransport
+	DataDir        string
+	Usage          *usage.Store
+	Workspaces     *workspace.Registry
+	NewTransport   NewTransport
+	TitleGenerator titlegen.Generator
 }
 
 // NewManager restores the session index. The ledger and registry are passed in
@@ -58,7 +60,7 @@ func NewManager(ctx context.Context, opts Options) (*Manager, error) {
 		scratch:       workspace.NewScratch(opts.DataDir),
 		workspaces:    opts.Workspaces,
 		newTransport:  opts.NewTransport,
-		generateTitle: defaultTitleGenerator,
+		generateTitle: opts.TitleGenerator,
 		sessions:      make(map[string]*sessionRuntime),
 		usage:         opts.Usage,
 	}
@@ -168,7 +170,16 @@ func (m *Manager) build(record record) (*sessionRuntime, error) {
 		transport.Close()
 		return nil, err
 	}
-	runtime := &sessionRuntime{record: record, session: session, transport: transport}
+	titleGeneration := TitleGeneration{Status: TitleGenerationIdle}
+	if record.AITitle != "" {
+		titleGeneration.Status = TitleGenerationSucceeded
+	}
+	runtime := &sessionRuntime{
+		record:          record,
+		session:         session,
+		transport:       transport,
+		titleGeneration: titleGeneration,
+	}
 	session.Subscribe(func(ev engine.Event) {
 		m.handleSessionEvent(record.ID, runtime, ev)
 	})
@@ -206,9 +217,6 @@ func (m *Manager) handleSessionEvent(sessionID string, runtime *sessionRuntime, 
 		_ = m.usage.RecordEvent(sessionID, ev)
 	}
 	if ev.Type == engine.UserMessageCompleted {
-		// Title generation is independent of the assistant run. Starting it
-		// here means an interrupted first response can still receive an AI title.
-		m.maybeGenerateTitle(runtime, ev.Text)
 		if queued, found := runtime.consumePending(ev.QueueHandle); found {
 			runtime.emit(MessageAccepted{
 				ID:       queued.ID,
@@ -216,8 +224,13 @@ func (m *Manager) handleSessionEvent(sessionID string, runtime *sessionRuntime, 
 				Images:   ev.Images,
 				Delivery: queued.Delivery,
 			})
+			// Message acceptance is observable before its background title state.
+			m.maybeGenerateTitle(runtime, ev.Text)
 			return
 		}
+		// Title generation is independent of the assistant run. Starting it
+		// here means an interrupted first response can still receive an AI title.
+		m.maybeGenerateTitle(runtime, ev.Text)
 	}
 	if ev.Type == engine.RunCompleted {
 		runtime.live.Store(false)

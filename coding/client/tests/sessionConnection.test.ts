@@ -84,6 +84,7 @@ function history(overrides: Partial<HistoryResponse> = {}): HistoryResponse {
     running: false,
     eventSeq: 0,
     title: 'New session',
+    titleGenerationStatus: 'idle',
     ...overrides,
   }
 }
@@ -100,11 +101,13 @@ function session(id: string): SessionSummary {
     updatedAt: '2026-07-23T12:00:00.000Z',
     running: false,
     hasApproval: false,
+    hasQuestion: false,
     modelProvider: 'openai',
     modelId: 'test-model',
     modelName: 'Test model',
     thinkingLevel: 'medium',
     permissionMode: 'ask',
+    titleGeneration: { status: 'idle' },
   }
 }
 

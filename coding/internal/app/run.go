@@ -14,6 +14,7 @@ import (
 	"github.com/ktsoator/or/coding/internal/conversation"
 	"github.com/ktsoator/or/coding/internal/httpapi"
 	"github.com/ktsoator/or/coding/internal/provider"
+	"github.com/ktsoator/or/coding/internal/titlegen"
 	"github.com/ktsoator/or/coding/internal/usage"
 	"github.com/ktsoator/or/coding/internal/workspace"
 	"github.com/ktsoator/or/llm"
@@ -43,25 +44,25 @@ func New(ctx context.Context, cfg config.Config) (*Runtime, error) {
 		return nil, err
 	}
 	transports := httpapi.NewSessionTransports()
+	registry := llm.DefaultProviderRegistry()
+	providers, err := provider.NewStore(cfg.DataDir, registry)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	providers.Apply()
+
 	manager, err := conversation.NewManager(ctx, conversation.Options{
-		DataDir:      cfg.DataDir,
-		Usage:        ledger,
-		Workspaces:   workspaces,
-		NewTransport: transports.New,
+		DataDir:        cfg.DataDir,
+		Usage:          ledger,
+		Workspaces:     workspaces,
+		NewTransport:   transports.New,
+		TitleGenerator: titlegen.New(providers),
 	})
 	if err != nil {
 		cancel()
 		return nil, err
 	}
-
-	registry := llm.DefaultProviderRegistry()
-	providers, err := provider.NewStore(cfg.DataDir, registry)
-	if err != nil {
-		manager.Close()
-		cancel()
-		return nil, err
-	}
-	providers.Apply()
 
 	server := httpapi.NewServer(httpapi.Options{
 		Conversations: manager,

@@ -8,6 +8,7 @@ import type {
   PreviewRequest,
   Question,
   TaskStatus,
+  TitleGenerationStatus,
   ToolOutcome,
   Usage,
 } from './generated/wire'
@@ -46,7 +47,19 @@ export type ThreadSnapshot = Pick<HistoryResponse, 'events' | 'running'> &
   Partial<
     Pick<
       HistoryResponse,
-      'queue' | 'context' | 'tasks' | 'eventSeq' | 'title' | 'aiTitle' | 'customTitle'
+      | 'queue'
+      | 'context'
+      | 'tasks'
+      | 'eventSeq'
+      | 'title'
+      | 'aiTitle'
+      | 'customTitle'
+      | 'titleGenerationStatus'
+      | 'titleGenerationProvider'
+      | 'titleGenerationModel'
+      | 'titleGenerationErrorCode'
+      | 'titleGenerationError'
+      | 'titleGenerationAttemptedAt'
     >
   >
 
@@ -200,6 +213,12 @@ export type ProviderInfo = {
   effectiveBaseURL?: string
   activeConnectionId: string
   connections: ProviderConnectionInfo[]
+  utilityModels: ProviderUtilityModelInfo[]
+}
+
+export type ProviderUtilityModelInfo = {
+  id: string
+  name: string
 }
 
 export type ActiveModelSelection = {
@@ -211,6 +230,14 @@ export type ActiveModelSelection = {
 export type ProviderListResponse = {
   providers: ProviderInfo[]
   activeModel?: ActiveModelSelection
+  utilityModel?: UtilityModelSelection
+}
+
+export type UtilityModelSelection = {
+  provider: string
+  model: string
+  connectionId: string
+  keyId: string
 }
 
 export type ProviderConnectionInfo = {
@@ -240,6 +267,7 @@ export type SessionSummary = {
   title: string
   aiTitle?: string
   customTitle?: string
+  titleGeneration: TitleGeneration
   workspacePath: string
   workspaceName: string
   scope: 'chat' | 'project'
@@ -254,6 +282,15 @@ export type SessionSummary = {
   modelName: string
   thinkingLevel: ThinkingLevel
   permissionMode: PermissionMode
+}
+
+export type TitleGeneration = {
+  status: TitleGenerationStatus
+  provider?: string
+  model?: string
+  errorCode?: string
+  error?: string
+  attemptedAt?: string
 }
 
 export type WorkspaceSummary = {

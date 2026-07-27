@@ -6,7 +6,7 @@ package provider
 import "github.com/ktsoator/or/llm"
 
 const (
-	fileVersion          = 2
+	fileVersion          = 4
 	OfficialConnectionID = "official"
 )
 
@@ -35,9 +35,10 @@ type Profile struct {
 }
 
 type profileFile struct {
-	Version     int                `json:"version"`
-	ActiveModel *ModelSelection    `json:"activeModel,omitempty"`
-	Providers   map[string]Profile `json:"providers"`
+	Version      int                    `json:"version"`
+	ActiveModel  *ModelSelection        `json:"activeModel,omitempty"`
+	UtilityModel *UtilityModelSelection `json:"utilityModel,omitempty"`
+	Providers    map[string]Profile     `json:"providers"`
 }
 
 // ModelSelection is the application-wide model used for new conversations.
@@ -47,6 +48,32 @@ type ModelSelection struct {
 	Provider      string                 `json:"provider"`
 	Model         string                 `json:"model"`
 	ThinkingLevel llm.ModelThinkingLevel `json:"thinkingLevel"`
+}
+
+// UtilityModelSelection pins the small model used for lightweight product work
+// such as session titles. It stores stable identities without copying the
+// credential itself.
+type UtilityModelSelection struct {
+	Provider     string `json:"provider"`
+	Model        string `json:"model"`
+	ConnectionID string `json:"connectionId"`
+	KeyID        string `json:"keyId"`
+}
+
+// ModelRoute is the public, secret-free identity of one resolved request path.
+type ModelRoute struct {
+	Provider     string `json:"provider"`
+	Model        string `json:"model"`
+	ConnectionID string `json:"connectionId"`
+	KeyID        string `json:"keyId"`
+}
+
+// ResolvedModelRoute carries the catalog model and request-scoped connection
+// settings used inside the product. It must never be serialized to the client.
+type ResolvedModelRoute struct {
+	Route   ModelRoute
+	Model   llm.Model
+	Options llm.StreamOptions
 }
 
 // Update describes an application-level profile change. Blank APIKey values

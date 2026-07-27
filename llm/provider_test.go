@@ -127,6 +127,20 @@ func TestResolveBaseURLOverride(t *testing.T) {
 	}
 }
 
+func TestResolveRequestBaseURLWinsOverProviderOverride(t *testing.T) {
+	provider := testProvider()
+	registry := registryWithProvider(t, provider)
+	providerURL := "https://provider.example.com/v1"
+	registry.SetOverride("acme", ProviderOverride{BaseURL: &providerURL})
+
+	resolved, _ := registry.ResolveRequest(provider.Models()[0], StreamOptions{
+		BaseURL: " https://request.example.com/v1 ",
+	})
+	if resolved.BaseURL != "https://request.example.com/v1" {
+		t.Fatalf("BaseURL = %q, want request override", resolved.BaseURL)
+	}
+}
+
 // TestResolveHeaderMerge pins per-key layering: model < spec < override.
 // StreamOptions.Headers stay untouched; adapters merge them last.
 func TestResolveHeaderMerge(t *testing.T) {

@@ -119,7 +119,11 @@ func (options *OpenAICompletionsStreamOptions) Validate(tools []ToolDefinition) 
 // extensions. A non-nil extension must match the target model protocol.
 type StreamOptions struct {
 	APIKey string
-	Env    ProviderEnv
+	// BaseURL overrides the model catalog and provider-level endpoint for this
+	// request only. Product shells use it to route concurrent requests through
+	// different saved connections without mutating the shared provider registry.
+	BaseURL string
+	Env     ProviderEnv
 	// Temperature overrides the model's default sampling temperature when set.
 	Temperature *float64
 	// MaxTokens caps the output tokens for this request. Zero leaves it unset.

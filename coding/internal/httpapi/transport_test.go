@@ -1,6 +1,11 @@
 package httpapi
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+
+	"github.com/ktsoator/or/coding/internal/conversation"
+)
 
 func TestSessionTransportsRemovesClosedTransport(t *testing.T) {
 	transports := NewSessionTransports()
@@ -37,4 +42,31 @@ func TestSessionTransportsReplacementSurvivesOldClose(t *testing.T) {
 		t.Fatal("closing replaced transport removed the current transport")
 	}
 	second.Close()
+}
+
+func TestProjectTitleGenerationEvent(t *testing.T) {
+	data, ok := projectSessionEvent(conversation.TitleGenerationChanged{
+		Generation: conversation.TitleGeneration{
+			Status:      conversation.TitleGenerationFailed,
+			Provider:    "openai",
+			Model:       "gpt-4o-mini",
+			ErrorCode:   "title_request_failed",
+			Error:       "The utility model could not generate a title.",
+			AttemptedAt: "2026-07-26T12:00:00Z",
+		},
+	})
+	if !ok {
+		t.Fatal("title generation event was not projected")
+	}
+	var event wireEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		t.Fatal(err)
+	}
+	if event.Type != wireEventTitleGeneration ||
+		event.TitleGenerationStatus != wireTitleGenerationFailed ||
+		event.TitleGenerationErrorCode != "title_request_failed" ||
+		event.TitleGenerationProvider != "openai" ||
+		event.TitleGenerationModel != "gpt-4o-mini" {
+		t.Fatalf("projected event = %#v", event)
+	}
 }

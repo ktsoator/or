@@ -48,7 +48,7 @@ func TestHandleSessionEventConsumesPendingByQueueHandle(t *testing.T) {
 	steerHandle := runtime.pending[1].Handle
 	runtime.pendingMu.Unlock()
 
-	events := make(chan Event, 1)
+	events := make(chan Event, 4)
 	runtime.transport = &recordingTransport{events: events}
 	manager.handleSessionEvent(created.ID, runtime, engine.Event{
 		Type:        engine.UserMessageCompleted,

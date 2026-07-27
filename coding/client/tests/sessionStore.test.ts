@@ -20,11 +20,13 @@ function session(id: string, updatedAt = '2026-07-23T12:00:00.000Z'): SessionSum
     updatedAt,
     running: false,
     hasApproval: false,
+    hasQuestion: false,
     modelProvider: 'openai',
     modelId: 'test-model',
     modelName: 'Test model',
     thinkingLevel: 'medium',
     permissionMode: 'ask',
+    titleGeneration: { status: 'idle' },
   }
 }
 
@@ -150,6 +152,71 @@ describe('sessionStoreReducer', () => {
       state,
     )
     expect(state.sessions[0]).toMatchObject({ hasQuestion: true })
+  })
+
+  test('tracks title generation across live events and reconnect snapshots', () => {
+    let state: SessionStoreState = {
+      ...createSessionStoreState(),
+      sessions: [session('session-1')],
+    }
+    state = reduce(
+      [
+        {
+          t: 'sessionWire',
+          sessionID: 'session-1',
+          event: {
+            type: 'title_generation_update',
+            titleGenerationStatus: 'generating',
+            titleGenerationAttemptedAt: '2026-07-26T12:00:00Z',
+          },
+        },
+        {
+          t: 'sessionWire',
+          sessionID: 'session-1',
+          event: {
+            type: 'title_generation_update',
+            titleGenerationStatus: 'failed',
+            titleGenerationProvider: 'openai',
+            titleGenerationModel: 'gpt-4o-mini',
+            titleGenerationErrorCode: 'title_request_failed',
+            titleGenerationError: 'The utility model could not generate a title.',
+            titleGenerationAttemptedAt: '2026-07-26T12:00:00Z',
+          },
+        },
+      ],
+      state,
+    )
+
+    expect(state.sessions[0]?.title).toBe('New session')
+    expect(state.sessions[0]?.titleGeneration).toEqual({
+      status: 'failed',
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      errorCode: 'title_request_failed',
+      error: 'The utility model could not generate a title.',
+      attemptedAt: '2026-07-26T12:00:00Z',
+    })
+
+    state = sessionStoreReducer(state, {
+      t: 'sessionSnapshot',
+      sessionID: 'session-1',
+      history: {
+        events: [],
+        running: false,
+        titleGenerationStatus: 'succeeded',
+        titleGenerationProvider: 'google',
+        titleGenerationModel: 'gemini-flash-lite',
+        titleGenerationAttemptedAt: '2026-07-26T12:01:00Z',
+      },
+    })
+    expect(state.sessions[0]?.titleGeneration).toEqual({
+      status: 'succeeded',
+      provider: 'google',
+      model: 'gemini-flash-lite',
+      errorCode: undefined,
+      error: undefined,
+      attemptedAt: '2026-07-26T12:01:00Z',
+    })
   })
 
   test('updates draft settings and transfers first send to the created session', () => {

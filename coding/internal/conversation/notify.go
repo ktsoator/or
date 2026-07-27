@@ -74,11 +74,14 @@ type TitleChanged struct {
 	CustomTitle string
 }
 
-func (MessageAccepted) Event()  {}
-func (MessageDequeued) Event()  {}
-func (MessageCancelled) Event() {}
-func (RunFailed) Event()        {}
-func (TitleChanged) Event()     {}
+type TitleGenerationChanged struct{ Generation TitleGeneration }
+
+func (MessageAccepted) Event()        {}
+func (MessageDequeued) Event()        {}
+func (MessageCancelled) Event()       {}
+func (RunFailed) Event()              {}
+func (TitleChanged) Event()           {}
+func (TitleGenerationChanged) Event() {}
 
 // emit hands one state change to the transport. It must not block: a session
 // raising an event is often mid-run.

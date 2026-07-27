@@ -219,6 +219,7 @@ func (s *Server) handleHistory(c *gin.Context) {
 	var title string
 	var aiTitle string
 	var customTitle string
+	var titleGeneration conversation.TitleGeneration
 	var snapshotErr error
 	eventSeq := transport.hub.snapshot(func() {
 		var snapshot conversation.Snapshot
@@ -237,6 +238,7 @@ func (s *Server) handleHistory(c *gin.Context) {
 		title = snapshot.Title
 		aiTitle = snapshot.AITitle
 		customTitle = snapshot.CustomTitle
+		titleGeneration = snapshot.TitleGeneration
 	})
 	if snapshotErr != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
@@ -249,15 +251,21 @@ func (s *Server) handleHistory(c *gin.Context) {
 	}
 	reissuePreviewGrants(s.transports.previews, c.Param("sessionID"), workspacePath, events)
 	c.JSON(http.StatusOK, wireHistoryResponse{
-		Events:      events,
-		Queue:       queue,
-		Context:     contextUsage,
-		Tasks:       tasks,
-		Running:     running,
-		EventSeq:    eventSeq,
-		Title:       title,
-		AITitle:     aiTitle,
-		CustomTitle: customTitle,
+		Events:                     events,
+		Queue:                      queue,
+		Context:                    contextUsage,
+		Tasks:                      tasks,
+		Running:                    running,
+		EventSeq:                   eventSeq,
+		Title:                      title,
+		AITitle:                    aiTitle,
+		CustomTitle:                customTitle,
+		TitleGenerationStatus:      wireTitleGenerationStatus(titleGeneration.Status),
+		TitleGenerationProvider:    titleGeneration.Provider,
+		TitleGenerationModel:       titleGeneration.Model,
+		TitleGenerationErrorCode:   titleGeneration.ErrorCode,
+		TitleGenerationError:       titleGeneration.Error,
+		TitleGenerationAttemptedAt: titleGeneration.AttemptedAt,
 	})
 }
 

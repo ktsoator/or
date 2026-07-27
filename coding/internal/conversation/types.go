@@ -63,24 +63,25 @@ var ErrQueuedMessageInFlight = errors.New("session: queued message is already be
 // Summary is the browser-facing metadata for one independent coding
 // conversation. Live state is sampled when the list is requested.
 type Summary struct {
-	ID             string                 `json:"id"`
-	Title          string                 `json:"title"`
-	AITitle        string                 `json:"aiTitle,omitempty"`
-	CustomTitle    string                 `json:"customTitle,omitempty"`
-	WorkspacePath  string                 `json:"workspacePath"`
-	WorkspaceName  string                 `json:"workspaceName"`
-	Scope          string                 `json:"scope"`
-	WorkspaceKind  string                 `json:"workspaceKind"`
-	CreatedAt      time.Time              `json:"createdAt"`
-	UpdatedAt      time.Time              `json:"updatedAt"`
-	Running        bool                   `json:"running"`
-	HasApproval    bool                   `json:"hasApproval"`
-	HasQuestion    bool                   `json:"hasQuestion"`
-	ModelProvider  string                 `json:"modelProvider"`
-	ModelID        string                 `json:"modelId"`
-	ModelName      string                 `json:"modelName"`
-	ThinkingLevel  llm.ModelThinkingLevel `json:"thinkingLevel"`
-	PermissionMode permission.Mode        `json:"permissionMode"`
+	ID              string                 `json:"id"`
+	Title           string                 `json:"title"`
+	AITitle         string                 `json:"aiTitle,omitempty"`
+	CustomTitle     string                 `json:"customTitle,omitempty"`
+	TitleGeneration TitleGeneration        `json:"titleGeneration"`
+	WorkspacePath   string                 `json:"workspacePath"`
+	WorkspaceName   string                 `json:"workspaceName"`
+	Scope           string                 `json:"scope"`
+	WorkspaceKind   string                 `json:"workspaceKind"`
+	CreatedAt       time.Time              `json:"createdAt"`
+	UpdatedAt       time.Time              `json:"updatedAt"`
+	Running         bool                   `json:"running"`
+	HasApproval     bool                   `json:"hasApproval"`
+	HasQuestion     bool                   `json:"hasQuestion"`
+	ModelProvider   string                 `json:"modelProvider"`
+	ModelID         string                 `json:"modelId"`
+	ModelName       string                 `json:"modelName"`
+	ThinkingLevel   llm.ModelThinkingLevel `json:"thinkingLevel"`
+	PermissionMode  permission.Mode        `json:"permissionMode"`
 }
 
 type record struct {
@@ -114,6 +115,28 @@ type sessionRuntime struct {
 	// titleGenerating is held only while an attempt is in flight, so a failed
 	// attempt is retried when the next user message enters the session.
 	titleGenerating atomic.Bool
+	titleGeneration TitleGeneration
+}
+
+type TitleGenerationStatus string
+
+const (
+	TitleGenerationIdle        TitleGenerationStatus = "idle"
+	TitleGenerationGenerating  TitleGenerationStatus = "generating"
+	TitleGenerationSucceeded   TitleGenerationStatus = "succeeded"
+	TitleGenerationFailed      TitleGenerationStatus = "failed"
+	TitleGenerationUnavailable TitleGenerationStatus = "unavailable"
+)
+
+// TitleGeneration is runtime diagnostics for the background title request.
+// Error is sanitized before it reaches this state and never contains secrets.
+type TitleGeneration struct {
+	Status      TitleGenerationStatus `json:"status"`
+	Provider    string                `json:"provider,omitempty"`
+	Model       string                `json:"model,omitempty"`
+	ErrorCode   string                `json:"errorCode,omitempty"`
+	Error       string                `json:"error,omitempty"`
+	AttemptedAt string                `json:"attemptedAt,omitempty"`
 }
 
 // awaitingUser reports that the session is blocked on its viewer: either a tool

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Check, ChevronDown, LoaderCircle, Plus, Trash2 } from 'lucide-react'
+import { Check, ChevronDown, LoaderCircle, Plus, Save as SaveIcon, Trash2 } from 'lucide-react'
 import { DropdownMenu } from 'radix-ui'
 import { apiURL } from '@/api'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { ProviderIcon } from '@/components/ProviderIdentity'
+import { UtilityModelSection } from '@/components/UtilityModelSection'
 import { providerName } from '@/lib/provider'
 import type {
   ModelOption,
@@ -29,7 +30,7 @@ type ConnectionDraft = Omit<ProviderConnectionInfo, 'keys'> & {
 
 export function ProvidersSettings({ onChanged }: { onChanged?: () => void }) {
   const { t } = useI18n()
-  const [providers, setProviders] = useState<ProviderInfo[]>([])
+  const [providerData, setProviderData] = useState<ProviderListResponse>()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selectedProviderId, setSelectedProviderId] = useState<string>()
@@ -42,7 +43,7 @@ export function ProvidersSettings({ onChanged }: { onChanged?: () => void }) {
           throw new Error(`HTTP ${providersResponse.status}`)
         }
         const data = (await providersResponse.json()) as ProviderListResponse
-        setProviders(data.providers)
+        setProviderData(data)
         setSelectedProviderId((current) =>
           current && data.providers.some((provider) => provider.id === current)
             ? current
@@ -70,11 +71,21 @@ export function ProvidersSettings({ onChanged }: { onChanged?: () => void }) {
     onChanged?.()
   }, [load, onChanged])
 
+  const providers = providerData?.providers ?? []
   const selected = providers.find((provider) => provider.id === selectedProviderId)
 
   return (
     <div>
-      <DefaultModelSection onChanged={afterChange} />
+      <DefaultModelSection
+        onChanged={afterChange}
+        utilityModel={providerData && (
+          <UtilityModelSection
+            providers={providerData.providers}
+            selection={providerData.utilityModel}
+            onChanged={afterChange}
+          />
+        )}
+      />
 
       {loading ? (
         <div className="flex items-center gap-2 py-6 text-[0.8125rem] text-stone-400">
@@ -118,7 +129,13 @@ type ModelsResponse = {
 // thinking effort that new sessions start with. It reads the model catalog and
 // current default from /api/models and persists changes to /api/model-selection.
 // The UI uses three cascading rows: Provider → Model → Thinking effort.
-function DefaultModelSection({ onChanged }: { onChanged?: () => void }) {
+function DefaultModelSection({
+  onChanged,
+  utilityModel,
+}: {
+  onChanged?: () => void
+  utilityModel?: ReactNode
+}) {
   const { t } = useI18n()
   const [models, setModels] = useState<ModelOption[]>([])
   const [provider, setProvider] = useState('')
@@ -246,21 +263,25 @@ function DefaultModelSection({ onChanged }: { onChanged?: () => void }) {
 
   return (
     <section className="mb-8">
-      <h2 className="mb-3 text-[0.875rem] leading-5 font-medium text-stone-800">
-        {t('settings.defaultModel')}
-      </h2>
       <div className="overflow-hidden rounded-[18px] border border-stone-200/90 bg-white px-4 shadow-[0_10px_32px_-30px_rgba(28,25,23,0.45)]">
         {loading ? (
-          <div className="flex items-center gap-2 py-6 text-[0.8125rem] text-stone-400">
+          <div className={cn(
+            'flex items-center gap-2 py-6 text-[0.8125rem] text-stone-400',
+            utilityModel && 'border-b border-stone-200/75',
+          )}>
             <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
             {t('providers.loading')}
           </div>
         ) : models.length === 0 ? (
-          <div className="py-6 text-[0.8125rem] text-stone-400">{t('settings.defaultModelEmpty')}</div>
+          <div className={cn(
+            'py-6 text-[0.8125rem] text-stone-400',
+            utilityModel && 'border-b border-stone-200/75',
+          )}>
+            {t('settings.defaultModelEmpty')}
+          </div>
         ) : (
-          <>
-            <SettingsRowLike label={t('settings.defaultModel')} description={t('settings.defaultModelDescription')}>
-              <div className="flex items-center gap-1.5">
+          <SettingsRowLike label={t('settings.defaultModel')} description={t('settings.defaultModelDescription')}>
+            <div className="flex items-center gap-1.5">
                 {/* Provider */}
                 <DropdownMenu.Root>
                   <DropdownMenu.Trigger asChild>
@@ -385,10 +406,10 @@ function DefaultModelSection({ onChanged }: { onChanged?: () => void }) {
                     </DropdownMenu.Content>
                   </DropdownMenu.Portal>
                 </DropdownMenu.Root>
-              </div>
-            </SettingsRowLike>
-          </>
+            </div>
+          </SettingsRowLike>
         )}
+        {utilityModel}
       </div>
       {error && <p className="mt-2 text-[0.8125rem] text-red-600">{error}</p>}
     </section>
@@ -723,11 +744,14 @@ function ProviderConfigPanel({
             active={configured && selectedConnection.id === activeConnectionId}
             activationBlocked={hasUnsavedChanges}
             activating={activating}
+            saving={saving}
+            saveDisabled={!hasUnsavedChanges || Boolean(activating)}
             onChange={(update) => updateConnection(selectedConnection.id, update)}
             onAddKey={() => addKey(selectedConnection.id)}
             onRemove={() => removeConnection(selectedConnection.id)}
             onActivateConnection={() => void activateConnection(selectedConnection.id)}
             onActivateKey={(keyID) => void activateKey(selectedConnection.id, keyID)}
+            onSave={() => void save()}
           />
         )}
 
@@ -736,21 +760,6 @@ function ProviderConfigPanel({
             {rowError}
           </p>
         )}
-
-        <div className="flex items-center justify-end border-t border-stone-100 bg-stone-50/45 px-4 py-3">
-          <button
-            type="button"
-            onClick={() => void save()}
-            disabled={saving || Boolean(activating) || !hasUnsavedChanges}
-            className={cn(
-              'inline-flex h-8 items-center gap-1.5 rounded-md bg-stone-950 px-3.5 text-[0.8125rem] font-medium text-white transition-colors hover:bg-stone-800 disabled:opacity-40',
-              saving ? 'cursor-wait' : 'cursor-pointer disabled:cursor-default',
-            )}
-          >
-            {saving && <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />}
-            {saving ? t('providers.saving') : t('providers.save')}
-          </button>
-        </div>
       </div>
     </>
   )
@@ -762,22 +771,28 @@ function ConnectionEditor({
   active,
   activationBlocked,
   activating,
+  saving,
+  saveDisabled,
   onChange,
   onAddKey,
   onRemove,
   onActivateConnection,
   onActivateKey,
+  onSave,
 }: {
   officialBaseURL: string
   connection: ConnectionDraft
   active: boolean
   activationBlocked: boolean
   activating: string
+  saving: boolean
+  saveDisabled: boolean
   onChange: (update: (current: ConnectionDraft) => ConnectionDraft) => void
   onAddKey: () => void
   onRemove: () => void
   onActivateConnection: () => void
   onActivateKey: (keyID: string) => void
+  onSave: () => void
 }) {
   const { t } = useI18n()
 
@@ -818,35 +833,53 @@ function ConnectionEditor({
             className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[0.9375rem] font-medium text-stone-900 outline-none placeholder:text-stone-400"
           />
         )}
-        <button
-          type="button"
-          onClick={onActivateConnection}
-          disabled={active || connectionActivationDisabled}
-          aria-busy={connectionBusy}
-          aria-label={connectionBusy ? t('providers.activating') : undefined}
-          title={
-            active
-              ? undefined
-              : !connection.persisted || activationBlocked
-                ? t('providers.saveBeforeActivate')
-                : !connection.activeKeyId
-                  ? t('providers.selectKeyFirst')
-                  : undefined
-          }
-          className={cn(
-            'inline-flex h-7 min-w-[6.75rem] items-center justify-center gap-1.5 rounded-md px-2.5 text-[0.71875rem] font-medium transition-colors',
-            active
-              ? 'cursor-default text-stone-600'
-              : 'cursor-pointer text-stone-500 hover:bg-[rgb(241,241,241)] hover:text-stone-950 disabled:cursor-not-allowed disabled:text-stone-300 disabled:hover:bg-transparent',
-          )}
-        >
-          {connectionBusy ? (
-            <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
-          ) : active ? (
-            <Check className="size-3.5" aria-hidden="true" />
-          ) : null}
-          <span>{active ? t('providers.active') : t('providers.useConnection')}</span>
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={onActivateConnection}
+            disabled={active || connectionActivationDisabled}
+            aria-busy={connectionBusy}
+            aria-label={connectionBusy ? t('providers.activating') : undefined}
+            title={
+              active
+                ? undefined
+                : !connection.persisted || activationBlocked
+                  ? t('providers.saveBeforeActivate')
+                  : !connection.activeKeyId
+                    ? t('providers.selectKeyFirst')
+                    : undefined
+            }
+            className={cn(
+              'inline-flex h-7 min-w-[5.5rem] items-center justify-center gap-1.5 rounded-md px-2.5 text-[0.71875rem] font-medium transition-colors',
+              active
+                ? 'cursor-default text-stone-600'
+                : 'cursor-pointer text-stone-500 hover:bg-[rgb(241,241,241)] hover:text-stone-950 disabled:cursor-not-allowed disabled:text-stone-300 disabled:hover:bg-transparent',
+            )}
+          >
+            {connectionBusy ? (
+              <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
+            ) : active ? (
+              <Check className="size-3.5" aria-hidden="true" />
+            ) : null}
+            <span>{active ? t('providers.active') : t('providers.useConnection')}</span>
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={saving || saveDisabled}
+            className={cn(
+              'inline-flex h-7 items-center gap-1.5 rounded-md bg-stone-950 px-2.5 text-[0.71875rem] font-medium text-white transition-colors hover:bg-stone-800 disabled:bg-stone-100 disabled:text-stone-400',
+              saving ? 'cursor-wait' : 'cursor-pointer disabled:cursor-default',
+            )}
+          >
+            {saving ? (
+              <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <SaveIcon className="size-3.5" aria-hidden="true" />
+            )}
+            {saving ? t('providers.saving') : t('providers.save')}
+          </button>
+        </div>
         {!connection.official && (
           <button
             type="button"
@@ -892,43 +925,48 @@ function ConnectionEditor({
 
         {connection.keys.length > 0 && (
           <div className="mt-1 divide-y divide-stone-100 border-y border-stone-100">
-            {connection.keys.map((key) => (
-              <div
-                key={key.id}
-                className="grid grid-cols-[1rem_minmax(6rem,0.75fr)_minmax(8rem,1fr)_auto_1.75rem] items-center gap-2 py-2.5 max-sm:grid-cols-[1rem_minmax(0,1fr)_auto_1.75rem]"
-              >
-                <SelectionDot selected={connection.activeKeyId === key.id} active={active && connection.activeKeyId === key.id} />
-                <input
-                  value={key.name}
-                  onChange={(event) => updateKey(key.id, { name: event.target.value })}
-                  placeholder={t('providers.keyNamePlaceholder')}
-                  className="min-w-0 border-0 bg-transparent p-0 text-[0.78125rem] text-stone-800 outline-none placeholder:text-stone-400"
-                />
-                <input
-                  type="password"
-                  value={key.apiKey}
-                  onChange={(event) => updateKey(key.id, { apiKey: event.target.value })}
-                  placeholder={key.preview || t('providers.apiKeyPlaceholder')}
-                  autoComplete="off"
-                  className="min-w-0 border-0 bg-transparent p-0 font-mono text-[0.75rem] text-stone-700 outline-none placeholder:text-stone-400 max-sm:col-start-2 max-sm:col-end-5 max-sm:row-start-2"
-                />
-                <ActivationButton
-                  configured={connection.activeKeyId === key.id}
-                  effective={active && connection.activeKeyId === key.id}
-                  busy={activating === `key:${connection.id}:${key.id}`}
-                  disabled={!connection.persisted || !key.persisted || activationBlocked || Boolean(activating)}
-                  onClick={() => onActivateKey(key.id)}
-                />
-                <button
-                  type="button"
-                  onClick={() => removeKey(key.id)}
-                  className="grid size-7 cursor-pointer place-items-center rounded-md text-stone-300 transition-colors hover:bg-stone-100 hover:text-red-600"
-                  aria-label={t('providers.removeKey')}
+            {connection.keys.map((key) => {
+              const effective = active && connection.activeKeyId === key.id
+              return (
+                <div
+                  key={key.id}
+                  className={cn(
+                    'grid grid-cols-[minmax(6rem,0.75fr)_minmax(8rem,1fr)_auto_1.75rem] items-center gap-2 px-2 py-2.5 transition-colors max-sm:grid-cols-[minmax(0,1fr)_auto_1.75rem]',
+                    effective && 'bg-stone-50/80',
+                  )}
                 >
-                  <Trash2 className="size-3.5" aria-hidden="true" />
-                </button>
-              </div>
-            ))}
+                  <input
+                    value={key.name}
+                    onChange={(event) => updateKey(key.id, { name: event.target.value })}
+                    placeholder={t('providers.keyNamePlaceholder')}
+                    className="min-w-0 border-0 bg-transparent p-0 text-[0.78125rem] text-stone-800 outline-none placeholder:text-stone-400"
+                  />
+                  <input
+                    type="password"
+                    value={key.apiKey}
+                    onChange={(event) => updateKey(key.id, { apiKey: event.target.value })}
+                    placeholder={key.preview || t('providers.apiKeyPlaceholder')}
+                    autoComplete="off"
+                    className="min-w-0 border-0 bg-transparent p-0 font-mono text-[0.75rem] text-stone-700 outline-none placeholder:text-stone-400 max-sm:col-start-1 max-sm:col-end-4 max-sm:row-start-2"
+                  />
+                  <ActivationButton
+                    configured={connection.activeKeyId === key.id}
+                    effective={effective}
+                    busy={activating === `key:${connection.id}:${key.id}`}
+                    disabled={!connection.persisted || !key.persisted || activationBlocked || Boolean(activating)}
+                    onClick={() => onActivateKey(key.id)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeKey(key.id)}
+                    className="grid size-7 cursor-pointer place-items-center rounded-md text-stone-300 transition-colors hover:bg-stone-100 hover:text-red-600"
+                    aria-label={t('providers.removeKey')}
+                  >
+                    <Trash2 className="size-3.5" aria-hidden="true" />
+                  </button>
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
@@ -961,7 +999,7 @@ function ActivationButton({
       className={cn(
         'inline-flex h-6 w-[4.5rem] items-center justify-center gap-1 rounded-md px-2 text-[0.6875rem] font-medium transition-colors',
         effective
-          ? 'cursor-default bg-stone-900 text-white'
+          ? 'cursor-default bg-stone-100 text-stone-800'
           : configured
             ? 'cursor-default bg-[rgb(237,237,237)] text-stone-600'
             : 'cursor-pointer text-stone-500 hover:bg-[rgb(241,241,241)] hover:text-stone-950',
@@ -981,23 +1019,6 @@ function ActivationButton({
             : t('providers.useKey')}
       </span>
     </button>
-  )
-}
-
-function SelectionDot({ selected, active }: { selected: boolean; active: boolean }) {
-  return (
-    <span
-      className={cn(
-        'grid size-3.5 place-items-center rounded-full border transition-colors',
-        active
-          ? 'border-stone-900 bg-stone-900'
-          : selected
-            ? 'border-stone-400 bg-stone-400'
-            : 'border-stone-300',
-      )}
-    >
-      {selected && <span className="size-1 rounded-full bg-white" />}
-    </span>
   )
 }
 

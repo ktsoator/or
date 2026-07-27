@@ -230,16 +230,25 @@ func (m *Manager) Rename(id, customTitle string) (Summary, error) {
 	}
 
 	previousCustomTitle := runtime.record.CustomTitle
+	previousGeneration := runtime.titleGeneration
 	runtime.record.CustomTitle = customTitle
+	if customTitle != "" {
+		runtime.titleGeneration = TitleGeneration{Status: TitleGenerationIdle}
+	} else if runtime.record.AITitle != "" {
+		runtime.titleGeneration = TitleGeneration{Status: TitleGenerationSucceeded}
+	}
 	runtime.record.UpdatedAt = time.Now().UTC()
 	if err := m.saveLocked(); err != nil {
 		runtime.record.CustomTitle = previousCustomTitle
+		runtime.titleGeneration = previousGeneration
 		m.mu.Unlock()
 		return Summary{}, err
 	}
 	summary := runtime.summary()
-	event := runtime.titleChanged()
+	titleEvent := runtime.titleChanged()
+	stateEvent := runtime.titleGenerationChanged()
 	m.mu.Unlock()
-	runtime.emit(event)
+	runtime.emit(titleEvent)
+	runtime.emit(stateEvent)
 	return summary, nil
 }
