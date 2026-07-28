@@ -80,6 +80,9 @@ func loadModelsDevModels(ctx context.Context, client *http.Client) ([]model, err
 	if err != nil {
 		return nil, err
 	}
+	if err := validateProviderRules(catalog); err != nil {
+		return nil, fmt.Errorf("validate models.dev provider rules: %w", err)
+	}
 	return fromModelsDev(catalog), nil
 }
 

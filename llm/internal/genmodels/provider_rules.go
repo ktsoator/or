@@ -1,5 +1,10 @@
 package main
 
+import (
+	"fmt"
+	"net/url"
+)
+
 var providerRules = []providerRule{
 	{Source: "anthropic", Provider: "anthropic", Protocol: "anthropic-messages", BaseURL: "https://api.anthropic.com"},
 	{Source: "deepseek", Provider: "deepseek", Protocol: "openai-completions", BaseURL: "https://api.deepseek.com"},
@@ -71,6 +76,51 @@ func zaiCompat() compatibility {
 		ThinkingFormat:          "zai",
 		ZAIToolStream:           boolp(true),
 	}
+}
+
+func validateProviderRules(catalog map[string]sourceProvider) error {
+	return validateProviderRuleSet(providerRules, catalog)
+}
+
+func validateProviderRuleSet(rules []providerRule, catalog map[string]sourceProvider) error {
+	seenProviders := make(map[string]int, len(rules))
+	for index, rule := range rules {
+		if rule.Source == "" {
+			return fmt.Errorf("provider rule %d has an empty source", index)
+		}
+		if rule.Provider == "" {
+			return fmt.Errorf("provider rule %d has an empty provider", index)
+		}
+		if rule.Protocol == "" {
+			return fmt.Errorf("provider %q has an empty protocol", rule.Provider)
+		}
+		parsedBaseURL, err := url.Parse(rule.BaseURL)
+		if err != nil || (parsedBaseURL.Scheme != "http" && parsedBaseURL.Scheme != "https") || parsedBaseURL.Host == "" {
+			return fmt.Errorf("provider %q has an invalid base URL %q", rule.Provider, rule.BaseURL)
+		}
+		if previous, exists := seenProviders[rule.Provider]; exists {
+			return fmt.Errorf("provider rule %d duplicates provider %q from rule %d", index, rule.Provider, previous)
+		}
+		seenProviders[rule.Provider] = index
+
+		source, exists := catalog[rule.Source]
+		if !exists {
+			return fmt.Errorf("provider %q references missing models.dev source %q", rule.Provider, rule.Source)
+		}
+		if !hasUsableSourceModel(source) {
+			return fmt.Errorf("provider %q source %q has no usable tool-calling models", rule.Provider, rule.Source)
+		}
+	}
+	return nil
+}
+
+func hasUsableSourceModel(source sourceProvider) bool {
+	for _, candidate := range source.Models {
+		if candidate.ToolCall && candidate.Status != "deprecated" {
+			return true
+		}
+	}
+	return false
 }
 
 func fromModelsDev(catalog map[string]sourceProvider) []model {
