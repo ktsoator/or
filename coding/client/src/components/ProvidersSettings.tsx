@@ -1,10 +1,19 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Check, ChevronDown, LoaderCircle, Plus, Save as SaveIcon, Trash2 } from 'lucide-react'
+import {
+  Activity,
+  Check,
+  ChevronDown,
+  LoaderCircle,
+  Plus,
+  Save as SaveIcon,
+  Trash2,
+} from 'lucide-react'
 import { DropdownMenu } from 'radix-ui'
 import { apiURL } from '@/api'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { ProviderIcon } from '@/components/ProviderIdentity'
+import { ProviderConnectionTestDialog } from '@/components/ProviderConnectionTestDialog'
 import { UtilityModelSection } from '@/components/UtilityModelSection'
 import { providerName } from '@/lib/provider'
 import type {
@@ -102,6 +111,7 @@ export function ProvidersSettings({ onChanged }: { onChanged?: () => void }) {
             providers={providers}
             info={selected}
             selectedProviderId={selected.id}
+            preferredModelId={providerData?.activeModel?.provider === selected.id ? providerData.activeModel.model : ''}
             onSelectProvider={setSelectedProviderId}
             onChanged={afterChange}
           />
@@ -566,12 +576,14 @@ function ProviderConfigPanel({
   providers,
   info,
   selectedProviderId,
+  preferredModelId,
   onSelectProvider,
   onChanged,
 }: {
   providers: ProviderInfo[]
   info: ProviderInfo
   selectedProviderId: string
+  preferredModelId: string
   onSelectProvider: (value: string) => void
   onChanged: () => void | Promise<void>
 }) {
@@ -583,7 +595,10 @@ function ProviderConfigPanel({
   const [saving, setSaving] = useState(false)
   const [activating, setActivating] = useState('')
   const [rowError, setRowError] = useState('')
+  const [testTarget, setTestTarget] = useState<{ connectionID: string; keyID: string }>()
   const selectedConnection = connections.find((connection) => connection.id === editingConnectionId) ?? connections[0]
+  const testConnection = connections.find((connection) => connection.id === testTarget?.connectionID)
+  const testKey = testConnection?.keys.find((key) => key.id === testTarget?.keyID)
   const hasUnsavedChanges = profileHasUnsavedChanges(info, connections)
 
   useEffect(() => {
@@ -751,6 +766,7 @@ function ProviderConfigPanel({
             onRemove={() => removeConnection(selectedConnection.id)}
             onActivateConnection={() => void activateConnection(selectedConnection.id)}
             onActivateKey={(keyID) => void activateKey(selectedConnection.id, keyID)}
+            onTestKey={(keyID) => setTestTarget({ connectionID: selectedConnection.id, keyID })}
             onSave={() => void save()}
           />
         )}
@@ -761,6 +777,19 @@ function ProviderConfigPanel({
           </p>
         )}
       </div>
+
+      {testConnection && testKey && (
+        <ProviderConnectionTestDialog
+          providerId={info.id}
+          providerLabel={providerName(info.id)}
+          preferredModelId={preferredModelId}
+          connection={testConnection}
+          credential={testKey}
+          onOpenChange={(open) => {
+            if (!open) setTestTarget(undefined)
+          }}
+        />
+      )}
     </>
   )
 }
@@ -778,6 +807,7 @@ function ConnectionEditor({
   onRemove,
   onActivateConnection,
   onActivateKey,
+  onTestKey,
   onSave,
 }: {
   officialBaseURL: string
@@ -792,6 +822,7 @@ function ConnectionEditor({
   onRemove: () => void
   onActivateConnection: () => void
   onActivateKey: (keyID: string) => void
+  onTestKey: (keyID: string) => void
   onSave: () => void
 }) {
   const { t } = useI18n()
@@ -931,7 +962,7 @@ function ConnectionEditor({
                 <div
                   key={key.id}
                   className={cn(
-                    'grid grid-cols-[minmax(6rem,0.75fr)_minmax(8rem,1fr)_auto_1.75rem] items-center gap-2 px-2 py-2.5 transition-colors max-sm:grid-cols-[minmax(0,1fr)_auto_1.75rem]',
+                    'grid grid-cols-[minmax(6rem,0.75fr)_minmax(8rem,1fr)_auto] items-center gap-2 px-2 py-2.5 transition-colors max-sm:grid-cols-[minmax(0,1fr)_auto]',
                     effective && 'bg-stone-50/80',
                   )}
                 >
@@ -947,23 +978,37 @@ function ConnectionEditor({
                     onChange={(event) => updateKey(key.id, { apiKey: event.target.value })}
                     placeholder={key.preview || t('providers.apiKeyPlaceholder')}
                     autoComplete="off"
-                    className="min-w-0 border-0 bg-transparent p-0 font-mono text-[0.75rem] text-stone-700 outline-none placeholder:text-stone-400 max-sm:col-start-1 max-sm:col-end-4 max-sm:row-start-2"
+                    className="min-w-0 border-0 bg-transparent p-0 font-mono text-[0.75rem] text-stone-700 outline-none placeholder:text-stone-400 max-sm:col-span-2 max-sm:row-start-2"
                   />
-                  <ActivationButton
-                    configured={connection.activeKeyId === key.id}
-                    effective={effective}
-                    busy={activating === `key:${connection.id}:${key.id}`}
-                    disabled={!connection.persisted || !key.persisted || activationBlocked || Boolean(activating)}
-                    onClick={() => onActivateKey(key.id)}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeKey(key.id)}
-                    className="grid size-7 cursor-pointer place-items-center rounded-md text-stone-300 transition-colors hover:bg-stone-100 hover:text-red-600"
-                    aria-label={t('providers.removeKey')}
-                  >
-                    <Trash2 className="size-3.5" aria-hidden="true" />
-                  </button>
+                  <div className="flex shrink-0 items-center gap-1 max-sm:col-start-2 max-sm:row-start-1">
+                    <button
+                      type="button"
+                      onClick={() => onTestKey(key.id)}
+                      disabled={
+                        (!key.persisted && !key.apiKey.trim()) ||
+                        (!connection.official && !connection.baseURL.trim())
+                      }
+                      className="inline-flex h-6 cursor-pointer items-center gap-1 rounded-md px-2 text-[0.6875rem] font-medium text-stone-500 transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-950 disabled:cursor-not-allowed disabled:text-stone-300 disabled:hover:bg-transparent"
+                    >
+                      <Activity className="size-3" aria-hidden="true" />
+                      {t('providers.test')}
+                    </button>
+                    <ActivationButton
+                      configured={connection.activeKeyId === key.id}
+                      effective={effective}
+                      busy={activating === `key:${connection.id}:${key.id}`}
+                      disabled={!connection.persisted || !key.persisted || activationBlocked || Boolean(activating)}
+                      onClick={() => onActivateKey(key.id)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeKey(key.id)}
+                      className="grid size-7 cursor-pointer place-items-center rounded-md text-stone-300 transition-colors hover:bg-stone-100 hover:text-red-600"
+                      aria-label={t('providers.removeKey')}
+                    >
+                      <Trash2 className="size-3.5" aria-hidden="true" />
+                    </button>
+                  </div>
                 </div>
               )
             })}

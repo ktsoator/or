@@ -19,6 +19,7 @@ func (s *Server) mountProviders(r gin.IRouter) {
 	r.PUT("/providers/:providerID", s.handleSetProvider)
 	r.PATCH("/providers/:providerID/active-connection", s.handleActivateProviderConnection)
 	r.PATCH("/providers/:providerID/connections/:connectionID/active-key", s.handleActivateProviderKey)
+	r.POST("/providers/:providerID/test-connection", s.handleTestProviderConnection)
 	r.DELETE("/providers/:providerID", s.handleClearProvider)
 }
 
@@ -74,6 +75,30 @@ type providerKeyRequest struct {
 	ID     string `json:"id"`
 	Name   string `json:"name"`
 	APIKey string `json:"apiKey"`
+}
+
+type providerConnectionTestRequest struct {
+	ConnectionID  string                 `json:"connectionId"`
+	KeyID         string                 `json:"keyId"`
+	BaseURL       string                 `json:"baseURL"`
+	APIKey        string                 `json:"apiKey"`
+	Model         string                 `json:"model"`
+	ThinkingLevel llm.ModelThinkingLevel `json:"thinkingLevel"`
+}
+
+type providerConnectionTestResponse struct {
+	Status         provider.ConnectionTestStatus `json:"status"`
+	Model          string                        `json:"model"`
+	ModelName      string                        `json:"modelName"`
+	RequestText    string                        `json:"requestText"`
+	ThinkingLevel  llm.ModelThinkingLevel        `json:"thinkingLevel"`
+	ThinkingText   string                        `json:"thinkingText"`
+	ResponseText   string                        `json:"responseText"`
+	StopReason     llm.StopReason                `json:"stopReason,omitempty"`
+	InputTokens    int64                         `json:"inputTokens"`
+	OutputTokens   int64                         `json:"outputTokens"`
+	LatencyMS      int64                         `json:"latencyMs"`
+	ProviderStatus int                           `json:"providerStatus,omitempty"`
 }
 
 type providerListResponse struct {
@@ -281,6 +306,45 @@ func (s *Server) handleActivateProviderKey(c *gin.Context) {
 	}
 	info, _ := s.projectProviderInfo(id, profile)
 	c.JSON(http.StatusOK, info)
+}
+
+func (s *Server) handleTestProviderConnection(c *gin.Context) {
+	if s.providerTests == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "provider connection testing is unavailable"})
+		return
+	}
+	var body providerConnectionTestRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid provider connection test"})
+		return
+	}
+	result, err := s.providerTests.Test(c.Request.Context(), provider.ConnectionTestRequest{
+		ProviderID:    c.Param("providerID"),
+		ConnectionID:  body.ConnectionID,
+		KeyID:         body.KeyID,
+		BaseURL:       body.BaseURL,
+		APIKey:        body.APIKey,
+		ModelID:       body.Model,
+		ThinkingLevel: body.ThinkingLevel,
+	})
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, providerConnectionTestResponse{
+		Status:         result.Status,
+		Model:          result.ModelID,
+		ModelName:      result.ModelName,
+		RequestText:    result.RequestText,
+		ThinkingLevel:  result.ThinkingLevel,
+		ThinkingText:   result.ThinkingText,
+		ResponseText:   result.ResponseText,
+		StopReason:     result.StopReason,
+		InputTokens:    result.InputTokens,
+		OutputTokens:   result.OutputTokens,
+		LatencyMS:      result.Latency.Milliseconds(),
+		ProviderStatus: result.ProviderStatus,
+	})
 }
 
 func (request providerProfileRequest) update() provider.Update {

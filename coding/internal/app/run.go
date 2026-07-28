@@ -51,6 +51,7 @@ func New(ctx context.Context, cfg config.Config) (*Runtime, error) {
 		return nil, err
 	}
 	providers.Apply()
+	providerTests := provider.NewConnectionTester(providers, llm.Complete)
 
 	manager, err := conversation.NewManager(ctx, conversation.Options{
 		DataDir:        cfg.DataDir,
@@ -71,6 +72,7 @@ func New(ctx context.Context, cfg config.Config) (*Runtime, error) {
 		Workspaces:    workspaces,
 		Registry:      registry,
 		Providers:     providers,
+		ProviderTests: providerTests,
 		BrowseRoot:    cfg.Cwd,
 		ClientOrigin:  cfg.ClientOrigin,
 	})

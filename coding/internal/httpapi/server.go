@@ -29,6 +29,7 @@ type Server struct {
 	workspaces    *workspace.Registry
 	registry      *llm.ProviderRegistry
 	providers     *provider.Store
+	providerTests *provider.ConnectionTester
 	browseRoot    string
 	clientOrigin  string
 }
@@ -43,6 +44,7 @@ type Options struct {
 	Workspaces    *workspace.Registry
 	Registry      *llm.ProviderRegistry
 	Providers     *provider.Store
+	ProviderTests *provider.ConnectionTester
 	BrowseRoot    string
 	ClientOrigin  string
 }
@@ -56,6 +58,7 @@ func NewServer(opts Options) *Server {
 		workspaces:    opts.Workspaces,
 		registry:      opts.Registry,
 		providers:     opts.Providers,
+		providerTests: opts.ProviderTests,
 		browseRoot:    opts.BrowseRoot,
 		clientOrigin:  opts.ClientOrigin,
 	}
