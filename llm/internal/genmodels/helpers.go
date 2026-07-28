@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"slices"
-	"strconv"
 	"strings"
 )
 
@@ -44,19 +42,8 @@ func inputModalities(values []string) []string {
 	return result
 }
 
-func contains(values []string, target string) bool {
-	return slices.Contains(values, target)
-}
-
 func defaultInt(value, fallback int64) int64 {
 	if value > 0 {
-		return value
-	}
-	return fallback
-}
-
-func defaultString(value, fallback string) string {
-	if value != "" {
 		return value
 	}
 	return fallback
@@ -71,22 +58,4 @@ func cloneMap(source map[string]string) map[string]string {
 		result[k] = v
 	}
 	return result
-}
-
-func perMillion(value string) float64 {
-	parsed, _ := strconv.ParseFloat(value, 64)
-	return parsed * 1_000_000
-}
-
-func anyPerMillion(value any) float64 {
-	switch v := value.(type) {
-	case json.Number:
-		parsed, _ := v.Float64()
-		return parsed * 1_000_000
-	case string:
-		return perMillion(v)
-	case float64:
-		return v * 1_000_000
-	}
-	return 0
 }
