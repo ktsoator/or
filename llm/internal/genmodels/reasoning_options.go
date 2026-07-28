@@ -1,6 +1,11 @@
 package main
 
-var generatedThinkingLevels = []string{"off", "minimal", "low", "medium", "high", "xhigh"}
+import (
+	"github.com/ktsoator/or/llm"
+	"github.com/ktsoator/or/llm/internal/openaicompat"
+)
+
+var generatedThinkingLevels = []string{"off", "minimal", "low", "medium", "high", "xhigh", "max"}
 
 // applyReasoningOptionMetadata converts verified models.dev effort values only
 // for models that use the standard OpenAI reasoning_effort field. Toggle and
@@ -14,17 +19,38 @@ func applyReasoningOptionMetadata(candidate *model, options []sourceReasoningOpt
 	}
 }
 
-// supportsDirectReasoningEffort is deliberately conservative. Generator
-// routes opt in by using OpenAI compatibility; non-standard thinking formats
-// and explicit opt-outs must be handled by provider rules instead.
+// supportsDirectReasoningEffort delegates to the runtime compatibility
+// resolver. Non-standard thinking formats and explicit opt-outs remain under
+// their provider rules instead of accepting generic models.dev effort values.
 func supportsDirectReasoningEffort(candidate model) bool {
-	if candidate.Protocol != "openai-completions" || candidate.Compat.Kind != "openai" {
-		return false
+	return openaicompat.SupportsDirectReasoningEffort(runtimeCompatibilityModel(candidate))
+}
+
+// runtimeCompatibilityModel translates generator data into the SDK model used
+// by the request adapter. Keeping this conversion here makes generation ask the
+// same resolver that will build the eventual request.
+func runtimeCompatibilityModel(candidate model) llm.Model {
+	result := llm.Model{
+		ID:       candidate.ID,
+		Provider: candidate.Provider,
+		Protocol: llm.Protocol(candidate.Protocol),
+		BaseURL:  candidate.BaseURL,
 	}
-	if candidate.Compat.ThinkingFormat != "" && candidate.Compat.ThinkingFormat != "openai" {
-		return false
+	if candidate.Compat.Kind != "openai" {
+		return result
 	}
-	return candidate.Compat.SupportsReasoningEffort == nil || *candidate.Compat.SupportsReasoningEffort
+	result.Compatibility = &llm.OpenAICompletionsCompatibility{
+		SupportsStore:                               candidate.Compat.SupportsStore,
+		SupportsDeveloperRole:                       candidate.Compat.SupportsDeveloperRole,
+		SupportsReasoningEffort:                     candidate.Compat.SupportsReasoningEffort,
+		MaxTokensField:                              candidate.Compat.MaxTokensField,
+		SupportsStrictMode:                          candidate.Compat.SupportsStrictMode,
+		RequiresReasoningContentOnAssistantMessages: candidate.Compat.RequiresReasoningContentOnAssistantMessages,
+		RequiresThinkingAsText:                      candidate.Compat.RequiresThinkingAsText,
+		ThinkingFormat:                              candidate.Compat.ThinkingFormat,
+		ZAIToolStream:                               candidate.Compat.ZAIToolStream,
+	}
+	return result
 }
 
 func effortThinkingLevelMap(options []sourceReasoningOption) map[string]*string {
@@ -58,9 +84,6 @@ func effortThinkingLevelMap(options []sourceReasoningOption) map[string]*string 
 		if supported[level] {
 			levelMap[level] = stringPointer(level)
 		}
-	}
-	if !supported["xhigh"] && supported["max"] {
-		levelMap["xhigh"] = stringPointer("max")
 	}
 	return levelMap
 }

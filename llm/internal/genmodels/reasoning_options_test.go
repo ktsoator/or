@@ -14,7 +14,7 @@ func TestEffortThinkingLevelMap(t *testing.T) {
 	got := effortThinkingLevelMap(reasoningValues(&none, nil, &low, &high))
 	want := map[string]*string{
 		"off": stringPointer("none"), "minimal": nil, "low": stringPointer("low"),
-		"medium": nil, "high": stringPointer("high"), "xhigh": nil,
+		"medium": nil, "high": stringPointer("high"), "xhigh": nil, "max": nil,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("effort map = %#v, want %#v", got, want)
@@ -29,11 +29,14 @@ func TestEffortThinkingLevelMapWithoutNoneDisablesOff(t *testing.T) {
 	}
 }
 
-func TestEffortThinkingLevelMapMapsMaxToXHigh(t *testing.T) {
+func TestEffortThinkingLevelMapPreservesMax(t *testing.T) {
 	max := "max"
 	got := effortThinkingLevelMap(reasoningValues(&max))
-	if value := got["xhigh"]; value == nil || *value != "max" {
-		t.Fatalf("xhigh = %v, want max", value)
+	if value := got["max"]; value == nil || *value != "max" {
+		t.Fatalf("max = %v, want max", value)
+	}
+	if value, present := got["xhigh"]; !present || value != nil {
+		t.Fatalf("xhigh = %v (present %v), want explicit nil", value, present)
 	}
 }
 
@@ -42,6 +45,9 @@ func TestEffortThinkingLevelMapPrefersNativeXHigh(t *testing.T) {
 	got := effortThinkingLevelMap(reasoningValues(&xhigh, &max))
 	if value := got["xhigh"]; value == nil || *value != "xhigh" {
 		t.Fatalf("xhigh = %v, want xhigh", value)
+	}
+	if value := got["max"]; value == nil || *value != "max" {
+		t.Fatalf("max = %v, want max", value)
 	}
 }
 
@@ -79,8 +85,22 @@ func TestApplyReasoningOptionMetadataRequiresDirectOpenAIEffort(t *testing.T) {
 			want:  true,
 		},
 		{
+			name:  "Groq detected from provider",
+			model: model{Protocol: "openai-completions", Provider: "groq"},
+			want:  true,
+		},
+		{
+			name:  "Cerebras detected from provider",
+			model: model{Protocol: "openai-completions", Provider: "cerebras"},
+			want:  true,
+		},
+		{
 			name:  "explicit effort opt-out",
 			model: model{Protocol: "openai-completions", Compat: compatibility{Kind: "openai", SupportsReasoningEffort: boolp(false)}},
+		},
+		{
+			name:  "xAI detected effort opt-out",
+			model: model{Protocol: "openai-completions", Provider: "xai"},
 		},
 		{
 			name:  "non-standard format",
