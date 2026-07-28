@@ -280,6 +280,29 @@ func TestThinkingRequestClampsUnsupportedLevels(t *testing.T) {
 	}
 }
 
+func TestMiniMaxThinkingOffPayloads(t *testing.T) {
+	m27, ok := llm.LookupModel("minimax-cn", "MiniMax-M2.7")
+	if !ok {
+		t.Fatal("minimax-cn/MiniMax-M2.7 is missing from the catalog")
+	}
+	m27Payload := marshalThinkingRequest(t, m27, false, llm.ModelThinkingOff)
+	if m27Payload.Thinking == nil || m27Payload.Thinking.Type != "enabled" {
+		t.Fatalf("M2.7 thinking = %#v, want enabled after unsupported off is clamped", m27Payload.Thinking)
+	}
+	if m27Payload.Thinking.BudgetTokens == nil {
+		t.Fatal("M2.7 enabled thinking is missing budget_tokens")
+	}
+
+	m3, ok := llm.LookupModel("minimax-cn", "MiniMax-M3")
+	if !ok {
+		t.Fatal("minimax-cn/MiniMax-M3 is missing from the catalog")
+	}
+	m3Payload := marshalThinkingRequest(t, m3, false, llm.ModelThinkingOff)
+	if m3Payload.Thinking == nil || m3Payload.Thinking.Type != "disabled" {
+		t.Fatalf("M3 thinking = %#v, want disabled", m3Payload.Thinking)
+	}
+}
+
 func TestKimiCodingAdaptiveThinkingPayloads(t *testing.T) {
 	tests := []struct {
 		modelID string

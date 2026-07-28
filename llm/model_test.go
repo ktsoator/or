@@ -483,6 +483,60 @@ func TestBuiltInMoonshotKimiThinkingMetadata(t *testing.T) {
 	}
 }
 
+func TestBuiltInMiniMaxThinkingMetadata(t *testing.T) {
+	for _, provider := range []string{"minimax", "minimax-cn"} {
+		for _, modelID := range []string{"MiniMax-M2.7", "MiniMax-M2.7-highspeed"} {
+			t.Run(provider+"/"+modelID, func(t *testing.T) {
+				model, ok := LookupModel(provider, modelID)
+				if !ok {
+					t.Fatalf("%s/%s is missing from the built-in catalog", provider, modelID)
+				}
+				levels := SupportedThinkingLevels(model)
+				if slices.Contains(levels, ModelThinkingOff) {
+					t.Fatalf("thinking levels = %v, want off excluded", levels)
+				}
+			})
+		}
+
+		t.Run(provider+"/MiniMax-M3", func(t *testing.T) {
+			model, ok := LookupModel(provider, "MiniMax-M3")
+			if !ok {
+				t.Fatalf("%s/MiniMax-M3 is missing from the built-in catalog", provider)
+			}
+			levels := SupportedThinkingLevels(model)
+			if !slices.Contains(levels, ModelThinkingOff) {
+				t.Fatalf("thinking levels = %v, want off included", levels)
+			}
+		})
+	}
+}
+
+func TestBuiltInOpenCodeGoMiniMaxThinkingMetadata(t *testing.T) {
+	m2, ok := LookupModel("opencode-go", "minimax-m2.7")
+	if !ok {
+		t.Fatal("opencode-go/minimax-m2.7 is missing from the built-in catalog")
+	}
+	if got, want := SupportedThinkingLevels(m2), []ModelThinkingLevel{ModelThinkingHigh}; !slices.Equal(got, want) {
+		t.Fatalf("M2.7 thinking levels = %v, want %v", got, want)
+	}
+	m2Compat, ok := m2.Compatibility.(*OpenAICompletionsCompatibility)
+	if !ok || m2Compat == nil {
+		t.Fatalf("M2.7 compatibility = %T, want OpenAI Completions", m2.Compatibility)
+	}
+	if m2Compat.SupportsReasoningEffort == nil || *m2Compat.SupportsReasoningEffort {
+		t.Fatalf("M2.7 SupportsReasoningEffort = %v, want false", m2Compat.SupportsReasoningEffort)
+	}
+
+	m3, ok := LookupModel("opencode-go", "minimax-m3")
+	if !ok {
+		t.Fatal("opencode-go/minimax-m3 is missing from the built-in catalog")
+	}
+	m3Levels := SupportedThinkingLevels(m3)
+	if !slices.Contains(m3Levels, ModelThinkingOff) || !slices.Contains(m3Levels, ModelThinkingHigh) {
+		t.Fatalf("M3 thinking levels = %v, want off and high included", m3Levels)
+	}
+}
+
 func TestBuiltInOpenCodeClaudeContextCorrections(t *testing.T) {
 	for _, modelID := range []string{"claude-sonnet-4", "claude-sonnet-4-5"} {
 		model, ok := LookupModel("opencode", modelID)

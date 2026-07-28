@@ -3348,6 +3348,9 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://api.minimax.io/anthropic",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "off": null
+    },
     "input": [
       "text"
     ],
@@ -3367,6 +3370,9 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://api.minimax.io/anthropic",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "off": null
+    },
     "input": [
       "text"
     ],
@@ -3482,6 +3488,9 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://api.minimaxi.com/anthropic",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "off": null
+    },
     "input": [
       "text"
     ],
@@ -3501,6 +3510,9 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://api.minimaxi.com/anthropic",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "off": null
+    },
     "input": [
       "text"
     ],
@@ -7384,6 +7396,12 @@
     "protocol": "openai-completions",
     "baseUrl": "https://opencode.ai/zen/go/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null,
+      "off": null
+    },
     "input": [
       "text"
     ],
@@ -7396,6 +7414,7 @@
     "contextWindow": 204800,
     "maxTokens": 131072,
     "compat": {
+      "supportsReasoningEffort": false,
       "maxTokensField": "max_tokens"
     }
   },

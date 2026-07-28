@@ -259,6 +259,17 @@ func TestBuildParamsProviderThinkingWireMatrix(t *testing.T) {
 			},
 		},
 		{
+			name:     "opencode go minimax m2.7 fixed hidden reasoning",
+			provider: "opencode-go",
+			modelID:  "minimax-m2.7",
+			cases: []thinkingWireCase{
+				{name: "unset", want: map[string]any{}},
+				{name: "off clamps high", reasoning: llm.ModelThinkingOff, want: map[string]any{}},
+				{name: "high", reasoning: llm.ModelThinkingHigh, want: map[string]any{}},
+				{name: "max clamps high", reasoning: llm.ModelThinkingMax, want: map[string]any{}},
+			},
+		},
+		{
 			name:     "opencode go glm always thinking",
 			provider: "opencode-go",
 			modelID:  "glm-5.2",

@@ -69,6 +69,16 @@ func applyOpenCodeOverrides(candidate *model) {
 		}
 	}
 
+	if candidate.Provider == "opencode-go" && candidate.ID == "minimax-m2.7" {
+		candidate.Compat.SupportsReasoningEffort = boolp(false)
+		candidate.ThinkingLevelMap = map[string]*string{
+			"off":     nil,
+			"minimal": nil,
+			"low":     nil,
+			"medium":  nil,
+		}
+	}
+
 	if strings.Contains(candidate.ID, "deepseek-v4") {
 		candidate.Compat.RequiresReasoningContentOnAssistantMessages = boolp(true)
 		if candidate.Provider == "opencode-go" {

@@ -54,6 +54,15 @@ func TestApplyOpenCodeOverrides(t *testing.T) {
 			unsupportedLevels:       []string{"minimal", "low", "medium"},
 		},
 		{
+			name: "opencode go minimax m2.7 has fixed hidden reasoning",
+			model: model{
+				ID: "minimax-m2.7", Provider: "opencode-go", Protocol: "openai-completions",
+				Compat: compatibility{Kind: "openai"},
+			},
+			supportsReasoningEffort: false,
+			unsupportedLevels:       []string{"off", "minimal", "low", "medium"},
+		},
+		{
 			name: "opencode go glm is always thinking",
 			model: model{
 				ID: "glm-5.2", Provider: "opencode-go", Protocol: "openai-completions",
