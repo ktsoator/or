@@ -219,7 +219,7 @@ func GetRunnableModels(provider string) []Model          // 仅返回已注册�
 
 ## 内置模型
 
-上述注册表中的内置模型并非在运行时拉取，而是随二进制一同发布。[`catalog.generated.json`](https://github.com/ktsoator/or/blob/main/llm/catalog.generated.json) 由 `go generate`（`internal/genmodels`）从上游模型清单数据生成——以 [Models.dev](https://models.dev) 为主，辅以 OpenRouter 与 Vercel AI Gateway 的实时模型清单与定价。它既包含已实现协议的模型，也包含为未来 adapter 准备的部分仅收录协议模型。生成结果连同源码一并提交，再经 `//go:embed` 编入二进制：
+上述注册表中的内置模型并非在运行时拉取，而是随二进制一同发布。[`catalog.generated.json`](https://github.com/ktsoator/or/blob/main/llm/catalog.generated.json) 由 `go generate`（`internal/genmodels`）从 [Models.dev](https://models.dev) 上游模型清单生成。它既包含已实现协议的模型，也包含为未来 adapter 准备的部分仅收录协议模型。生成结果连同源码一并提交，再经 `//go:embed` 编入二进制：
 
 ```go
 //go:embed catalog.generated.json

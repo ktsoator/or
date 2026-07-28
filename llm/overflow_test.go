@@ -16,8 +16,6 @@ func TestIsContextOverflowMatchesVendorErrorMessages(t *testing.T) {
 		{"Google Gemini", "input token count (250000) exceeds the maximum"},
 		{"xAI Grok", "maximum prompt length is 131072 but the request contains more"},
 		{"Groq", "Please reduce the length of the messages or completion"},
-		{"OpenRouter", "maximum context length is 200000 tokens"},
-		{"OpenRouter/Poolside", "exceeds the maximum allowed input length of 16384 tokens"},
 		{"Together AI", "input (12345 tokens) is longer than the model's context length (8192 tokens)"},
 		{"GitHub Copilot", "exceeds the limit of 16384"},
 		{"llama.cpp", "exceeds the available context size"},

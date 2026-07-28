@@ -17,24 +17,19 @@ import (
 func TestCollectStrictRejectsSourceFailure(t *testing.T) {
 	sources := []catalogSource{
 		staticSource("models.dev", []model{validGeneratedModel("anthropic", "claude")}),
-		failingSource("OpenRouter", errors.New("service unavailable")),
-		staticSource("Vercel AI Gateway", []model{validGeneratedModel("vercel-ai-gateway", "claude")}),
+		failingSource("additional source", errors.New("service unavailable")),
 	}
 
 	_, err := collect(context.Background(), http.DefaultClient, collectOptions{sources: sources})
-	if err == nil || !strings.Contains(err.Error(), "OpenRouter: service unavailable") {
-		t.Fatalf("collect error = %v, want OpenRouter failure", err)
+	if err == nil || !strings.Contains(err.Error(), "additional source: service unavailable") {
+		t.Fatalf("collect error = %v, want additional source failure", err)
 	}
 }
 
 func TestCollectStrictAcceptsCompleteCatalog(t *testing.T) {
 	complete := validCompleteCatalog()
-	first := len(complete) / 3
-	second := first * 2
 	sources := []catalogSource{
-		staticSource("models.dev", complete[:first]),
-		staticSource("OpenRouter", complete[first:second]),
-		staticSource("Vercel AI Gateway", complete[second:]),
+		staticSource("models.dev", complete),
 	}
 
 	models, err := collect(context.Background(), http.DefaultClient, collectOptions{sources: sources})
@@ -50,7 +45,7 @@ func TestCollectAllowPartialWarnsAndReturnsAvailableModels(t *testing.T) {
 	var warnings bytes.Buffer
 	sources := []catalogSource{
 		staticSource("models.dev", []model{validGeneratedModel("anthropic", "claude")}),
-		failingSource("OpenRouter", errors.New("service unavailable")),
+		failingSource("additional source", errors.New("service unavailable")),
 	}
 
 	models, err := collect(context.Background(), http.DefaultClient, collectOptions{
@@ -64,15 +59,14 @@ func TestCollectAllowPartialWarnsAndReturnsAvailableModels(t *testing.T) {
 	if len(models) != 1 || models[0].Provider != "anthropic" {
 		t.Fatalf("models = %#v, want available source only", models)
 	}
-	if !strings.Contains(warnings.String(), "OpenRouter: service unavailable") {
-		t.Fatalf("warnings = %q, want OpenRouter failure", warnings.String())
+	if !strings.Contains(warnings.String(), "additional source: service unavailable") {
+		t.Fatalf("warnings = %q, want additional source failure", warnings.String())
 	}
 }
 
 func TestCollectAllowPartialRejectsWhenAllSourcesFail(t *testing.T) {
 	sources := []catalogSource{
 		failingSource("models.dev", errors.New("offline")),
-		failingSource("OpenRouter", errors.New("offline")),
 	}
 
 	_, err := collect(context.Background(), http.DefaultClient, collectOptions{
@@ -101,12 +95,12 @@ func TestValidateCompleteCatalogInvariants(t *testing.T) {
 	t.Run("required provider", func(t *testing.T) {
 		missing := append([]model(nil), complete...)
 		for index := range missing {
-			if missing[index].Provider == "openrouter" {
+			if missing[index].Provider == "opencode" {
 				missing[index].Provider = "anthropic"
 			}
 		}
 		err := validateCatalog(missing, false)
-		if err == nil || !strings.Contains(err.Error(), `missing required provider "openrouter"`) {
+		if err == nil || !strings.Contains(err.Error(), `missing required provider "opencode"`) {
 			t.Fatalf("validation error = %v, want missing provider", err)
 		}
 	})

@@ -8,14 +8,12 @@ import (
 	"net/http"
 )
 
-const minimumCompleteCatalogModels = 500
+const minimumCompleteCatalogModels = 300
 
 var requiredCompleteCatalogProviders = []string{
 	"anthropic",
 	"deepseek",
 	"opencode",
-	"openrouter",
-	"vercel-ai-gateway",
 }
 
 type collectOptions struct {
@@ -74,8 +72,6 @@ func collect(ctx context.Context, client *http.Client, options collectOptions) (
 func defaultCatalogSources() []catalogSource {
 	return []catalogSource{
 		{name: "models.dev", load: loadModelsDevModels},
-		{name: "OpenRouter", load: fromOpenRouter},
-		{name: "Vercel AI Gateway", load: fromVercel},
 	}
 }
 

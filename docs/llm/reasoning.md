@@ -140,8 +140,8 @@ With `ThinkingDisplayOmitted`, no `EventThinkingDelta` events arrive and the
 
 ## Conversation continuity
 
-Reasoning metadata needed by a provider—such as Anthropic signatures and
-OpenRouter encrypted reasoning—is retained in assistant messages and replayed
+Reasoning metadata needed by a provider, such as Anthropic signatures, is
+retained in assistant messages and replayed
 when required by later tool calls. This matters most for tool use with thinking:
 some providers require the signed thinking block to be sent back verbatim before
 they will accept the next tool call, so dropping it can make the turn fail. The

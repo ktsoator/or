@@ -154,7 +154,6 @@ func TestBuildParamsUnsetOmitsThinkingControlsForEveryFormat(t *testing.T) {
 		"qwen",
 		"qwen-chat-template",
 		"deepseek",
-		"openrouter",
 		"ant-ling",
 		"together",
 		"string-thinking",
@@ -718,48 +717,6 @@ func TestOpenCodeAlwaysThinkingModelsExcludeOff(t *testing.T) {
 				t.Errorf("%s/%s unexpectedly supports thinking off", test.provider, test.modelID)
 			}
 		}
-	}
-}
-
-func TestApplyThinkingOpenRouterEnabled(t *testing.T) {
-	model := reasoningModel(nil)
-	params := oai.ChatCompletionNewParams{}
-	applyThinking(&params, model, resolvedCompat{thinkingFormat: "openrouter"}, explicitThinking(llm.ModelThinkingMedium))
-
-	got := extraFields(t, params)["reasoning"]
-	want := map[string]any{"effort": "medium"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("reasoning = %#v, want %#v", got, want)
-	}
-}
-
-func TestApplyThinkingOpenRouterDisabledUsesOffEffort(t *testing.T) {
-	model := reasoningModel(nil)
-	params := oai.ChatCompletionNewParams{}
-	applyThinking(&params, model, resolvedCompat{thinkingFormat: "openrouter"}, explicitThinking(llm.ModelThinkingOff))
-
-	got := extraFields(t, params)["reasoning"]
-	want := map[string]any{"effort": "none"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("reasoning = %#v, want default %#v", got, want)
-	}
-}
-
-func TestBuildParamsClampsUnsupportedOpenRouterOff(t *testing.T) {
-	model := reasoningModel(map[llm.ModelThinkingLevel]*string{
-		llm.ModelThinkingOff: nil,
-	})
-	params := buildParams(
-		model,
-		nil,
-		nil,
-		llm.StreamOptions{Reasoning: llm.ModelThinkingOff},
-		resolvedCompat{thinkingFormat: "openrouter"},
-	)
-
-	want := map[string]any{"effort": "minimal"}
-	if got := extraFields(t, params)["reasoning"]; !reflect.DeepEqual(got, want) {
-		t.Fatalf("reasoning = %#v, want %#v after clamp", got, want)
 	}
 }
 

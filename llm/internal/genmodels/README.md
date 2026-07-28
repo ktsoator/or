@@ -23,18 +23,13 @@ go run ./llm/internal/genmodels \
 
 Do not commit a partial catalog.
 
-The generator draws on several public catalog layers:
+The generator draws on one public catalog source:
 
 - [Models.dev](https://models.dev) is the primary source. It is an open-source
   database created by OpenCode and maintained as provider/model TOML files in
   [`sst/models.dev`](https://github.com/sst/models.dev).
-- [OpenRouter](https://openrouter.ai/api/v1/models) supplies its live routed
-  model catalog and pricing.
-- [Vercel AI Gateway](https://ai-gateway.vercel.sh/v1/models) supplies its live
-  gateway catalog and pricing.
-
-These are catalog aggregators, not authoritative model vendors. Provider API
-documentation remains the source of truth when metadata conflicts. Local
+Models.dev is a catalog aggregator, not an authoritative model vendor. Provider
+API documentation remains the source of truth when metadata conflicts. Local
 normalization and compatibility overrides live in `provider_*.go` and
 `overrides.go` and should stay small and explicit. Source-specific fetching is
 kept in `source_*.go`, while `render.go` owns deterministic catalog output.

@@ -66,12 +66,6 @@ func applyThinking(
 		if hasEffort && compat.supportsReasoningEffort {
 			extras["reasoning_effort"] = mappedEffort(model, effort)
 		}
-	case "openrouter":
-		if hasEffort {
-			extras["reasoning"] = map[string]any{"effort": mappedEffort(model, effort)}
-		} else {
-			extras["reasoning"] = map[string]any{"effort": offEffort(model)}
-		}
 	case "ant-ling":
 		// ant-ling only sends reasoning when the level is explicitly mapped.
 		if hasEffort {
