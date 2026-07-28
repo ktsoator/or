@@ -2,7 +2,7 @@
 
 内置模型清单和协议实现是两套独立信息。`GetModels` 返回清单中收录的模型；只有模型的 `Protocol` 已在当前进程注册协议适配器时，请求才能被路由。使用 `GetRunnableModels` 构建运行时模型列表。
 
-<!-- catalog-stats: total=373 runnable=302 openai-completions=230 anthropic-messages=72 openai-responses=30 google-generative-ai=20 mistral-conversations=21 -->
+<!-- catalog-stats: total=370 runnable=299 openai-completions=227 anthropic-messages=72 openai-responses=30 google-generative-ai=20 mistral-conversations=21 -->
 
 ## 协议状态
 

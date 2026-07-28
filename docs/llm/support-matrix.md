@@ -2,7 +2,7 @@
 
 The model catalog and protocol implementations are independent. `GetModels` returns catalog entries. A request is routable only when the current process has registered an adapter for the model's `Protocol`. Use `GetRunnableModels` for runtime model lists.
 
-<!-- catalog-stats: total=373 runnable=302 openai-completions=230 anthropic-messages=72 openai-responses=30 google-generative-ai=20 mistral-conversations=21 -->
+<!-- catalog-stats: total=370 runnable=299 openai-completions=227 anthropic-messages=72 openai-responses=30 google-generative-ai=20 mistral-conversations=21 -->
 
 ## Protocol status
 

@@ -1,7 +1,5 @@
 package main
 
-import "strings"
-
 var providerRules = []providerRule{
 	{Source: "anthropic", Provider: "anthropic", Protocol: "anthropic-messages", BaseURL: "https://api.anthropic.com"},
 	{Source: "deepseek", Provider: "deepseek", Protocol: "openai-completions", BaseURL: "https://api.deepseek.com"},
@@ -17,9 +15,9 @@ var providerRules = []providerRule{
 	{Source: "moonshotai", Provider: "moonshotai", Protocol: "openai-completions", BaseURL: "https://api.moonshot.ai/v1", Compat: moonshotCompat()},
 	{Source: "moonshotai-cn", Provider: "moonshotai-cn", Protocol: "openai-completions", BaseURL: "https://api.moonshot.cn/v1", Compat: moonshotCompat()},
 	{Source: "xiaomi", Provider: "xiaomi", Protocol: "openai-completions", BaseURL: "https://api.xiaomimimo.com/v1", Compat: xiaomiCompat()},
-	{Source: "xiaomi", Provider: "xiaomi-token-plan-cn", Protocol: "openai-completions", BaseURL: "https://token-plan-cn.xiaomimimo.com/v1", Compat: xiaomiCompat()},
-	{Source: "xiaomi", Provider: "xiaomi-token-plan-ams", Protocol: "openai-completions", BaseURL: "https://token-plan-ams.xiaomimimo.com/v1", Compat: xiaomiCompat()},
-	{Source: "xiaomi", Provider: "xiaomi-token-plan-sgp", Protocol: "openai-completions", BaseURL: "https://token-plan-sgp.xiaomimimo.com/v1", Compat: xiaomiCompat()},
+	{Source: "xiaomi-token-plan-cn", Provider: "xiaomi-token-plan-cn", Protocol: "openai-completions", BaseURL: "https://token-plan-cn.xiaomimimo.com/v1", Compat: xiaomiCompat()},
+	{Source: "xiaomi-token-plan-ams", Provider: "xiaomi-token-plan-ams", Protocol: "openai-completions", BaseURL: "https://token-plan-ams.xiaomimimo.com/v1", Compat: xiaomiCompat()},
+	{Source: "xiaomi-token-plan-sgp", Provider: "xiaomi-token-plan-sgp", Protocol: "openai-completions", BaseURL: "https://token-plan-sgp.xiaomimimo.com/v1", Compat: xiaomiCompat()},
 	{Source: "zai-coding-plan", Provider: "zai", Protocol: "openai-completions", BaseURL: "https://api.z.ai/api/coding/paas/v4", Compat: zaiCompat()},
 	{Source: "zai-coding-plan", Provider: "zai-coding-cn", Protocol: "openai-completions", BaseURL: "https://open.bigmodel.cn/api/coding/paas/v4", Compat: zaiCompat()},
 	{Source: "kimi-for-coding", Provider: "kimi-coding", Protocol: "anthropic-messages", BaseURL: "https://api.kimi.com/coding", Headers: map[string]string{"User-Agent": "KimiCLI/1.5"}},
@@ -80,9 +78,6 @@ func fromModelsDev(catalog map[string]sourceProvider) []model {
 	for _, rule := range providerRules {
 		for id, source := range catalog[rule.Source].Models {
 			if !source.ToolCall || source.Status == "deprecated" {
-				continue
-			}
-			if strings.HasPrefix(rule.Provider, "xiaomi-token-plan-") && id == "mimo-v2-flash" {
 				continue
 			}
 			models = append(models, normalize(id, source, rule))
