@@ -113,6 +113,24 @@ func TestValidateCompleteCatalogInvariants(t *testing.T) {
 			t.Fatalf("validation error = %v, want token limit failure", err)
 		}
 	})
+
+	t.Run("thinking profile requires reasoning", func(t *testing.T) {
+		invalid := []model{validGeneratedModel("opencode-go", "mimo-v2.5")}
+		err := validateCatalog(invalid, true)
+		if err == nil || !strings.Contains(err.Error(), "thinking profile but reasoning is disabled") {
+			t.Fatalf("validation error = %v, want reasoning mismatch", err)
+		}
+	})
+
+	t.Run("thinking profile must be applied", func(t *testing.T) {
+		invalid := []model{validGeneratedModel("opencode-go", "mimo-v2.5")}
+		invalid[0].Reasoning = true
+		invalid[0].Compat.Kind = "openai"
+		err := validateCatalog(invalid, true)
+		if err == nil || !strings.Contains(err.Error(), "does not match its thinking profile") {
+			t.Fatalf("validation error = %v, want unapplied profile mismatch", err)
+		}
+	})
 }
 
 func TestGenerateCatalogFailurePreservesExistingOutput(t *testing.T) {

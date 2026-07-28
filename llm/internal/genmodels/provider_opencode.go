@@ -2,6 +2,22 @@ package main
 
 import "strings"
 
+var openCodeThinkingProfiles = map[modelRouteKey]thinkingProfile{
+	{Provider: "opencode", ModelID: "deepseek-v4-flash"}:      effortThinking("", true, "high", "max"),
+	{Provider: "opencode", ModelID: "deepseek-v4-flash-free"}: effortThinking("", true, "high", "max"),
+	{Provider: "opencode", ModelID: "deepseek-v4-pro"}:        effortThinking("", true, "high", "max"),
+	{Provider: "opencode", ModelID: "kimi-k2.6"}:              toggleThinking("deepseek", false),
+
+	{Provider: "opencode-go", ModelID: "deepseek-v4-flash"}: effortThinking("deepseek", true, "off", "high", "max"),
+	{Provider: "opencode-go", ModelID: "deepseek-v4-pro"}:   effortThinking("deepseek", true, "off", "high", "max"),
+	{Provider: "opencode-go", ModelID: "glm-5.2"}:           effortThinking("", false, "high", "max"),
+	{Provider: "opencode-go", ModelID: "kimi-k2.6"}:         toggleThinking("deepseek", false),
+	{Provider: "opencode-go", ModelID: "mimo-v2.5"}:         toggleThinking("deepseek", true),
+	{Provider: "opencode-go", ModelID: "mimo-v2.5-pro"}:     fixedThinking("", true),
+	{Provider: "opencode-go", ModelID: "minimax-m2.7"}:      fixedThinking("hidden", false),
+	{Provider: "opencode-go", ModelID: "qwen3.6-plus"}:      toggleThinking("qwen", false),
+}
+
 func fromOpenCode(catalog map[string]sourceProvider) []model {
 	variants := []struct{ source, provider, base string }{
 		{"opencode", "opencode", "https://opencode.ai/zen"},
@@ -37,11 +53,9 @@ func fromOpenCode(catalog map[string]sourceProvider) []model {
 			if protocol != "openai-completions" && protocol != "anthropic-messages" {
 				continue
 			}
-			normalized := normalize(id, source, providerRule{
+			models = append(models, normalize(id, source, providerRule{
 				Provider: variant.provider, Protocol: protocol, BaseURL: baseURL, Compat: compat,
-			})
-			applyOpenCodeOverrides(&normalized)
-			models = append(models, normalized)
+			}))
 		}
 	}
 	return models
@@ -51,111 +65,26 @@ func applyOpenCodeOverrides(candidate *model) {
 	if candidate == nil {
 		return
 	}
-	if (candidate.Provider == "opencode" || candidate.Provider == "opencode-go") &&
-		(candidate.ID == "claude-sonnet-4" || candidate.ID == "claude-sonnet-4-5") {
+	if candidate.Provider != "opencode" && candidate.Provider != "opencode-go" {
+		return
+	}
+	if candidate.ID == "claude-sonnet-4" || candidate.ID == "claude-sonnet-4-5" {
 		candidate.ContextWindow = 200_000
 	}
 	if candidate.Protocol != "openai-completions" {
 		return
 	}
 
-	if candidate.ID == "kimi-k2.6" {
-		candidate.Compat.ThinkingFormat = "deepseek"
-		candidate.Compat.SupportsReasoningEffort = boolp(false)
-		candidate.ThinkingLevelMap = map[string]*string{
-			"minimal": nil,
-			"low":     nil,
-			"medium":  nil,
-		}
+	key := modelRouteKey{Provider: candidate.Provider, ModelID: candidate.ID}
+	if profile, ok := openCodeThinkingProfiles[key]; ok {
+		applyThinkingProfile(candidate, profile)
+		return
 	}
 
-	if candidate.Compat.ThinkingFormat == "qwen" {
-		candidate.Compat.SupportsReasoningEffort = boolp(false)
-		candidate.ThinkingLevelMap = map[string]*string{
-			"minimal": nil,
-			"low":     nil,
-			"medium":  nil,
-		}
-	}
-
-	if candidate.Provider == "opencode-go" && candidate.ID == "mimo-v2.5" {
-		candidate.Compat.ThinkingFormat = "deepseek"
-		candidate.Compat.RequiresReasoningContentOnAssistantMessages = boolp(true)
-		candidate.Compat.SupportsReasoningEffort = boolp(false)
-		candidate.ThinkingLevelMap = map[string]*string{
-			"minimal": nil,
-			"low":     nil,
-			"medium":  nil,
-		}
-	}
-
-	if candidate.Provider == "opencode-go" && candidate.ID == "mimo-v2.5-pro" {
-		candidate.Compat.ThinkingFormat = "deepseek"
-		candidate.Compat.RequiresReasoningContentOnAssistantMessages = boolp(true)
-		candidate.Compat.SupportsReasoningEffort = boolp(false)
-		candidate.ThinkingLevelMap = map[string]*string{
-			"off":     nil,
-			"minimal": nil,
-			"low":     nil,
-			"medium":  nil,
-		}
-	}
-
-	if candidate.Provider == "opencode-go" && candidate.ID == "minimax-m2.7" {
-		candidate.Compat.SupportsReasoningEffort = boolp(false)
-		candidate.ThinkingVisibility = "hidden"
-		candidate.ThinkingLevelMap = map[string]*string{
-			"off":     nil,
-			"minimal": nil,
-			"low":     nil,
-			"medium":  nil,
-		}
-	}
-
-	if strings.Contains(candidate.ID, "deepseek-v4") {
-		candidate.Compat.RequiresReasoningContentOnAssistantMessages = boolp(true)
-		if candidate.Provider == "opencode-go" {
-			candidate.Compat.ThinkingFormat = "deepseek"
-		}
-	}
-
-	if candidate.Provider == "opencode-go" && candidate.ID == "glm-5.2" {
-		high, max := "high", "max"
-		candidate.ThinkingLevelMap = map[string]*string{
-			"off":     nil,
-			"minimal": nil,
-			"low":     nil,
-			"medium":  nil,
-			"high":    &high,
-			"max":     &max,
-		}
-	}
-
-	if candidate.Provider == "opencode" && candidate.ID == "grok-build-0.1" {
-		candidate.Compat.SupportsReasoningEffort = boolp(false)
-		candidate.ThinkingLevelMap = map[string]*string{
-			"off":     nil,
-			"minimal": nil,
-			"low":     nil,
-			"medium":  nil,
-		}
-	}
-
-	// OpenCode aggregates model families with different request formats. Only
-	// advertise Off when models.dev or a verified format describes the wire
-	// value. Otherwise an explicit Off may serialize to no field and leave the
-	// provider's default reasoning enabled.
-	if candidate.Reasoning && candidate.Compat.ThinkingFormat == "" {
-		if candidate.ThinkingLevelMap == nil {
-			candidate.Compat.SupportsReasoningEffort = boolp(false)
-			candidate.ThinkingLevelMap = map[string]*string{
-				"off":     nil,
-				"minimal": nil,
-				"low":     nil,
-				"medium":  nil,
-			}
-		} else if _, hasOff := candidate.ThinkingLevelMap["off"]; !hasOff {
-			candidate.ThinkingLevelMap["off"] = nil
-		}
+	// An empty models.dev control list does not prove that a gateway route can
+	// disable or tune reasoning. Keep the provider default and expose one fixed
+	// thinking state until that exact route has a verified profile.
+	if candidate.Reasoning && candidate.ThinkingLevelMap == nil {
+		applyThinkingProfile(candidate, fixedProviderDefault())
 	}
 }
