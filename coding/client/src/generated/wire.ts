@@ -196,6 +196,7 @@ export type UsageCost = {
 
 export type Usage = {
   input: number
+  inputUnknown?: boolean
   output: number
   cacheRead: number
   cacheWrite: number

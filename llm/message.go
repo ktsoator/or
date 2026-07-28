@@ -17,12 +17,13 @@ type UsageCost struct {
 
 // Usage records token consumption for one assistant response.
 type Usage struct {
-	Input       int64     `json:"input"`
-	Output      int64     `json:"output"`
-	CacheRead   int64     `json:"cacheRead"`
-	CacheWrite  int64     `json:"cacheWrite"`
-	TotalTokens int64     `json:"totalTokens"`
-	Cost        UsageCost `json:"cost"`
+	Input        int64     `json:"input"`
+	InputUnknown bool      `json:"inputUnknown,omitempty"`
+	Output       int64     `json:"output"`
+	CacheRead    int64     `json:"cacheRead"`
+	CacheWrite   int64     `json:"cacheWrite"`
+	TotalTokens  int64     `json:"totalTokens"`
+	Cost         UsageCost `json:"cost"`
 }
 
 // StopReason explains why the model stopped generating a response.

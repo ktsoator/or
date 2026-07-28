@@ -1082,6 +1082,7 @@ function mergeUsage(current: Usage, next?: Usage): Usage {
   if (!next) return current
   return {
     input: current.input + next.input,
+    inputUnknown: Boolean(current.inputUnknown || next.inputUnknown),
     output: current.output + next.output,
     cacheRead: current.cacheRead + next.cacheRead,
     cacheWrite: current.cacheWrite + next.cacheWrite,
@@ -1107,6 +1108,7 @@ function usageTokens(usage: Usage): number {
 
 function hasUsage(usage: Usage): boolean {
   return (
+    Boolean(usage.inputUnknown) ||
     usage.input !== 0 ||
     usage.output !== 0 ||
     usage.cacheRead !== 0 ||

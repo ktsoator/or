@@ -377,7 +377,7 @@ function ModelRow({
         </button>
       </td>
       <NumberCell value={formatNumber(model.requests)} />
-      <NumberCell value={formatNumber(model.input)} />
+      <NumberCell value={model.inputUnknown ? '--' : formatNumber(model.input)} />
       <NumberCell value={formatNumber(model.cacheRead)} />
       <NumberCell value={formatNumber(model.output)} />
       <NumberCell value={formatNumber(model.totalTokens)} strong />
@@ -558,7 +558,7 @@ function RequestRow({
       <td className="px-4 py-2.5">
         <div className="text-stone-600 tabular-nums">{timestamp}</div>
       </td>
-      <NumberCell value={formatNumber(event.usage.input)} />
+      <NumberCell value={event.usage.inputUnknown ? '--' : formatNumber(event.usage.input)} />
       <NumberCell value={formatNumber(event.usage.cacheRead)} />
       <NumberCell value={formatNumber(event.usage.output)} />
       <NumberCell value={formatNumber(totalTokens)} strong />
@@ -605,6 +605,7 @@ function groupByProvider(models: ModelUsageSummary[]): ProviderUsageGroup[] {
         models: [],
         requests: 0,
         input: 0,
+        inputUnknown: false,
         output: 0,
         cacheRead: 0,
         cacheWrite: 0,
@@ -616,6 +617,7 @@ function groupByProvider(models: ModelUsageSummary[]): ProviderUsageGroup[] {
     group.models.push(model)
     group.requests += model.requests
     group.input += model.input
+    group.inputUnknown = Boolean(group.inputUnknown || model.inputUnknown)
     group.output += model.output
     group.cacheRead += model.cacheRead
     group.cacheWrite += model.cacheWrite

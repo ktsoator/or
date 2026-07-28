@@ -76,6 +76,7 @@ func (s *Server) Handler() http.Handler {
 	r.Use(gin.Recovery())
 
 	api := r.Group("/api")
+	s.mountHealth(api)
 	s.mountSessions(api)
 	s.mountModels(api)
 	s.mountProviders(api)

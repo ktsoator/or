@@ -15,8 +15,10 @@ import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { ProviderIcon } from '@/components/ProviderIdentity'
 import { ProviderConnectionTestDialog } from '@/components/ProviderConnectionTestDialog'
+import { FixedThinkingStatus } from '@/components/FixedThinkingStatus'
 import { UtilityModelSection } from '@/components/UtilityModelSection'
 import { providerName } from '@/lib/provider'
+import { isFixedHiddenThinking } from '@/modelThinking'
 import type {
   ModelOption,
   ProviderConnectionInfo,
@@ -261,6 +263,7 @@ function DefaultModelSection({
 
   const current = models.find((entry) => entry.provider === provider && entry.id === model)
   const thinkingLevels = current?.thinkingLevels ?? []
+  const fixedHiddenThinking = isFixedHiddenThinking(current)
 
   const persist = async (nextProvider: string, nextModel: string, nextThinking: ThinkingLevel) => {
     setSaving(true)
@@ -445,45 +448,49 @@ function DefaultModelSection({
                 </DropdownMenu.Root>
 
                 {/* Thinking effort */}
-                <DropdownMenu.Root>
-                  <DropdownMenu.Trigger asChild>
-                    <button
-                      type="button"
-                      aria-label={t('settings.defaultModelThinking')}
-                      className={triggerClass}
-                      disabled={saving || thinkingLevels.length === 0}
-                    >
-                      <span className="truncate">{t(`effort.${thinking}` as Parameters<typeof t>[0])}</span>
-                      <ChevronDown className="size-3.5 shrink-0 text-stone-400" aria-hidden="true" />
-                    </button>
-                  </DropdownMenu.Trigger>
-                  <DropdownMenu.Portal>
-                    <DropdownMenu.Content
-                      side="bottom"
-                      align="end"
-                      sideOffset={7}
-                      collisionPadding={10}
-                      className="z-[100] min-w-[10rem] animate-[fade-in_110ms_ease-out] rounded-[14px] border border-stone-200 bg-white p-1 text-[0.8125rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
-                    >
-                      <DropdownMenu.RadioGroup value={thinking} onValueChange={chooseThinking}>
-                        <div className="flex flex-col gap-0.5">
-                          {thinkingLevels.map((level) => (
-                            <DropdownMenu.RadioItem
-                              key={level}
-                              value={level}
-                              className="relative flex h-9 cursor-pointer items-center rounded-[9px] px-2.5 pr-8 outline-none select-none data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(237,237,237)]"
-                            >
-                              <span>{t(`effort.${level}` as Parameters<typeof t>[0])}</span>
-                              <DropdownMenu.ItemIndicator className="absolute right-2 grid size-4 place-items-center text-stone-700">
-                                <Check className="size-3.5" aria-hidden="true" />
-                              </DropdownMenu.ItemIndicator>
-                            </DropdownMenu.RadioItem>
-                          ))}
-                        </div>
-                      </DropdownMenu.RadioGroup>
-                    </DropdownMenu.Content>
-                  </DropdownMenu.Portal>
-                </DropdownMenu.Root>
+                {fixedHiddenThinking ? (
+                  <FixedThinkingStatus className="h-9 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-[0.8125rem] text-stone-500 outline-none focus-visible:ring-2 focus-visible:ring-stone-300" />
+                ) : (
+                  <DropdownMenu.Root>
+                    <DropdownMenu.Trigger asChild>
+                      <button
+                        type="button"
+                        aria-label={t('settings.defaultModelThinking')}
+                        className={triggerClass}
+                        disabled={saving || thinkingLevels.length === 0}
+                      >
+                        <span className="truncate">{t(`effort.${thinking}` as Parameters<typeof t>[0])}</span>
+                        <ChevronDown className="size-3.5 shrink-0 text-stone-400" aria-hidden="true" />
+                      </button>
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Portal>
+                      <DropdownMenu.Content
+                        side="bottom"
+                        align="end"
+                        sideOffset={7}
+                        collisionPadding={10}
+                        className="z-[100] min-w-[10rem] animate-[fade-in_110ms_ease-out] rounded-[14px] border border-stone-200 bg-white p-1 text-[0.8125rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+                      >
+                        <DropdownMenu.RadioGroup value={thinking} onValueChange={chooseThinking}>
+                          <div className="flex flex-col gap-0.5">
+                            {thinkingLevels.map((level) => (
+                              <DropdownMenu.RadioItem
+                                key={level}
+                                value={level}
+                                className="relative flex h-9 cursor-pointer items-center rounded-[9px] px-2.5 pr-8 outline-none select-none data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(237,237,237)]"
+                              >
+                                <span>{t(`effort.${level}` as Parameters<typeof t>[0])}</span>
+                                <DropdownMenu.ItemIndicator className="absolute right-2 grid size-4 place-items-center text-stone-700">
+                                  <Check className="size-3.5" aria-hidden="true" />
+                                </DropdownMenu.ItemIndicator>
+                              </DropdownMenu.RadioItem>
+                            ))}
+                          </div>
+                        </DropdownMenu.RadioGroup>
+                      </DropdownMenu.Content>
+                    </DropdownMenu.Portal>
+                  </DropdownMenu.Root>
+                )}
             </div>
           </SettingsRowLike>
         )}

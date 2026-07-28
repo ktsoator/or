@@ -36,6 +36,16 @@ const (
 	ModelThinkingMax     ModelThinkingLevel = "max"
 )
 
+// ModelThinkingVisibility describes whether a provider returns the model's
+// reasoning text. An empty value keeps the default behavior: reasoning text is
+// shown when the provider sends it.
+type ModelThinkingVisibility string
+
+const (
+	ModelThinkingVisible ModelThinkingVisibility = "visible"
+	ModelThinkingHidden  ModelThinkingVisibility = "hidden"
+)
+
 // ThinkingDisplay controls how a reasoning model returns its thinking. It does
 // not change whether the model reasons or what it is billed; it only governs
 // what travels back. Only Anthropic-protocol models honor it today.
@@ -80,10 +90,11 @@ type Model struct {
 	// ThinkingLevelMap maps a provider-independent level to the provider's own
 	// value; a nil value marks a level as unsupported, a missing key falls back
 	// to the provider default.
-	ThinkingLevelMap map[ModelThinkingLevel]*string `json:"thinkingLevelMap,omitempty"`
-	Input            []ModelInput                   `json:"input"`         // accepted modalities: text, image
-	ContextWindow    int64                          `json:"contextWindow"` // max total tokens (input + output)
-	MaxTokens        int64                          `json:"maxTokens"`     // max tokens the model may generate
+	ThinkingLevelMap   map[ModelThinkingLevel]*string `json:"thinkingLevelMap,omitempty"`
+	ThinkingVisibility ModelThinkingVisibility        `json:"thinkingVisibility,omitempty"`
+	Input              []ModelInput                   `json:"input"`         // accepted modalities: text, image
+	ContextWindow      int64                          `json:"contextWindow"` // max total tokens (input + output)
+	MaxTokens          int64                          `json:"maxTokens"`     // max tokens the model may generate
 
 	// Pricing and per-provider quirks.
 	Cost ModelCost `json:"cost"`

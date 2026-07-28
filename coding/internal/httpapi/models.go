@@ -9,12 +9,29 @@ import (
 )
 
 type modelOption struct {
-	Provider       string                   `json:"provider"`
-	ID             string                   `json:"id"`
-	Name           string                   `json:"name"`
-	ContextWindow  int64                    `json:"contextWindow"`
-	ThinkingLevels []llm.ModelThinkingLevel `json:"thinkingLevels"`
-	SupportsImages bool                     `json:"supportsImages"`
+	Provider           string                      `json:"provider"`
+	ID                 string                      `json:"id"`
+	Name               string                      `json:"name"`
+	ContextWindow      int64                       `json:"contextWindow"`
+	ThinkingLevels     []llm.ModelThinkingLevel    `json:"thinkingLevels"`
+	ThinkingVisibility llm.ModelThinkingVisibility `json:"thinkingVisibility,omitempty"`
+	SupportsImages     bool                        `json:"supportsImages"`
+}
+
+func newModelOption(model llm.Model) modelOption {
+	name := model.Name
+	if name == "" {
+		name = model.ID
+	}
+	return modelOption{
+		Provider:           model.Provider,
+		ID:                 model.ID,
+		Name:               name,
+		ContextWindow:      model.ContextWindow,
+		ThinkingLevels:     llm.SupportedThinkingLevels(model),
+		ThinkingVisibility: model.ThinkingVisibility,
+		SupportsImages:     slices.Contains(model.Input, llm.Image),
+	}
 }
 
 func (s *Server) handleModels(c *gin.Context) {
@@ -25,18 +42,7 @@ func (s *Server) handleModels(c *gin.Context) {
 			continue
 		}
 		for _, model := range llm.GetRunnableModels(providerID) {
-			name := model.Name
-			if name == "" {
-				name = model.ID
-			}
-			models = append(models, modelOption{
-				Provider:       model.Provider,
-				ID:             model.ID,
-				Name:           name,
-				ContextWindow:  model.ContextWindow,
-				ThinkingLevels: llm.SupportedThinkingLevels(model),
-				SupportsImages: slices.Contains(model.Input, llm.Image),
-			})
+			models = append(models, newModelOption(model))
 		}
 	}
 	defaultProvider := ""

@@ -245,16 +245,17 @@ func projectImages(images []llm.ImageContent) []wireImage {
 }
 
 func projectUsage(usage llm.Usage) *wireUsage {
-	if usage.Input == 0 && usage.Output == 0 && usage.CacheRead == 0 &&
+	if !usage.InputUnknown && usage.Input == 0 && usage.Output == 0 && usage.CacheRead == 0 &&
 		usage.CacheWrite == 0 && usage.TotalTokens == 0 && usage.Cost.Total == 0 {
 		return nil
 	}
 	return &wireUsage{
-		Input:       usage.Input,
-		Output:      usage.Output,
-		CacheRead:   usage.CacheRead,
-		CacheWrite:  usage.CacheWrite,
-		TotalTokens: usage.TotalTokens,
+		Input:        usage.Input,
+		InputUnknown: usage.InputUnknown,
+		Output:       usage.Output,
+		CacheRead:    usage.CacheRead,
+		CacheWrite:   usage.CacheWrite,
+		TotalTokens:  usage.TotalTokens,
 		Cost: wireUsageCost{
 			Input:      usage.Cost.Input,
 			Output:     usage.Cost.Output,

@@ -39,13 +39,14 @@ type Event struct {
 
 // Totals is an aggregate returned by the usage API.
 type Totals struct {
-	Requests    int64         `json:"requests"`
-	Input       int64         `json:"input"`
-	Output      int64         `json:"output"`
-	CacheRead   int64         `json:"cacheRead"`
-	CacheWrite  int64         `json:"cacheWrite"`
-	TotalTokens int64         `json:"totalTokens"`
-	Cost        llm.UsageCost `json:"cost"`
+	Requests     int64         `json:"requests"`
+	Input        int64         `json:"input"`
+	InputUnknown bool          `json:"inputUnknown,omitempty"`
+	Output       int64         `json:"output"`
+	CacheRead    int64         `json:"cacheRead"`
+	CacheWrite   int64         `json:"cacheWrite"`
+	TotalTokens  int64         `json:"totalTokens"`
+	Cost         llm.UsageCost `json:"cost"`
 }
 
 // ModelSummary groups usage by the requested provider and model.
@@ -330,6 +331,7 @@ func (s *Store) Events(provider, model string, since time.Time, offset, limit in
 func addTotals(total *Totals, usage llm.Usage) {
 	total.Requests++
 	total.Input += usage.Input
+	total.InputUnknown = total.InputUnknown || usage.InputUnknown
 	total.Output += usage.Output
 	total.CacheRead += usage.CacheRead
 	total.CacheWrite += usage.CacheWrite
@@ -346,7 +348,7 @@ func addTotals(total *Totals, usage llm.Usage) {
 }
 
 func present(usage llm.Usage) bool {
-	return usage.Input != 0 || usage.Output != 0 || usage.CacheRead != 0 ||
+	return usage.InputUnknown || usage.Input != 0 || usage.Output != 0 || usage.CacheRead != 0 ||
 		usage.CacheWrite != 0 || usage.TotalTokens != 0 || usage.Cost.Total != 0
 }
 
@@ -354,9 +356,9 @@ func eventID(sessionID, provider, model, responseID string, timestamp time.Time,
 	if responseID != "" {
 		return provider + ":" + responseID
 	}
-	payload := fmt.Sprintf("%s\x00%s\x00%s\x00%d\x00%d\x00%d\x00%d\x00%d",
+	payload := fmt.Sprintf("%s\x00%s\x00%s\x00%d\x00%d\x00%t\x00%d\x00%d\x00%d",
 		sessionID, provider, model, timestamp.UnixMilli(),
-		usage.Input, usage.Output, usage.CacheRead, usage.CacheWrite)
+		usage.Input, usage.InputUnknown, usage.Output, usage.CacheRead, usage.CacheWrite)
 	sum := sha256.Sum256([]byte(payload))
 	return "local:" + hex.EncodeToString(sum[:])
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/ktsoator/or/coding/internal/conversation"
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/tools"
+	"github.com/ktsoator/or/llm"
 )
 
 func TestProjectSessionEventIncludesRunFailure(t *testing.T) {
@@ -43,6 +44,24 @@ func TestProjectEventIncludesResponseCompletionTime(t *testing.T) {
 	}
 	if want := completedAt.UTC().Format(time.RFC3339Nano); event.CompletedAt != want {
 		t.Fatalf("completedAt = %q, want %q", event.CompletedAt, want)
+	}
+}
+
+func TestProjectEventPreservesUnknownInputUsage(t *testing.T) {
+	data, ok := ProjectEvent(engine.Event{
+		Type:  engine.MessageCompleted,
+		Usage: llm.Usage{InputUnknown: true, Output: 5, TotalTokens: 5},
+	})
+	if !ok {
+		t.Fatal("message completion event was not projected")
+	}
+
+	var event wireEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		t.Fatal(err)
+	}
+	if event.Usage == nil || !event.Usage.InputUnknown {
+		t.Fatalf("usage = %#v, want inputUnknown preserved", event.Usage)
 	}
 }
 

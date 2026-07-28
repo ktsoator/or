@@ -1,0 +1,45 @@
+import { Lock } from 'lucide-react'
+import { Tooltip } from 'radix-ui'
+import { useI18n } from '@/i18n'
+import { cn } from '@/lib/utils'
+
+export function FixedThinkingStatus({
+  className,
+  focusable = true,
+  iconOnly = false,
+}: {
+  className?: string
+  focusable?: boolean
+  iconOnly?: boolean
+}) {
+  const { t } = useI18n()
+  const description = t('model.hiddenThinkingDescription')
+
+  return (
+    <Tooltip.Provider delayDuration={180} skipDelayDuration={80}>
+      <Tooltip.Root>
+        <Tooltip.Trigger asChild>
+          <span
+            className={cn('inline-flex min-w-0 items-center gap-1.5', className)}
+            tabIndex={focusable ? 0 : undefined}
+            aria-label={`${t('model.fixedThinking')}. ${description}`}
+            data-testid="fixed-thinking-status"
+          >
+            <Lock className="size-3.5 shrink-0" aria-hidden="true" />
+            {!iconOnly && <span className="truncate">{t('model.fixedThinking')}</span>}
+          </span>
+        </Tooltip.Trigger>
+        <Tooltip.Portal>
+          <Tooltip.Content
+            side="top"
+            sideOffset={6}
+            collisionPadding={8}
+            className="z-[210] max-w-[17rem] animate-[fade-in_100ms_ease-out] rounded-md bg-stone-900 px-2.5 py-1.5 text-[0.6875rem] leading-4 text-white shadow-lg"
+          >
+            {description}
+          </Tooltip.Content>
+        </Tooltip.Portal>
+      </Tooltip.Root>
+    </Tooltip.Provider>
+  )
+}

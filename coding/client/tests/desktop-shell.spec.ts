@@ -115,6 +115,8 @@ async function openDesktopClient(
   page: Page,
   options: {
     failCreate?: boolean
+    healthFailures?: number
+    legacyHealth?: boolean
     browserResultFailures?: number
     existingSession?: boolean
     historyEvents?: unknown[]
@@ -124,10 +126,14 @@ async function openDesktopClient(
     secondarySession?: boolean
     secondaryHistoryEvents?: unknown[]
     modelName?: string
+    modelThinkingLevels?: Array<'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'>
+    modelThinkingVisibility?: 'visible' | 'hidden'
     nativeDirectory?: string
   } = {},
 ) {
   const requests: Array<{ method: string; path: string; body?: unknown }> = []
+  const modelThinkingLevels = options.modelThinkingLevels ?? ['medium']
+  const modelThinkingLevel = modelThinkingLevels[0] ?? 'off'
   const createdSession = {
     id: 'test-session',
     title: 'New session',
@@ -142,7 +148,7 @@ async function openDesktopClient(
     modelProvider: 'openai',
     modelId: 'test-model',
     modelName: options.modelName ?? 'Test model',
-    thinkingLevel: 'medium',
+    thinkingLevel: modelThinkingLevel,
     permissionMode: 'ask',
   }
   const secondarySession = {
@@ -164,6 +170,7 @@ async function openDesktopClient(
   }
   let sessionCreated = Boolean(options.existingSession)
   let workbenchSessionCreated = false
+  let remainingHealthFailures = options.healthFailures ?? 0
   let remainingBrowserResultFailures = options.browserResultFailures ?? 0
 
   await page.addInitScript(({ nativeDirectory }) => {
@@ -362,6 +369,16 @@ async function openDesktopClient(
     const requestBody = postData ? JSON.parse(postData) : undefined
     requests.push({ method, path, body: requestBody })
 
+    if (path === '/api/health') {
+      if (remainingHealthFailures > 0) {
+        remainingHealthFailures--
+        await route.fulfill({ status: 503 })
+      } else {
+        await route.fulfill({ status: options.legacyHealth ? 404 : 204 })
+      }
+      return
+    }
+
     if (path === '/api/sessions' && method === 'POST') {
       if (options.failCreate) {
         await route.fulfill({
@@ -460,12 +477,18 @@ async function openDesktopClient(
     let body: unknown = []
     let status = 200
     if (path === '/api/models') {
-      body = options.modelName
-        ? {
-            ...models,
-            models: models.models.map((model) => ({ ...model, name: options.modelName })),
-          }
-        : models
+      body = {
+        ...models,
+        defaultThinkingLevel: modelThinkingLevel,
+        models: models.models.map((model) => ({
+          ...model,
+          name: options.modelName ?? model.name,
+          thinkingLevels: modelThinkingLevels,
+          ...(options.modelThinkingVisibility
+            ? { thinkingVisibility: options.modelThinkingVisibility }
+            : {}),
+        })),
+      }
     }
     if (path === '/api/sessions') {
       body = sessionCreated
@@ -618,6 +641,18 @@ test('desktop external links open in the system browser without leaving Coding',
   ).toBe('http://localhost:3000/')
   expect(page.url()).toBe(appURL)
   await expect(page.getByTestId('conversation-header')).toBeVisible()
+})
+
+test('Coding API startup retries recover the Composer automatically', async ({ page }) => {
+  const requests = await openDesktopClient(page, { healthFailures: 2, legacyHealth: true })
+  const input = page.getByTestId('composer').locator('textarea')
+
+  await expect(input).toBeDisabled()
+  await expect(input).toBeEnabled()
+  await expect(input).toHaveAttribute('placeholder', 'Ask anything')
+  await expect.poll(
+    () => requests.filter((request) => request.path === '/api/health').length,
+  ).toBeGreaterThanOrEqual(3)
 })
 
 test('workbench opens before a preview and launches Browser without hiding Chat', async ({
@@ -2896,6 +2931,33 @@ test('response usage stays on one line and truncates when Chat is narrow', async
   await expect(actions).toHaveCSS('overflow', 'hidden')
 })
 
+test('unknown provider input is shown as unavailable', async ({ page }) => {
+  await openDesktopClient(page, {
+    existingSession: true,
+    historyEvents: [
+      {
+        type: 'message_end',
+        text: 'Completed response',
+        finalResponse: true,
+        usage: {
+          input: 0,
+          inputUnknown: true,
+          output: 3486,
+          cacheRead: 21224,
+          cacheWrite: 0,
+          totalTokens: 24710,
+          cost: { input: 0, output: 0.0042, cacheRead: 0.0013, cacheWrite: 0, total: 0.0055 },
+        },
+      },
+    ],
+  })
+
+  await page.getByTestId('response-usage-trigger').hover()
+  const tooltip = page.getByRole('tooltip')
+  await expect(tooltip).toContainText(/Uncached input\s*--/)
+  await expect(tooltip).not.toContainText('Cache hit')
+})
+
 test('Composer controls stay separate and compact when Chat is narrow', async ({ page }) => {
   await page.setViewportSize({ width: 960, height: 700 })
   await openDesktopClient(page, {
@@ -2945,6 +3007,30 @@ test('Composer controls stay separate and compact when Chat is narrow', async ({
   }))
   expect(modelNameLayout.whiteSpace).toBe('nowrap')
   expect(modelNameLayout.scrollWidth).toBeGreaterThan(modelNameLayout.clientWidth)
+})
+
+test('fixed hidden thinking is shown as a read-only model capability', async ({ page }) => {
+  await openDesktopClient(page, {
+    existingSession: true,
+    modelThinkingLevels: ['high'],
+    modelThinkingVisibility: 'hidden',
+  })
+
+  const trigger = page.getByTestId('model-settings-trigger')
+  const compactStatus = trigger.getByTestId('fixed-thinking-status')
+  await expect(compactStatus).toBeVisible()
+  await expect(compactStatus).toHaveText('')
+  await trigger.click()
+
+  const menu = page.getByRole('menu')
+  const status = menu.getByTestId('fixed-thinking-status')
+  await expect(status).toHaveText('Fixed thinking')
+  await expect(menu.getByRole('menuitem', { name: /Effort/ })).toHaveCount(0)
+
+  await status.hover()
+  await expect(page.getByRole('tooltip')).toContainText(
+    'The model reasons internally, but the provider does not return its reasoning process.',
+  )
 })
 
 test('first send creates a session and renders the user message', async ({ page }) => {

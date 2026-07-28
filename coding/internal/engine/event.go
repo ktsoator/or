@@ -205,6 +205,7 @@ func eventUserMessage(message agent.AgentMessage) (string, []llm.ImageContent, b
 
 func addUsage(total *llm.Usage, usage llm.Usage) {
 	total.Input += usage.Input
+	total.InputUnknown = total.InputUnknown || usage.InputUnknown
 	total.Output += usage.Output
 	total.CacheRead += usage.CacheRead
 	total.CacheWrite += usage.CacheWrite
@@ -221,7 +222,7 @@ func addUsage(total *llm.Usage, usage llm.Usage) {
 }
 
 func hasUsage(usage llm.Usage) bool {
-	return usage.Input != 0 || usage.Output != 0 || usage.CacheRead != 0 ||
+	return usage.InputUnknown || usage.Input != 0 || usage.Output != 0 || usage.CacheRead != 0 ||
 		usage.CacheWrite != 0 || usage.TotalTokens != 0 || usage.Cost.Total != 0
 }
 

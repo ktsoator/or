@@ -310,12 +310,34 @@ func assistantContentIndex(content []llm.AssistantContent, target llm.AssistantC
 
 func usageFrom(usage oai.CompletionUsage, model llm.Model) llm.Usage {
 	cacheRead := usage.PromptTokensDetails.CachedTokens
-	input := max(0, usage.PromptTokens-cacheRead)
+	cacheWrite := usage.PromptTokensDetails.CacheWriteTokens
+	promptTokens := usage.PromptTokens
+	promptKnown := usage.JSON.PromptTokens.Valid() && promptTokens > 0
+	if !promptKnown && usage.JSON.TotalTokens.Valid() && usage.JSON.CompletionTokens.Valid() &&
+		usage.TotalTokens >= usage.CompletionTokens {
+		inferredPrompt := usage.TotalTokens - usage.CompletionTokens
+		if inferredPrompt > 0 {
+			promptTokens = inferredPrompt
+			promptKnown = true
+		}
+	}
+	accountedPrompt := cacheRead + cacheWrite
+	inputUnknown := !promptKnown || promptTokens < accountedPrompt
+	input := int64(0)
+	if !inputUnknown {
+		input = promptTokens - accountedPrompt
+	}
+	totalTokens := usage.TotalTokens
+	if !usage.JSON.TotalTokens.Valid() {
+		totalTokens = input + usage.CompletionTokens + cacheRead + cacheWrite
+	}
 	result := llm.Usage{
-		Input:       input,
-		Output:      usage.CompletionTokens,
-		CacheRead:   cacheRead,
-		TotalTokens: input + usage.CompletionTokens + cacheRead,
+		Input:        input,
+		InputUnknown: inputUnknown,
+		Output:       usage.CompletionTokens,
+		CacheRead:    cacheRead,
+		CacheWrite:   cacheWrite,
+		TotalTokens:  totalTokens,
 	}
 	result.Cost = llm.CalculateCost(model, result)
 	return result

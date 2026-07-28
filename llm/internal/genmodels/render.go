@@ -51,14 +51,15 @@ func toCatalogModel(source model) catalogModel {
 		compat = &value
 	}
 	return catalogModel{
-		ID:               source.ID,
-		Name:             source.Name,
-		Provider:         source.Provider,
-		Protocol:         source.Protocol,
-		BaseURL:          source.BaseURL,
-		Reasoning:        source.Reasoning,
-		ThinkingLevelMap: source.ThinkingLevelMap,
-		Input:            source.Input,
+		ID:                 source.ID,
+		Name:               source.Name,
+		Provider:           source.Provider,
+		Protocol:           source.Protocol,
+		BaseURL:            source.BaseURL,
+		Reasoning:          source.Reasoning,
+		ThinkingLevelMap:   source.ThinkingLevelMap,
+		ThinkingVisibility: source.ThinkingVisibility,
+		Input:              source.Input,
 		Cost: catalogCost{
 			Input:      source.InputCost,
 			Output:     source.OutputCost,

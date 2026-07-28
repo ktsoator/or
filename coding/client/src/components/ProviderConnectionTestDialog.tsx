@@ -14,7 +14,9 @@ import { apiURL } from '@/api'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { ProviderIcon } from '@/components/ProviderIdentity'
+import { FixedThinkingStatus } from '@/components/FixedThinkingStatus'
 import { composerMenuTriggerClass } from '@/components/composerControlStyles'
+import { isFixedHiddenThinking } from '@/modelThinking'
 import type { ModelOption, ThinkingLevel } from '@/types'
 
 type TestConnection = {
@@ -110,6 +112,7 @@ export function ProviderConnectionTestDialog({
   useEffect(() => () => requestRef.current?.abort(), [])
 
   const selectedModel = models.find((model) => model.id === selectedModelId)
+  const fixedHiddenThinking = isFixedHiddenThinking(selectedModel)
   const connectionName = connection.official
     ? t('providers.officialConnection')
     : connection.name || t('providers.customConnection')
@@ -302,59 +305,63 @@ export function ProviderConnectionTestDialog({
               <span className="text-[0.75rem] font-medium text-stone-700">
                 {t('providers.testThinking')}
               </span>
-              <DropdownMenu.Root>
-                <DropdownMenu.Trigger asChild>
-                  <button
-                    type="button"
-                    aria-label={t('providers.testThinking')}
-                    disabled={testing || !selectedModel || selectedModel.thinkingLevels.length === 0}
-                    className={cn(
-                      composerMenuTriggerClass,
-                      'min-w-[8.5rem] justify-between bg-[rgb(246,246,246)]',
-                    )}
-                  >
-                    <span className="truncate">
-                      {t(`effort.${selectedThinkingLevel}`)}
-                    </span>
-                    <ChevronDown
-                      className="size-3.5 shrink-0 text-stone-400 transition-transform duration-150 group-data-[state=open]:rotate-180"
-                      aria-hidden="true"
-                    />
-                  </button>
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Portal>
-                  <DropdownMenu.Content
-                    side="bottom"
-                    align="end"
-                    sideOffset={7}
-                    collisionPadding={10}
-                    className="z-[190] min-w-[11rem] animate-[fade-in_110ms_ease-out] rounded-2xl border border-stone-200 bg-white p-1 text-[0.875rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
-                  >
-                    <DropdownMenu.Label className="px-2.5 py-1.5 text-[0.75rem] font-medium text-stone-400">
-                      {t('providers.testThinking')}
-                    </DropdownMenu.Label>
-                    <DropdownMenu.Separator className="mx-1.5 my-0.5 h-px bg-stone-100" />
-                    <DropdownMenu.RadioGroup
-                      className="flex flex-col gap-0.5"
-                      value={selectedThinkingLevel}
-                      onValueChange={chooseThinkingLevel}
+              {fixedHiddenThinking ? (
+                <FixedThinkingStatus className="h-9 min-w-[8.5rem] justify-center rounded-xl bg-[rgb(246,246,246)] px-2.5 text-[0.8125rem] text-stone-500 outline-none focus-visible:ring-2 focus-visible:ring-stone-300" />
+              ) : (
+                <DropdownMenu.Root>
+                  <DropdownMenu.Trigger asChild>
+                    <button
+                      type="button"
+                      aria-label={t('providers.testThinking')}
+                      disabled={testing || !selectedModel || selectedModel.thinkingLevels.length === 0}
+                      className={cn(
+                        composerMenuTriggerClass,
+                        'min-w-[8.5rem] justify-between bg-[rgb(246,246,246)]',
+                      )}
                     >
-                      {(selectedModel?.thinkingLevels ?? []).map((level) => (
-                        <DropdownMenu.RadioItem
-                          key={level}
-                          value={level}
-                          className="relative flex h-[30px] cursor-default items-center rounded-[10px] px-2.5 pr-9 outline-none select-none data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(237,237,237)] data-[state=checked]:font-medium"
-                        >
-                          <span>{t(`effort.${level}`)}</span>
-                          <DropdownMenu.ItemIndicator className="absolute right-2.5 grid size-4 place-items-center text-stone-700">
-                            <Check className="size-3.5" aria-hidden="true" />
-                          </DropdownMenu.ItemIndicator>
-                        </DropdownMenu.RadioItem>
-                      ))}
-                    </DropdownMenu.RadioGroup>
-                  </DropdownMenu.Content>
-                </DropdownMenu.Portal>
-              </DropdownMenu.Root>
+                      <span className="truncate">
+                        {t(`effort.${selectedThinkingLevel}`)}
+                      </span>
+                      <ChevronDown
+                        className="size-3.5 shrink-0 text-stone-400 transition-transform duration-150 group-data-[state=open]:rotate-180"
+                        aria-hidden="true"
+                      />
+                    </button>
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Portal>
+                    <DropdownMenu.Content
+                      side="bottom"
+                      align="end"
+                      sideOffset={7}
+                      collisionPadding={10}
+                      className="z-[190] min-w-[11rem] animate-[fade-in_110ms_ease-out] rounded-2xl border border-stone-200 bg-white p-1 text-[0.875rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+                    >
+                      <DropdownMenu.Label className="px-2.5 py-1.5 text-[0.75rem] font-medium text-stone-400">
+                        {t('providers.testThinking')}
+                      </DropdownMenu.Label>
+                      <DropdownMenu.Separator className="mx-1.5 my-0.5 h-px bg-stone-100" />
+                      <DropdownMenu.RadioGroup
+                        className="flex flex-col gap-0.5"
+                        value={selectedThinkingLevel}
+                        onValueChange={chooseThinkingLevel}
+                      >
+                        {(selectedModel?.thinkingLevels ?? []).map((level) => (
+                          <DropdownMenu.RadioItem
+                            key={level}
+                            value={level}
+                            className="relative flex h-[30px] cursor-default items-center rounded-[10px] px-2.5 pr-9 outline-none select-none data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(237,237,237)] data-[state=checked]:font-medium"
+                          >
+                            <span>{t(`effort.${level}`)}</span>
+                            <DropdownMenu.ItemIndicator className="absolute right-2.5 grid size-4 place-items-center text-stone-700">
+                              <Check className="size-3.5" aria-hidden="true" />
+                            </DropdownMenu.ItemIndicator>
+                          </DropdownMenu.RadioItem>
+                        ))}
+                      </DropdownMenu.RadioGroup>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Portal>
+                </DropdownMenu.Root>
+              )}
             </div>
 
             <div className="mt-4">

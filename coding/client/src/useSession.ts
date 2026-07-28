@@ -9,6 +9,7 @@ import { sessionCommands } from './sessionCommands'
 import { useSessionConnection } from './sessionConnection'
 import { threadsReducer } from './sessionReducer'
 import { useBrowserResultOutbox } from './useBrowserResultOutbox'
+import { useServiceConnection } from './serviceConnection'
 import {
   createSessionDraft,
   createSessionStoreState,
@@ -138,13 +139,11 @@ export function useSession(secondarySessionID?: string): Session {
     createSessionStoreState(),
   )
   const { sessions, workspaces, draft, pendingDraftSend, activeSessionID } = sessionStore
-  const [initializing, setInitializing] = useState(true)
   const [creating, setCreating] = useState(false)
   const [updatingSettings, setUpdatingSettings] = useState(false)
   const [compactingSessionID, setCompactingSessionID] = useState<string>()
   const [models, setModels] = useState<ModelOption[]>([])
   const [modelDefaults, setModelDefaults] = useState<ModelDefaults>()
-  const [serviceStatus, setServiceStatus] = useState<ConnectionStatus>('connecting')
 
   const acknowledgeBrowserResult = useCallback((sessionID: string, id: string) => {
     dispatch({ t: 'browserResultAcknowledged', sessionID, id })
@@ -177,37 +176,25 @@ export function useSession(secondarySessionID?: string): Session {
   const applyPrimarySessionStatus = useCallback(
     (sessionID: string, status: ConnectionStatus) => {
       dispatch({ t: 'status', sessionID, status })
-      if (status !== 'connecting') setServiceStatus(status)
     },
     [],
   )
 
   const loadModels = useCallback(async (signal?: AbortSignal) => {
-    try {
-      const response = await fetch(apiURL('/models'), { cache: 'no-store', signal })
-      if (!response.ok) throw new Error(`model catalog failed (${response.status})`)
-      const catalog = (await response.json()) as ModelCatalogResponse
-      setModels(catalog.models)
-      setModelDefaults(
-        catalog.defaultProvider && catalog.defaultModel
-          ? {
-              provider: catalog.defaultProvider,
-              model: catalog.defaultModel,
-              thinkingLevel: catalog.defaultThinkingLevel,
-            }
-          : undefined,
-      )
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return
-      setModels([])
-    }
+    const response = await fetch(apiURL('/models'), { cache: 'no-store', signal })
+    if (!response.ok) throw new Error(`model catalog failed (${response.status})`)
+    const catalog = (await response.json()) as ModelCatalogResponse
+    setModels(catalog.models)
+    setModelDefaults(
+      catalog.defaultProvider && catalog.defaultModel
+        ? {
+            provider: catalog.defaultProvider,
+            model: catalog.defaultModel,
+            thinkingLevel: catalog.defaultThinkingLevel,
+          }
+        : undefined,
+    )
   }, [])
-
-  useEffect(() => {
-    const controller = new AbortController()
-    void loadModels(controller.signal)
-    return () => controller.abort()
-  }, [loadModels])
 
   const refreshSessions = useCallback(async (signal?: AbortSignal) => {
     const response = await fetch(apiURL('/sessions'), { cache: 'no-store', signal })
@@ -230,44 +217,17 @@ export function useSession(secondarySessionID?: string): Session {
     return received
   }, [])
 
-  useEffect(() => {
-    let controller: AbortController | undefined
-    let active = true
-
-    const refresh = (initial = false) => {
-      controller?.abort()
-      controller = new AbortController()
-      void Promise.all([
-        refreshSessions(controller.signal),
-        refreshWorkspaces(controller.signal),
+  const refreshServiceState = useCallback(
+    async (signal: AbortSignal) => {
+      await Promise.all([
+        loadModels(signal),
+        refreshSessions(signal),
+        refreshWorkspaces(signal),
       ])
-        .then(() => setServiceStatus('ready'))
-        .catch((error: unknown) => {
-          if (error instanceof DOMException && error.name === 'AbortError') return
-          setServiceStatus('disconnected')
-        })
-        .finally(() => {
-          if (active && initial) setInitializing(false)
-        })
-    }
-
-    const refreshWhenVisible = () => {
-      if (document.visibilityState === 'visible') refresh()
-    }
-
-    const refreshOnFocus = () => refresh()
-
-    refresh(true)
-    window.addEventListener('focus', refreshOnFocus)
-    document.addEventListener('visibilitychange', refreshWhenVisible)
-
-    return () => {
-      active = false
-      controller?.abort()
-      window.removeEventListener('focus', refreshOnFocus)
-      document.removeEventListener('visibilitychange', refreshWhenVisible)
-    }
-  }, [refreshSessions, refreshWorkspaces])
+    },
+    [loadModels, refreshSessions, refreshWorkspaces],
+  )
+  const { status: serviceStatus, initializing } = useServiceConnection(refreshServiceState)
 
   useEffect(() => {
     if (activeSessionID) localStorage.setItem(selectedSessionKey, activeSessionID)

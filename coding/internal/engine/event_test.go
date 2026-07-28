@@ -9,6 +9,15 @@ import (
 	"github.com/ktsoator/or/llm"
 )
 
+func TestAddUsagePreservesUnknownInput(t *testing.T) {
+	total := llm.Usage{Input: 2, Output: 3, TotalTokens: 5}
+	addUsage(&total, llm.Usage{InputUnknown: true, Output: 4, TotalTokens: 4})
+
+	if !total.InputUnknown || total.Input != 2 || total.Output != 7 || total.TotalTokens != 9 {
+		t.Fatalf("usage = %#v, want partial input retained and marked unknown", total)
+	}
+}
+
 func TestProjectAgentEventProjectsToolInputLifecycle(t *testing.T) {
 	tests := []struct {
 		name      string

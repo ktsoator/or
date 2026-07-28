@@ -131,6 +131,54 @@ func TestUsageFromExtraDecodesObject(t *testing.T) {
 	}
 }
 
+func TestUsageFromExtraRecoversMissingPromptFromTotal(t *testing.T) {
+	raw := `{"completion_tokens":5,"total_tokens":15,"prompt_tokens_details":{"cached_tokens":2,"cache_write_tokens":1}}`
+	fields := map[string]respjson.Field{"usage": respjson.NewField(raw)}
+	usage, ok, err := usageFromExtra(fields, "usage", llm.Model{})
+	if err != nil || !ok {
+		t.Fatalf("usage = %#v ok=%v err=%v", usage, ok, err)
+	}
+	if usage.InputUnknown {
+		t.Fatal("input is unknown after prompt tokens were recovered from total_tokens")
+	}
+	if usage.Input != 7 || usage.Output != 5 || usage.CacheRead != 2 || usage.CacheWrite != 1 {
+		t.Fatalf("usage = %#v, want input=7 output=5 cacheRead=2 cacheWrite=1", usage)
+	}
+	if usage.TotalTokens != 15 {
+		t.Fatalf("totalTokens = %d, want provider-reported 15", usage.TotalTokens)
+	}
+}
+
+func TestUsageFromExtraMarksUnrecoverablePromptUnknown(t *testing.T) {
+	raw := `{"completion_tokens":5,"total_tokens":5}`
+	fields := map[string]respjson.Field{"usage": respjson.NewField(raw)}
+	usage, ok, err := usageFromExtra(fields, "usage", llm.Model{})
+	if err != nil || !ok {
+		t.Fatalf("usage = %#v ok=%v err=%v", usage, ok, err)
+	}
+	if !usage.InputUnknown || usage.Input != 0 {
+		t.Fatalf("usage = %#v, want unknown zero-valued input", usage)
+	}
+	if usage.TotalTokens != 5 {
+		t.Fatalf("totalTokens = %d, want provider-reported 5", usage.TotalTokens)
+	}
+}
+
+func TestUsageFromExtraMarksInconsistentPromptUnknown(t *testing.T) {
+	raw := `{"prompt_tokens":1,"completion_tokens":5,"total_tokens":6,"prompt_tokens_details":{"cached_tokens":2}}`
+	fields := map[string]respjson.Field{"usage": respjson.NewField(raw)}
+	usage, ok, err := usageFromExtra(fields, "usage", llm.Model{})
+	if err != nil || !ok {
+		t.Fatalf("usage = %#v ok=%v err=%v", usage, ok, err)
+	}
+	if !usage.InputUnknown || usage.Input != 0 {
+		t.Fatalf("usage = %#v, want inconsistent input marked unknown", usage)
+	}
+	if usage.TotalTokens != 6 {
+		t.Fatalf("totalTokens = %d, want provider-reported 6", usage.TotalTokens)
+	}
+}
+
 func TestUsageFromExtraReportsDecodeError(t *testing.T) {
 	// Malformed JSON must surface as an error rather than silently zero usage.
 	fields := map[string]respjson.Field{"usage": respjson.NewField(`{not json`)}

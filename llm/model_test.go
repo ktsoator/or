@@ -519,6 +519,9 @@ func TestBuiltInOpenCodeGoMiniMaxThinkingMetadata(t *testing.T) {
 	if got, want := SupportedThinkingLevels(m2), []ModelThinkingLevel{ModelThinkingHigh}; !slices.Equal(got, want) {
 		t.Fatalf("M2.7 thinking levels = %v, want %v", got, want)
 	}
+	if m2.ThinkingVisibility != ModelThinkingHidden {
+		t.Fatalf("M2.7 thinking visibility = %q, want %q", m2.ThinkingVisibility, ModelThinkingHidden)
+	}
 	m2Compat, ok := m2.Compatibility.(*OpenAICompletionsCompatibility)
 	if !ok || m2Compat == nil {
 		t.Fatalf("M2.7 compatibility = %T, want OpenAI Completions", m2.Compatibility)
@@ -534,6 +537,9 @@ func TestBuiltInOpenCodeGoMiniMaxThinkingMetadata(t *testing.T) {
 	m3Levels := SupportedThinkingLevels(m3)
 	if !slices.Contains(m3Levels, ModelThinkingOff) || !slices.Contains(m3Levels, ModelThinkingHigh) {
 		t.Fatalf("M3 thinking levels = %v, want off and high included", m3Levels)
+	}
+	if m3.ThinkingVisibility == ModelThinkingHidden {
+		t.Fatalf("M3 thinking visibility = %q, want provider default", m3.ThinkingVisibility)
 	}
 }
 

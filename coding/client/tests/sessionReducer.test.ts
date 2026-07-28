@@ -339,6 +339,60 @@ describe('threadsReducer event sequences', () => {
     )
   })
 
+  test('preserves unknown input while merging tool-loop usage', () => {
+    const usageCost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }
+    const state = reduce([
+      {
+        t: 'wire',
+        sessionID,
+        ev: {
+          type: 'message_end',
+          finalResponse: false,
+          usage: {
+            input: 0,
+            inputUnknown: true,
+            output: 4,
+            cacheRead: 10,
+            cacheWrite: 0,
+            totalTokens: 14,
+            cost: usageCost,
+          },
+        },
+      },
+      {
+        t: 'wire',
+        sessionID,
+        ev: {
+          type: 'message_end',
+          text: 'done',
+          finalResponse: true,
+          usage: {
+            input: 2,
+            output: 3,
+            cacheRead: 8,
+            cacheWrite: 0,
+            totalTokens: 13,
+            cost: usageCost,
+          },
+        },
+      },
+    ])
+
+    expect(thread(state).items).toContainEqual(
+      expect.objectContaining({
+        kind: 'assistant',
+        markdown: 'done',
+        usage: expect.objectContaining({
+          input: 2,
+          inputUnknown: true,
+          output: 7,
+          cacheRead: 18,
+          totalTokens: 27,
+        }),
+      }),
+    )
+  })
+
   test('keeps terminal tool outcome metadata as the UI source of truth', () => {
     const state = reduce([
       {

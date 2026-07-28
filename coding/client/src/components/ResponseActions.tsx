@@ -25,7 +25,9 @@ export function ResponseActions({
     ? usage.totalTokens || usage.input + usage.output + usage.cacheRead + usage.cacheWrite
     : 0
   const promptTokens = usage ? usage.input + usage.cacheRead : 0
-  const cacheHitRate = usage && promptTokens > 0 ? usage.cacheRead / promptTokens : 0
+  const cacheHitRate = usage && !usage.inputUnknown && promptTokens > 0
+    ? usage.cacheRead / promptTokens
+    : undefined
   const completedTime = completedAt ? formatMessageTime(completedAt, locale) : ''
 
   useEffect(
@@ -126,12 +128,15 @@ export function ResponseActions({
                   className="z-[150] animate-[fade-in_110ms_ease-out] rounded-lg border border-stone-200/80 bg-white px-2.5 py-1.5 text-[0.6875rem] leading-4 text-stone-700 tabular-nums shadow-[0_10px_28px_-20px_rgba(28,25,23,0.4)] outline-none"
                 >
                   <div className="flex items-center gap-2.5 whitespace-nowrap">
-                    <Metric label={t('actions.input')} value={formatNumber(usage.input)} />
+                    <Metric
+                      label={t('actions.input')}
+                      value={usage.inputUnknown ? '--' : formatNumber(usage.input)}
+                    />
                     <Metric label={t('actions.output')} value={formatNumber(usage.output)} />
                     {usage.cacheRead > 0 && (
                       <Metric label={t('actions.cacheRead')} value={formatNumber(usage.cacheRead)} />
                     )}
-                    {promptTokens > 0 && (
+                    {cacheHitRate !== undefined && (
                       <Metric
                         label={t('actions.cacheHitRate')}
                         value={formatNumber(cacheHitRate, {
@@ -212,6 +217,7 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function hasUsage(usage: Usage): boolean {
   return (
+    Boolean(usage.inputUnknown) ||
     usage.input !== 0 ||
     usage.output !== 0 ||
     usage.cacheRead !== 0 ||

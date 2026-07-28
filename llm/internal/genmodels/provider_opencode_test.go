@@ -13,6 +13,7 @@ func TestApplyOpenCodeOverrides(t *testing.T) {
 		requiresReasoning       bool
 		supportsReasoningEffort bool
 		unsupportedLevels       []string
+		thinkingVisibility      string
 	}{
 		{
 			name: "opencode go deepseek",
@@ -61,6 +62,7 @@ func TestApplyOpenCodeOverrides(t *testing.T) {
 			},
 			supportsReasoningEffort: false,
 			unsupportedLevels:       []string{"off", "minimal", "low", "medium"},
+			thinkingVisibility:      "hidden",
 		},
 		{
 			name: "opencode go glm is always thinking",
@@ -103,6 +105,9 @@ func TestApplyOpenCodeOverrides(t *testing.T) {
 					t.Errorf("ThinkingLevelMap[%q] = %v, want explicit nil", level, value)
 				}
 			}
+			if test.model.ThinkingVisibility != test.thinkingVisibility {
+				t.Errorf("ThinkingVisibility = %q, want %q", test.model.ThinkingVisibility, test.thinkingVisibility)
+			}
 		})
 	}
 }
@@ -112,7 +117,8 @@ func TestApplyOpenCodeOverridesIgnoresOtherProtocols(t *testing.T) {
 		ID: "kimi-k2.6", Provider: "opencode", Protocol: "anthropic-messages",
 	}
 	applyOpenCodeOverrides(&model)
-	if model.Compat.ThinkingFormat != "" || model.Compat.SupportsReasoningEffort != nil || model.ThinkingLevelMap != nil {
+	if model.Compat.ThinkingFormat != "" || model.Compat.SupportsReasoningEffort != nil ||
+		model.ThinkingLevelMap != nil || model.ThinkingVisibility != "" {
 		t.Fatalf("unexpected override: %#v", model)
 	}
 }

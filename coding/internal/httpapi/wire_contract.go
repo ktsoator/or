@@ -349,12 +349,13 @@ type wireBrowserTabsResult struct {
 }
 
 type wireUsage struct {
-	Input       int64         `json:"input"`
-	Output      int64         `json:"output"`
-	CacheRead   int64         `json:"cacheRead"`
-	CacheWrite  int64         `json:"cacheWrite"`
-	TotalTokens int64         `json:"totalTokens"`
-	Cost        wireUsageCost `json:"cost"`
+	Input        int64         `json:"input"`
+	InputUnknown bool          `json:"inputUnknown,omitempty"`
+	Output       int64         `json:"output"`
+	CacheRead    int64         `json:"cacheRead"`
+	CacheWrite   int64         `json:"cacheWrite"`
+	TotalTokens  int64         `json:"totalTokens"`
+	Cost         wireUsageCost `json:"cost"`
 }
 
 type wireUsageCost struct {

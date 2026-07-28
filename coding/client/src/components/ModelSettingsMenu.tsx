@@ -5,7 +5,9 @@ import type { ContextUsage, ModelOption, ThinkingLevel } from '@/types'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 import { ProviderIcon } from '@/components/ProviderIdentity'
+import { FixedThinkingStatus } from '@/components/FixedThinkingStatus'
 import { providerName } from '@/lib/provider'
+import { isFixedHiddenThinking } from '@/modelThinking'
 import { composerMenuTriggerClass } from './composerControlStyles'
 
 export function ModelSettingsMenu({
@@ -39,6 +41,7 @@ export function ModelSettingsMenu({
   const currentModel = models.find(
     (model) => model.provider === modelProvider && model.id === modelID,
   )
+  const fixedHiddenThinking = isFixedHiddenThinking(currentModel)
   const modelKey = modelProvider && modelID ? JSON.stringify([modelProvider, modelID]) : ''
   const thinkingLevels = currentModel?.thinkingLevels ?? (thinkingLevel ? [thinkingLevel] : [])
   const groupedModels = useMemo(
@@ -54,7 +57,11 @@ export function ModelSettingsMenu({
   const modelName = currentModel?.name ?? modelID ?? t('model.fallback')
   const selectedModelName = selectedProvider === modelProvider ? modelName : t('model.select')
   const selectedProviderName = providerName(selectedProvider || modelProvider || '')
-  const effortName = thinkingLevel ? t(`effort.${thinkingLevel}`) : t('model.effort')
+  const effortName = fixedHiddenThinking
+    ? t('model.fixedThinking')
+    : thinkingLevel
+      ? t(`effort.${thinkingLevel}`)
+      : t('model.effort')
   const unavailable = disabled || !modelKey || models.length === 0
   const contextWindow = currentModel?.contextWindow ?? contextUsage?.contextWindow ?? 0
   const currentContextUsage =
@@ -107,12 +114,20 @@ export function ModelSettingsMenu({
           >
             {modelName}
           </span>
-          <span
-            data-testid="model-settings-effort"
-            className="shrink-0 text-stone-400 @max-[430px]:hidden max-sm:hidden"
-          >
-            {effortName}
-          </span>
+          {fixedHiddenThinking ? (
+            <FixedThinkingStatus
+              className="shrink-0 text-stone-400"
+              focusable={false}
+              iconOnly
+            />
+          ) : (
+            <span
+              data-testid="model-settings-effort"
+              className="shrink-0 text-stone-400 @max-[430px]:hidden max-sm:hidden"
+            >
+              {effortName}
+            </span>
+          )}
           <ChevronDown
             className="size-3.5 shrink-0 text-stone-400 transition-transform duration-150 group-data-[state=open]:rotate-180"
             aria-hidden="true"
@@ -213,45 +228,52 @@ export function ModelSettingsMenu({
             </DropdownMenu.Portal>
           </DropdownMenu.Sub>
 
-          <DropdownMenu.Sub>
-            <DropdownMenu.SubTrigger
-              className={subTriggerClass}
-              disabled={selectedProvider !== modelProvider}
-            >
+          {fixedHiddenThinking ? (
+            <div className="mb-0.5 flex h-[30px] select-none items-center rounded-[10px] px-2.5">
               <span>{t('model.effort')}</span>
-              <span className="ml-auto flex items-center gap-1.5 text-stone-500">
-                <span>{effortName}</span>
-                <ChevronRight className="size-3.5" aria-hidden="true" />
-              </span>
-            </DropdownMenu.SubTrigger>
-            <DropdownMenu.Portal>
-              <DropdownMenu.SubContent
-                sideOffset={6}
-                alignOffset={-4}
-                collisionPadding={10}
-                className="z-[110] min-w-[13rem] animate-[fade-in_110ms_ease-out] rounded-2xl border border-stone-200 bg-white p-1 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+              <FixedThinkingStatus className="ml-auto text-stone-500 outline-none focus-visible:ring-2 focus-visible:ring-stone-300" />
+            </div>
+          ) : (
+            <DropdownMenu.Sub>
+              <DropdownMenu.SubTrigger
+                className={subTriggerClass}
+                disabled={selectedProvider !== modelProvider}
               >
-                <DropdownMenu.Label className={menuLabelClass}>
-                  {t('model.effort')}
-                </DropdownMenu.Label>
-                <DropdownMenu.Separator className={separatorClass} />
-                <DropdownMenu.RadioGroup
-                  className="flex flex-col gap-0.5"
-                  value={thinkingLevel ?? ''}
-                  onValueChange={selectEffort}
+                <span>{t('model.effort')}</span>
+                <span className="ml-auto flex items-center gap-1.5 text-stone-500">
+                  <span>{effortName}</span>
+                  <ChevronRight className="size-3.5" aria-hidden="true" />
+                </span>
+              </DropdownMenu.SubTrigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.SubContent
+                  sideOffset={6}
+                  alignOffset={-4}
+                  collisionPadding={10}
+                  className="z-[110] min-w-[13rem] animate-[fade-in_110ms_ease-out] rounded-2xl border border-stone-200 bg-white p-1 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
                 >
-                  {thinkingLevels.map((level) => (
-                    <DropdownMenu.RadioItem key={level} value={level} className={radioItemClass}>
-                      <span>{t(`effort.${level}`)}</span>
-                      <DropdownMenu.ItemIndicator className="absolute right-2.5 grid size-4 place-items-center text-stone-700">
-                        <Check className="size-3.5" aria-hidden="true" />
-                      </DropdownMenu.ItemIndicator>
-                    </DropdownMenu.RadioItem>
-                  ))}
-                </DropdownMenu.RadioGroup>
-              </DropdownMenu.SubContent>
-            </DropdownMenu.Portal>
-          </DropdownMenu.Sub>
+                  <DropdownMenu.Label className={menuLabelClass}>
+                    {t('model.effort')}
+                  </DropdownMenu.Label>
+                  <DropdownMenu.Separator className={separatorClass} />
+                  <DropdownMenu.RadioGroup
+                    className="flex flex-col gap-0.5"
+                    value={thinkingLevel ?? ''}
+                    onValueChange={selectEffort}
+                  >
+                    {thinkingLevels.map((level) => (
+                      <DropdownMenu.RadioItem key={level} value={level} className={radioItemClass}>
+                        <span>{t(`effort.${level}`)}</span>
+                        <DropdownMenu.ItemIndicator className="absolute right-2.5 grid size-4 place-items-center text-stone-700">
+                          <Check className="size-3.5" aria-hidden="true" />
+                        </DropdownMenu.ItemIndicator>
+                      </DropdownMenu.RadioItem>
+                    ))}
+                  </DropdownMenu.RadioGroup>
+                </DropdownMenu.SubContent>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Sub>
+          )}
 
           <DropdownMenu.Separator className="mx-2 my-1 h-px bg-stone-100" />
           <ContextMeter usage={currentContextUsage} contextWindow={contextWindow} />

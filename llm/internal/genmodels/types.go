@@ -35,22 +35,23 @@ type sourceProvider struct {
 }
 
 type model struct {
-	ID               string
-	Name             string
-	Protocol         string
-	Provider         string
-	BaseURL          string
-	Reasoning        bool
-	Input            []string
-	InputCost        float64
-	OutputCost       float64
-	CacheReadCost    float64
-	CacheWriteCost   float64
-	ContextWindow    int64
-	MaxTokens        int64
-	Headers          map[string]string
-	ThinkingLevelMap map[string]*string
-	Compat           compatibility
+	ID                 string
+	Name               string
+	Protocol           string
+	Provider           string
+	BaseURL            string
+	Reasoning          bool
+	Input              []string
+	InputCost          float64
+	OutputCost         float64
+	CacheReadCost      float64
+	CacheWriteCost     float64
+	ContextWindow      int64
+	MaxTokens          int64
+	Headers            map[string]string
+	ThinkingLevelMap   map[string]*string
+	ThinkingVisibility string
+	Compat             compatibility
 }
 
 type compatibility struct {
@@ -72,19 +73,20 @@ type compatibility struct {
 }
 
 type catalogModel struct {
-	ID               string             `json:"id"`
-	Name             string             `json:"name"`
-	Provider         string             `json:"provider"`
-	Protocol         string             `json:"protocol"`
-	BaseURL          string             `json:"baseUrl"`
-	Reasoning        bool               `json:"reasoning"`
-	ThinkingLevelMap map[string]*string `json:"thinkingLevelMap,omitempty"`
-	Input            []string           `json:"input"`
-	Cost             catalogCost        `json:"cost"`
-	ContextWindow    int64              `json:"contextWindow"`
-	MaxTokens        int64              `json:"maxTokens"`
-	Headers          map[string]string  `json:"headers,omitempty"`
-	Compatibility    *compatibility     `json:"compat,omitempty"`
+	ID                 string             `json:"id"`
+	Name               string             `json:"name"`
+	Provider           string             `json:"provider"`
+	Protocol           string             `json:"protocol"`
+	BaseURL            string             `json:"baseUrl"`
+	Reasoning          bool               `json:"reasoning"`
+	ThinkingLevelMap   map[string]*string `json:"thinkingLevelMap,omitempty"`
+	ThinkingVisibility string             `json:"thinkingVisibility,omitempty"`
+	Input              []string           `json:"input"`
+	Cost               catalogCost        `json:"cost"`
+	ContextWindow      int64              `json:"contextWindow"`
+	MaxTokens          int64              `json:"maxTokens"`
+	Headers            map[string]string  `json:"headers,omitempty"`
+	Compatibility      *compatibility     `json:"compat,omitempty"`
 }
 
 type catalogCost struct {

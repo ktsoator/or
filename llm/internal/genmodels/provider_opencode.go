@@ -71,6 +71,7 @@ func applyOpenCodeOverrides(candidate *model) {
 
 	if candidate.Provider == "opencode-go" && candidate.ID == "minimax-m2.7" {
 		candidate.Compat.SupportsReasoningEffort = boolp(false)
+		candidate.ThinkingVisibility = "hidden"
 		candidate.ThinkingLevelMap = map[string]*string{
 			"off":     nil,
 			"minimal": nil,
