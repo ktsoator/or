@@ -6586,7 +6586,8 @@
       "max": "max",
       "medium": null,
       "minimal": null,
-      "off": null
+      "off": null,
+      "xhigh": null
     },
     "input": [
       "text"
@@ -6600,6 +6601,7 @@
     "contextWindow": 1000000,
     "maxTokens": 384000,
     "compat": {
+      "supportsReasoningEffort": true,
       "maxTokensField": "max_tokens",
       "requiresReasoningContentOnAssistantMessages": true
     }
@@ -6617,7 +6619,8 @@
       "max": "max",
       "medium": null,
       "minimal": null,
-      "off": null
+      "off": null,
+      "xhigh": null
     },
     "input": [
       "text"
@@ -6631,6 +6634,7 @@
     "contextWindow": 200000,
     "maxTokens": 128000,
     "compat": {
+      "supportsReasoningEffort": true,
       "maxTokensField": "max_tokens",
       "requiresReasoningContentOnAssistantMessages": true
     }
@@ -6648,7 +6652,8 @@
       "max": "max",
       "medium": null,
       "minimal": null,
-      "off": null
+      "off": null,
+      "xhigh": null
     },
     "input": [
       "text"
@@ -6662,6 +6667,7 @@
     "contextWindow": 1000000,
     "maxTokens": 384000,
     "compat": {
+      "supportsReasoningEffort": true,
       "maxTokensField": "max_tokens",
       "requiresReasoningContentOnAssistantMessages": true
     }
@@ -7199,7 +7205,9 @@
       "low": null,
       "max": "max",
       "medium": null,
-      "minimal": null
+      "minimal": null,
+      "off": "none",
+      "xhigh": null
     },
     "input": [
       "text"
@@ -7213,6 +7221,7 @@
     "contextWindow": 1000000,
     "maxTokens": 384000,
     "compat": {
+      "supportsReasoningEffort": true,
       "maxTokensField": "max_tokens",
       "requiresReasoningContentOnAssistantMessages": true,
       "thinkingFormat": "deepseek"
@@ -7230,7 +7239,9 @@
       "low": null,
       "max": "max",
       "medium": null,
-      "minimal": null
+      "minimal": null,
+      "off": "none",
+      "xhigh": null
     },
     "input": [
       "text"
@@ -7244,6 +7255,7 @@
     "contextWindow": 1000000,
     "maxTokens": 384000,
     "compat": {
+      "supportsReasoningEffort": true,
       "maxTokensField": "max_tokens",
       "requiresReasoningContentOnAssistantMessages": true,
       "thinkingFormat": "deepseek"
@@ -7291,7 +7303,8 @@
       "max": "max",
       "medium": null,
       "minimal": null,
-      "off": null
+      "off": null,
+      "xhigh": null
     },
     "input": [
       "text"
@@ -7305,6 +7318,7 @@
     "contextWindow": 1000000,
     "maxTokens": 131072,
     "compat": {
+      "supportsReasoningEffort": true,
       "maxTokensField": "max_tokens"
     }
   },
@@ -7489,8 +7503,7 @@
     "compat": {
       "supportsReasoningEffort": false,
       "maxTokensField": "max_tokens",
-      "requiresReasoningContentOnAssistantMessages": true,
-      "thinkingFormat": "deepseek"
+      "requiresReasoningContentOnAssistantMessages": true
     }
   },
   {

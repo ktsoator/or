@@ -31,6 +31,9 @@ func applyOverrides(models []model) {
 				m.Compat.SupportsReasoningEffort = boolp(true)
 			}
 		}
+		// Route-specific gateway profiles are final overrides. Applying them last
+		// prevents family-wide compatibility rules from leaking across routes.
+		applyOpenCodeOverrides(m)
 	}
 }
 

@@ -87,6 +87,9 @@ func validateCatalog(models []model, allowPartial bool) error {
 	if len(models) == 0 {
 		return errors.New("generated catalog is empty")
 	}
+	if err := validateThinkingProfiles(openCodeThinkingProfiles); err != nil {
+		return fmt.Errorf("invalid OpenCode thinking profiles: %w", err)
+	}
 
 	providers := make(map[string]struct{})
 	seen := make(map[string]struct{}, len(models))
@@ -100,6 +103,11 @@ func validateCatalog(models []model, allowPartial bool) error {
 				candidate.Provider,
 				candidate.ID,
 			)
+		}
+		if profile, ok := openCodeThinkingProfiles[modelRouteKey{Provider: candidate.Provider, ModelID: candidate.ID}]; ok {
+			if err := validateAppliedThinkingProfile(candidate, profile); err != nil {
+				return err
+			}
 		}
 		key := candidate.Provider + "\x00" + candidate.ID
 		if _, exists := seen[key]; exists {

@@ -34,6 +34,13 @@ normalization and compatibility overrides live in `provider_*.go` and
 `overrides.go` and should stay small and explicit. Source-specific fetching is
 kept in `source_*.go`, while `render.go` owns deterministic catalog output.
 
+Compatibility belongs to a routed model, identified by provider endpoint and
+model ID. Models with the same ID on a native API and an aggregation gateway do
+not inherit controls from each other. Generator-only thinking profiles classify
+verified routes as fixed, toggle, or effort-controlled and compile that behavior
+into the existing runtime catalog fields. Unverified gateway routes keep the
+provider's fixed default instead of advertising a control that may do nothing.
+
 Verified models.dev `reasoning_options` effort values are normalized into the
 SDK's thinking levels for standard OpenAI-compatible and Anthropic adaptive-
 thinking models. Toggle and token budget controls remain provider-specific, and

@@ -81,7 +81,6 @@ func TestApplyOpenCodeOverrides(t *testing.T) {
 				ID: "mimo-v2.5-pro", Provider: "opencode-go", Protocol: "openai-completions", Reasoning: true,
 				Compat: compatibility{Kind: "openai"},
 			},
-			thinkingFormat:          "deepseek",
 			requiresReasoning:       true,
 			supportsReasoningEffort: false,
 			unsupportedLevels:       []string{"off", "minimal", "low", "medium"},
@@ -108,7 +107,7 @@ func TestApplyOpenCodeOverrides(t *testing.T) {
 		{
 			name: "opencode grok uses server default",
 			model: model{
-				ID: "grok-build-0.1", Provider: "opencode", Protocol: "openai-completions",
+				ID: "grok-build-0.1", Provider: "opencode", Protocol: "openai-completions", Reasoning: true,
 				Compat: compatibility{Kind: "openai"},
 			},
 			supportsReasoningEffort: false,
@@ -175,6 +174,7 @@ func TestFromOpenCodeAppliesHy3ReasoningOptions(t *testing.T) {
 	}
 
 	models := fromOpenCode(catalog)
+	applyOverrides(models)
 	if len(models) != 1 {
 		t.Fatalf("generated %d models, want 1", len(models))
 	}
@@ -198,15 +198,27 @@ func TestFromOpenCodeManualReasoningOverrideWins(t *testing.T) {
 	}
 
 	models := fromOpenCode(catalog)
+	applyOverrides(models)
 	if len(models) != 1 {
 		t.Fatalf("generated %d models, want 1", len(models))
 	}
 	want := map[string]*string{
 		"off": nil, "minimal": nil, "low": nil, "medium": nil,
-		"high": stringPointer("high"), "max": stringPointer("max"),
+		"high": stringPointer("high"), "xhigh": nil, "max": stringPointer("max"),
 	}
 	if !reflect.DeepEqual(models[0].ThinkingLevelMap, want) {
 		t.Fatalf("ThinkingLevelMap = %#v, want manual override %#v", models[0].ThinkingLevelMap, want)
+	}
+}
+
+func TestApplyOpenCodeOverridesKeepsRoutesIndependent(t *testing.T) {
+	candidate := model{
+		ID: "mimo-v2.5", Provider: "xiaomi", Protocol: "openai-completions", Reasoning: true,
+		Compat: compatibility{Kind: "openai", ThinkingFormat: "deepseek"},
+	}
+	applyOpenCodeOverrides(&candidate)
+	if candidate.ThinkingLevelMap != nil || candidate.Compat.SupportsReasoningEffort != nil {
+		t.Fatalf("OpenCode override leaked into Xiaomi route: %#v", candidate)
 	}
 }
 
