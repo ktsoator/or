@@ -105,6 +105,7 @@ type providerListResponse struct {
 	Providers    []providerInfo                  `json:"providers"`
 	ActiveModel  *provider.ModelSelection        `json:"activeModel,omitempty"`
 	UtilityModel *provider.UtilityModelSelection `json:"utilityModel,omitempty"`
+	Repairs      []provider.SelectionRepair      `json:"repairs,omitempty"`
 }
 
 func (s *Server) handleProviders(c *gin.Context) {
@@ -124,6 +125,7 @@ func (s *Server) handleProviders(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	response := providerListResponse{
 		Providers: out,
+		Repairs:   s.providers.Repairs(),
 	}
 	if selection, ok := s.providers.ActiveModel(); ok {
 		response.ActiveModel = &selection
@@ -155,8 +157,8 @@ func (s *Server) projectProviderInfo(id string, profile provider.Profile) (provi
 	}
 	status, _ := s.registry.AuthStatus(id, nil)
 	models := runnableProviderModels(registered)
-	if len(models) == 0 {
-		models = registered.Models()
+	if len(models) == 0 && !profileHasStoredConfiguration(profile) {
+		return providerInfo{}, false
 	}
 	officialBaseURL := ""
 	effectiveBaseURL := ""
@@ -237,6 +239,18 @@ func runnableProviderModels(registered *llm.Provider) []llm.Model {
 		}
 	}
 	return runnable
+}
+
+func profileHasStoredConfiguration(profile provider.Profile) bool {
+	if profile.ActiveConnectionID != "" && profile.ActiveConnectionID != provider.OfficialConnectionID {
+		return true
+	}
+	for _, connection := range profile.Connections {
+		if connection.ID != provider.OfficialConnectionID || connection.ActiveKeyID != "" || len(connection.Keys) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func maskAPIKey(value string) string {

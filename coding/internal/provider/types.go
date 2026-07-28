@@ -60,6 +60,37 @@ type UtilityModelSelection struct {
 	KeyID        string `json:"keyId"`
 }
 
+// SelectionRepair records one persisted model selection that was adjusted
+// during startup because its route or thinking level is no longer available.
+// It is kept in memory for the settings UI and is not written to providers.json.
+type SelectionRepair struct {
+	Target      SelectionRepairTarget `json:"target"`
+	Reason      SelectionRepairReason `json:"reason"`
+	Previous    ModelReference        `json:"previous"`
+	Replacement *ModelReference       `json:"replacement,omitempty"`
+}
+
+type SelectionRepairTarget string
+
+const (
+	SelectionRepairActiveModel  SelectionRepairTarget = "active_model"
+	SelectionRepairUtilityModel SelectionRepairTarget = "utility_model"
+)
+
+type SelectionRepairReason string
+
+const (
+	SelectionRepairUnavailable      SelectionRepairReason = "unavailable"
+	SelectionRepairUnsupportedLevel SelectionRepairReason = "unsupported_thinking_level"
+)
+
+// ModelReference is the non-secret identity used in a selection repair.
+type ModelReference struct {
+	Provider      string                 `json:"provider"`
+	Model         string                 `json:"model"`
+	ThinkingLevel llm.ModelThinkingLevel `json:"thinkingLevel,omitempty"`
+}
+
 // ModelRoute is the public, secret-free identity of one resolved request path.
 type ModelRoute struct {
 	Provider     string `json:"provider"`

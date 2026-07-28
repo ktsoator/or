@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -115,5 +116,74 @@ func TestProviderConnectionTestEndpointReportsUnavailableService(t *testing.T) {
 	router.ServeHTTP(response, request)
 	if response.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+}
+
+func TestProvidersEndpointFiltersCatalogOnlyAndProjectsRepairs(t *testing.T) {
+	registry := llm.NewProviderRegistry()
+	for _, spec := range []llm.ProviderSpec{
+		{
+			ID: "runnable", Name: "Runnable", Models: []llm.Model{{
+				ID: "available", Provider: "runnable", Protocol: llm.ProtocolOpenAICompletions,
+				BaseURL: "https://runnable.example.com/v1", Input: []llm.ModelInput{llm.Text},
+			}},
+		},
+		{
+			ID: "catalog-only", Name: "Catalog only", Models: []llm.Model{{
+				ID: "listed", Provider: "catalog-only", Protocol: "unsupported",
+				BaseURL: "https://catalog.example.com", Input: []llm.ModelInput{llm.Text},
+			}},
+		},
+		{
+			ID: "configured-catalog-only", Name: "Configured catalog only", Models: []llm.Model{{
+				ID: "listed", Provider: "configured-catalog-only", Protocol: "unsupported",
+				BaseURL: "https://configured.example.com", Input: []llm.ModelInput{llm.Text},
+			}},
+		},
+	} {
+		if err := registry.Register(llm.NewSpecProvider(spec)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(
+		dir+"/providers.json",
+		[]byte(`{
+				"version":4,
+				"activeModel":{"provider":"gone","model":"missing","thinkingLevel":"off"},
+				"providers":{"configured-catalog-only":{"activeConnectionId":"official","connections":[{"id":"official","activeKeyId":"saved","keys":[{"id":"saved","name":"Saved","apiKey":"secret"}]}]}}
+			}`),
+		0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+	store, err := provider.NewStore(dir, registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	server := &Server{registry: registry, providers: store}
+	router := gin.New()
+	server.mountProviders(router.Group("/api"))
+	request := httptest.NewRequest(http.MethodGet, "/api/providers", nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var payload providerListResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	providerIDs := make(map[string]bool, len(payload.Providers))
+	for _, info := range payload.Providers {
+		providerIDs[info.ID] = true
+	}
+	if len(payload.Providers) != 2 || !providerIDs["runnable"] || !providerIDs["configured-catalog-only"] ||
+		providerIDs["catalog-only"] {
+		t.Fatalf("providers = %#v, want runnable and configured catalog-only providers", payload.Providers)
+	}
+	if len(payload.Repairs) != 1 || payload.Repairs[0].Target != provider.SelectionRepairActiveModel {
+		t.Fatalf("repairs = %#v, want active model repair", payload.Repairs)
 	}
 }

@@ -6,6 +6,7 @@ import {
   LoaderCircle,
   Plus,
   Save as SaveIcon,
+  TriangleAlert,
   Trash2,
 } from 'lucide-react'
 import { DropdownMenu } from 'radix-ui'
@@ -21,6 +22,7 @@ import type {
   ProviderConnectionInfo,
   ProviderInfo,
   ProviderListResponse,
+  ProviderSelectionRepair,
   ThinkingLevel,
 } from '@/types'
 
@@ -85,6 +87,21 @@ export function ProvidersSettings({ onChanged }: { onChanged?: () => void }) {
 
   return (
     <div>
+      {providerData?.repairs && providerData.repairs.length > 0 && (
+        <div
+          className="mb-6 flex gap-2.5 border-l-2 border-amber-400 bg-amber-50/45 px-3 py-2.5 text-[0.8125rem] leading-5 text-amber-900"
+          role="status"
+        >
+          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />
+          <div className="min-w-0 space-y-1">
+            {providerData.repairs.map((repair, index) => (
+              <p key={`${repair.target}:${repair.previous.provider}:${repair.previous.model}:${index}`}>
+                {selectionRepairMessage(repair, t)}
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
       <DefaultModelSection
         onChanged={afterChange}
         utilityModel={providerData && (
@@ -126,6 +143,57 @@ export function ProvidersSettings({ onChanged }: { onChanged?: () => void }) {
       )}
     </div>
   )
+}
+
+function selectionRepairMessage(
+  repair: ProviderSelectionRepair,
+  t: ReturnType<typeof useI18n>['t'],
+): string {
+  const previous = modelReferenceLabel(repair.previous)
+  const replacement = repair.replacement && modelReferenceLabel(repair.replacement)
+  if (repair.reason === 'unsupported_thinking_level' && repair.replacement) {
+    return t('providers.defaultThinkingRecovered', {
+      model: previous,
+      previous: thinkingLevelLabel(repair.previous.thinkingLevel, t),
+      replacement: thinkingLevelLabel(repair.replacement.thinkingLevel, t),
+    })
+  }
+  if (repair.target === 'utility_model') {
+    if (
+      repair.replacement &&
+      repair.replacement.provider === repair.previous.provider &&
+      repair.replacement.model === repair.previous.model
+    ) {
+      return t('providers.utilityRouteRecovered', { model: previous })
+    }
+    return replacement
+      ? t('providers.utilityModelRecovered', { previous, replacement })
+      : t('providers.utilityModelCleared', { previous })
+  }
+  return replacement
+    ? t('providers.defaultModelRecovered', { previous, replacement })
+    : t('providers.defaultModelCleared', { previous })
+}
+
+function modelReferenceLabel(reference: { provider: string; model: string }): string {
+  return `${providerName(reference.provider) || reference.provider}/${reference.model}`
+}
+
+const thinkingLabelKeys = {
+  off: 'effort.off',
+  minimal: 'effort.minimal',
+  low: 'effort.low',
+  medium: 'effort.medium',
+  high: 'effort.high',
+  xhigh: 'effort.xhigh',
+  max: 'effort.max',
+} as const
+
+function thinkingLevelLabel(
+  level: ThinkingLevel | undefined,
+  t: ReturnType<typeof useI18n>['t'],
+): string {
+  return t(thinkingLabelKeys[level ?? 'off'])
 }
 
 type ModelsResponse = {

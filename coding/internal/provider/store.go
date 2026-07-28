@@ -23,6 +23,7 @@ type Store struct {
 	profiles     map[string]Profile
 	activeModel  *ModelSelection
 	utilityModel *UtilityModelSelection
+	repairs      []SelectionRepair
 }
 
 func NewStore(
@@ -55,13 +56,6 @@ func NewStore(
 	if file.Providers != nil {
 		store.profiles = file.Providers
 	}
-	if file.ActiveModel != nil {
-		selection, err := validateModelSelection(registry, *file.ActiveModel)
-		if err != nil {
-			return nil, fmt.Errorf("invalid active model: %w", err)
-		}
-		store.activeModel = &selection
-	}
 	for id, profile := range store.profiles {
 		if strings.TrimSpace(id) == "" {
 			return nil, errors.New("provider settings contain an empty provider id")
@@ -72,24 +66,50 @@ func NewStore(
 		}
 		store.profiles[id] = validated
 	}
+	repaired := false
+	if file.ActiveModel != nil {
+		selection, repair := store.restoreActiveModel(*file.ActiveModel)
+		store.activeModel = selection
+		if repair != nil {
+			store.repairs = append(store.repairs, *repair)
+			repaired = true
+		}
+	}
 	if file.Version == 3 && file.UtilityModel != nil && utilitySelectionEmpty(*file.UtilityModel) {
 		if route, resolveErr := store.resolveLegacyAutomaticUtilityRoute(); resolveErr == nil {
 			selection := utilitySelectionFromRoute(route.Route)
 			store.utilityModel = &selection
 		}
 	} else if file.UtilityModel != nil {
-		selection, err := store.validateUtilitySelection(*file.UtilityModel)
-		if err != nil {
-			return nil, fmt.Errorf("invalid utility model: %w", err)
+		selection, repair := store.restoreUtilityModel(*file.UtilityModel)
+		store.utilityModel = selection
+		if repair != nil {
+			store.repairs = append(store.repairs, *repair)
+			repaired = true
 		}
-		store.utilityModel = &selection
 	}
-	if file.Version == 3 {
+	if file.Version == 3 || repaired {
 		if err := store.saveLocked(); err != nil {
-			return nil, fmt.Errorf("migrate %s: %w", store.path, err)
+			return nil, fmt.Errorf("update %s: %w", store.path, err)
 		}
 	}
 	return store, nil
+}
+
+// Repairs returns startup repairs that should be surfaced to the user. The
+// returned slice is independent from the store and safe for callers to retain.
+func (s *Store) Repairs() []SelectionRepair {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	repairs := make([]SelectionRepair, len(s.repairs))
+	copy(repairs, s.repairs)
+	for index := range repairs {
+		if repairs[index].Replacement != nil {
+			replacement := *repairs[index].Replacement
+			repairs[index].Replacement = &replacement
+		}
+	}
+	return repairs
 }
 
 func (s *Store) Snapshot() map[string]Profile {

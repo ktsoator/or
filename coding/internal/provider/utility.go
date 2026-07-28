@@ -37,6 +37,7 @@ func (s *Store) SetUtilityModel(selection UtilityModelSelection) (UtilityModelSe
 		s.utilityModel = previous
 		return UtilityModelSelection{}, err
 	}
+	s.clearRepairLocked(SelectionRepairUtilityModel)
 	return validated, nil
 }
 

@@ -231,6 +231,20 @@ export type ProviderListResponse = {
   providers: ProviderInfo[]
   activeModel?: ActiveModelSelection
   utilityModel?: UtilityModelSelection
+  repairs?: ProviderSelectionRepair[]
+}
+
+export type ProviderSelectionRepair = {
+  target: 'active_model' | 'utility_model'
+  reason: 'unavailable' | 'unsupported_thinking_level'
+  previous: ProviderModelReference
+  replacement?: ProviderModelReference
+}
+
+export type ProviderModelReference = {
+  provider: string
+  model: string
+  thinkingLevel?: ThinkingLevel
 }
 
 export type UtilityModelSelection = {

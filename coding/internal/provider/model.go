@@ -39,6 +39,7 @@ func (s *Store) ActivateModel(selection ModelSelection) (ModelSelection, error) 
 		s.mu.Unlock()
 		return ModelSelection{}, err
 	}
+	s.clearRepairLocked(SelectionRepairActiveModel)
 	s.mu.Unlock()
 	return validated, nil
 }

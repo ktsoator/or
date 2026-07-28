@@ -360,6 +360,140 @@ func TestActiveModelStartsEmptyAndPersistsAfterExplicitActivation(t *testing.T) 
 	}
 }
 
+func TestStoreRepairsUnavailableActiveAndUtilityModels(t *testing.T) {
+	dir := t.TempDir()
+	data := []byte(`{
+  "version": 4,
+  "activeModel": {"provider":"test-provider","model":"removed-model","thinkingLevel":"high"},
+  "utilityModel": {"provider":"test-provider","model":"removed-utility","connectionId":"official","keyId":"work"},
+  "providers": {
+    "test-provider": {
+      "activeConnectionId": "official",
+      "connections": [{"id":"official","activeKeyId":"work","keys":[{"id":"work","name":"Work","apiKey":"secret"}]}]
+    }
+  }
+}`)
+	if err := os.WriteFile(dir+"/providers.json", data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := NewStore(dir, registryWithProvider(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	active, ok := store.ActiveModel()
+	if !ok || active.Provider != "test-provider" || active.Model != "test-model" ||
+		active.ThinkingLevel != llm.ModelThinkingOff {
+		t.Fatalf("repaired active model = %#v, %v", active, ok)
+	}
+	utility, ok := store.UtilityModel()
+	if !ok || utility.Provider != "test-provider" || utility.Model != "test-model" ||
+		utility.ConnectionID != OfficialConnectionID || utility.KeyID != "work" {
+		t.Fatalf("repaired utility model = %#v, %v", utility, ok)
+	}
+	repairs := store.Repairs()
+	if len(repairs) != 2 {
+		t.Fatalf("repairs = %#v, want active and utility repairs", repairs)
+	}
+	if repairs[0].Target != SelectionRepairActiveModel || repairs[0].Reason != SelectionRepairUnavailable ||
+		repairs[0].Replacement == nil || repairs[0].Replacement.Model != "test-model" {
+		t.Fatalf("active repair = %#v", repairs[0])
+	}
+	if repairs[1].Target != SelectionRepairUtilityModel || repairs[1].Replacement == nil ||
+		repairs[1].Replacement.Model != "test-model" {
+		t.Fatalf("utility repair = %#v", repairs[1])
+	}
+
+	var persisted profileFile
+	persistedData, err := os.ReadFile(dir + "/providers.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(persistedData, &persisted); err != nil {
+		t.Fatal(err)
+	}
+	if persisted.ActiveModel == nil || *persisted.ActiveModel != active {
+		t.Fatalf("persisted active model = %#v, want %#v", persisted.ActiveModel, active)
+	}
+	if persisted.UtilityModel == nil || *persisted.UtilityModel != utility {
+		t.Fatalf("persisted utility model = %#v, want %#v", persisted.UtilityModel, utility)
+	}
+
+	store.Apply()
+	if _, err := store.ActivateModel(active); err != nil {
+		t.Fatal(err)
+	}
+	if repairs := store.Repairs(); len(repairs) != 1 || repairs[0].Target != SelectionRepairUtilityModel {
+		t.Fatalf("repairs after active selection = %#v, want utility repair only", repairs)
+	}
+	if _, err := store.SetUtilityModel(utility); err != nil {
+		t.Fatal(err)
+	}
+	if repairs := store.Repairs(); len(repairs) != 0 {
+		t.Fatalf("repairs after explicit selections = %#v, want none", repairs)
+	}
+}
+
+func TestStoreClearsUnavailableActiveModelWithoutConfiguredFallback(t *testing.T) {
+	dir := t.TempDir()
+	data := []byte(`{
+  "version": 4,
+  "activeModel": {"provider":"test-provider","model":"removed-model","thinkingLevel":"high"},
+  "providers": {}
+}`)
+	if err := os.WriteFile(dir+"/providers.json", data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store, err := NewStore(dir, registryWithProvider(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if active, ok := store.ActiveModel(); ok {
+		t.Fatalf("active model = %#v, want cleared", active)
+	}
+	repairs := store.Repairs()
+	if len(repairs) != 1 || repairs[0].Replacement != nil {
+		t.Fatalf("repairs = %#v, want one cleared selection", repairs)
+	}
+	var persisted profileFile
+	persistedData, err := os.ReadFile(dir + "/providers.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(persistedData, &persisted); err != nil {
+		t.Fatal(err)
+	}
+	if persisted.ActiveModel != nil {
+		t.Fatalf("persisted active model = %#v, want omitted", persisted.ActiveModel)
+	}
+}
+
+func TestStoreRepairsUnsupportedThinkingLevel(t *testing.T) {
+	dir := t.TempDir()
+	data := []byte(`{
+  "version": 4,
+  "activeModel": {"provider":"test-provider","model":"test-model","thinkingLevel":"high"},
+  "providers": {}
+}`)
+	if err := os.WriteFile(dir+"/providers.json", data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store, err := NewStore(dir, registryWithProvider(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	active, ok := store.ActiveModel()
+	if !ok || active.ThinkingLevel != llm.ModelThinkingOff {
+		t.Fatalf("active model = %#v, %v, want thinking off", active, ok)
+	}
+	repairs := store.Repairs()
+	if len(repairs) != 1 || repairs[0].Reason != SelectionRepairUnsupportedLevel ||
+		repairs[0].Previous.ThinkingLevel != llm.ModelThinkingHigh || repairs[0].Replacement == nil ||
+		repairs[0].Replacement.ThinkingLevel != llm.ModelThinkingOff {
+		t.Fatalf("repairs = %#v", repairs)
+	}
+}
+
 func TestStoreRejectsUnsupportedFileVersion(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(dir+"/providers.json", []byte(`{"version":1,"providers":{}}`), 0o600); err != nil {
