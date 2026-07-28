@@ -63,7 +63,7 @@ func TestConnectionTesterUsesDraftValuesWithoutPersisting(t *testing.T) {
 	if gotOptions.MaxRetries == nil || *gotOptions.MaxRetries != 0 {
 		t.Fatalf("max retries = %v", gotOptions.MaxRetries)
 	}
-	if gotOptions.MaxTokens != connectionTestStandardTokens || gotOptions.Timeout != connectionTestStandardTimeout {
+	if gotOptions.MaxTokens != 0 || gotOptions.Timeout != connectionTestStandardTimeout {
 		t.Fatalf("probe limits = tokens %d, timeout %s", gotOptions.MaxTokens, gotOptions.Timeout)
 	}
 	if gotOptions.Reasoning != llm.ModelThinkingOff {
@@ -362,7 +362,7 @@ func TestConnectionTesterProjectsSelectedThinkingAndText(t *testing.T) {
 		t.Fatal(err)
 	}
 	if gotOptions.Reasoning != llm.ModelThinkingLow ||
-		gotOptions.MaxTokens != 4_096 ||
+		gotOptions.MaxTokens != 0 ||
 		gotOptions.Timeout != connectionTestReasoningTimeout {
 		t.Fatalf("probe options = %+v", gotOptions)
 	}
@@ -420,7 +420,7 @@ func TestConnectionTesterRequestsSummarizedAnthropicThinking(t *testing.T) {
 	if !ok || protocolOptions.ThinkingDisplay != llm.ThinkingDisplaySummarized {
 		t.Fatalf("protocol options = %#v", gotOptions.ProtocolOptions)
 	}
-	if gotOptions.MaxTokens != 10_240 {
+	if gotOptions.MaxTokens != 0 {
 		t.Fatalf("max tokens = %d", gotOptions.MaxTokens)
 	}
 }
@@ -451,7 +451,7 @@ func TestConnectionTesterRejectsUnsupportedExplicitThinkingLevel(t *testing.T) {
 	}
 }
 
-func TestConnectionTesterCapsProbeTokensAtModelLimit(t *testing.T) {
+func TestConnectionTesterLeavesOutputLimitUnset(t *testing.T) {
 	registry := llm.NewProviderRegistry()
 	model := testModel()
 	model.MaxTokens = 8
@@ -487,7 +487,7 @@ func TestConnectionTesterCapsProbeTokensAtModelLimit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if maxTokens != 8 {
-		t.Fatalf("max tokens = %d", maxTokens)
+	if maxTokens != 0 {
+		t.Fatalf("max tokens = %d, want unset", maxTokens)
 	}
 }

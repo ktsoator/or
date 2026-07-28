@@ -7,13 +7,17 @@ export function FixedThinkingStatus({
   className,
   focusable = true,
   iconOnly = false,
+  hidden = false,
 }: {
   className?: string
   focusable?: boolean
   iconOnly?: boolean
+  hidden?: boolean
 }) {
   const { t } = useI18n()
-  const description = t('model.hiddenThinkingDescription')
+  const description = hidden
+    ? t('model.hiddenThinkingDescription')
+    : t('model.fixedThinkingDescription')
 
   return (
     <Tooltip.Provider delayDuration={180} skipDelayDuration={80}>

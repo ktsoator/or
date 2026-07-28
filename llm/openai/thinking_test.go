@@ -3,6 +3,7 @@ package openai
 import (
 	"encoding/json"
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/ktsoator/or/llm"
@@ -220,7 +221,7 @@ func TestBuildParamsProviderThinkingWireMatrix(t *testing.T) {
 			modelID:  "deepseek-v4-flash",
 			cases: []thinkingWireCase{
 				{name: "unset", want: map[string]any{}},
-				{name: "off", reasoning: llm.ModelThinkingOff, want: map[string]any{}},
+				{name: "off clamps high", reasoning: llm.ModelThinkingOff, want: map[string]any{"reasoning_effort": "high"}},
 				{name: "high", reasoning: llm.ModelThinkingHigh, want: map[string]any{"reasoning_effort": "high"}},
 				{name: "max", reasoning: llm.ModelThinkingMax, want: map[string]any{"reasoning_effort": "max"}},
 			},
@@ -546,6 +547,11 @@ func TestOpenCodeThinkingOffPayloads(t *testing.T) {
 			field: "thinking", want: map[string]any{"type": "disabled"},
 		},
 		{
+			name:     "opencode go mimo",
+			provider: "opencode-go", modelID: "mimo-v2.5",
+			field: "thinking", want: map[string]any{"type": "disabled"},
+		},
+		{
 			name:     "opencode go qwen",
 			provider: "opencode-go", modelID: "qwen3.6-plus",
 			field: "enable_thinking", want: false,
@@ -576,6 +582,29 @@ func TestOpenCodeThinkingOffPayloads(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestOpenCodeModelsAdvertisingOffAlwaysSendAControl(t *testing.T) {
+	for _, provider := range []string{"opencode", "opencode-go"} {
+		for _, model := range llm.GetModels(provider) {
+			if model.Protocol != llm.ProtocolOpenAICompletions ||
+				!model.Reasoning ||
+				!slices.Contains(llm.SupportedThinkingLevels(model), llm.ModelThinkingOff) {
+				continue
+			}
+
+			params := buildParams(
+				model,
+				nil,
+				nil,
+				llm.StreamOptions{Reasoning: llm.ModelThinkingOff},
+				resolveCompat(model),
+			)
+			if controls := thinkingControls(t, params); len(controls) == 0 {
+				t.Errorf("%s/%s advertises thinking Off but sends no control", provider, model.ID)
+			}
+		}
 	}
 }
 
@@ -610,6 +639,40 @@ func TestOpenCodeKimiThinkingLevels(t *testing.T) {
 	}
 }
 
+func TestOpenCodeQwenThinkingLevels(t *testing.T) {
+	model, ok := llm.LookupModel("opencode-go", "qwen3.6-plus")
+	if !ok {
+		t.Fatal("model opencode-go/qwen3.6-plus is missing from the catalog")
+	}
+	want := []llm.ModelThinkingLevel{
+		llm.ModelThinkingOff,
+		llm.ModelThinkingHigh,
+	}
+	if got := llm.SupportedThinkingLevels(model); !reflect.DeepEqual(got, want) {
+		t.Fatalf("thinking levels = %v, want %v", got, want)
+	}
+}
+
+func TestOpenCodeMiMoThinkingLevels(t *testing.T) {
+	tests := []struct {
+		modelID string
+		want    []llm.ModelThinkingLevel
+	}{
+		{modelID: "mimo-v2.5", want: []llm.ModelThinkingLevel{llm.ModelThinkingOff, llm.ModelThinkingHigh}},
+		{modelID: "mimo-v2.5-pro", want: []llm.ModelThinkingLevel{llm.ModelThinkingHigh}},
+	}
+
+	for _, test := range tests {
+		model, ok := llm.LookupModel("opencode-go", test.modelID)
+		if !ok {
+			t.Fatalf("model opencode-go/%s is missing from the catalog", test.modelID)
+		}
+		if got := llm.SupportedThinkingLevels(model); !reflect.DeepEqual(got, test.want) {
+			t.Errorf("%s thinking levels = %v, want %v", test.modelID, got, test.want)
+		}
+	}
+}
+
 func TestGeneratedDirectEffortThinkingLevels(t *testing.T) {
 	want := []llm.ModelThinkingLevel{
 		llm.ModelThinkingLow,
@@ -639,7 +702,10 @@ func TestOpenCodeAlwaysThinkingModelsExcludeOff(t *testing.T) {
 		modelID  string
 	}{
 		{provider: "opencode-go", modelID: "glm-5.2"},
+		{provider: "opencode-go", modelID: "mimo-v2.5-pro"},
 		{provider: "opencode", modelID: "grok-build-0.1"},
+		{provider: "opencode", modelID: "glm-5"},
+		{provider: "opencode", modelID: "deepseek-v4-flash"},
 	}
 
 	for _, test := range tests {

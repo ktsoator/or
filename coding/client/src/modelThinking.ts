@@ -1,9 +1,7 @@
 import type { ModelOption } from '@/types'
 
-export function isFixedHiddenThinking(model?: ModelOption): boolean {
+export function isFixedThinking(model?: ModelOption): boolean {
   return Boolean(
-    model?.thinkingVisibility === 'hidden' &&
-      model.thinkingLevels.length === 1 &&
-      model.thinkingLevels[0] !== 'off',
+    model && model.thinkingLevels.length === 1 && model.thinkingLevels[0] !== 'off',
   )
 }

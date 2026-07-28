@@ -158,35 +158,37 @@ export function UsageSettings() {
               </div>
 
               {activeProvider && (
-                <div className="mt-4 min-w-0 overflow-hidden rounded-[14px] border border-stone-200 bg-white">
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[38.75rem] border-collapse text-left text-[0.8125rem]">
-                      <thead className="border-b border-stone-200 bg-[#fdfdfc] text-[0.71875rem] font-medium text-stone-500">
-                        <tr>
-                          <th className="px-4 py-2.5">{t('usage.model')}</th>
-                          <th className="px-3 py-2.5 text-right">{t('usage.requests')}</th>
-                          <th className="px-3 py-2.5 text-right">{t('usage.input')}</th>
-                          <th className="px-3 py-2.5 text-right">{t('usage.cacheRead')}</th>
-                          <th className="px-3 py-2.5 text-right">{t('usage.output')}</th>
-                          <th className="px-3 py-2.5 text-right">{t('usage.total')}</th>
-                          <th className="px-4 py-2.5 text-right">{t('usage.cost')}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {activeProvider.models.map((model) => (
-                          <ModelRow
-                            key={`${model.provider}/${model.model}`}
-                            model={model}
-                            formatNumber={formatNumber}
-                            selected={modelUsageKey(model) === selectedModelKey}
-                            onToggle={() => {
-                              const key = modelUsageKey(model)
-                              setSelectedModelKey((current) => (current === key ? '' : key))
-                            }}
-                          />
-                        ))}
-                      </tbody>
-                    </table>
+                <>
+                  <div className="mt-4 min-w-0 overflow-hidden rounded-[14px] border border-stone-200 bg-white">
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[38.75rem] border-collapse text-left text-[0.8125rem]">
+                        <thead className="border-b border-stone-200 bg-[#fdfdfc] text-[0.71875rem] font-medium text-stone-500">
+                          <tr>
+                            <th className="px-4 py-2.5">{t('usage.model')}</th>
+                            <th className="px-3 py-2.5 text-right">{t('usage.requests')}</th>
+                            <th className="px-3 py-2.5 text-right">{t('usage.input')}</th>
+                            <th className="px-3 py-2.5 text-right">{t('usage.cacheRead')}</th>
+                            <th className="px-3 py-2.5 text-right">{t('usage.output')}</th>
+                            <th className="px-3 py-2.5 text-right">{t('usage.total')}</th>
+                            <th className="px-4 py-2.5 text-right">{t('usage.cost')}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {activeProvider.models.map((model) => (
+                            <ModelRow
+                              key={`${model.provider}/${model.model}`}
+                              model={model}
+                              formatNumber={formatNumber}
+                              selected={modelUsageKey(model) === selectedModelKey}
+                              onToggle={() => {
+                                const key = modelUsageKey(model)
+                                setSelectedModelKey((current) => (current === key ? '' : key))
+                              }}
+                            />
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                   {selectedModel && (
                     <RequestDetails
@@ -197,7 +199,7 @@ export function UsageSettings() {
                       since={since}
                     />
                   )}
-                </div>
+                </>
               )}
             </section>
           )}
@@ -446,9 +448,10 @@ function RequestDetails({
   const rangeEnd = Math.min(total, rangeStart + events.length - 1)
 
   return (
-    <div className="border-t border-stone-200 bg-white">
-      <div className="px-4 py-3 text-[0.8125rem] font-medium text-stone-800">
-        {t('usage.requestDetails')}
+    <div className="mt-3 min-w-0 overflow-hidden rounded-[14px] border border-stone-200 bg-white">
+      <div className="flex min-h-11 items-center gap-2 px-4 py-2.5 text-[0.8125rem]">
+        <span className="font-medium text-stone-800">{t('usage.requestDetails')}</span>
+        <span className="min-w-0 truncate text-stone-400">{model.name || model.model}</span>
       </div>
 
       {loading && events.length === 0 ? (

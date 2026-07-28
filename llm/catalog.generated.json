@@ -6260,6 +6260,12 @@
     "protocol": "openai-completions",
     "baseUrl": "https://opencode.ai/zen/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null,
+      "off": null
+    },
     "input": [
       "text"
     ],
@@ -6272,6 +6278,7 @@
     "contextWindow": 200000,
     "maxTokens": 32000,
     "compat": {
+      "supportsReasoningEffort": false,
       "maxTokensField": "max_tokens"
     }
   },
@@ -6578,7 +6585,8 @@
       "low": null,
       "max": "max",
       "medium": null,
-      "minimal": null
+      "minimal": null,
+      "off": null
     },
     "input": [
       "text"
@@ -6608,7 +6616,8 @@
       "low": null,
       "max": "max",
       "medium": null,
-      "minimal": null
+      "minimal": null,
+      "off": null
     },
     "input": [
       "text"
@@ -6638,7 +6647,8 @@
       "low": null,
       "max": "max",
       "medium": null,
-      "minimal": null
+      "minimal": null,
+      "off": null
     },
     "input": [
       "text"
@@ -6663,6 +6673,12 @@
     "protocol": "openai-completions",
     "baseUrl": "https://opencode.ai/zen/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null,
+      "off": null
+    },
     "input": [
       "text"
     ],
@@ -6675,6 +6691,7 @@
     "contextWindow": 204800,
     "maxTokens": 131072,
     "compat": {
+      "supportsReasoningEffort": false,
       "maxTokensField": "max_tokens"
     }
   },
@@ -6685,6 +6702,12 @@
     "protocol": "openai-completions",
     "baseUrl": "https://opencode.ai/zen/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null,
+      "off": null
+    },
     "input": [
       "text"
     ],
@@ -6697,6 +6720,7 @@
     "contextWindow": 204800,
     "maxTokens": 131072,
     "compat": {
+      "supportsReasoningEffort": false,
       "maxTokensField": "max_tokens"
     }
   },
@@ -6768,6 +6792,12 @@
     "protocol": "openai-completions",
     "baseUrl": "https://opencode.ai/zen/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null,
+      "off": null
+    },
     "input": [
       "text",
       "image"
@@ -6781,6 +6811,7 @@
     "contextWindow": 262144,
     "maxTokens": 65536,
     "compat": {
+      "supportsReasoningEffort": false,
       "maxTokensField": "max_tokens"
     }
   },
@@ -6821,6 +6852,12 @@
     "protocol": "openai-completions",
     "baseUrl": "https://opencode.ai/zen/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null,
+      "off": null
+    },
     "input": [
       "text",
       "image"
@@ -6834,6 +6871,7 @@
     "contextWindow": 262144,
     "maxTokens": 262144,
     "compat": {
+      "supportsReasoningEffort": false,
       "maxTokensField": "max_tokens"
     }
   },
@@ -6938,6 +6976,12 @@
     "protocol": "openai-completions",
     "baseUrl": "https://opencode.ai/zen/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null,
+      "off": null
+    },
     "input": [
       "text",
       "image"
@@ -6951,6 +6995,7 @@
     "contextWindow": 200000,
     "maxTokens": 32000,
     "compat": {
+      "supportsReasoningEffort": false,
       "maxTokensField": "max_tokens"
     }
   },
@@ -6961,6 +7006,12 @@
     "protocol": "openai-completions",
     "baseUrl": "https://opencode.ai/zen/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null,
+      "off": null
+    },
     "input": [
       "text"
     ],
@@ -6973,6 +7024,7 @@
     "contextWindow": 204800,
     "maxTokens": 131072,
     "compat": {
+      "supportsReasoningEffort": false,
       "maxTokensField": "max_tokens"
     }
   },
@@ -6983,6 +7035,12 @@
     "protocol": "openai-completions",
     "baseUrl": "https://opencode.ai/zen/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null,
+      "off": null
+    },
     "input": [
       "text"
     ],
@@ -6995,6 +7053,7 @@
     "contextWindow": 204800,
     "maxTokens": 131072,
     "compat": {
+      "supportsReasoningEffort": false,
       "maxTokensField": "max_tokens"
     }
   },
@@ -7005,6 +7064,12 @@
     "protocol": "openai-completions",
     "baseUrl": "https://opencode.ai/zen/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null,
+      "off": null
+    },
     "input": [
       "text",
       "image"
@@ -7018,6 +7083,7 @@
     "contextWindow": 512000,
     "maxTokens": 128000,
     "compat": {
+      "supportsReasoningEffort": false,
       "maxTokensField": "max_tokens"
     }
   },
@@ -7028,6 +7094,12 @@
     "protocol": "openai-completions",
     "baseUrl": "https://opencode.ai/zen/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null,
+      "off": null
+    },
     "input": [
       "text"
     ],
@@ -7040,6 +7112,7 @@
     "contextWindow": 1000000,
     "maxTokens": 128000,
     "compat": {
+      "supportsReasoningEffort": false,
       "maxTokensField": "max_tokens"
     }
   },
@@ -7183,6 +7256,12 @@
     "protocol": "openai-completions",
     "baseUrl": "https://opencode.ai/zen/go/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null,
+      "off": null
+    },
     "input": [
       "text"
     ],
@@ -7195,6 +7274,7 @@
     "contextWindow": 202752,
     "maxTokens": 32768,
     "compat": {
+      "supportsReasoningEffort": false,
       "maxTokensField": "max_tokens"
     }
   },
@@ -7296,6 +7376,12 @@
     "protocol": "openai-completions",
     "baseUrl": "https://opencode.ai/zen/go/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null,
+      "off": null
+    },
     "input": [
       "text",
       "image"
@@ -7309,6 +7395,7 @@
     "contextWindow": 262144,
     "maxTokens": 262144,
     "compat": {
+      "supportsReasoningEffort": false,
       "maxTokensField": "max_tokens"
     }
   },
@@ -7351,6 +7438,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://opencode.ai/zen/go/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text",
       "image"
@@ -7364,7 +7456,10 @@
     "contextWindow": 1000000,
     "maxTokens": 128000,
     "compat": {
-      "maxTokensField": "max_tokens"
+      "supportsReasoningEffort": false,
+      "maxTokensField": "max_tokens",
+      "requiresReasoningContentOnAssistantMessages": true,
+      "thinkingFormat": "deepseek"
     }
   },
   {
@@ -7374,6 +7469,12 @@
     "protocol": "openai-completions",
     "baseUrl": "https://opencode.ai/zen/go/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null,
+      "off": null
+    },
     "input": [
       "text"
     ],
@@ -7386,7 +7487,10 @@
     "contextWindow": 1048576,
     "maxTokens": 128000,
     "compat": {
-      "maxTokensField": "max_tokens"
+      "supportsReasoningEffort": false,
+      "maxTokensField": "max_tokens",
+      "requiresReasoningContentOnAssistantMessages": true,
+      "thinkingFormat": "deepseek"
     }
   },
   {
@@ -7446,6 +7550,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://opencode.ai/zen/go/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text",
       "image"
@@ -7459,6 +7568,7 @@
     "contextWindow": 1000000,
     "maxTokens": 65536,
     "compat": {
+      "supportsReasoningEffort": false,
       "maxTokensField": "max_tokens",
       "thinkingFormat": "qwen"
     }

@@ -18,7 +18,6 @@ import (
 const (
 	connectionTestStandardTimeout  = 12 * time.Second
 	connectionTestReasoningTimeout = 30 * time.Second
-	connectionTestStandardTokens   = 64
 	connectionTestPrompt           = "hi"
 )
 
@@ -93,17 +92,13 @@ func (t *ConnectionTester) Test(ctx context.Context, request ConnectionTestReque
 	if err != nil {
 		return ConnectionTestResult{}, err
 	}
-	timeout, maxTokens := connectionTestLimits(thinkingLevel)
+	timeout := connectionTestTimeout(thinkingLevel)
 	probeCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	var providerStatus atomic.Int64
 	zeroRetries := 0
 	options.MaxRetries = &zeroRetries
-	options.MaxTokens = maxTokens
-	if model.MaxTokens > 0 && model.MaxTokens < options.MaxTokens {
-		options.MaxTokens = model.MaxTokens
-	}
 	options.Reasoning = thinkingLevel
 	options.Timeout = timeout
 	if model.Protocol == llm.ProtocolAnthropicMessages && thinkingLevel != llm.ModelThinkingOff {
@@ -162,18 +157,17 @@ func resolveConnectionTestThinkingLevel(model llm.Model, requested llm.ModelThin
 	return requested, nil
 }
 
-func connectionTestLimits(thinkingLevel llm.ModelThinkingLevel) (time.Duration, int64) {
+func connectionTestTimeout(thinkingLevel llm.ModelThinkingLevel) time.Duration {
 	switch thinkingLevel {
-	case llm.ModelThinkingMinimal:
-		return connectionTestReasoningTimeout, 2_048
-	case llm.ModelThinkingLow:
-		return connectionTestReasoningTimeout, 4_096
-	case llm.ModelThinkingMedium:
-		return connectionTestReasoningTimeout, 10_240
-	case llm.ModelThinkingHigh, llm.ModelThinkingXHigh, llm.ModelThinkingMax:
-		return connectionTestReasoningTimeout, 20_480
+	case llm.ModelThinkingMinimal,
+		llm.ModelThinkingLow,
+		llm.ModelThinkingMedium,
+		llm.ModelThinkingHigh,
+		llm.ModelThinkingXHigh,
+		llm.ModelThinkingMax:
+		return connectionTestReasoningTimeout
 	default:
-		return connectionTestStandardTimeout, connectionTestStandardTokens
+		return connectionTestStandardTimeout
 	}
 }
 

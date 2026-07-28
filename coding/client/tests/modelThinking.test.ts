@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { isFixedHiddenThinking } from '../src/modelThinking'
+import { isFixedThinking } from '../src/modelThinking'
 import type { ModelOption } from '../src/types'
 
 function model(overrides: Partial<ModelOption> = {}): ModelOption {
@@ -14,20 +14,20 @@ function model(overrides: Partial<ModelOption> = {}): ModelOption {
   }
 }
 
-describe('isFixedHiddenThinking', () => {
-  test('recognizes a single hidden reasoning level', () => {
-    expect(isFixedHiddenThinking(model({ thinkingVisibility: 'hidden' }))).toBe(true)
+describe('isFixedThinking', () => {
+  test('recognizes a single reasoning level regardless of visibility', () => {
+    expect(isFixedThinking(model({ thinkingVisibility: 'hidden' }))).toBe(true)
+    expect(isFixedThinking(model({ thinkingVisibility: 'visible' }))).toBe(true)
   })
 
-  test('does not hide configurable or visible controls', () => {
+  test('keeps configurable and non-reasoning controls available', () => {
     expect(
-      isFixedHiddenThinking(
+      isFixedThinking(
         model({ thinkingVisibility: 'hidden', thinkingLevels: ['off', 'high'] }),
       ),
     ).toBe(false)
-    expect(isFixedHiddenThinking(model({ thinkingVisibility: 'visible' }))).toBe(false)
     expect(
-      isFixedHiddenThinking(
+      isFixedThinking(
         model({ thinkingVisibility: 'hidden', thinkingLevels: ['off'] }),
       ),
     ).toBe(false)

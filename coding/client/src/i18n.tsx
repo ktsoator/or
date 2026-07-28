@@ -335,6 +335,8 @@ const en = {
   'model.models': '{provider} models',
   'model.effort': 'Effort',
   'model.fixedThinking': 'Fixed thinking',
+  'model.fixedThinkingDescription':
+    "This model's thinking mode is fixed by the provider and cannot be changed.",
   'model.hiddenThinkingDescription':
     'The model reasons internally, but the provider does not return its reasoning process.',
   'model.context': 'Context',
@@ -884,6 +886,7 @@ const zh: Record<TranslationKey, string> = {
   'model.models': '{provider} 模型',
   'model.effort': '思考强度',
   'model.fixedThinking': '固定思考',
+  'model.fixedThinkingDescription': '该模型的思考模式由厂商固定，无法关闭或调整',
   'model.hiddenThinkingDescription': '模型会内部推理，但厂商不返回思考过程',
   'model.context': '上下文',
   'model.contextUsage': '模型上下文用量',

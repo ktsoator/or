@@ -7,7 +7,7 @@ import { useI18n } from '@/i18n'
 import { ProviderIcon } from '@/components/ProviderIdentity'
 import { FixedThinkingStatus } from '@/components/FixedThinkingStatus'
 import { providerName } from '@/lib/provider'
-import { isFixedHiddenThinking } from '@/modelThinking'
+import { isFixedThinking } from '@/modelThinking'
 import { composerMenuTriggerClass } from './composerControlStyles'
 
 export function ModelSettingsMenu({
@@ -41,7 +41,7 @@ export function ModelSettingsMenu({
   const currentModel = models.find(
     (model) => model.provider === modelProvider && model.id === modelID,
   )
-  const fixedHiddenThinking = isFixedHiddenThinking(currentModel)
+  const fixedThinking = isFixedThinking(currentModel)
   const modelKey = modelProvider && modelID ? JSON.stringify([modelProvider, modelID]) : ''
   const thinkingLevels = currentModel?.thinkingLevels ?? (thinkingLevel ? [thinkingLevel] : [])
   const groupedModels = useMemo(
@@ -57,7 +57,7 @@ export function ModelSettingsMenu({
   const modelName = currentModel?.name ?? modelID ?? t('model.fallback')
   const selectedModelName = selectedProvider === modelProvider ? modelName : t('model.select')
   const selectedProviderName = providerName(selectedProvider || modelProvider || '')
-  const effortName = fixedHiddenThinking
+  const effortName = fixedThinking
     ? t('model.fixedThinking')
     : thinkingLevel
       ? t(`effort.${thinkingLevel}`)
@@ -114,10 +114,11 @@ export function ModelSettingsMenu({
           >
             {modelName}
           </span>
-          {fixedHiddenThinking ? (
+          {fixedThinking ? (
             <FixedThinkingStatus
               className="shrink-0 text-stone-400"
               focusable={false}
+              hidden={currentModel?.thinkingVisibility === 'hidden'}
               iconOnly
             />
           ) : (
@@ -228,10 +229,13 @@ export function ModelSettingsMenu({
             </DropdownMenu.Portal>
           </DropdownMenu.Sub>
 
-          {fixedHiddenThinking ? (
+          {fixedThinking ? (
             <div className="mb-0.5 flex h-[30px] select-none items-center rounded-[10px] px-2.5">
               <span>{t('model.effort')}</span>
-              <FixedThinkingStatus className="ml-auto text-stone-500 outline-none focus-visible:ring-2 focus-visible:ring-stone-300" />
+              <FixedThinkingStatus
+                className="ml-auto text-stone-500 outline-none focus-visible:ring-2 focus-visible:ring-stone-300"
+                hidden={currentModel?.thinkingVisibility === 'hidden'}
+              />
             </div>
           ) : (
             <DropdownMenu.Sub>

@@ -18,7 +18,7 @@ import { ProviderConnectionTestDialog } from '@/components/ProviderConnectionTes
 import { FixedThinkingStatus } from '@/components/FixedThinkingStatus'
 import { UtilityModelSection } from '@/components/UtilityModelSection'
 import { providerName } from '@/lib/provider'
-import { isFixedHiddenThinking } from '@/modelThinking'
+import { isFixedThinking } from '@/modelThinking'
 import type {
   ModelOption,
   ProviderConnectionInfo,
@@ -263,7 +263,7 @@ function DefaultModelSection({
 
   const current = models.find((entry) => entry.provider === provider && entry.id === model)
   const thinkingLevels = current?.thinkingLevels ?? []
-  const fixedHiddenThinking = isFixedHiddenThinking(current)
+  const fixedThinking = isFixedThinking(current)
 
   const persist = async (nextProvider: string, nextModel: string, nextThinking: ThinkingLevel) => {
     setSaving(true)
@@ -448,8 +448,11 @@ function DefaultModelSection({
                 </DropdownMenu.Root>
 
                 {/* Thinking effort */}
-                {fixedHiddenThinking ? (
-                  <FixedThinkingStatus className="h-9 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-[0.8125rem] text-stone-500 outline-none focus-visible:ring-2 focus-visible:ring-stone-300" />
+                {fixedThinking ? (
+                  <FixedThinkingStatus
+                    className="h-9 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-[0.8125rem] text-stone-500 outline-none focus-visible:ring-2 focus-visible:ring-stone-300"
+                    hidden={current?.thinkingVisibility === 'hidden'}
+                  />
                 ) : (
                   <DropdownMenu.Root>
                     <DropdownMenu.Trigger asChild>

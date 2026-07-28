@@ -69,6 +69,38 @@ func applyOpenCodeOverrides(candidate *model) {
 		}
 	}
 
+	if candidate.Compat.ThinkingFormat == "qwen" {
+		candidate.Compat.SupportsReasoningEffort = boolp(false)
+		candidate.ThinkingLevelMap = map[string]*string{
+			"minimal": nil,
+			"low":     nil,
+			"medium":  nil,
+		}
+	}
+
+	if candidate.Provider == "opencode-go" && candidate.ID == "mimo-v2.5" {
+		candidate.Compat.ThinkingFormat = "deepseek"
+		candidate.Compat.RequiresReasoningContentOnAssistantMessages = boolp(true)
+		candidate.Compat.SupportsReasoningEffort = boolp(false)
+		candidate.ThinkingLevelMap = map[string]*string{
+			"minimal": nil,
+			"low":     nil,
+			"medium":  nil,
+		}
+	}
+
+	if candidate.Provider == "opencode-go" && candidate.ID == "mimo-v2.5-pro" {
+		candidate.Compat.ThinkingFormat = "deepseek"
+		candidate.Compat.RequiresReasoningContentOnAssistantMessages = boolp(true)
+		candidate.Compat.SupportsReasoningEffort = boolp(false)
+		candidate.ThinkingLevelMap = map[string]*string{
+			"off":     nil,
+			"minimal": nil,
+			"low":     nil,
+			"medium":  nil,
+		}
+	}
+
 	if candidate.Provider == "opencode-go" && candidate.ID == "minimax-m2.7" {
 		candidate.Compat.SupportsReasoningEffort = boolp(false)
 		candidate.ThinkingVisibility = "hidden"
@@ -106,6 +138,24 @@ func applyOpenCodeOverrides(candidate *model) {
 			"minimal": nil,
 			"low":     nil,
 			"medium":  nil,
+		}
+	}
+
+	// OpenCode aggregates model families with different request formats. Only
+	// advertise Off when models.dev or a verified format describes the wire
+	// value. Otherwise an explicit Off may serialize to no field and leave the
+	// provider's default reasoning enabled.
+	if candidate.Reasoning && candidate.Compat.ThinkingFormat == "" {
+		if candidate.ThinkingLevelMap == nil {
+			candidate.Compat.SupportsReasoningEffort = boolp(false)
+			candidate.ThinkingLevelMap = map[string]*string{
+				"off":     nil,
+				"minimal": nil,
+				"low":     nil,
+				"medium":  nil,
+			}
+		} else if _, hasOff := candidate.ThinkingLevelMap["off"]; !hasOff {
+			candidate.ThinkingLevelMap["off"] = nil
 		}
 	}
 }

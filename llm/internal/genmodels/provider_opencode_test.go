@@ -55,6 +55,38 @@ func TestApplyOpenCodeOverrides(t *testing.T) {
 			unsupportedLevels:       []string{"minimal", "low", "medium"},
 		},
 		{
+			name: "opencode go qwen has toggle only",
+			model: model{
+				ID: "qwen3.6-plus", Provider: "opencode-go", Protocol: "openai-completions", Reasoning: true,
+				Compat: compatibility{Kind: "openai", ThinkingFormat: "qwen"},
+			},
+			thinkingFormat:          "qwen",
+			supportsReasoningEffort: false,
+			unsupportedLevels:       []string{"minimal", "low", "medium"},
+		},
+		{
+			name: "opencode go mimo has toggle only",
+			model: model{
+				ID: "mimo-v2.5", Provider: "opencode-go", Protocol: "openai-completions", Reasoning: true,
+				Compat: compatibility{Kind: "openai"},
+			},
+			thinkingFormat:          "deepseek",
+			requiresReasoning:       true,
+			supportsReasoningEffort: false,
+			unsupportedLevels:       []string{"minimal", "low", "medium"},
+		},
+		{
+			name: "opencode go mimo pro has fixed thinking",
+			model: model{
+				ID: "mimo-v2.5-pro", Provider: "opencode-go", Protocol: "openai-completions", Reasoning: true,
+				Compat: compatibility{Kind: "openai"},
+			},
+			thinkingFormat:          "deepseek",
+			requiresReasoning:       true,
+			supportsReasoningEffort: false,
+			unsupportedLevels:       []string{"off", "minimal", "low", "medium"},
+		},
+		{
 			name: "opencode go minimax m2.7 has fixed hidden reasoning",
 			model: model{
 				ID: "minimax-m2.7", Provider: "opencode-go", Protocol: "openai-completions",
@@ -77,6 +109,15 @@ func TestApplyOpenCodeOverrides(t *testing.T) {
 			name: "opencode grok uses server default",
 			model: model{
 				ID: "grok-build-0.1", Provider: "opencode", Protocol: "openai-completions",
+				Compat: compatibility{Kind: "openai"},
+			},
+			supportsReasoningEffort: false,
+			unsupportedLevels:       []string{"off", "minimal", "low", "medium"},
+		},
+		{
+			name: "unverified opencode controls use fixed provider default",
+			model: model{
+				ID: "glm-5", Provider: "opencode", Protocol: "openai-completions", Reasoning: true,
 				Compat: compatibility{Kind: "openai"},
 			},
 			supportsReasoningEffort: false,

@@ -3033,6 +3033,27 @@ test('fixed hidden thinking is shown as a read-only model capability', async ({ 
   )
 })
 
+test('fixed provider thinking is shown without an effort menu', async ({ page }) => {
+  await openDesktopClient(page, {
+    existingSession: true,
+    modelThinkingLevels: ['high'],
+    modelThinkingVisibility: 'visible',
+  })
+
+  const trigger = page.getByTestId('model-settings-trigger')
+  await trigger.click()
+
+  const menu = page.getByRole('menu')
+  const status = menu.getByTestId('fixed-thinking-status')
+  await expect(status).toHaveText('Fixed thinking')
+  await expect(menu.getByRole('menuitem', { name: /Effort/ })).toHaveCount(0)
+
+  await status.hover()
+  await expect(page.getByRole('tooltip')).toContainText(
+    "This model's thinking mode is fixed by the provider and cannot be changed.",
+  )
+})
+
 test('first send creates a session and renders the user message', async ({ page }) => {
   const requests = await openDesktopClient(page)
   const message = 'Desktop first-send regression'
