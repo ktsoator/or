@@ -55,14 +55,6 @@ Usage:
 	},
 }
 
-var lsText = toolText{
-	description: `List the entries of a directory in the workspace, directories first.
-
-Usage:
-- path defaults to the workspace root. Common vendored directories are still listed but their contents are not traversed.
-- Use glob to find files by pattern or grep to search contents; ls is for a quick look at one directory.`,
-}
-
 var editText = toolText{
 	description: `Perform an exact string replacement in a file.
 
@@ -95,8 +87,9 @@ var bashText = toolText{
 	description: `Run a bash command in the workspace directory and return its combined output and exit code.
 
 Usage:
-- Use bash for building, testing, running programs, and version control.
-- Do not use bash as a substitute for read, grep, glob, ls, edit, or write.
+- Use bash for building, testing, running programs, version control, and listing directory contents.
+- Use glob to find files by pattern; use bash with ls only for a quick look at one directory.
+- Do not use bash as a substitute for read, grep, glob, edit, or write.
 - Create or replace files with write, not echo or printf redirection, tee, or heredocs. Modify existing files with edit, not sed -i, awk, or perl.
 - If edit or write requires a prior read, call read and retry the same tool.
 - A non-zero exit code returns a failed tool outcome while preserving command output and the exact exit code, so inspect the output and react to it.

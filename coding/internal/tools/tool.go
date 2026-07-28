@@ -46,7 +46,6 @@ func CoreToolsWithTasks(root string, ops Ops) ([]Tool, *TaskManager) {
 		Read(root, ops, files, tasks.OwnsOutputPath),
 		Grep(root, ops),
 		Glob(root, ops),
-		LS(root, ops),
 		Edit(root, ops, files),
 		Write(root, ops, files),
 		Bash(root, ops, tasks),

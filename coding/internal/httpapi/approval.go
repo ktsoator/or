@@ -130,7 +130,7 @@ func describeApproval(req permission.ApprovalRequest) string {
 		if cmd, ok := req.Request.Args["command"].(string); ok {
 			return "bash: " + firstLine(cmd)
 		}
-	case "read", "grep", "glob", "ls", "edit", "write":
+	case "read", "grep", "glob", "edit", "write":
 		if path, ok := req.Request.Args["path"].(string); ok && path != "" {
 			return req.Request.Tool + " " + path
 		}

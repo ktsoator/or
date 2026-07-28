@@ -31,7 +31,6 @@ func TestBuiltInToolsDescribeAccess(t *testing.T) {
 		{tool: "read", args: map[string]any{"path": "README.md"}, action: permission.Read, path: "README.md"},
 		{tool: "grep", args: map[string]any{}, action: permission.Read},
 		{tool: "glob", args: map[string]any{"path": "src"}, action: permission.Read, path: "src"},
-		{tool: "ls", args: map[string]any{"path": "src"}, action: permission.Read, path: "src"},
 		{tool: "edit", args: map[string]any{"path": "main.go"}, action: permission.Write, path: "main.go"},
 		{tool: "write", args: map[string]any{"path": "main.go"}, action: permission.Write, path: "main.go"},
 		{tool: "bash", args: map[string]any{"command": "pwd"}, action: permission.Execute, command: "pwd"},
