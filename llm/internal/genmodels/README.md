@@ -10,6 +10,19 @@ The generated `llm/catalog.generated.json` is committed and embedded
 by `catalog.go`, so normal builds and application startup do not need network
 or filesystem access.
 
+Generation is strict by default: every catalog source must succeed, the result
+must pass structural and size checks, and the destination is replaced
+atomically only after rendering succeeds. For local source diagnostics, partial
+output can be written to a separate file explicitly:
+
+```sh
+go run ./llm/internal/genmodels \
+  -allow-partial \
+  -output /tmp/catalog.partial.json
+```
+
+Do not commit a partial catalog.
+
 The generator draws on several public catalog layers:
 
 - [Models.dev](https://models.dev) is the primary source. It is an open-source
