@@ -14,8 +14,6 @@ import "regexp"
 //   - Google (Gemini):  "input token count (...) exceeds the maximum"
 //   - xAI (Grok):       "maximum prompt length is 131072 but the request contains ..."
 //   - Groq:             "Please reduce the length of the messages or completion"
-//   - OpenRouter:       "maximum context length is X tokens"
-//   - OpenRouter/Poolside: "exceeds the maximum allowed input length of Y tokens"
 //   - Together AI:      "input (X tokens) is longer than the model's context length (Y tokens)"
 //   - GitHub Copilot:   "exceeds the limit of Y"
 //   - llama.cpp:        "exceeds the available context size"
@@ -33,8 +31,6 @@ var overflowPatterns = compilePatterns([]string{
 	`(?i)input token count.*exceeds the maximum`,                                                    // Google (Gemini)
 	`(?i)maximum prompt length is \d+`,                                                              // xAI (Grok)
 	`(?i)reduce the length of the messages`,                                                         // Groq
-	`(?i)maximum context length is \d+ tokens`,                                                      // OpenRouter (most backends)
-	`(?i)exceeds (?:the )?maximum allowed input length of [\d,]+ tokens?`,                           // OpenRouter/Poolside
 	`(?i)input \(\d+ tokens\) is longer than the model'?s context length \(\d+ tokens\)`,            // Together AI
 	`(?i)exceeds the limit of \d+`,                                                                  // GitHub Copilot
 	`(?i)exceeds the available context size`,                                                        // llama.cpp server

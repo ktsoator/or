@@ -13,7 +13,6 @@ type ThinkingFormat string
 
 const (
 	ThinkingFormatOpenAI           ThinkingFormat = "openai"
-	ThinkingFormatOpenRouter       ThinkingFormat = "openrouter"
 	ThinkingFormatDeepSeek         ThinkingFormat = "deepseek"
 	ThinkingFormatTogether         ThinkingFormat = "together"
 	ThinkingFormatZAI              ThinkingFormat = "zai"
@@ -85,7 +84,6 @@ func Detect(model llm.Model) Resolved {
 		contains("api.z.ai") || contains("open.bigmodel.cn")
 	isTogether := provider == "together" || contains("api.together.ai") || contains("api.together.xyz")
 	isMoonshot := provider == "moonshotai" || provider == "moonshotai-cn" || contains("api.moonshot.")
-	isOpenRouter := provider == "openrouter" || contains("openrouter.ai")
 	isCloudflareWorkersAI := provider == "cloudflare-workers-ai" || contains("api.cloudflare.com")
 	isCloudflareAIGateway := provider == "cloudflare-ai-gateway" || contains("gateway.ai.cloudflare.com")
 	isNVIDIA := provider == "nvidia" || contains("integrate.api.nvidia.com")
@@ -104,9 +102,6 @@ func Detect(model llm.Model) Resolved {
 
 	isGrok := provider == "xai" || contains("api.x.ai")
 	isDeepSeek := provider == "deepseek" || contains("deepseek.com")
-	isOpenRouterDeveloperRoleModel := isOpenRouter &&
-		(strings.HasPrefix(model.ID, "anthropic/") || strings.HasPrefix(model.ID, "openai/"))
-
 	maxTokensField := "max_completion_tokens"
 	if useMaxTokens {
 		maxTokensField = "max_tokens"
@@ -122,13 +117,11 @@ func Detect(model llm.Model) Resolved {
 		thinkingFormat = ThinkingFormatTogether
 	case isAntLing:
 		thinkingFormat = ThinkingFormatAntLing
-	case isOpenRouter:
-		thinkingFormat = ThinkingFormatOpenRouter
 	}
 
 	return Resolved{
 		SupportsStore:         !isNonStandard,
-		SupportsDeveloperRole: isOpenRouterDeveloperRoleModel || (!isNonStandard && !isOpenRouter),
+		SupportsDeveloperRole: !isNonStandard,
 		SupportsReasoningEffort: !isGrok && !isZAI && !isMoonshot && !isTogether &&
 			!isCloudflareAIGateway && !isNVIDIA && !isAntLing,
 		MaxTokensField: maxTokensField,

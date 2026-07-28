@@ -147,28 +147,6 @@ func TestDetectCompatProviderMatrix(t *testing.T) {
 			}),
 		},
 		{
-			name:  "openrouter generic model has no developer role and routes to openrouter thinking",
-			model: llm.Model{Provider: "openrouter", ID: "google/gemini-pro"},
-			want: override(defaults, func(w *want) {
-				w.thinkingFormat = "openrouter"
-				w.supportsDeveloperRole = false
-			}),
-		},
-		{
-			name:  "openrouter anthropic-prefixed model regains developer role",
-			model: llm.Model{Provider: "openrouter", ID: "anthropic/claude-3.5"},
-			want: override(defaults, func(w *want) {
-				w.thinkingFormat = "openrouter"
-			}),
-		},
-		{
-			name:  "openrouter openai-prefixed model regains developer role",
-			model: llm.Model{Provider: "openrouter", ID: "openai/gpt-4"},
-			want: override(defaults, func(w *want) {
-				w.thinkingFormat = "openrouter"
-			}),
-		},
-		{
 			name:  "cerebras",
 			model: llm.Model{Provider: "cerebras", ID: "llama-cerebras"},
 			want: override(defaults, func(w *want) {
@@ -224,7 +202,6 @@ func TestDetectCompatMatchesByBaseURL(t *testing.T) {
 		{name: "together.xyz", baseURL: "https://api.together.xyz/v1", want: "together", maxTokens: "max_tokens", strictMode: false},
 		{name: "moonshot global", baseURL: "https://api.moonshot.ai/v1", want: "openai", maxTokens: "max_tokens", strictMode: false},
 		{name: "moonshot cn", baseURL: "https://api.moonshot.cn/v1", want: "openai", maxTokens: "max_tokens", strictMode: false},
-		{name: "openrouter", baseURL: "https://openrouter.ai/api/v1", want: "openrouter", maxTokens: "max_completion_tokens", strictMode: true},
 		{name: "deepseek", baseURL: "https://api.deepseek.com/v1", want: "deepseek", maxTokens: "max_completion_tokens", strictMode: true},
 		{name: "grok via x.ai", baseURL: "https://api.x.ai/v1", want: "openai", maxTokens: "max_completion_tokens", strictMode: true},
 		{name: "chutes", baseURL: "https://chutes.ai/v1", want: "openai", maxTokens: "max_tokens", strictMode: true},

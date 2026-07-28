@@ -320,9 +320,8 @@ that implicit coupling.
 The built-in models in that registry are not fetched at runtime; they ship with
 the binary.
 [`catalog.generated.json`](https://github.com/ktsoator/or/blob/main/llm/catalog.generated.json)
-is produced by `go generate` (`internal/genmodels`) from upstream catalog data —
-[Models.dev](https://models.dev) as the primary source, plus the live catalogs and
-pricing from OpenRouter and Vercel AI Gateway. It contains models for the
+is produced by `go generate` (`internal/genmodels`) from the
+[Models.dev](https://models.dev) upstream catalog. It contains models for the
 implemented protocols and selected catalog-only protocols planned for future
 adapters. The result is committed alongside the source and embedded into the
 binary with `//go:embed`:

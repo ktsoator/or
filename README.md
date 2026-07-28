@@ -135,7 +135,7 @@ The built-in adapters implement:
 - Anthropic-compatible Messages
 
 The model catalog includes explicit compatibility metadata for DeepSeek,
-MiniMax, Xiaomi MiMo, Z.AI, Moonshot AI, Kimi, Anthropic, OpenRouter, and other
+MiniMax, Xiaomi MiMo, Z.AI, Moonshot AI, Kimi, Anthropic, OpenCode, and other
 compatible providers. Catalog presence is not a guarantee that every model has
 been live-tested; both wire adapters are covered by automated mock-server tests.
 

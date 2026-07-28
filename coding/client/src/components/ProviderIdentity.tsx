@@ -13,9 +13,7 @@ import mistralIcon from '@/assets/providers/mistral.svg'
 import nvidiaIcon from '@/assets/providers/nvidia.svg'
 import openAIIcon from '@/assets/providers/openai.svg'
 import openCodeIcon from '@/assets/providers/opencode.svg'
-import openRouterIcon from '@/assets/providers/openrouter.svg'
 import togetherIcon from '@/assets/providers/together.svg'
-import vercelIcon from '@/assets/providers/vercel.svg'
 import xiaomiMimoIcon from '@/assets/providers/xiaomi-mimo.svg'
 import xAIIcon from '@/assets/providers/xai.svg'
 import zaiIcon from '@/assets/providers/zai.svg'
@@ -40,9 +38,7 @@ const providerIcons: Record<string, string> = {
   openai: openAIIcon,
   opencode: openCodeIcon,
   'opencode-go': openCodeIcon,
-  openrouter: openRouterIcon,
   together: togetherIcon,
-  'vercel-ai-gateway': vercelIcon,
   xai: xAIIcon,
   xiaomi: xiaomiMimoIcon,
   'xiaomi-token-plan-ams': xiaomiMimoIcon,
