@@ -40,9 +40,10 @@ normalization and compatibility overrides live in `provider_*.go` and
 kept in `source_*.go`, while `render.go` owns deterministic catalog output.
 
 Verified models.dev `reasoning_options` effort values are normalized into the
-SDK's thinking levels for standard OpenAI-compatible models. Toggle and token
-budget controls remain provider-specific, and local compatibility overrides are
-applied after source metadata so verified provider behavior stays authoritative.
+SDK's thinking levels for standard OpenAI-compatible and Anthropic adaptive-
+thinking models. Toggle and token budget controls remain provider-specific, and
+local compatibility overrides keep verified provider behavior authoritative
+when source metadata is incomplete.
 
 The catalog includes models for the implemented `openai-completions` and
 `anthropic-messages` protocols, plus selected catalog-only protocols planned

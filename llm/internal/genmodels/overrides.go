@@ -6,6 +6,7 @@ func applyOverrides(models []model) {
 	for i := range models {
 		m := &models[i]
 		id := strings.ToLower(m.ID)
+		applyKimiOverrides(m)
 		if m.Protocol == "anthropic-messages" && isAdaptiveAnthropic(m.ID) {
 			m.Compat.Kind = "anthropic"
 			m.Compat.ForceAdaptiveThinking = boolp(true)

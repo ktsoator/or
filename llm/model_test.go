@@ -380,6 +380,109 @@ func TestBuiltInAnthropicAdaptiveThinkingMetadata(t *testing.T) {
 	}
 }
 
+func TestBuiltInKimiCodingCompatibilityMetadata(t *testing.T) {
+	models := GetModels("kimi-coding")
+	if len(models) == 0 {
+		t.Fatal("kimi-coding has no models in the built-in catalog")
+	}
+
+	allowEmptySignature := map[string]bool{
+		"k3":              true,
+		"kimi-for-coding": true,
+	}
+	wantThinkingLevels := map[string][]ModelThinkingLevel{
+		"k3":                        {ModelThinkingLow, ModelThinkingHigh, ModelThinkingMax},
+		"k3-256k":                   {ModelThinkingLow, ModelThinkingHigh, ModelThinkingMax},
+		"kimi-for-coding":           {ModelThinkingOff, ModelThinkingMinimal, ModelThinkingLow, ModelThinkingMedium, ModelThinkingHigh},
+		"kimi-for-coding-highspeed": {ModelThinkingOff, ModelThinkingMinimal, ModelThinkingLow, ModelThinkingMedium, ModelThinkingHigh},
+	}
+	for _, model := range models {
+		if model.Protocol != ProtocolAnthropicMessages {
+			t.Errorf("kimi-coding/%s protocol = %q, want %q", model.ID, model.Protocol, ProtocolAnthropicMessages)
+			continue
+		}
+		compatibility, ok := model.Compatibility.(*AnthropicMessagesCompatibility)
+		if !ok || compatibility == nil {
+			t.Errorf("kimi-coding/%s compatibility = %T, want Anthropic Messages", model.ID, model.Compatibility)
+			continue
+		}
+		if compatibility.ForceAdaptiveThinking == nil || !*compatibility.ForceAdaptiveThinking {
+			t.Errorf("kimi-coding/%s is not marked adaptive", model.ID)
+		}
+		wantLevels, known := wantThinkingLevels[model.ID]
+		if !known {
+			t.Errorf("unexpected kimi-coding model %s", model.ID)
+		} else if got := SupportedThinkingLevels(model); !slices.Equal(got, wantLevels) {
+			t.Errorf("kimi-coding/%s thinking levels = %v, want %v", model.ID, got, wantLevels)
+		}
+		gotAllowEmptySignature := compatibility.AllowEmptySignature != nil &&
+			*compatibility.AllowEmptySignature
+		if want := allowEmptySignature[model.ID]; gotAllowEmptySignature != want {
+			t.Errorf(
+				"kimi-coding/%s AllowEmptySignature = %v, want %v",
+				model.ID,
+				gotAllowEmptySignature,
+				want,
+			)
+		}
+		delete(allowEmptySignature, model.ID)
+		delete(wantThinkingLevels, model.ID)
+	}
+	for modelID := range allowEmptySignature {
+		t.Errorf("kimi-coding/%s is missing from the built-in catalog", modelID)
+	}
+	for modelID := range wantThinkingLevels {
+		t.Errorf("kimi-coding/%s thinking metadata is missing from the built-in catalog", modelID)
+	}
+}
+
+func TestBuiltInMoonshotKimiThinkingMetadata(t *testing.T) {
+	for _, provider := range []string{"moonshotai", "moonshotai-cn"} {
+		t.Run(provider+"/kimi-k3", func(t *testing.T) {
+			model, ok := LookupModel(provider, "kimi-k3")
+			if !ok {
+				t.Fatalf("%s/kimi-k3 is missing from the built-in catalog", provider)
+			}
+			want := []ModelThinkingLevel{ModelThinkingLow, ModelThinkingHigh, ModelThinkingMax}
+			if got := SupportedThinkingLevels(model); !slices.Equal(got, want) {
+				t.Fatalf("thinking levels = %v, want %v", got, want)
+			}
+			compatibility, ok := model.Compatibility.(*OpenAICompletionsCompatibility)
+			if !ok || compatibility == nil {
+				t.Fatalf("compatibility = %T, want OpenAI Completions", model.Compatibility)
+			}
+			if compatibility.SupportsReasoningEffort == nil || !*compatibility.SupportsReasoningEffort {
+				t.Error("Kimi K3 must support reasoning_effort")
+			}
+			if compatibility.ThinkingFormat != "" {
+				t.Errorf("thinking format = %q, want standard OpenAI", compatibility.ThinkingFormat)
+			}
+			if compatibility.RequiresReasoningContentOnAssistantMessages == nil ||
+				!*compatibility.RequiresReasoningContentOnAssistantMessages {
+				t.Error("Kimi K3 must replay assistant reasoning content")
+			}
+		})
+
+		for _, modelID := range []string{"kimi-k2.7-code", "kimi-k2.7-code-highspeed"} {
+			t.Run(provider+"/"+modelID, func(t *testing.T) {
+				model, ok := LookupModel(provider, modelID)
+				if !ok {
+					t.Fatalf("%s/%s is missing from the built-in catalog", provider, modelID)
+				}
+				want := []ModelThinkingLevel{
+					ModelThinkingMinimal,
+					ModelThinkingLow,
+					ModelThinkingMedium,
+					ModelThinkingHigh,
+				}
+				if got := SupportedThinkingLevels(model); !slices.Equal(got, want) {
+					t.Fatalf("thinking levels = %v, want %v", got, want)
+				}
+			})
+		}
+	}
+}
+
 func TestBuiltInOpenCodeClaudeContextCorrections(t *testing.T) {
 	for _, modelID := range []string{"claude-sonnet-4", "claude-sonnet-4-5"} {
 		model, ok := LookupModel("opencode", modelID)

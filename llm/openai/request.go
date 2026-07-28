@@ -130,7 +130,7 @@ func buildParams(
 	if compat.supportsStore {
 		params.Store = oai.Bool(false)
 	}
-	applyThinking(&params, model, compat, resolveEffort(model, options.Reasoning))
+	applyThinking(&params, model, compat, resolveThinking(model, options.Reasoning))
 	if len(tools) > 0 && compat.zaiToolStream {
 		mergeExtraFields(&params, map[string]any{"tool_stream": true})
 	}

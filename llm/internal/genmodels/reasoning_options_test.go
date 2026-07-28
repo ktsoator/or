@@ -71,7 +71,7 @@ func TestEffortThinkingLevelMapIgnoresNonEffortControls(t *testing.T) {
 	}
 }
 
-func TestApplyReasoningOptionMetadataRequiresDirectOpenAIEffort(t *testing.T) {
+func TestApplyReasoningOptionMetadataRequiresNamedEffort(t *testing.T) {
 	none := "none"
 	options := reasoningValues(&none)
 	tests := []struct {
@@ -107,7 +107,14 @@ func TestApplyReasoningOptionMetadataRequiresDirectOpenAIEffort(t *testing.T) {
 			model: model{Protocol: "openai-completions", Compat: compatibility{Kind: "openai", ThinkingFormat: "deepseek"}},
 		},
 		{
-			name:  "anthropic protocol",
+			name: "adaptive Anthropic compatibility",
+			model: model{Protocol: "anthropic-messages", Compat: compatibility{
+				ForceAdaptiveThinking: boolp(true),
+			}},
+			want: true,
+		},
+		{
+			name:  "budget Anthropic protocol",
 			model: model{Protocol: "anthropic-messages"},
 		},
 	}

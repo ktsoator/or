@@ -17,19 +17,31 @@ var defaultThinkingBudgets = map[llm.ModelThinkingLevel]int64{
 	llm.ModelThinkingMax:     16384,
 }
 
-// thinkingActive reports whether the request asks the model to reason. An empty
-// level leaves the model default; "off" disables thinking explicitly.
+// resolveThinkingLevel preserves the difference between an unspecified level
+// and an explicit request, then clamps explicit levels to what the model
+// supports.
+func resolveThinkingLevel(model llm.Model, reasoning llm.ModelThinkingLevel) (llm.ModelThinkingLevel, bool) {
+	if !model.Reasoning || reasoning == "" {
+		return "", false
+	}
+	return llm.ClampThinkingLevel(model, reasoning), true
+}
+
+// thinkingActive reports whether the clamped request asks the model to reason.
+// An empty level leaves the model default; a supported "off" disables thinking.
 func thinkingActive(model llm.Model, reasoning llm.ModelThinkingLevel) bool {
-	return model.Reasoning && reasoning != "" && reasoning != llm.ModelThinkingOff
+	resolved, specified := resolveThinkingLevel(model, reasoning)
+	return specified && resolved != llm.ModelThinkingOff
 }
 
 // applyThinking sets the reasoning request fields. Adaptive models receive
 // thinking: adaptive plus an effort level; other reasoning models receive
-// budget-based thinking. "off" disables thinking; an empty level is left to the
-// model's own default. display controls how thinking is returned and applies to
-// both the adaptive and budget-based forms.
+// budget-based thinking. A supported "off" disables thinking, unsupported
+// levels are clamped, and an empty level is left to the model's own default.
+// display controls how thinking is returned and applies to both forms.
 func applyThinking(params *sdk.MessageNewParams, model llm.Model, compat compat, reasoning llm.ModelThinkingLevel, display llm.ThinkingDisplay) {
-	if !model.Reasoning || reasoning == "" {
+	reasoning, specified := resolveThinkingLevel(model, reasoning)
+	if !specified {
 		return
 	}
 	if reasoning == llm.ModelThinkingOff {

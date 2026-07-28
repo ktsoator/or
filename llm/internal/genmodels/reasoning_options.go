@@ -7,11 +7,11 @@ import (
 
 var generatedThinkingLevels = []string{"off", "minimal", "low", "medium", "high", "xhigh", "max"}
 
-// applyReasoningOptionMetadata converts verified models.dev effort values only
-// for models that use the standard OpenAI reasoning_effort field. Toggle and
+// applyReasoningOptionMetadata converts verified models.dev effort values for
+// models whose wire protocol accepts named effort levels. Toggle and
 // token-budget controls belong to their protocol-specific compatibility rules.
 func applyReasoningOptionMetadata(candidate *model, options []sourceReasoningOption) {
-	if candidate == nil || !supportsDirectReasoningEffort(*candidate) {
+	if candidate == nil || !supportsEffortThinkingLevels(*candidate) {
 		return
 	}
 	if levelMap := effortThinkingLevelMap(options); levelMap != nil {
@@ -19,10 +19,13 @@ func applyReasoningOptionMetadata(candidate *model, options []sourceReasoningOpt
 	}
 }
 
-// supportsDirectReasoningEffort delegates to the runtime compatibility
-// resolver. Non-standard thinking formats and explicit opt-outs remain under
+// supportsEffortThinkingLevels accepts standard OpenAI reasoning_effort and
+// Anthropic-compatible adaptive thinking. Other thinking formats remain under
 // their provider rules instead of accepting generic models.dev effort values.
-func supportsDirectReasoningEffort(candidate model) bool {
+func supportsEffortThinkingLevels(candidate model) bool {
+	if candidate.Protocol == "anthropic-messages" {
+		return candidate.Compat.ForceAdaptiveThinking != nil && *candidate.Compat.ForceAdaptiveThinking
+	}
 	return openaicompat.SupportsDirectReasoningEffort(runtimeCompatibilityModel(candidate))
 }
 

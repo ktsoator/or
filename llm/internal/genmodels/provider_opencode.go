@@ -62,12 +62,10 @@ func applyOpenCodeOverrides(candidate *model) {
 	if candidate.ID == "kimi-k2.6" {
 		candidate.Compat.ThinkingFormat = "deepseek"
 		candidate.Compat.SupportsReasoningEffort = boolp(false)
-		if candidate.Provider == "opencode-go" {
-			candidate.ThinkingLevelMap = map[string]*string{
-				"minimal": nil,
-				"low":     nil,
-				"medium":  nil,
-			}
+		candidate.ThinkingLevelMap = map[string]*string{
+			"minimal": nil,
+			"low":     nil,
+			"medium":  nil,
 		}
 	}
 

@@ -131,7 +131,8 @@ type StreamOptions struct {
 	// Headers are merged into the request, overriding model default headers.
 	Headers map[string]string
 	// Reasoning requests a thinking level. The provider clamps it to what the
-	// model supports. Empty leaves the model's default; "off" disables thinking.
+	// model supports. Empty leaves the model's default; "off" explicitly
+	// disables thinking when the model supports it.
 	Reasoning ModelThinkingLevel
 	// ProtocolOptions carries settings specific to exactly one protocol.
 	ProtocolOptions ProtocolStreamOptions

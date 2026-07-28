@@ -21,6 +21,10 @@ func reasoningModel(levels map[llm.ModelThinkingLevel]*string) llm.Model {
 
 func strPtr(s string) *string { return &s }
 
+func explicitThinking(level llm.ModelThinkingLevel) resolvedThinking {
+	return resolvedThinking{specified: true, level: level}
+}
+
 // extraFields encodes params and returns the decoded ExtraFields map so tests can
 // assert on non-standard reasoning fields written through SetExtraFields.
 func extraFields(t *testing.T, params oai.ChatCompletionNewParams) map[string]any {
@@ -36,35 +40,323 @@ func extraFields(t *testing.T, params oai.ChatCompletionNewParams) map[string]an
 	return decoded
 }
 
-func TestResolveEffort(t *testing.T) {
+var thinkingControlFields = []string{
+	"reasoning_effort",
+	"thinking",
+	"reasoning",
+	"enable_thinking",
+	"chat_template_kwargs",
+	"output_config",
+}
+
+func thinkingControls(t *testing.T, params oai.ChatCompletionNewParams) map[string]any {
+	t.Helper()
+	body := extraFields(t, params)
+	controls := make(map[string]any)
+	for _, field := range thinkingControlFields {
+		if value, ok := body[field]; ok {
+			controls[field] = value
+		}
+	}
+	return controls
+}
+
+type thinkingWireCase struct {
+	name      string
+	reasoning llm.ModelThinkingLevel
+	want      map[string]any
+}
+
+func runThinkingWireCases(
+	t *testing.T,
+	model llm.Model,
+	compat resolvedCompat,
+	cases []thinkingWireCase,
+) {
+	t.Helper()
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			params := buildParams(
+				model,
+				nil,
+				nil,
+				llm.StreamOptions{Reasoning: test.reasoning},
+				compat,
+			)
+			if got := thinkingControls(t, params); !reflect.DeepEqual(got, test.want) {
+				t.Fatalf("thinking controls = %#v, want %#v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestResolveThinking(t *testing.T) {
 	mediumValue := "medium"
 	model := reasoningModel(map[llm.ModelThinkingLevel]*string{
 		llm.ModelThinkingMedium: &mediumValue,
 	})
 
-	if got := resolveEffort(model, ""); got != "" {
-		t.Fatalf("empty request = %q, want \"\"", got)
+	if got := resolveThinking(model, ""); got.specified {
+		t.Fatalf("empty request = %#v, want unspecified", got)
 	}
 
-	if got := resolveEffort(model, llm.ModelThinkingOff); got != "" {
-		t.Fatalf("off request = %q, want \"\"", got)
+	if got := resolveThinking(model, llm.ModelThinkingOff); !got.specified || got.level != llm.ModelThinkingOff {
+		t.Fatalf("off request = %#v, want explicit off", got)
 	}
 
-	if got := resolveEffort(model, llm.ModelThinkingMedium); got != llm.ModelThinkingMedium {
-		t.Fatalf("medium request = %q, want medium", got)
+	if got := resolveThinking(model, llm.ModelThinkingMedium); !got.specified || got.level != llm.ModelThinkingMedium {
+		t.Fatalf("medium request = %#v, want explicit medium", got)
 	}
 
-	// A non-reasoning model clamps any request down to off, which resolveEffort
-	// returns as "".
+	// A non-reasoning model clamps any explicit request down to off without
+	// turning it into an unspecified request.
 	plain := llm.Model{Reasoning: false}
-	if got := resolveEffort(plain, llm.ModelThinkingHigh); got != "" {
-		t.Fatalf("non-reasoning model returns %q, want \"\"", got)
+	if got := resolveThinking(plain, llm.ModelThinkingHigh); !got.specified || got.level != llm.ModelThinkingOff {
+		t.Fatalf("non-reasoning model returns %#v, want explicit off", got)
+	}
+}
+
+func TestBuildParamsStandardOpenAIThinkingWireMatrix(t *testing.T) {
+	model := reasoningModel(map[llm.ModelThinkingLevel]*string{
+		llm.ModelThinkingOff:  strPtr("none"),
+		llm.ModelThinkingHigh: strPtr("high"),
+		llm.ModelThinkingMax:  strPtr("max"),
+	})
+	runThinkingWireCases(t, model, resolvedCompat{
+		thinkingFormat:          "openai",
+		supportsReasoningEffort: true,
+	}, []thinkingWireCase{
+		{name: "unset", want: map[string]any{}},
+		{
+			name:      "off",
+			reasoning: llm.ModelThinkingOff,
+			want:      map[string]any{"reasoning_effort": "none"},
+		},
+		{
+			name:      "high",
+			reasoning: llm.ModelThinkingHigh,
+			want:      map[string]any{"reasoning_effort": "high"},
+		},
+		{
+			name:      "max",
+			reasoning: llm.ModelThinkingMax,
+			want:      map[string]any{"reasoning_effort": "max"},
+		},
+	})
+}
+
+func TestBuildParamsUnsetOmitsThinkingControlsForEveryFormat(t *testing.T) {
+	model := reasoningModel(nil)
+	for _, format := range []string{
+		"openai",
+		"zai",
+		"qwen",
+		"qwen-chat-template",
+		"deepseek",
+		"openrouter",
+		"ant-ling",
+		"together",
+		"string-thinking",
+	} {
+		t.Run(format, func(t *testing.T) {
+			params := buildParams(model, nil, nil, llm.StreamOptions{}, resolvedCompat{
+				thinkingFormat:          format,
+				supportsReasoningEffort: true,
+			})
+			if got := thinkingControls(t, params); len(got) != 0 {
+				t.Fatalf("unset thinking controls = %#v, want none", got)
+			}
+		})
+	}
+}
+
+func TestBuildParamsProviderThinkingWireMatrix(t *testing.T) {
+	disabled := map[string]any{"type": "disabled"}
+	enabled := map[string]any{"type": "enabled"}
+	zaiEnabled := map[string]any{"type": "enabled", "clear_thinking": false}
+
+	tests := []struct {
+		name     string
+		provider string
+		modelID  string
+		cases    []thinkingWireCase
+	}{
+		{
+			name:     "deepseek direct",
+			provider: "deepseek",
+			modelID:  "deepseek-v4-flash",
+			cases: []thinkingWireCase{
+				{name: "unset", want: map[string]any{}},
+				{name: "off", reasoning: llm.ModelThinkingOff, want: map[string]any{"thinking": disabled}},
+				{name: "high", reasoning: llm.ModelThinkingHigh, want: map[string]any{"thinking": enabled, "reasoning_effort": "high"}},
+				{name: "max", reasoning: llm.ModelThinkingMax, want: map[string]any{"thinking": enabled, "reasoning_effort": "max"}},
+			},
+		},
+		{
+			name:     "moonshot kimi k3 effort",
+			provider: "moonshotai",
+			modelID:  "kimi-k3",
+			cases: []thinkingWireCase{
+				{name: "unset", want: map[string]any{}},
+				{name: "off clamps low", reasoning: llm.ModelThinkingOff, want: map[string]any{"reasoning_effort": "low"}},
+				{name: "high", reasoning: llm.ModelThinkingHigh, want: map[string]any{"reasoning_effort": "high"}},
+				{name: "max", reasoning: llm.ModelThinkingMax, want: map[string]any{"reasoning_effort": "max"}},
+			},
+		},
+		{
+			name:     "moonshot kimi k2.7 always thinking",
+			provider: "moonshotai",
+			modelID:  "kimi-k2.7-code",
+			cases: []thinkingWireCase{
+				{name: "unset", want: map[string]any{}},
+				{name: "off clamps enabled", reasoning: llm.ModelThinkingOff, want: map[string]any{"thinking": enabled}},
+				{name: "high", reasoning: llm.ModelThinkingHigh, want: map[string]any{"thinking": enabled}},
+				{name: "max clamps high", reasoning: llm.ModelThinkingMax, want: map[string]any{"thinking": enabled}},
+			},
+		},
+		{
+			name:     "opencode zen deepseek",
+			provider: "opencode",
+			modelID:  "deepseek-v4-flash",
+			cases: []thinkingWireCase{
+				{name: "unset", want: map[string]any{}},
+				{name: "off", reasoning: llm.ModelThinkingOff, want: map[string]any{}},
+				{name: "high", reasoning: llm.ModelThinkingHigh, want: map[string]any{"reasoning_effort": "high"}},
+				{name: "max", reasoning: llm.ModelThinkingMax, want: map[string]any{"reasoning_effort": "max"}},
+			},
+		},
+		{
+			name:     "opencode go deepseek",
+			provider: "opencode-go",
+			modelID:  "deepseek-v4-flash",
+			cases: []thinkingWireCase{
+				{name: "unset", want: map[string]any{}},
+				{name: "off", reasoning: llm.ModelThinkingOff, want: map[string]any{"thinking": disabled}},
+				{name: "high", reasoning: llm.ModelThinkingHigh, want: map[string]any{"thinking": enabled, "reasoning_effort": "high"}},
+				{name: "max", reasoning: llm.ModelThinkingMax, want: map[string]any{"thinking": enabled, "reasoning_effort": "max"}},
+			},
+		},
+		{
+			name:     "opencode kimi toggle",
+			provider: "opencode",
+			modelID:  "kimi-k2.6",
+			cases: []thinkingWireCase{
+				{name: "unset", want: map[string]any{}},
+				{name: "off", reasoning: llm.ModelThinkingOff, want: map[string]any{"thinking": disabled}},
+				{name: "high", reasoning: llm.ModelThinkingHigh, want: map[string]any{"thinking": enabled}},
+				{name: "max clamps high", reasoning: llm.ModelThinkingMax, want: map[string]any{"thinking": enabled}},
+			},
+		},
+		{
+			name:     "opencode go kimi toggle",
+			provider: "opencode-go",
+			modelID:  "kimi-k2.6",
+			cases: []thinkingWireCase{
+				{name: "unset", want: map[string]any{}},
+				{name: "off", reasoning: llm.ModelThinkingOff, want: map[string]any{"thinking": disabled}},
+				{name: "high", reasoning: llm.ModelThinkingHigh, want: map[string]any{"thinking": enabled}},
+				{name: "max clamps high", reasoning: llm.ModelThinkingMax, want: map[string]any{"thinking": enabled}},
+			},
+		},
+		{
+			name:     "opencode go glm always thinking",
+			provider: "opencode-go",
+			modelID:  "glm-5.2",
+			cases: []thinkingWireCase{
+				{name: "unset", want: map[string]any{}},
+				{name: "off clamps high", reasoning: llm.ModelThinkingOff, want: map[string]any{"reasoning_effort": "high"}},
+				{name: "high", reasoning: llm.ModelThinkingHigh, want: map[string]any{"reasoning_effort": "high"}},
+				{name: "max", reasoning: llm.ModelThinkingMax, want: map[string]any{"reasoning_effort": "max"}},
+			},
+		},
+		{
+			name:     "opencode grok server default",
+			provider: "opencode",
+			modelID:  "grok-build-0.1",
+			cases: []thinkingWireCase{
+				{name: "unset", want: map[string]any{}},
+				{name: "off clamps high", reasoning: llm.ModelThinkingOff, want: map[string]any{}},
+				{name: "high", reasoning: llm.ModelThinkingHigh, want: map[string]any{}},
+				{name: "max clamps high", reasoning: llm.ModelThinkingMax, want: map[string]any{}},
+			},
+		},
+		{
+			name:     "together fixed reasoning",
+			provider: "together",
+			modelID:  "MiniMaxAI/MiniMax-M2.7",
+			cases: []thinkingWireCase{
+				{name: "unset", want: map[string]any{}},
+				{name: "off clamps high", reasoning: llm.ModelThinkingOff, want: map[string]any{}},
+				{name: "high", reasoning: llm.ModelThinkingHigh, want: map[string]any{}},
+				{name: "max clamps high", reasoning: llm.ModelThinkingMax, want: map[string]any{}},
+			},
+		},
+		{
+			name:     "together reasoning effort",
+			provider: "together",
+			modelID:  "openai/gpt-oss-120b",
+			cases: []thinkingWireCase{
+				{name: "unset", want: map[string]any{}},
+				{name: "off clamps low", reasoning: llm.ModelThinkingOff, want: map[string]any{"reasoning_effort": "low"}},
+				{name: "high", reasoning: llm.ModelThinkingHigh, want: map[string]any{"reasoning_effort": "high"}},
+				{name: "max clamps high", reasoning: llm.ModelThinkingMax, want: map[string]any{"reasoning_effort": "high"}},
+			},
+		},
+		{
+			name:     "together toggle and effort",
+			provider: "together",
+			modelID:  "deepseek-ai/DeepSeek-V4-Pro",
+			cases: []thinkingWireCase{
+				{name: "unset", want: map[string]any{}},
+				{name: "off", reasoning: llm.ModelThinkingOff, want: map[string]any{"reasoning": map[string]any{"enabled": false}}},
+				{
+					name: "high", reasoning: llm.ModelThinkingHigh,
+					want: map[string]any{"reasoning": map[string]any{"enabled": true}, "reasoning_effort": "high"},
+				},
+				{
+					name: "max clamps high", reasoning: llm.ModelThinkingMax,
+					want: map[string]any{"reasoning": map[string]any{"enabled": true}, "reasoning_effort": "high"},
+				},
+			},
+		},
+		{
+			name:     "together toggle only",
+			provider: "together",
+			modelID:  "moonshotai/Kimi-K2.6",
+			cases: []thinkingWireCase{
+				{name: "unset", want: map[string]any{}},
+				{name: "off", reasoning: llm.ModelThinkingOff, want: map[string]any{"reasoning": map[string]any{"enabled": false}}},
+				{name: "high", reasoning: llm.ModelThinkingHigh, want: map[string]any{"reasoning": map[string]any{"enabled": true}}},
+				{name: "max clamps high", reasoning: llm.ModelThinkingMax, want: map[string]any{"reasoning": map[string]any{"enabled": true}}},
+			},
+		},
+		{
+			name:     "zai glm",
+			provider: "zai",
+			modelID:  "glm-5.2",
+			cases: []thinkingWireCase{
+				{name: "unset", want: map[string]any{}},
+				{name: "off", reasoning: llm.ModelThinkingOff, want: map[string]any{"thinking": disabled}},
+				{name: "high", reasoning: llm.ModelThinkingHigh, want: map[string]any{"thinking": zaiEnabled, "reasoning_effort": "high"}},
+				{name: "max", reasoning: llm.ModelThinkingMax, want: map[string]any{"thinking": zaiEnabled, "reasoning_effort": "max"}},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			model, ok := llm.LookupModel(test.provider, test.modelID)
+			if !ok {
+				t.Fatalf("model %s/%s is missing from the catalog", test.provider, test.modelID)
+			}
+			runThinkingWireCases(t, model, resolveCompat(model), test.cases)
+		})
 	}
 }
 
 func TestApplyThinkingNonReasoningModelIsNoop(t *testing.T) {
 	params := oai.ChatCompletionNewParams{}
-	applyThinking(&params, llm.Model{Reasoning: false}, resolvedCompat{thinkingFormat: "openai"}, "")
+	applyThinking(&params, llm.Model{Reasoning: false}, resolvedCompat{thinkingFormat: "openai"}, explicitThinking(llm.ModelThinkingHigh))
 	if len(params.ExtraFields()) != 0 {
 		t.Fatalf("non-reasoning model wrote extras: %#v", params.ExtraFields())
 	}
@@ -74,7 +366,7 @@ func TestApplyThinkingOpenAIDefault(t *testing.T) {
 	// Default OpenAI format with an effort writes reasoning_effort.
 	model := reasoningModel(nil)
 	params := oai.ChatCompletionNewParams{}
-	applyThinking(&params, model, resolvedCompat{thinkingFormat: "openai", supportsReasoningEffort: true}, llm.ModelThinkingHigh)
+	applyThinking(&params, model, resolvedCompat{thinkingFormat: "openai", supportsReasoningEffort: true}, explicitThinking(llm.ModelThinkingHigh))
 
 	if got := extraFields(t, params)["reasoning_effort"]; got != "high" {
 		t.Fatalf("reasoning_effort = %#v, want high", got)
@@ -88,7 +380,7 @@ func TestApplyThinkingOpenAIWithoutEffortUsesOffString(t *testing.T) {
 		llm.ModelThinkingOff: strPtr("none"),
 	})
 	params := oai.ChatCompletionNewParams{}
-	applyThinking(&params, model, resolvedCompat{thinkingFormat: "openai", supportsReasoningEffort: true}, "")
+	applyThinking(&params, model, resolvedCompat{thinkingFormat: "openai", supportsReasoningEffort: true}, explicitThinking(llm.ModelThinkingOff))
 
 	if got := extraFields(t, params)["reasoning_effort"]; got != "none" {
 		t.Fatalf("reasoning_effort = %#v, want none", got)
@@ -100,7 +392,7 @@ func TestApplyThinkingOpenAIWithoutEffortNoOffString(t *testing.T) {
 	// rather than guess.
 	model := reasoningModel(nil)
 	params := oai.ChatCompletionNewParams{}
-	applyThinking(&params, model, resolvedCompat{thinkingFormat: "openai", supportsReasoningEffort: true}, "")
+	applyThinking(&params, model, resolvedCompat{thinkingFormat: "openai", supportsReasoningEffort: true}, explicitThinking(llm.ModelThinkingOff))
 
 	if got := extraFields(t, params)["reasoning_effort"]; got != nil {
 		t.Fatalf("reasoning_effort = %#v, want absent", got)
@@ -110,7 +402,7 @@ func TestApplyThinkingOpenAIWithoutEffortNoOffString(t *testing.T) {
 func TestApplyThinkingOpenAIIgnoresEffortWhenUnsupported(t *testing.T) {
 	model := reasoningModel(nil)
 	params := oai.ChatCompletionNewParams{}
-	applyThinking(&params, model, resolvedCompat{thinkingFormat: "openai", supportsReasoningEffort: false}, llm.ModelThinkingHigh)
+	applyThinking(&params, model, resolvedCompat{thinkingFormat: "openai", supportsReasoningEffort: false}, explicitThinking(llm.ModelThinkingHigh))
 
 	if got := extraFields(t, params)["reasoning_effort"]; got != nil {
 		t.Fatalf("reasoning_effort = %#v, want absent when unsupported", got)
@@ -120,11 +412,11 @@ func TestApplyThinkingOpenAIIgnoresEffortWhenUnsupported(t *testing.T) {
 func TestApplyThinkingZAIEnabled(t *testing.T) {
 	model := reasoningModel(nil)
 	params := oai.ChatCompletionNewParams{}
-	applyThinking(&params, model, resolvedCompat{thinkingFormat: "zai", supportsReasoningEffort: true}, llm.ModelThinkingHigh)
+	applyThinking(&params, model, resolvedCompat{thinkingFormat: "zai", supportsReasoningEffort: true}, explicitThinking(llm.ModelThinkingHigh))
 
 	extras := extraFields(t, params)
-	if !reflect.DeepEqual(extras["thinking"], map[string]any{"type": "enabled"}) {
-		t.Fatalf("thinking = %#v, want enabled", extras["thinking"])
+	if !reflect.DeepEqual(extras["thinking"], map[string]any{"type": "enabled", "clear_thinking": false}) {
+		t.Fatalf("thinking = %#v, want enabled with preservation", extras["thinking"])
 	}
 	if got := extras["reasoning_effort"]; got != "high" {
 		t.Fatalf("reasoning_effort = %#v, want high", got)
@@ -136,7 +428,7 @@ func TestApplyThinkingZAIDisabled(t *testing.T) {
 	// reasoning_effort.
 	model := reasoningModel(nil)
 	params := oai.ChatCompletionNewParams{}
-	applyThinking(&params, model, resolvedCompat{thinkingFormat: "zai"}, "")
+	applyThinking(&params, model, resolvedCompat{thinkingFormat: "zai"}, explicitThinking(llm.ModelThinkingOff))
 
 	extras := extraFields(t, params)
 	if !reflect.DeepEqual(extras["thinking"], map[string]any{"type": "disabled"}) {
@@ -150,12 +442,12 @@ func TestApplyThinkingZAIDisabled(t *testing.T) {
 func TestApplyThinkingQwen(t *testing.T) {
 	model := reasoningModel(nil)
 	for _, enabled := range []bool{true, false} {
-		effort := llm.ModelThinkingHigh
+		thinking := explicitThinking(llm.ModelThinkingHigh)
 		if !enabled {
-			effort = ""
+			thinking = explicitThinking(llm.ModelThinkingOff)
 		}
 		params := oai.ChatCompletionNewParams{}
-		applyThinking(&params, model, resolvedCompat{thinkingFormat: "qwen"}, effort)
+		applyThinking(&params, model, resolvedCompat{thinkingFormat: "qwen"}, thinking)
 		if got := extraFields(t, params)["enable_thinking"]; got != enabled {
 			t.Fatalf("enable_thinking(%v) = %#v", enabled, got)
 		}
@@ -165,7 +457,7 @@ func TestApplyThinkingQwen(t *testing.T) {
 func TestApplyThinkingQwenChatTemplate(t *testing.T) {
 	model := reasoningModel(nil)
 	params := oai.ChatCompletionNewParams{}
-	applyThinking(&params, model, resolvedCompat{thinkingFormat: "qwen-chat-template"}, llm.ModelThinkingHigh)
+	applyThinking(&params, model, resolvedCompat{thinkingFormat: "qwen-chat-template"}, explicitThinking(llm.ModelThinkingHigh))
 
 	got := extraFields(t, params)["chat_template_kwargs"]
 	want := map[string]any{"enable_thinking": true, "preserve_thinking": true}
@@ -177,7 +469,7 @@ func TestApplyThinkingQwenChatTemplate(t *testing.T) {
 func TestApplyThinkingDeepSeekEnabled(t *testing.T) {
 	model := reasoningModel(nil)
 	params := oai.ChatCompletionNewParams{}
-	applyThinking(&params, model, resolvedCompat{thinkingFormat: "deepseek", supportsReasoningEffort: true}, llm.ModelThinkingHigh)
+	applyThinking(&params, model, resolvedCompat{thinkingFormat: "deepseek", supportsReasoningEffort: true}, explicitThinking(llm.ModelThinkingHigh))
 
 	extras := extraFields(t, params)
 	if !reflect.DeepEqual(extras["thinking"], map[string]any{"type": "enabled"}) {
@@ -191,7 +483,7 @@ func TestApplyThinkingDeepSeekEnabled(t *testing.T) {
 func TestApplyThinkingDeepSeekDisabled(t *testing.T) {
 	model := reasoningModel(nil)
 	params := oai.ChatCompletionNewParams{}
-	applyThinking(&params, model, resolvedCompat{thinkingFormat: "deepseek"}, "")
+	applyThinking(&params, model, resolvedCompat{thinkingFormat: "deepseek"}, explicitThinking(llm.ModelThinkingOff))
 
 	extras := extraFields(t, params)
 	if !reflect.DeepEqual(extras["thinking"], map[string]any{"type": "disabled"}) {
@@ -199,17 +491,23 @@ func TestApplyThinkingDeepSeekDisabled(t *testing.T) {
 	}
 }
 
-func TestApplyThinkingDeepSeekOffMappedToNil(t *testing.T) {
-	// off mapped to nil means the model has no "disable thinking" wire form, so
-	// no thinking field is sent when effort is unset.
+func TestBuildParamsClampsUnsupportedDeepSeekOff(t *testing.T) {
+	// An explicit off request is clamped to the nearest supported level before
+	// request serialization. It must not emit a disable parameter the model
+	// rejects.
 	model := reasoningModel(map[llm.ModelThinkingLevel]*string{
 		llm.ModelThinkingOff: nil,
 	})
-	params := oai.ChatCompletionNewParams{}
-	applyThinking(&params, model, resolvedCompat{thinkingFormat: "deepseek"}, "")
+	params := buildParams(
+		model,
+		nil,
+		nil,
+		llm.StreamOptions{Reasoning: llm.ModelThinkingOff},
+		resolvedCompat{thinkingFormat: "deepseek"},
+	)
 
-	if _, present := extraFields(t, params)["thinking"]; present {
-		t.Fatalf("thinking must be absent when off mapped to nil")
+	if got := extraFields(t, params)["thinking"]; !reflect.DeepEqual(got, map[string]any{"type": "enabled"}) {
+		t.Fatalf("thinking = %#v, want enabled after clamp", got)
 	}
 }
 
@@ -255,7 +553,7 @@ func TestOpenCodeThinkingOffPayloads(t *testing.T) {
 				t.Fatalf("model %s/%s is missing from the catalog", test.provider, test.modelID)
 			}
 			params := oai.ChatCompletionNewParams{}
-			applyThinking(&params, model, resolveCompat(model), resolveEffort(model, llm.ModelThinkingOff))
+			applyThinking(&params, model, resolveCompat(model), resolveThinking(model, llm.ModelThinkingOff))
 
 			extras := extraFields(t, params)
 			if got := extras[test.field]; !reflect.DeepEqual(got, test.want) {
@@ -282,6 +580,22 @@ func TestOpenCodeHy3ThinkingLevels(t *testing.T) {
 	}
 	if got := llm.SupportedThinkingLevels(model); !reflect.DeepEqual(got, want) {
 		t.Fatalf("thinking levels = %v, want %v", got, want)
+	}
+}
+
+func TestOpenCodeKimiThinkingLevels(t *testing.T) {
+	want := []llm.ModelThinkingLevel{
+		llm.ModelThinkingOff,
+		llm.ModelThinkingHigh,
+	}
+	for _, provider := range []string{"opencode", "opencode-go"} {
+		model, ok := llm.LookupModel(provider, "kimi-k2.6")
+		if !ok {
+			t.Fatalf("model %s/kimi-k2.6 is missing from the catalog", provider)
+		}
+		if got := llm.SupportedThinkingLevels(model); !reflect.DeepEqual(got, want) {
+			t.Errorf("%s/kimi-k2.6 thinking levels = %v, want %v", provider, got, want)
+		}
 	}
 }
 
@@ -333,7 +647,7 @@ func TestOpenCodeAlwaysThinkingModelsExcludeOff(t *testing.T) {
 func TestApplyThinkingOpenRouterEnabled(t *testing.T) {
 	model := reasoningModel(nil)
 	params := oai.ChatCompletionNewParams{}
-	applyThinking(&params, model, resolvedCompat{thinkingFormat: "openrouter"}, llm.ModelThinkingMedium)
+	applyThinking(&params, model, resolvedCompat{thinkingFormat: "openrouter"}, explicitThinking(llm.ModelThinkingMedium))
 
 	got := extraFields(t, params)["reasoning"]
 	want := map[string]any{"effort": "medium"}
@@ -345,7 +659,7 @@ func TestApplyThinkingOpenRouterEnabled(t *testing.T) {
 func TestApplyThinkingOpenRouterDisabledUsesOffEffort(t *testing.T) {
 	model := reasoningModel(nil)
 	params := oai.ChatCompletionNewParams{}
-	applyThinking(&params, model, resolvedCompat{thinkingFormat: "openrouter"}, "")
+	applyThinking(&params, model, resolvedCompat{thinkingFormat: "openrouter"}, explicitThinking(llm.ModelThinkingOff))
 
 	got := extraFields(t, params)["reasoning"]
 	want := map[string]any{"effort": "none"}
@@ -354,15 +668,21 @@ func TestApplyThinkingOpenRouterDisabledUsesOffEffort(t *testing.T) {
 	}
 }
 
-func TestApplyThinkingOpenRouterOffMappedToNil(t *testing.T) {
+func TestBuildParamsClampsUnsupportedOpenRouterOff(t *testing.T) {
 	model := reasoningModel(map[llm.ModelThinkingLevel]*string{
 		llm.ModelThinkingOff: nil,
 	})
-	params := oai.ChatCompletionNewParams{}
-	applyThinking(&params, model, resolvedCompat{thinkingFormat: "openrouter"}, "")
+	params := buildParams(
+		model,
+		nil,
+		nil,
+		llm.StreamOptions{Reasoning: llm.ModelThinkingOff},
+		resolvedCompat{thinkingFormat: "openrouter"},
+	)
 
-	if _, present := extraFields(t, params)["reasoning"]; present {
-		t.Fatalf("reasoning must be absent when off mapped to nil")
+	want := map[string]any{"effort": "minimal"}
+	if got := extraFields(t, params)["reasoning"]; !reflect.DeepEqual(got, want) {
+		t.Fatalf("reasoning = %#v, want %#v after clamp", got, want)
 	}
 }
 
@@ -372,7 +692,7 @@ func TestApplyThinkingAntLingOnlyWhenLevelMapped(t *testing.T) {
 		llm.ModelThinkingHigh: strPtr("hard"),
 	})
 	params := oai.ChatCompletionNewParams{}
-	applyThinking(&params, model, resolvedCompat{thinkingFormat: "ant-ling"}, llm.ModelThinkingHigh)
+	applyThinking(&params, model, resolvedCompat{thinkingFormat: "ant-ling"}, explicitThinking(llm.ModelThinkingHigh))
 
 	got := extraFields(t, params)["reasoning"]
 	want := map[string]any{"effort": "hard"}
@@ -384,7 +704,7 @@ func TestApplyThinkingAntLingOnlyWhenLevelMapped(t *testing.T) {
 func TestApplyThinkingAntLingSkipsUnmappedLevel(t *testing.T) {
 	model := reasoningModel(nil)
 	params := oai.ChatCompletionNewParams{}
-	applyThinking(&params, model, resolvedCompat{thinkingFormat: "ant-ling"}, llm.ModelThinkingHigh)
+	applyThinking(&params, model, resolvedCompat{thinkingFormat: "ant-ling"}, explicitThinking(llm.ModelThinkingHigh))
 
 	if _, present := extraFields(t, params)["reasoning"]; present {
 		t.Fatalf("ant-ling must skip unmapped levels")
@@ -394,7 +714,7 @@ func TestApplyThinkingAntLingSkipsUnmappedLevel(t *testing.T) {
 func TestApplyThinkingTogether(t *testing.T) {
 	model := reasoningModel(nil)
 	params := oai.ChatCompletionNewParams{}
-	applyThinking(&params, model, resolvedCompat{thinkingFormat: "together", supportsReasoningEffort: true}, llm.ModelThinkingHigh)
+	applyThinking(&params, model, resolvedCompat{thinkingFormat: "together", supportsReasoningEffort: true}, explicitThinking(llm.ModelThinkingHigh))
 
 	extras := extraFields(t, params)
 	if !reflect.DeepEqual(extras["reasoning"], map[string]any{"enabled": true}) {
@@ -408,7 +728,7 @@ func TestApplyThinkingTogether(t *testing.T) {
 func TestApplyThinkingTogetherDisabledOmitsReasoningEffort(t *testing.T) {
 	model := reasoningModel(nil)
 	params := oai.ChatCompletionNewParams{}
-	applyThinking(&params, model, resolvedCompat{thinkingFormat: "together"}, "")
+	applyThinking(&params, model, resolvedCompat{thinkingFormat: "together"}, explicitThinking(llm.ModelThinkingOff))
 
 	extras := extraFields(t, params)
 	if !reflect.DeepEqual(extras["reasoning"], map[string]any{"enabled": false}) {
@@ -426,27 +746,32 @@ func TestApplyThinkingStringFormat(t *testing.T) {
 	})
 
 	on := oai.ChatCompletionNewParams{}
-	applyThinking(&on, model, resolvedCompat{thinkingFormat: "string-thinking"}, llm.ModelThinkingHigh)
+	applyThinking(&on, model, resolvedCompat{thinkingFormat: "string-thinking"}, explicitThinking(llm.ModelThinkingHigh))
 	if got := extraFields(t, on)["thinking"]; got != "deep" {
 		t.Fatalf("thinking on = %#v, want deep", got)
 	}
 
 	off := oai.ChatCompletionNewParams{}
-	applyThinking(&off, model, resolvedCompat{thinkingFormat: "string-thinking"}, "")
+	applyThinking(&off, model, resolvedCompat{thinkingFormat: "string-thinking"}, explicitThinking(llm.ModelThinkingOff))
 	if got := extraFields(t, off)["thinking"]; got != "off" {
 		t.Fatalf("thinking off = %#v, want off", got)
 	}
 }
 
-func TestApplyThinkingStringFormatOffMappedToNil(t *testing.T) {
+func TestBuildParamsClampsUnsupportedStringThinkingOff(t *testing.T) {
 	model := reasoningModel(map[llm.ModelThinkingLevel]*string{
 		llm.ModelThinkingOff: nil,
 	})
-	params := oai.ChatCompletionNewParams{}
-	applyThinking(&params, model, resolvedCompat{thinkingFormat: "string-thinking"}, "")
+	params := buildParams(
+		model,
+		nil,
+		nil,
+		llm.StreamOptions{Reasoning: llm.ModelThinkingOff},
+		resolvedCompat{thinkingFormat: "string-thinking"},
+	)
 
-	if _, present := extraFields(t, params)["thinking"]; present {
-		t.Fatalf("thinking must be absent when off mapped to nil")
+	if got := extraFields(t, params)["thinking"]; got != "minimal" {
+		t.Fatalf("thinking = %#v, want minimal after clamp", got)
 	}
 }
 
@@ -456,6 +781,9 @@ func TestThinkingTypeHelper(t *testing.T) {
 	}
 	if got := thinkingType(false); !reflect.DeepEqual(got, map[string]any{"type": "disabled"}) {
 		t.Fatalf("thinkingType(false) = %#v", got)
+	}
+	if got := zaiThinkingType(true); !reflect.DeepEqual(got, map[string]any{"type": "enabled", "clear_thinking": false}) {
+		t.Fatalf("zaiThinkingType(true) = %#v", got)
 	}
 }
 
@@ -484,9 +812,6 @@ func TestOffEffortHelpers(t *testing.T) {
 		llm.ModelThinkingOff: strPtr("disabled"),
 	})
 	withoutOff := reasoningModel(nil)
-	nilOff := reasoningModel(map[llm.ModelThinkingLevel]*string{
-		llm.ModelThinkingOff: nil,
-	})
 
 	if got := offEffort(withOff); got != "disabled" {
 		t.Fatalf("offEffort mapped = %q", got)
@@ -500,18 +825,5 @@ func TestOffEffortHelpers(t *testing.T) {
 	}
 	if _, ok := offString(withoutOff); ok {
 		t.Fatalf("offString without mapping must report false")
-	}
-	if _, ok := offString(nilOff); ok {
-		t.Fatalf("offString nil mapping must report false")
-	}
-
-	if offIsNull(withOff) {
-		t.Fatalf("offIsNull mapped string must be false")
-	}
-	if offIsNull(withoutOff) {
-		t.Fatalf("offIsNull missing must be false")
-	}
-	if !offIsNull(nilOff) {
-		t.Fatalf("offIsNull explicit nil must be true")
 	}
 }

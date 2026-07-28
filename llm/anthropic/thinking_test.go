@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 
 	sdk "github.com/anthropics/anthropic-sdk-go"
@@ -137,3 +138,207 @@ func TestAdaptiveMaxThinkingPayload(t *testing.T) {
 		t.Fatalf("output_config.effort = %q, want max", payload.OutputConfig.Effort)
 	}
 }
+
+type thinkingRequestPayload struct {
+	Thinking *struct {
+		Type         string `json:"type"`
+		BudgetTokens *int64 `json:"budget_tokens"`
+		Display      string `json:"display"`
+	} `json:"thinking"`
+	OutputConfig *struct {
+		Effort string `json:"effort"`
+	} `json:"output_config"`
+}
+
+func marshalThinkingRequest(
+	t *testing.T,
+	model llm.Model,
+	adaptive bool,
+	reasoning llm.ModelThinkingLevel,
+) thinkingRequestPayload {
+	t.Helper()
+	params := sdk.MessageNewParams{Model: model.ID, MaxTokens: model.MaxTokens}
+	applyThinking(&params, model, compat{forceAdaptiveThinking: adaptive}, reasoning, "")
+	encoded, err := json.Marshal(params)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	var payload thinkingRequestPayload
+	if err := json.Unmarshal(encoded, &payload); err != nil {
+		t.Fatalf("decode request: %v\n%s", err, encoded)
+	}
+	return payload
+}
+
+func TestThinkingRequestPayloadMatrix(t *testing.T) {
+	max := "max"
+	model := llm.Model{
+		ID:               "test-model",
+		Protocol:         llm.ProtocolAnthropicMessages,
+		Reasoning:        true,
+		MaxTokens:        32768,
+		ThinkingLevelMap: map[llm.ModelThinkingLevel]*string{llm.ModelThinkingMax: &max},
+	}
+	tests := []struct {
+		name       string
+		adaptive   bool
+		reasoning  llm.ModelThinkingLevel
+		wantType   string
+		wantBudget *int64
+		wantEffort string
+	}{
+		{name: "budget unset"},
+		{name: "budget off", reasoning: llm.ModelThinkingOff, wantType: "disabled"},
+		{name: "budget high", reasoning: llm.ModelThinkingHigh, wantType: "enabled", wantBudget: int64Pointer(16384)},
+		{name: "budget max", reasoning: llm.ModelThinkingMax, wantType: "enabled", wantBudget: int64Pointer(16384)},
+		{name: "adaptive unset", adaptive: true},
+		{name: "adaptive off", adaptive: true, reasoning: llm.ModelThinkingOff, wantType: "disabled"},
+		{name: "adaptive high", adaptive: true, reasoning: llm.ModelThinkingHigh, wantType: "adaptive", wantEffort: "high"},
+		{name: "adaptive max", adaptive: true, reasoning: llm.ModelThinkingMax, wantType: "adaptive", wantEffort: "max"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			payload := marshalThinkingRequest(t, model, test.adaptive, test.reasoning)
+			if test.wantType == "" {
+				if payload.Thinking != nil || payload.OutputConfig != nil {
+					t.Fatalf("unset thinking payload = %#v, %#v; want both absent", payload.Thinking, payload.OutputConfig)
+				}
+				return
+			}
+			if payload.Thinking == nil || payload.Thinking.Type != test.wantType {
+				t.Fatalf("thinking = %#v, want type %q", payload.Thinking, test.wantType)
+			}
+			if !reflect.DeepEqual(payload.Thinking.BudgetTokens, test.wantBudget) {
+				t.Errorf("budget_tokens = %v, want %v", payload.Thinking.BudgetTokens, test.wantBudget)
+			}
+			if test.wantType == "enabled" || test.wantType == "adaptive" {
+				if payload.Thinking.Display != "summarized" {
+					t.Errorf("thinking.display = %q, want summarized", payload.Thinking.Display)
+				}
+			} else if payload.Thinking.Display != "" {
+				t.Errorf("disabled thinking.display = %q, want absent", payload.Thinking.Display)
+			}
+			if test.wantEffort == "" {
+				if payload.OutputConfig != nil {
+					t.Fatalf("output_config = %#v, want absent", payload.OutputConfig)
+				}
+			} else if payload.OutputConfig == nil || payload.OutputConfig.Effort != test.wantEffort {
+				t.Fatalf("output_config = %#v, want effort %q", payload.OutputConfig, test.wantEffort)
+			}
+		})
+	}
+}
+
+func TestThinkingRequestClampsUnsupportedLevels(t *testing.T) {
+	high := "high"
+	model := llm.Model{
+		ID:        "always-thinking",
+		Protocol:  llm.ProtocolAnthropicMessages,
+		Reasoning: true,
+		MaxTokens: 32768,
+		ThinkingLevelMap: map[llm.ModelThinkingLevel]*string{
+			llm.ModelThinkingOff:     nil,
+			llm.ModelThinkingMinimal: nil,
+			llm.ModelThinkingLow:     nil,
+			llm.ModelThinkingMedium:  nil,
+			llm.ModelThinkingHigh:    &high,
+			llm.ModelThinkingXHigh:   nil,
+			llm.ModelThinkingMax:     nil,
+		},
+	}
+
+	for _, adaptive := range []bool{false, true} {
+		name := "budget"
+		if adaptive {
+			name = "adaptive"
+		}
+		t.Run(name+" off clamps high", func(t *testing.T) {
+			payload := marshalThinkingRequest(t, model, adaptive, llm.ModelThinkingOff)
+			if payload.Thinking == nil {
+				t.Fatal("thinking is absent")
+			}
+			wantType := "enabled"
+			if adaptive {
+				wantType = "adaptive"
+			}
+			if payload.Thinking.Type != wantType {
+				t.Fatalf("thinking.type = %q, want %q", payload.Thinking.Type, wantType)
+			}
+			if adaptive && (payload.OutputConfig == nil || payload.OutputConfig.Effort != "high") {
+				t.Fatalf("output_config = %#v, want effort high", payload.OutputConfig)
+			}
+			if !thinkingActive(model, llm.ModelThinkingOff) {
+				t.Fatal("clamped unsupported off must be active")
+			}
+		})
+	}
+
+	payload := marshalThinkingRequest(t, model, true, llm.ModelThinkingMax)
+	if payload.OutputConfig == nil || payload.OutputConfig.Effort != "high" {
+		t.Fatalf("unsupported max output_config = %#v, want effort high", payload.OutputConfig)
+	}
+}
+
+func TestKimiCodingAdaptiveThinkingPayloads(t *testing.T) {
+	tests := []struct {
+		modelID string
+		levels  []llm.ModelThinkingLevel
+	}{
+		{modelID: "k3", levels: []llm.ModelThinkingLevel{llm.ModelThinkingHigh, llm.ModelThinkingMax}},
+		{modelID: "k3-256k", levels: []llm.ModelThinkingLevel{llm.ModelThinkingHigh, llm.ModelThinkingMax}},
+		{modelID: "kimi-for-coding", levels: []llm.ModelThinkingLevel{llm.ModelThinkingMedium}},
+		{modelID: "kimi-for-coding-highspeed", levels: []llm.ModelThinkingLevel{llm.ModelThinkingMedium}},
+	}
+	for _, test := range tests {
+		t.Run(test.modelID, func(t *testing.T) {
+			modelID := test.modelID
+			model, ok := llm.LookupModel("kimi-coding", modelID)
+			if !ok {
+				t.Fatalf("kimi-coding/%s is missing from the catalog", modelID)
+			}
+			compatibility := resolveCompat(model)
+			if !compatibility.forceAdaptiveThinking {
+				t.Fatal("model is not marked adaptive")
+			}
+
+			for _, level := range test.levels {
+				t.Run(string(level), func(t *testing.T) {
+					payload := marshalThinkingRequest(t, model, compatibility.forceAdaptiveThinking, level)
+					if payload.Thinking == nil || payload.Thinking.Type != "adaptive" {
+						t.Fatalf("thinking = %#v, want adaptive", payload.Thinking)
+					}
+					if payload.OutputConfig == nil || payload.OutputConfig.Effort != string(level) {
+						t.Fatalf("output_config = %#v, want effort %s", payload.OutputConfig, level)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestThinkingActiveUsesClampedLevel(t *testing.T) {
+	high := "high"
+	model := llm.Model{
+		Reasoning: true,
+		ThinkingLevelMap: map[llm.ModelThinkingLevel]*string{
+			llm.ModelThinkingOff:     nil,
+			llm.ModelThinkingMinimal: nil,
+			llm.ModelThinkingLow:     nil,
+			llm.ModelThinkingMedium:  nil,
+			llm.ModelThinkingHigh:    &high,
+		},
+	}
+	if thinkingActive(model, "") {
+		t.Fatal("unset thinking must not be active")
+	}
+	if !thinkingActive(model, llm.ModelThinkingOff) {
+		t.Fatal("unsupported off clamps to high and must be active")
+	}
+	model.ThinkingLevelMap = nil
+	if thinkingActive(model, llm.ModelThinkingOff) {
+		t.Fatal("supported off must not be active")
+	}
+}
+
+func int64Pointer(value int64) *int64 { return &value }

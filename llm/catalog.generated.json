@@ -3148,6 +3148,15 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://api.kimi.com/coding",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "high": "high",
+      "low": "low",
+      "max": "max",
+      "medium": null,
+      "minimal": null,
+      "off": null,
+      "xhigh": null
+    },
     "input": [
       "text",
       "image"
@@ -3162,6 +3171,10 @@
     "maxTokens": 131072,
     "headers": {
       "User-Agent": "KimiCLI/1.5"
+    },
+    "compat": {
+      "forceAdaptiveThinking": true,
+      "allowEmptySignature": true
     }
   },
   {
@@ -3171,6 +3184,15 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://api.kimi.com/coding",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "high": "high",
+      "low": "low",
+      "max": "max",
+      "medium": null,
+      "minimal": null,
+      "off": null,
+      "xhigh": null
+    },
     "input": [
       "text",
       "image"
@@ -3185,6 +3207,9 @@
     "maxTokens": 131072,
     "headers": {
       "User-Agent": "KimiCLI/1.5"
+    },
+    "compat": {
+      "forceAdaptiveThinking": true
     }
   },
   {
@@ -3208,6 +3233,10 @@
     "maxTokens": 32768,
     "headers": {
       "User-Agent": "KimiCLI/1.5"
+    },
+    "compat": {
+      "forceAdaptiveThinking": true,
+      "allowEmptySignature": true
     }
   },
   {
@@ -3231,6 +3260,9 @@
     "maxTokens": 32768,
     "headers": {
       "User-Agent": "KimiCLI/1.5"
+    },
+    "compat": {
+      "forceAdaptiveThinking": true
     }
   },
   {
@@ -4109,6 +4141,9 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.moonshot.ai/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "off": null
+    },
     "input": [
       "text",
       "image"
@@ -4137,6 +4172,9 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.moonshot.ai/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "off": null
+    },
     "input": [
       "text",
       "image"
@@ -4165,6 +4203,15 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.moonshot.ai/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "high": "high",
+      "low": "low",
+      "max": "max",
+      "medium": null,
+      "minimal": null,
+      "off": null,
+      "xhigh": null
+    },
     "input": [
       "text",
       "image"
@@ -4180,10 +4227,10 @@
     "compat": {
       "supportsStore": false,
       "supportsDeveloperRole": false,
-      "supportsReasoningEffort": false,
+      "supportsReasoningEffort": true,
       "maxTokensField": "max_tokens",
       "supportsStrictMode": false,
-      "thinkingFormat": "deepseek"
+      "requiresReasoningContentOnAssistantMessages": true
     }
   },
   {
@@ -4384,6 +4431,9 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.moonshot.cn/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "off": null
+    },
     "input": [
       "text",
       "image"
@@ -4412,6 +4462,9 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.moonshot.cn/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "off": null
+    },
     "input": [
       "text",
       "image"
@@ -4440,6 +4493,15 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.moonshot.cn/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "high": "high",
+      "low": "low",
+      "max": "max",
+      "medium": null,
+      "minimal": null,
+      "off": null,
+      "xhigh": null
+    },
     "input": [
       "text",
       "image"
@@ -4455,10 +4517,10 @@
     "compat": {
       "supportsStore": false,
       "supportsDeveloperRole": false,
-      "supportsReasoningEffort": false,
+      "supportsReasoningEffort": true,
       "maxTokensField": "max_tokens",
       "supportsStrictMode": false,
-      "thinkingFormat": "deepseek"
+      "requiresReasoningContentOnAssistantMessages": true
     }
   },
   {
@@ -6717,6 +6779,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://opencode.ai/zen/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text",
       "image"
@@ -8641,13 +8708,13 @@
       "image"
     ],
     "cost": {
-      "input": 0.14,
-      "output": 0.42,
-      "cacheRead": 0.049999999999999996,
+      "input": 0.07,
+      "output": 0.33999999999999997,
+      "cacheRead": 0,
       "cacheWrite": 0
     },
     "contextWindow": 262144,
-    "maxTokens": 262144
+    "maxTokens": 16384
   },
   {
     "id": "google/gemma-4-26b-a4b-it:free",
@@ -12584,9 +12651,9 @@
       "text"
     ],
     "cost": {
-      "input": 0.728,
-      "output": 2.288,
-      "cacheRead": 0.1352,
+      "input": 0.7686000000000001,
+      "output": 2.4156,
+      "cacheRead": 0.14274,
       "cacheWrite": 0
     },
     "contextWindow": 1048576,
@@ -12819,6 +12886,12 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.together.ai/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null,
+      "off": null
+    },
     "input": [
       "text"
     ],
@@ -12829,7 +12902,15 @@
       "cacheWrite": 0
     },
     "contextWindow": 202752,
-    "maxTokens": 131072
+    "maxTokens": 131072,
+    "compat": {
+      "supportsStore": false,
+      "supportsDeveloperRole": false,
+      "supportsReasoningEffort": false,
+      "maxTokensField": "max_tokens",
+      "supportsStrictMode": false,
+      "thinkingFormat": "openai"
+    }
   },
   {
     "id": "MiniMaxAI/MiniMax-M3",
@@ -12838,6 +12919,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.together.ai/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text",
       "image"
@@ -12849,7 +12935,15 @@
       "cacheWrite": 0
     },
     "contextWindow": 524288,
-    "maxTokens": 250000
+    "maxTokens": 250000,
+    "compat": {
+      "supportsStore": false,
+      "supportsDeveloperRole": false,
+      "supportsReasoningEffort": false,
+      "maxTokensField": "max_tokens",
+      "supportsStrictMode": false,
+      "thinkingFormat": "together"
+    }
   },
   {
     "id": "Qwen/Qwen2.5-7B-Instruct-Turbo",
@@ -12868,7 +12962,14 @@
       "cacheWrite": 0
     },
     "contextWindow": 32768,
-    "maxTokens": 32768
+    "maxTokens": 32768,
+    "compat": {
+      "supportsStore": false,
+      "supportsDeveloperRole": false,
+      "supportsReasoningEffort": false,
+      "maxTokensField": "max_tokens",
+      "supportsStrictMode": false
+    }
   },
   {
     "id": "Qwen/Qwen3.5-9B",
@@ -12877,6 +12978,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.together.ai/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text",
       "image"
@@ -12888,7 +12994,15 @@
       "cacheWrite": 0
     },
     "contextWindow": 262144,
-    "maxTokens": 65536
+    "maxTokens": 65536,
+    "compat": {
+      "supportsStore": false,
+      "supportsDeveloperRole": false,
+      "supportsReasoningEffort": false,
+      "maxTokensField": "max_tokens",
+      "supportsStrictMode": false,
+      "thinkingFormat": "together"
+    }
   },
   {
     "id": "Qwen/Qwen3.6-Plus",
@@ -12897,6 +13011,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.together.ai/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text"
     ],
@@ -12907,7 +13026,15 @@
       "cacheWrite": 0
     },
     "contextWindow": 1000000,
-    "maxTokens": 500000
+    "maxTokens": 500000,
+    "compat": {
+      "supportsStore": false,
+      "supportsDeveloperRole": false,
+      "supportsReasoningEffort": false,
+      "maxTokensField": "max_tokens",
+      "supportsStrictMode": false,
+      "thinkingFormat": "together"
+    }
   },
   {
     "id": "Qwen/Qwen3.7-Max",
@@ -12926,7 +13053,14 @@
       "cacheWrite": 0
     },
     "contextWindow": 1000000,
-    "maxTokens": 500000
+    "maxTokens": 500000,
+    "compat": {
+      "supportsStore": false,
+      "supportsDeveloperRole": false,
+      "supportsReasoningEffort": false,
+      "maxTokensField": "max_tokens",
+      "supportsStrictMode": false
+    }
   },
   {
     "id": "deepseek-ai/DeepSeek-V4-Pro",
@@ -12935,6 +13069,12 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.together.ai/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null,
+      "xhigh": null
+    },
     "input": [
       "text"
     ],
@@ -12945,7 +13085,15 @@
       "cacheWrite": 0
     },
     "contextWindow": 512000,
-    "maxTokens": 384000
+    "maxTokens": 384000,
+    "compat": {
+      "supportsStore": false,
+      "supportsDeveloperRole": false,
+      "supportsReasoningEffort": true,
+      "maxTokensField": "max_tokens",
+      "supportsStrictMode": false,
+      "thinkingFormat": "together"
+    }
   },
   {
     "id": "google/gemma-4-31B-it",
@@ -12954,6 +13102,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.together.ai/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text",
       "image"
@@ -12965,7 +13118,15 @@
       "cacheWrite": 0
     },
     "contextWindow": 262144,
-    "maxTokens": 131072
+    "maxTokens": 131072,
+    "compat": {
+      "supportsStore": false,
+      "supportsDeveloperRole": false,
+      "supportsReasoningEffort": false,
+      "maxTokensField": "max_tokens",
+      "supportsStrictMode": false,
+      "thinkingFormat": "together"
+    }
   },
   {
     "id": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
@@ -12984,7 +13145,14 @@
       "cacheWrite": 0
     },
     "contextWindow": 131072,
-    "maxTokens": 131072
+    "maxTokens": 131072,
+    "compat": {
+      "supportsStore": false,
+      "supportsDeveloperRole": false,
+      "supportsReasoningEffort": false,
+      "maxTokensField": "max_tokens",
+      "supportsStrictMode": false
+    }
   },
   {
     "id": "moonshotai/Kimi-K2.6",
@@ -12993,6 +13161,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.together.ai/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text",
       "image"
@@ -13004,7 +13177,15 @@
       "cacheWrite": 0
     },
     "contextWindow": 262144,
-    "maxTokens": 131000
+    "maxTokens": 131000,
+    "compat": {
+      "supportsStore": false,
+      "supportsDeveloperRole": false,
+      "supportsReasoningEffort": false,
+      "maxTokensField": "max_tokens",
+      "supportsStrictMode": false,
+      "thinkingFormat": "together"
+    }
   },
   {
     "id": "moonshotai/Kimi-K2.7-Code",
@@ -13013,6 +13194,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.together.ai/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text"
     ],
@@ -13023,7 +13209,15 @@
       "cacheWrite": 0
     },
     "contextWindow": 262144,
-    "maxTokens": 131072
+    "maxTokens": 131072,
+    "compat": {
+      "supportsStore": false,
+      "supportsDeveloperRole": false,
+      "supportsReasoningEffort": false,
+      "maxTokensField": "max_tokens",
+      "supportsStrictMode": false,
+      "thinkingFormat": "together"
+    }
   },
   {
     "id": "moonshotai/Kimi-K3",
@@ -13032,6 +13226,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.together.ai/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text",
       "image"
@@ -13043,7 +13242,15 @@
       "cacheWrite": 0
     },
     "contextWindow": 1048576,
-    "maxTokens": 131072
+    "maxTokens": 131072,
+    "compat": {
+      "supportsStore": false,
+      "supportsDeveloperRole": false,
+      "supportsReasoningEffort": false,
+      "maxTokensField": "max_tokens",
+      "supportsStrictMode": false,
+      "thinkingFormat": "together"
+    }
   },
   {
     "id": "nvidia/nemotron-3-ultra-550b-a55b",
@@ -13052,6 +13259,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.together.ai/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text"
     ],
@@ -13062,7 +13274,15 @@
       "cacheWrite": 0
     },
     "contextWindow": 512300,
-    "maxTokens": 512300
+    "maxTokens": 512300,
+    "compat": {
+      "supportsStore": false,
+      "supportsDeveloperRole": false,
+      "supportsReasoningEffort": false,
+      "maxTokensField": "max_tokens",
+      "supportsStrictMode": false,
+      "thinkingFormat": "together"
+    }
   },
   {
     "id": "openai/gpt-oss-120b",
@@ -13071,6 +13291,15 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.together.ai/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "high": "high",
+      "low": "low",
+      "max": null,
+      "medium": "medium",
+      "minimal": null,
+      "off": null,
+      "xhigh": null
+    },
     "input": [
       "text"
     ],
@@ -13081,7 +13310,15 @@
       "cacheWrite": 0
     },
     "contextWindow": 131072,
-    "maxTokens": 131072
+    "maxTokens": 131072,
+    "compat": {
+      "supportsStore": false,
+      "supportsDeveloperRole": false,
+      "supportsReasoningEffort": true,
+      "maxTokensField": "max_tokens",
+      "supportsStrictMode": false,
+      "thinkingFormat": "openai"
+    }
   },
   {
     "id": "openai/gpt-oss-20b",
@@ -13090,6 +13327,15 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.together.ai/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "high": "high",
+      "low": "low",
+      "max": null,
+      "medium": "medium",
+      "minimal": null,
+      "off": null,
+      "xhigh": null
+    },
     "input": [
       "text"
     ],
@@ -13100,7 +13346,15 @@
       "cacheWrite": 0
     },
     "contextWindow": 131072,
-    "maxTokens": 131072
+    "maxTokens": 131072,
+    "compat": {
+      "supportsStore": false,
+      "supportsDeveloperRole": false,
+      "supportsReasoningEffort": true,
+      "maxTokensField": "max_tokens",
+      "supportsStrictMode": false,
+      "thinkingFormat": "openai"
+    }
   },
   {
     "id": "thinkingmachines/Inkling",
@@ -13109,6 +13363,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.together.ai/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text",
       "image"
@@ -13120,7 +13379,15 @@
       "cacheWrite": 0
     },
     "contextWindow": 524288,
-    "maxTokens": 131072
+    "maxTokens": 131072,
+    "compat": {
+      "supportsStore": false,
+      "supportsDeveloperRole": false,
+      "supportsReasoningEffort": false,
+      "maxTokensField": "max_tokens",
+      "supportsStrictMode": false,
+      "thinkingFormat": "together"
+    }
   },
   {
     "id": "zai-org/GLM-5.2",
@@ -13129,6 +13396,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.together.ai/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text"
     ],
@@ -13139,7 +13411,15 @@
       "cacheWrite": 0
     },
     "contextWindow": 262144,
-    "maxTokens": 164000
+    "maxTokens": 164000,
+    "compat": {
+      "supportsStore": false,
+      "supportsDeveloperRole": false,
+      "supportsReasoningEffort": false,
+      "maxTokensField": "max_tokens",
+      "supportsStrictMode": false,
+      "thinkingFormat": "together"
+    }
   },
   {
     "id": "alibaba/qwen-3-14b",
@@ -14414,26 +14694,6 @@
     },
     "contextWindow": 1000000,
     "maxTokens": 65000
-  },
-  {
-    "id": "google/gemini-3-pro-preview",
-    "name": "Gemini 3 Pro Preview",
-    "provider": "vercel-ai-gateway",
-    "protocol": "anthropic-messages",
-    "baseUrl": "https://ai-gateway.vercel.sh",
-    "reasoning": true,
-    "input": [
-      "text",
-      "image"
-    ],
-    "cost": {
-      "input": 2,
-      "output": 12,
-      "cacheRead": 0.19999999999999998,
-      "cacheWrite": 0
-    },
-    "contextWindow": 1000000,
-    "maxTokens": 64000
   },
   {
     "id": "google/gemini-3.1-flash-lite",

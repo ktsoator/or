@@ -34,13 +34,14 @@ func TestApplyOpenCodeOverrides(t *testing.T) {
 			supportsReasoningEffort: true,
 		},
 		{
-			name: "opencode kimi",
+			name: "opencode kimi has toggle only",
 			model: model{
 				ID: "kimi-k2.6", Provider: "opencode", Protocol: "openai-completions",
 				Compat: compatibility{Kind: "openai"},
 			},
 			thinkingFormat:          "deepseek",
 			supportsReasoningEffort: false,
+			unsupportedLevels:       []string{"minimal", "low", "medium"},
 		},
 		{
 			name: "opencode go kimi has toggle only",

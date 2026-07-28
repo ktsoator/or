@@ -5,38 +5,48 @@ import (
 	oai "github.com/openai/openai-go/v3"
 )
 
-// resolveEffort clamps a requested thinking level to one the model supports and
-// returns it, or "" when thinking is unset or resolves to off.
-func resolveEffort(model llm.Model, requested llm.ModelThinkingLevel) llm.ModelThinkingLevel {
+// resolvedThinking preserves the difference between an omitted thinking option
+// and an explicit request to disable thinking.
+type resolvedThinking struct {
+	specified bool
+	level     llm.ModelThinkingLevel
+}
+
+func (thinking resolvedThinking) enabled() bool {
+	return thinking.specified && thinking.level != llm.ModelThinkingOff
+}
+
+// resolveThinking clamps an explicitly requested level to one the model
+// supports. An empty request stays unspecified so the provider keeps its own
+// default instead of receiving a disable-thinking parameter.
+func resolveThinking(model llm.Model, requested llm.ModelThinkingLevel) resolvedThinking {
 	if requested == "" {
-		return ""
+		return resolvedThinking{}
 	}
-	clamped := llm.ClampThinkingLevel(model, requested)
-	if clamped == llm.ModelThinkingOff {
-		return ""
-	}
-	return clamped
+	return resolvedThinking{specified: true, level: llm.ClampThinkingLevel(model, requested)}
 }
 
 // applyThinking sets the request fields that control reasoning, dispatching on
-// the provider's thinking wire format. effort is the clamped level ("" = off).
-// Non-standard fields are written through SetExtraFields; reasoning_effort is
-// carried that way too so all formats share one code path.
+// the provider's thinking wire format. Unspecified requests return before any
+// control field is written. Non-standard fields are written through
+// SetExtraFields; reasoning_effort is carried that way too so all formats share
+// one code path.
 func applyThinking(
 	params *oai.ChatCompletionNewParams,
 	model llm.Model,
 	compat resolvedCompat,
-	effort llm.ModelThinkingLevel,
+	thinking resolvedThinking,
 ) {
-	if !model.Reasoning {
+	if !model.Reasoning || !thinking.specified {
 		return
 	}
-	hasEffort := effort != ""
+	hasEffort := thinking.enabled()
+	effort := thinking.level
 	extras := map[string]any{}
 
 	switch compat.thinkingFormat {
 	case "zai":
-		extras["thinking"] = thinkingType(hasEffort)
+		extras["thinking"] = zaiThinkingType(hasEffort)
 		if hasEffort && compat.supportsReasoningEffort {
 			extras["reasoning_effort"] = mappedEffort(model, effort)
 		}
@@ -50,7 +60,7 @@ func applyThinking(
 	case "deepseek":
 		if hasEffort {
 			extras["thinking"] = thinkingType(true)
-		} else if !offIsNull(model) {
+		} else {
 			extras["thinking"] = thinkingType(false)
 		}
 		if hasEffort && compat.supportsReasoningEffort {
@@ -59,7 +69,7 @@ func applyThinking(
 	case "openrouter":
 		if hasEffort {
 			extras["reasoning"] = map[string]any{"effort": mappedEffort(model, effort)}
-		} else if !offIsNull(model) {
+		} else {
 			extras["reasoning"] = map[string]any{"effort": offEffort(model)}
 		}
 	case "ant-ling":
@@ -77,7 +87,7 @@ func applyThinking(
 	case "string-thinking":
 		if hasEffort {
 			extras["thinking"] = mappedEffort(model, effort)
-		} else if !offIsNull(model) {
+		} else {
 			extras["thinking"] = offEffort(model)
 		}
 	default: // "openai"
@@ -100,6 +110,13 @@ func thinkingType(enabled bool) map[string]any {
 		return map[string]any{"type": "enabled"}
 	}
 	return map[string]any{"type": "disabled"}
+}
+
+func zaiThinkingType(enabled bool) map[string]any {
+	if enabled {
+		return map[string]any{"type": "enabled", "clear_thinking": false}
+	}
+	return thinkingType(false)
 }
 
 // mappedEffort returns the provider-specific value for a level, falling back to
@@ -126,11 +143,4 @@ func offString(model llm.Model) (string, bool) {
 		return *value, true
 	}
 	return "", false
-}
-
-// offIsNull reports whether the model explicitly maps "off" to nil, marking the
-// disabled state as unsupported (so no "disable thinking" field is sent).
-func offIsNull(model llm.Model) bool {
-	value, ok := model.ThinkingLevelMap[llm.ModelThinkingOff]
-	return ok && value == nil
 }

@@ -54,7 +54,7 @@
 // sent. Each is invoked once per attempt including retries.
 //
 // Reasoning is a provider-neutral effort level ([ModelThinkingLevel]: off,
-// minimal, low, medium, high, xhigh). Each adapter maps it to that provider's
+// minimal, low, medium, high, xhigh, max). Each adapter maps it to that provider's
 // native form (Anthropic adaptive or budget thinking; the OpenAI-compatible
 // reasoning fields) and clamps it to what the model supports. It is ignored by
 // non-reasoning models.

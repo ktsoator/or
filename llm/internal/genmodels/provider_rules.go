@@ -115,6 +115,8 @@ func normalize(id string, source sourceModel, rule providerRule) model {
 		Headers:        cloneMap(rule.Headers),
 		Compat:         rule.Compat,
 	}
+	applyKimiRequestCompatibility(&candidate)
+	applyTogetherRequestCompatibility(&candidate)
 	applyReasoningOptionMetadata(&candidate, source.ReasoningOptions)
 	return candidate
 }
