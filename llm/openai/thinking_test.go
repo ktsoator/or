@@ -285,6 +285,29 @@ func TestOpenCodeHy3ThinkingLevels(t *testing.T) {
 	}
 }
 
+func TestGeneratedDirectEffortThinkingLevels(t *testing.T) {
+	want := []llm.ModelThinkingLevel{
+		llm.ModelThinkingLow,
+		llm.ModelThinkingMedium,
+		llm.ModelThinkingHigh,
+	}
+	for _, ref := range []struct {
+		provider string
+		modelID  string
+	}{
+		{provider: "cerebras", modelID: "gpt-oss-120b"},
+		{provider: "groq", modelID: "openai/gpt-oss-120b"},
+	} {
+		model, ok := llm.LookupModel(ref.provider, ref.modelID)
+		if !ok {
+			t.Fatalf("model %s/%s is missing from the catalog", ref.provider, ref.modelID)
+		}
+		if got := llm.SupportedThinkingLevels(model); !reflect.DeepEqual(got, want) {
+			t.Errorf("%s/%s thinking levels = %v, want %v", ref.provider, ref.modelID, got, want)
+		}
+	}
+}
+
 func TestOpenCodeAlwaysThinkingModelsExcludeOff(t *testing.T) {
 	tests := []struct {
 		provider string

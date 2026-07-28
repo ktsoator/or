@@ -170,7 +170,7 @@ func connectionTestLimits(thinkingLevel llm.ModelThinkingLevel) (time.Duration, 
 		return connectionTestReasoningTimeout, 4_096
 	case llm.ModelThinkingMedium:
 		return connectionTestReasoningTimeout, 10_240
-	case llm.ModelThinkingHigh, llm.ModelThinkingXHigh:
+	case llm.ModelThinkingHigh, llm.ModelThinkingXHigh, llm.ModelThinkingMax:
 		return connectionTestReasoningTimeout, 20_480
 	default:
 		return connectionTestStandardTimeout, connectionTestStandardTokens

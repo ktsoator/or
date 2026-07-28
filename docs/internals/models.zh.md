@@ -10,7 +10,7 @@
 ```go
 type Protocol string           // "openai-completions"、"anthropic-messages"
 type ModelInput string         // "text"、"image"
-type ModelThinkingLevel string // off、minimal、low、medium、high、xhigh
+type ModelThinkingLevel string // off、minimal、low、medium、high、xhigh、max
 type ThinkingDisplay string    // summarized、omitted
 ```
 
@@ -148,7 +148,7 @@ func (model *Model) UnmarshalJSON(data []byte) error {
 
 调用方使用的是中立的 `ModelThinkingLevel`，而各模型支持的级别并不一致。两个函数负责把一个请求级别落到目标模型实际接受的级别上。
 
-`SupportedThinkingLevels` 给出某模型接受的级别集合：非推理模型仅支持 `off`；推理模型则依 `off → minimal → low → medium → high → xhigh` 的次序枚举，其中在 `ThinkingLevelMap` 中显式映射为 `nil` 的级别视为不支持，而 `xhigh` 须经显式映射方才纳入——即默认不开放最高档，除非模型明确声明。
+`SupportedThinkingLevels` 给出某模型接受的级别集合：非推理模型仅支持 `off`；推理模型则依 `off → minimal → low → medium → high → xhigh → max` 的次序枚举，其中在 `ThinkingLevelMap` 中显式映射为 `nil` 的级别视为不支持，而 `xhigh` 与 `max` 须经显式映射方才纳入——即默认不开放扩展档位，除非模型明确声明。
 
 `ClampThinkingLevel` 将任意请求级别收敛至最接近的受支持级别，规则依次为：命中则直接采用；否则沿次序向上抬升至首个受支持级别；仍无则转而向下回落；最终退至最低的受支持级别（或 `off`）。如此，调用方可请求任一级别，而总能得到目标模型可处理的结果，无需自行比对每个模型的能力表。
 

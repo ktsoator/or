@@ -19,7 +19,7 @@ and keeps the public API self-documenting.
 ```go
 type Protocol string           // "openai-completions", "anthropic-messages"
 type ModelInput string         // "text", "image"
-type ModelThinkingLevel string // off, minimal, low, medium, high, xhigh
+type ModelThinkingLevel string // off, minimal, low, medium, high, xhigh, max
 type ThinkingDisplay string    // summarized, omitted
 ```
 
@@ -205,10 +205,10 @@ actually accepts.
 
 `SupportedThinkingLevels` gives the set of levels a model accepts: a non-reasoning
 model supports only `off`; a reasoning model enumerates them in `off → minimal →
-low → medium → high → xhigh` order, where a level explicitly mapped to `nil` in
-`ThinkingLevelMap` counts as unsupported, and `xhigh` is included only when
-explicitly mapped — the top level stays closed by default unless the model
-declares it.
+low → medium → high → xhigh → max` order, where a level explicitly mapped to
+`nil` in `ThinkingLevelMap` counts as unsupported, and `xhigh`/`max` are included
+only when explicitly mapped — extended levels stay closed by default unless the
+model declares them.
 
 `ClampThinkingLevel` snaps any requested level to the nearest supported one, in
 this order: take it directly if supported; otherwise step up through the order to

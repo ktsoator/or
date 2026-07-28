@@ -72,11 +72,21 @@ func TestSupportedThinkingLevelsExcludesMappedNil(t *testing.T) {
 
 func TestSupportedThinkingLevelsIncludesXHighWhenExplicitlyMapped(t *testing.T) {
 	model := anthropicReasoningModel()
-	xhighVal := "max"
+	xhighVal := "xhigh"
 	model.ThinkingLevelMap[ModelThinkingXHigh] = &xhighVal
 	got := SupportedThinkingLevels(model)
 	if !slices.Contains(got, ModelThinkingXHigh) {
 		t.Fatalf("levels = %v, want xhigh included", got)
+	}
+}
+
+func TestSupportedThinkingLevelsIncludesMaxWhenExplicitlyMapped(t *testing.T) {
+	model := anthropicReasoningModel()
+	maxValue := "max"
+	model.ThinkingLevelMap[ModelThinkingMax] = &maxValue
+	got := SupportedThinkingLevels(model)
+	if !slices.Contains(got, ModelThinkingMax) {
+		t.Fatalf("levels = %v, want max included", got)
 	}
 }
 
@@ -331,6 +341,54 @@ func TestLookupModelAndGetModelFromBuiltInCatalog(t *testing.T) {
 func TestLookupModelUnknownPair(t *testing.T) {
 	if _, ok := LookupModel("nope-provider", "nope-model"); ok {
 		t.Fatalf("LookupModel for unknown pair returned ok")
+	}
+}
+
+func TestBuiltInAnthropicAdaptiveThinkingMetadata(t *testing.T) {
+	tests := []struct {
+		modelID   string
+		wantOff   bool
+		wantXHigh bool
+	}{
+		{modelID: "claude-opus-4-6", wantOff: true},
+		{modelID: "claude-sonnet-5", wantOff: true, wantXHigh: true},
+		{modelID: "claude-fable-5", wantXHigh: true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.modelID, func(t *testing.T) {
+			model, ok := LookupModel("anthropic", test.modelID)
+			if !ok {
+				t.Fatalf("anthropic/%s is missing from the catalog", test.modelID)
+			}
+			compatibility, ok := model.Compatibility.(*AnthropicMessagesCompatibility)
+			if !ok || compatibility == nil || compatibility.ForceAdaptiveThinking == nil ||
+				!*compatibility.ForceAdaptiveThinking {
+				t.Fatalf("anthropic/%s is not marked adaptive", test.modelID)
+			}
+			levels := SupportedThinkingLevels(model)
+			if got := slices.Contains(levels, ModelThinkingOff); got != test.wantOff {
+				t.Errorf("off support = %v, want %v; levels=%v", got, test.wantOff, levels)
+			}
+			if got := slices.Contains(levels, ModelThinkingXHigh); got != test.wantXHigh {
+				t.Errorf("xhigh support = %v, want %v; levels=%v", got, test.wantXHigh, levels)
+			}
+			if !slices.Contains(levels, ModelThinkingMax) {
+				t.Errorf("max is missing; levels=%v", levels)
+			}
+		})
+	}
+}
+
+func TestBuiltInOpenCodeClaudeContextCorrections(t *testing.T) {
+	for _, modelID := range []string{"claude-sonnet-4", "claude-sonnet-4-5"} {
+		model, ok := LookupModel("opencode", modelID)
+		if !ok {
+			t.Fatalf("opencode/%s is missing from the catalog", modelID)
+		}
+		if model.ContextWindow != 200_000 {
+			t.Errorf("opencode/%s context = %d, want 200000", modelID, model.ContextWindow)
+		}
 	}
 }
 

@@ -28,7 +28,7 @@ func main() {
 		llm.Prompt("A farmer must cross a river with a wolf, a goat, and a cabbage. "+
 			"The boat carries only one item at a time. How does he get all three across?"),
 		llm.StreamOptions{
-			Reasoning: llm.ModelThinkingHigh, // off, minimal, low, medium, high, xhigh
+			Reasoning: llm.ModelThinkingHigh, // off, minimal, low, medium, high, xhigh, max
 		})
 	if err != nil {
 		log.Fatal(err)

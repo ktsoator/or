@@ -14,6 +14,7 @@ var defaultThinkingBudgets = map[llm.ModelThinkingLevel]int64{
 	llm.ModelThinkingMedium:  8192,
 	llm.ModelThinkingHigh:    16384,
 	llm.ModelThinkingXHigh:   16384,
+	llm.ModelThinkingMax:     16384,
 }
 
 // thinkingActive reports whether the request asks the model to reason. An empty
@@ -87,6 +88,8 @@ func mapEffort(model llm.Model, level llm.ModelThinkingLevel) sdk.OutputConfigEf
 			return sdk.OutputConfigEffortHigh
 		case "xhigh":
 			return sdk.OutputConfigEffortXhigh
+		case "max":
+			return sdk.OutputConfigEffortMax
 		}
 	}
 	switch level {
@@ -96,6 +99,8 @@ func mapEffort(model llm.Model, level llm.ModelThinkingLevel) sdk.OutputConfigEf
 		return sdk.OutputConfigEffortMedium
 	case llm.ModelThinkingXHigh:
 		return sdk.OutputConfigEffortXhigh
+	case llm.ModelThinkingMax:
+		return sdk.OutputConfigEffortMax
 	default:
 		return sdk.OutputConfigEffortHigh
 	}

@@ -123,7 +123,7 @@ func TestFromOpenCodeAppliesHy3ReasoningOptions(t *testing.T) {
 	}
 	want := map[string]*string{
 		"off": stringPointer("none"), "minimal": nil, "low": stringPointer("low"),
-		"medium": nil, "high": stringPointer("high"), "xhigh": nil,
+		"medium": nil, "high": stringPointer("high"), "xhigh": nil, "max": nil,
 	}
 	if !reflect.DeepEqual(models[0].ThinkingLevelMap, want) {
 		t.Fatalf("ThinkingLevelMap = %#v, want %#v", models[0].ThinkingLevelMap, want)
@@ -146,9 +146,33 @@ func TestFromOpenCodeManualReasoningOverrideWins(t *testing.T) {
 	}
 	want := map[string]*string{
 		"off": nil, "minimal": nil, "low": nil, "medium": nil,
-		"high": stringPointer("high"), "xhigh": stringPointer("max"),
+		"high": stringPointer("high"), "max": stringPointer("max"),
 	}
 	if !reflect.DeepEqual(models[0].ThinkingLevelMap, want) {
 		t.Fatalf("ThinkingLevelMap = %#v, want manual override %#v", models[0].ThinkingLevelMap, want)
+	}
+}
+
+func TestApplyOpenCodeOverridesCorrectsClaudeContext(t *testing.T) {
+	for _, provider := range []string{"opencode", "opencode-go"} {
+		for _, modelID := range []string{"claude-sonnet-4", "claude-sonnet-4-5"} {
+			t.Run(provider+"/"+modelID, func(t *testing.T) {
+				candidate := model{
+					ID: modelID, Provider: provider, Protocol: "anthropic-messages", ContextWindow: 1_000_000,
+				}
+				applyOpenCodeOverrides(&candidate)
+				if candidate.ContextWindow != 200_000 {
+					t.Fatalf("ContextWindow = %d, want 200000", candidate.ContextWindow)
+				}
+			})
+		}
+	}
+
+	control := model{
+		ID: "claude-sonnet-4-6", Provider: "opencode", Protocol: "anthropic-messages", ContextWindow: 1_000_000,
+	}
+	applyOpenCodeOverrides(&control)
+	if control.ContextWindow != 1_000_000 {
+		t.Fatalf("claude-sonnet-4-6 ContextWindow = %d, want unchanged", control.ContextWindow)
 	}
 }

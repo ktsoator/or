@@ -6,6 +6,11 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://api.anthropic.com",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "max": "max",
+      "off": null,
+      "xhigh": "xhigh"
+    },
     "input": [
       "text",
       "image"
@@ -19,7 +24,6 @@
     "contextWindow": 1000000,
     "maxTokens": 128000,
     "compat": {
-      "supportsTemperature": false,
       "forceAdaptiveThinking": true
     }
   },
@@ -110,6 +114,9 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://api.anthropic.com",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "max": "max"
+    },
     "input": [
       "text",
       "image"
@@ -133,6 +140,10 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://api.anthropic.com",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "max": "max",
+      "xhigh": "xhigh"
+    },
     "input": [
       "text",
       "image"
@@ -157,6 +168,10 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://api.anthropic.com",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "max": "max",
+      "xhigh": "xhigh"
+    },
     "input": [
       "text",
       "image"
@@ -181,6 +196,10 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://api.anthropic.com",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "max": "max",
+      "xhigh": "xhigh"
+    },
     "input": [
       "text",
       "image"
@@ -245,6 +264,9 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://api.anthropic.com",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "max": "max"
+    },
     "input": [
       "text",
       "image"
@@ -268,6 +290,10 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://api.anthropic.com",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "max": "max",
+      "xhigh": "xhigh"
+    },
     "input": [
       "text",
       "image"
@@ -279,7 +305,10 @@
       "cacheWrite": 2.5
     },
     "contextWindow": 1000000,
-    "maxTokens": 128000
+    "maxTokens": 128000,
+    "compat": {
+      "forceAdaptiveThinking": true
+    }
   },
   {
     "id": "gemma-4-31b",
@@ -288,6 +317,15 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.cerebras.ai/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "high": "high",
+      "low": "low",
+      "max": null,
+      "medium": "medium",
+      "minimal": null,
+      "off": "none",
+      "xhigh": null
+    },
     "input": [
       "text",
       "image"
@@ -308,6 +346,15 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.cerebras.ai/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "high": "high",
+      "low": "low",
+      "max": null,
+      "medium": "medium",
+      "minimal": null,
+      "off": null,
+      "xhigh": null
+    },
     "input": [
       "text"
     ],
@@ -327,6 +374,15 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.cerebras.ai/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "high": null,
+      "low": null,
+      "max": null,
+      "medium": null,
+      "minimal": null,
+      "off": "none",
+      "xhigh": null
+    },
     "input": [
       "text"
     ],
@@ -387,9 +443,9 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": null,
+      "max": "max",
       "medium": null,
-      "minimal": null,
-      "xhigh": "max"
+      "minimal": null
     },
     "input": [
       "text"
@@ -413,9 +469,9 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": null,
+      "max": "max",
       "medium": null,
-      "minimal": null,
-      "xhigh": "max"
+      "minimal": null
     },
     "input": [
       "text"
@@ -439,9 +495,9 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": null,
+      "max": "max",
       "medium": null,
-      "minimal": null,
-      "xhigh": "max"
+      "minimal": null
     },
     "input": [
       "text"
@@ -465,9 +521,9 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": null,
+      "max": "max",
       "medium": null,
-      "minimal": null,
-      "xhigh": "max"
+      "minimal": null
     },
     "input": [
       "text"
@@ -848,6 +904,9 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://api.individual.githubcopilot.com",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "max": "max"
+    },
     "input": [
       "text",
       "image"
@@ -877,6 +936,10 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://api.individual.githubcopilot.com",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "max": "max",
+      "xhigh": "xhigh"
+    },
     "input": [
       "text",
       "image"
@@ -907,6 +970,10 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://api.individual.githubcopilot.com",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "max": "max",
+      "xhigh": "xhigh"
+    },
     "input": [
       "text",
       "image"
@@ -1022,6 +1089,9 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://api.individual.githubcopilot.com",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "max": "max"
+    },
     "input": [
       "text",
       "image"
@@ -1756,6 +1826,15 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.groq.com/openai/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "high": "high",
+      "low": "low",
+      "max": null,
+      "medium": "medium",
+      "minimal": null,
+      "off": null,
+      "xhigh": null
+    },
     "input": [
       "text"
     ],
@@ -1775,6 +1854,15 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.groq.com/openai/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "high": "high",
+      "low": "low",
+      "max": null,
+      "medium": "medium",
+      "minimal": null,
+      "off": null,
+      "xhigh": null
+    },
     "input": [
       "text"
     ],
@@ -1794,6 +1882,15 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.groq.com/openai/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "high": "high",
+      "low": "low",
+      "max": null,
+      "medium": "medium",
+      "minimal": null,
+      "off": null,
+      "xhigh": null
+    },
     "input": [
       "text"
     ],
@@ -1813,6 +1910,15 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.groq.com/openai/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "high": null,
+      "low": null,
+      "max": null,
+      "medium": null,
+      "minimal": null,
+      "off": "none",
+      "xhigh": null
+    },
     "input": [
       "text"
     ],
@@ -2191,6 +2297,7 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": "low",
+      "max": null,
       "medium": "medium",
       "minimal": null,
       "off": "none",
@@ -2313,6 +2420,7 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": "low",
+      "max": null,
       "medium": "medium",
       "minimal": null,
       "off": "none",
@@ -2343,6 +2451,7 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": "low",
+      "max": null,
       "medium": "medium",
       "minimal": null,
       "off": "none",
@@ -2461,6 +2570,7 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": null,
+      "max": null,
       "medium": null,
       "minimal": null,
       "off": null,
@@ -2694,10 +2804,11 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": "low",
+      "max": "max",
       "medium": null,
       "minimal": null,
       "off": null,
-      "xhigh": "max"
+      "xhigh": null
     },
     "input": [
       "text",
@@ -2725,6 +2836,7 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": "low",
+      "max": null,
       "medium": "medium",
       "minimal": null,
       "off": null,
@@ -2755,6 +2867,7 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": "low",
+      "max": null,
       "medium": "medium",
       "minimal": null,
       "off": null,
@@ -2807,6 +2920,7 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": "low",
+      "max": null,
       "medium": "medium",
       "minimal": null,
       "off": null,
@@ -4395,9 +4509,9 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": null,
+      "max": "max",
       "medium": null,
-      "minimal": null,
-      "xhigh": "max"
+      "minimal": null
     },
     "input": [
       "text"
@@ -4421,9 +4535,9 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": null,
+      "max": "max",
       "medium": null,
-      "minimal": null,
-      "xhigh": "max"
+      "minimal": null
     },
     "input": [
       "text"
@@ -6094,6 +6208,11 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://opencode.ai/zen",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "max": "max",
+      "off": null,
+      "xhigh": "xhigh"
+    },
     "input": [
       "text",
       "image"
@@ -6107,7 +6226,6 @@
     "contextWindow": 1000000,
     "maxTokens": 128000,
     "compat": {
-      "supportsTemperature": false,
       "forceAdaptiveThinking": true
     }
   },
@@ -6178,6 +6296,9 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://opencode.ai/zen",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "max": "max"
+    },
     "input": [
       "text",
       "image"
@@ -6201,6 +6322,10 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://opencode.ai/zen",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "max": "max",
+      "xhigh": "xhigh"
+    },
     "input": [
       "text",
       "image"
@@ -6225,6 +6350,10 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://opencode.ai/zen",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "max": "max",
+      "xhigh": "xhigh"
+    },
     "input": [
       "text",
       "image"
@@ -6249,6 +6378,10 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://opencode.ai/zen",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "max": "max",
+      "xhigh": "xhigh"
+    },
     "input": [
       "text",
       "image"
@@ -6283,7 +6416,7 @@
       "cacheRead": 0.3,
       "cacheWrite": 3.75
     },
-    "contextWindow": 1000000,
+    "contextWindow": 200000,
     "maxTokens": 64000
   },
   {
@@ -6303,7 +6436,7 @@
       "cacheRead": 0.3,
       "cacheWrite": 3.75
     },
-    "contextWindow": 1000000,
+    "contextWindow": 200000,
     "maxTokens": 64000
   },
   {
@@ -6313,6 +6446,9 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://opencode.ai/zen",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "max": "max"
+    },
     "input": [
       "text",
       "image"
@@ -6336,6 +6472,10 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://opencode.ai/zen",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "max": "max",
+      "xhigh": "xhigh"
+    },
     "input": [
       "text",
       "image"
@@ -6347,7 +6487,10 @@
       "cacheWrite": 2.5
     },
     "contextWindow": 1000000,
-    "maxTokens": 128000
+    "maxTokens": 128000,
+    "compat": {
+      "forceAdaptiveThinking": true
+    }
   },
   {
     "id": "deepseek-v4-flash",
@@ -6359,9 +6502,9 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": null,
+      "max": "max",
       "medium": null,
-      "minimal": null,
-      "xhigh": "max"
+      "minimal": null
     },
     "input": [
       "text"
@@ -6389,9 +6532,9 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": null,
+      "max": "max",
       "medium": null,
-      "minimal": null,
-      "xhigh": "max"
+      "minimal": null
     },
     "input": [
       "text"
@@ -6419,9 +6562,9 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": null,
+      "max": "max",
       "medium": null,
-      "minimal": null,
-      "xhigh": "max"
+      "minimal": null
     },
     "input": [
       "text"
@@ -6493,10 +6636,11 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": null,
+      "max": "max",
       "medium": null,
       "minimal": null,
       "off": null,
-      "xhigh": "max"
+      "xhigh": null
     },
     "input": [
       "text"
@@ -6624,10 +6768,11 @@
     "thinkingLevelMap": {
       "high": null,
       "low": null,
+      "max": "max",
       "medium": null,
       "minimal": null,
       "off": null,
-      "xhigh": "max"
+      "xhigh": null
     },
     "input": [
       "text",
@@ -6655,6 +6800,7 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": "low",
+      "max": null,
       "medium": "medium",
       "minimal": null,
       "off": null,
@@ -6685,6 +6831,7 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": "low",
+      "max": null,
       "medium": "medium",
       "minimal": null,
       "off": null,
@@ -6827,6 +6974,7 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": null,
+      "max": null,
       "medium": null,
       "minimal": null,
       "off": "none",
@@ -6897,9 +7045,9 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": null,
+      "max": "max",
       "medium": null,
-      "minimal": null,
-      "xhigh": "max"
+      "minimal": null
     },
     "input": [
       "text"
@@ -6928,9 +7076,9 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": null,
+      "max": "max",
       "medium": null,
-      "minimal": null,
-      "xhigh": "max"
+      "minimal": null
     },
     "input": [
       "text"
@@ -6981,10 +7129,10 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": null,
+      "max": "max",
       "medium": null,
       "minimal": null,
-      "off": null,
-      "xhigh": "max"
+      "off": null
     },
     "input": [
       "text"
@@ -7011,6 +7159,7 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": "low",
+      "max": null,
       "medium": null,
       "minimal": null,
       "off": "none",
@@ -7094,10 +7243,11 @@
     "thinkingLevelMap": {
       "high": null,
       "low": null,
+      "max": "max",
       "medium": null,
       "minimal": null,
       "off": null,
-      "xhigh": "max"
+      "xhigh": null
     },
     "input": [
       "text",
@@ -8117,9 +8267,9 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": null,
+      "max": "max",
       "medium": null,
-      "minimal": null,
-      "xhigh": "max"
+      "minimal": null
     },
     "input": [
       "text"
@@ -8143,9 +8293,9 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": null,
+      "max": "max",
       "medium": null,
-      "minimal": null,
-      "xhigh": "max"
+      "minimal": null
     },
     "input": [
       "text"
@@ -12434,9 +12584,9 @@
       "text"
     ],
     "cost": {
-      "input": 0.7308,
-      "output": 2.2968,
-      "cacheRead": 0.13572,
+      "input": 0.728,
+      "output": 2.288,
+      "cacheRead": 0.1352,
       "cacheWrite": 0
     },
     "contextWindow": 1048576,
@@ -13562,6 +13712,11 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://ai-gateway.vercel.sh",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "max": "max",
+      "off": null,
+      "xhigh": "xhigh"
+    },
     "input": [
       "text",
       "image"
@@ -13575,7 +13730,6 @@
     "contextWindow": 1000000,
     "maxTokens": 128000,
     "compat": {
-      "supportsTemperature": false,
       "forceAdaptiveThinking": true
     }
   },
@@ -13666,6 +13820,9 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://ai-gateway.vercel.sh",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "max": "max"
+    },
     "input": [
       "text",
       "image"
@@ -13689,6 +13846,10 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://ai-gateway.vercel.sh",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "max": "max",
+      "xhigh": "xhigh"
+    },
     "input": [
       "text",
       "image"
@@ -13713,6 +13874,10 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://ai-gateway.vercel.sh",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "max": "max",
+      "xhigh": "xhigh"
+    },
     "input": [
       "text",
       "image"
@@ -13737,6 +13902,10 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://ai-gateway.vercel.sh",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "max": "max",
+      "xhigh": "xhigh"
+    },
     "input": [
       "text",
       "image"
@@ -13761,6 +13930,10 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://ai-gateway.vercel.sh",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "max": "max",
+      "xhigh": "xhigh"
+    },
     "input": [
       "text",
       "image"
@@ -13785,6 +13958,10 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://ai-gateway.vercel.sh",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "max": "max",
+      "xhigh": "xhigh"
+    },
     "input": [
       "text",
       "image"
@@ -13849,6 +14026,9 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://ai-gateway.vercel.sh",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "max": "max"
+    },
     "input": [
       "text",
       "image"
@@ -13872,6 +14052,10 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://ai-gateway.vercel.sh",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "max": "max",
+      "xhigh": "xhigh"
+    },
     "input": [
       "text",
       "image"
@@ -13883,7 +14067,10 @@
       "cacheWrite": 2.5
     },
     "contextWindow": 1000000,
-    "maxTokens": 128000
+    "maxTokens": 128000,
+    "compat": {
+      "forceAdaptiveThinking": true
+    }
   },
   {
     "id": "arcee-ai/trinity-large-thinking",
@@ -14106,9 +14293,9 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": null,
+      "max": "max",
       "medium": null,
-      "minimal": null,
-      "xhigh": "max"
+      "minimal": null
     },
     "input": [
       "text"
@@ -14132,9 +14319,9 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": null,
+      "max": "max",
       "medium": null,
-      "minimal": null,
-      "xhigh": "max"
+      "minimal": null
     },
     "input": [
       "text"
@@ -17309,9 +17496,9 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": "high",
+      "max": "max",
       "medium": "high",
-      "minimal": null,
-      "xhigh": "max"
+      "minimal": null
     },
     "input": [
       "text"
@@ -17467,9 +17654,9 @@
     "thinkingLevelMap": {
       "high": "high",
       "low": "high",
+      "max": "max",
       "medium": "high",
-      "minimal": null,
-      "xhigh": "max"
+      "minimal": null
     },
     "input": [
       "text"

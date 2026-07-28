@@ -33,6 +33,7 @@ const (
 	ModelThinkingMedium  ModelThinkingLevel = "medium"
 	ModelThinkingHigh    ModelThinkingLevel = "high"
 	ModelThinkingXHigh   ModelThinkingLevel = "xhigh"
+	ModelThinkingMax     ModelThinkingLevel = "max"
 )
 
 // ThinkingDisplay controls how a reasoning model returns its thinking. It does
@@ -144,11 +145,13 @@ var extendedThinkingLevels = []ModelThinkingLevel{
 	ModelThinkingMedium,
 	ModelThinkingHigh,
 	ModelThinkingXHigh,
+	ModelThinkingMax,
 }
 
 // SupportedThinkingLevels returns the thinking levels a model accepts. A
 // non-reasoning model supports only "off". For reasoning models, a level mapped
-// to nil is unsupported, and "xhigh" is supported only when explicitly mapped.
+// to nil is unsupported, and "xhigh"/"max" are supported only when explicitly
+// mapped.
 func SupportedThinkingLevels(model Model) []ModelThinkingLevel {
 	if !model.Reasoning {
 		return []ModelThinkingLevel{ModelThinkingOff}
@@ -160,7 +163,7 @@ func SupportedThinkingLevels(model Model) []ModelThinkingLevel {
 		if present && mapped == nil {
 			continue
 		}
-		if level == ModelThinkingXHigh && !present {
+		if (level == ModelThinkingXHigh || level == ModelThinkingMax) && !present {
 			continue
 		}
 		levels = append(levels, level)

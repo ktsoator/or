@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	sdk "github.com/anthropics/anthropic-sdk-go"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -99,5 +100,40 @@ func TestApplyThinkingDefaultsToSummarized(t *testing.T) {
 		if thinking["display"] != "summarized" {
 			t.Fatalf("adaptive=%t thinking.display = %v, want summarized", adaptive, thinking["display"])
 		}
+	}
+}
+
+func TestAdaptiveMaxThinkingPayload(t *testing.T) {
+	model, ok := llm.LookupModel("anthropic", "claude-sonnet-5")
+	if !ok {
+		t.Fatal("anthropic/claude-sonnet-5 is missing from the catalog")
+	}
+	compatibility := resolveCompat(model)
+	if !compatibility.forceAdaptiveThinking {
+		t.Fatal("claude-sonnet-5 is not marked adaptive")
+	}
+
+	params := sdk.MessageNewParams{Model: model.ID, MaxTokens: model.MaxTokens}
+	applyThinking(&params, model, compatibility, llm.ModelThinkingMax, "")
+	encoded, err := json.Marshal(params)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	var payload struct {
+		Thinking struct {
+			Type string `json:"type"`
+		} `json:"thinking"`
+		OutputConfig struct {
+			Effort string `json:"effort"`
+		} `json:"output_config"`
+	}
+	if err := json.Unmarshal(encoded, &payload); err != nil {
+		t.Fatalf("decode request: %v", err)
+	}
+	if payload.Thinking.Type != "adaptive" {
+		t.Fatalf("thinking.type = %q, want adaptive", payload.Thinking.Type)
+	}
+	if payload.OutputConfig.Effort != "max" {
+		t.Fatalf("output_config.effort = %q, want max", payload.OutputConfig.Effort)
 	}
 }

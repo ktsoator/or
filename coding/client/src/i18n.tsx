@@ -348,6 +348,7 @@ const en = {
   'effort.medium': 'Medium',
   'effort.high': 'High',
   'effort.xhigh': 'Extra High',
+  'effort.max': 'Max',
 
   'thinking.working': 'Working',
   'thinking.process': 'Thought process',
@@ -887,6 +888,7 @@ const zh: Record<TranslationKey, string> = {
   'effort.medium': '中',
   'effort.high': '高',
   'effort.xhigh': '极高',
+  'effort.max': '最高',
 
   'thinking.working': '正在处理',
   'thinking.process': '思考过程',

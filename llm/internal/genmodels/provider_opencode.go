@@ -48,7 +48,14 @@ func fromOpenCode(catalog map[string]sourceProvider) []model {
 }
 
 func applyOpenCodeOverrides(candidate *model) {
-	if candidate == nil || candidate.Protocol != "openai-completions" {
+	if candidate == nil {
+		return
+	}
+	if (candidate.Provider == "opencode" || candidate.Provider == "opencode-go") &&
+		(candidate.ID == "claude-sonnet-4" || candidate.ID == "claude-sonnet-4-5") {
+		candidate.ContextWindow = 200_000
+	}
+	if candidate.Protocol != "openai-completions" {
 		return
 	}
 
@@ -79,7 +86,7 @@ func applyOpenCodeOverrides(candidate *model) {
 			"low":     nil,
 			"medium":  nil,
 			"high":    &high,
-			"xhigh":   &max,
+			"max":     &max,
 		}
 	}
 
