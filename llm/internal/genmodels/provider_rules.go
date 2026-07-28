@@ -98,7 +98,7 @@ func normalize(id string, source sourceModel, rule providerRule) model {
 	if name == "" {
 		name = id
 	}
-	return model{
+	candidate := model{
 		ID:             id,
 		Name:           name,
 		Protocol:       rule.Protocol,
@@ -115,4 +115,6 @@ func normalize(id string, source sourceModel, rule providerRule) model {
 		Headers:        cloneMap(rule.Headers),
 		Compat:         rule.Compat,
 	}
+	applyReasoningOptionMetadata(&candidate, source.ReasoningOptions)
+	return candidate
 }

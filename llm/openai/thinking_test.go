@@ -241,6 +241,11 @@ func TestOpenCodeThinkingOffPayloads(t *testing.T) {
 			provider: "opencode-go", modelID: "qwen3.6-plus",
 			field: "enable_thinking", want: false,
 		},
+		{
+			name:     "opencode go hy3",
+			provider: "opencode-go", modelID: "hy3",
+			field: "reasoning_effort", want: "none",
+		},
 	}
 
 	for _, test := range tests {
@@ -256,10 +261,27 @@ func TestOpenCodeThinkingOffPayloads(t *testing.T) {
 			if got := extras[test.field]; !reflect.DeepEqual(got, test.want) {
 				t.Fatalf("%s = %#v, want %#v", test.field, got, test.want)
 			}
-			if _, present := extras["reasoning_effort"]; present {
-				t.Fatalf("reasoning_effort must be absent when thinking is off: %#v", extras)
+			if test.field != "reasoning_effort" {
+				if _, present := extras["reasoning_effort"]; present {
+					t.Fatalf("reasoning_effort must be absent when thinking is off: %#v", extras)
+				}
 			}
 		})
+	}
+}
+
+func TestOpenCodeHy3ThinkingLevels(t *testing.T) {
+	model, ok := llm.LookupModel("opencode-go", "hy3")
+	if !ok {
+		t.Fatal("model opencode-go/hy3 is missing from the catalog")
+	}
+	want := []llm.ModelThinkingLevel{
+		llm.ModelThinkingOff,
+		llm.ModelThinkingLow,
+		llm.ModelThinkingHigh,
+	}
+	if got := llm.SupportedThinkingLevels(model); !reflect.DeepEqual(got, want) {
+		t.Fatalf("thinking levels = %v, want %v", got, want)
 	}
 }
 

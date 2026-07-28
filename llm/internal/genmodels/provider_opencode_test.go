@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestApplyOpenCodeOverrides(t *testing.T) {
 	tests := []struct {
@@ -101,5 +104,51 @@ func TestApplyOpenCodeOverridesIgnoresOtherProtocols(t *testing.T) {
 	applyOpenCodeOverrides(&model)
 	if model.Compat.ThinkingFormat != "" || model.Compat.SupportsReasoningEffort != nil || model.ThinkingLevelMap != nil {
 		t.Fatalf("unexpected override: %#v", model)
+	}
+}
+
+func TestFromOpenCodeAppliesHy3ReasoningOptions(t *testing.T) {
+	none, low, high := "none", "low", "high"
+	source := sourceModel{
+		Name: "Hy3", ToolCall: true, Reasoning: true,
+		ReasoningOptions: reasoningValues(&none, &low, &high),
+	}
+	catalog := map[string]sourceProvider{
+		"opencode-go": {Models: map[string]sourceModel{"hy3": source}},
+	}
+
+	models := fromOpenCode(catalog)
+	if len(models) != 1 {
+		t.Fatalf("generated %d models, want 1", len(models))
+	}
+	want := map[string]*string{
+		"off": stringPointer("none"), "minimal": nil, "low": stringPointer("low"),
+		"medium": nil, "high": stringPointer("high"), "xhigh": nil,
+	}
+	if !reflect.DeepEqual(models[0].ThinkingLevelMap, want) {
+		t.Fatalf("ThinkingLevelMap = %#v, want %#v", models[0].ThinkingLevelMap, want)
+	}
+}
+
+func TestFromOpenCodeManualReasoningOverrideWins(t *testing.T) {
+	none, low := "none", "low"
+	source := sourceModel{
+		ToolCall: true, Reasoning: true,
+		ReasoningOptions: reasoningValues(&none, &low),
+	}
+	catalog := map[string]sourceProvider{
+		"opencode-go": {Models: map[string]sourceModel{"glm-5.2": source}},
+	}
+
+	models := fromOpenCode(catalog)
+	if len(models) != 1 {
+		t.Fatalf("generated %d models, want 1", len(models))
+	}
+	want := map[string]*string{
+		"off": nil, "minimal": nil, "low": nil, "medium": nil,
+		"high": stringPointer("high"), "xhigh": stringPointer("max"),
+	}
+	if !reflect.DeepEqual(models[0].ThinkingLevelMap, want) {
+		t.Fatalf("ThinkingLevelMap = %#v, want manual override %#v", models[0].ThinkingLevelMap, want)
 	}
 }

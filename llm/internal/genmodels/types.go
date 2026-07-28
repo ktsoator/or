@@ -1,11 +1,12 @@
 package main
 
 type sourceModel struct {
-	Name      string `json:"name"`
-	ToolCall  bool   `json:"tool_call"`
-	Reasoning bool   `json:"reasoning"`
-	Status    string `json:"status"`
-	Limit     struct {
+	Name             string                  `json:"name"`
+	ToolCall         bool                    `json:"tool_call"`
+	Reasoning        bool                    `json:"reasoning"`
+	ReasoningOptions []sourceReasoningOption `json:"reasoning_options"`
+	Status           string                  `json:"status"`
+	Limit            struct {
 		Context int64 `json:"context"`
 		Output  int64 `json:"output"`
 	} `json:"limit"`
@@ -22,6 +23,11 @@ type sourceModel struct {
 	Provider struct {
 		NPM string `json:"npm"`
 	} `json:"provider"`
+}
+
+type sourceReasoningOption struct {
+	Type   string    `json:"type"`
+	Values []*string `json:"values"`
 }
 
 type sourceProvider struct {
