@@ -24,7 +24,7 @@ export function ThinkingModeToggle({
       aria-checked={checked}
       disabled={disabled}
       className={cn(
-        'inline-flex h-9 cursor-pointer items-center gap-2 rounded-[10px] px-2.5 text-[0.8125rem] text-stone-700 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:ring-2 focus-visible:ring-stone-300 disabled:cursor-not-allowed disabled:opacity-60',
+        'inline-flex h-9 cursor-pointer items-center gap-2 rounded-[10px] px-2.5 text-[0.8125rem] text-stone-700 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:bg-[rgb(241,241,241)] disabled:cursor-not-allowed disabled:opacity-60',
         className,
       )}
       onClick={() => onCheckedChange(!checked)}

@@ -11,10 +11,11 @@ import (
 // skillDTO is a skill as the browser lists it. The instructions body is
 // intentionally omitted; the page only shows discovery metadata.
 type skillDTO struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Source      string `json:"source"`
-	Dir         string `json:"dir"`
+	Name                   string `json:"name"`
+	Description            string `json:"description"`
+	Source                 string `json:"source"`
+	Dir                    string `json:"dir"`
+	DisableModelInvocation bool   `json:"disableModelInvocation"`
 }
 
 // skillDiagnosticDTO reports a skill that could not be loaded, so the page can
@@ -41,7 +42,13 @@ func (s *Server) handleSkills(c *gin.Context) {
 	user := make([]skillDTO, 0)
 	project := make([]skillDTO, 0)
 	for _, sk := range reg.List() {
-		dto := skillDTO{Name: sk.Name, Description: sk.Description, Source: string(sk.Source), Dir: sk.Dir}
+		dto := skillDTO{
+			Name:                   sk.Name,
+			Description:            sk.Description,
+			Source:                 string(sk.Source),
+			Dir:                    sk.Dir,
+			DisableModelInvocation: sk.DisableModelInvocation,
+		}
 		if sk.Source == skills.SourceProject {
 			project = append(project, dto)
 		} else {
@@ -78,10 +85,11 @@ func (s *Server) handleSkillContent(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, skillDetailDTO{
 		skillDTO: skillDTO{
-			Name:        sk.Name,
-			Description: sk.Description,
-			Source:      string(sk.Source),
-			Dir:         sk.Dir,
+			Name:                   sk.Name,
+			Description:            sk.Description,
+			Source:                 string(sk.Source),
+			Dir:                    sk.Dir,
+			DisableModelInvocation: sk.DisableModelInvocation,
 		},
 		Content: sk.Content,
 	})

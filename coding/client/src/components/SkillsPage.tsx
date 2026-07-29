@@ -2,26 +2,14 @@ import { useCallback, useEffect, useState } from 'react'
 import { ArrowLeft, LoaderCircle, X } from 'lucide-react'
 import { apiURL } from '@/api'
 import { useI18n } from '@/i18n'
+import {
+  fetchSkills,
+  type SkillDiagnostic,
+  type SkillEntry,
+  type SkillsResponse,
+} from '@/skills'
 import { Markdown } from './Markdown'
 import { SidebarToggleButton } from './SidebarToggleButton'
-
-type SkillEntry = {
-  name: string
-  description: string
-  source: 'user' | 'project'
-  dir: string
-}
-
-type SkillDiagnostic = {
-  path: string
-  message: string
-}
-
-type SkillsResponse = {
-  user: SkillEntry[]
-  project: SkillEntry[]
-  diagnostics: SkillDiagnostic[]
-}
 
 // relativizeHome trims the user's home prefix off an absolute path so directory
 // hints read as "~/.or/skills/commit" rather than a long absolute path.
@@ -53,10 +41,7 @@ export function SkillsPage({
     setLoading(true)
     setError(false)
     try {
-      const query = workspacePath ? `?workspace=${encodeURIComponent(workspacePath)}` : ''
-      const response = await fetch(apiURL(`/skills${query}`), { cache: 'no-store' })
-      if (!response.ok) throw new Error('failed')
-      setData((await response.json()) as SkillsResponse)
+      setData(await fetchSkills(workspacePath))
     } catch {
       setError(true)
     } finally {
@@ -83,7 +68,7 @@ export function SkillsPage({
           />
         )}
         <button
-          className="window-titlebar-control flex h-9 cursor-pointer items-center gap-2 rounded-[10px] px-2.5 text-[0.84375rem] font-normal text-stone-500 outline-none transition-colors hover:bg-stone-200/65 hover:text-stone-900 focus-visible:ring-2 focus-visible:ring-stone-300"
+          className="window-titlebar-control flex h-9 cursor-pointer items-center gap-2 rounded-[10px] px-2.5 text-[0.84375rem] font-normal text-stone-500 outline-none transition-colors hover:bg-stone-200/65 hover:text-stone-900 focus-visible:bg-stone-200/65 focus-visible:text-stone-900"
           type="button"
           onClick={onBack}
         >
@@ -201,14 +186,24 @@ function SkillSection({
 }
 
 function SkillCard({ skill, onSelect }: { skill: SkillEntry; onSelect: (skill: SkillEntry) => void }) {
+  const { t } = useI18n()
   return (
     <button
       type="button"
-      className="flex cursor-pointer flex-col gap-0.5 rounded-[18px] border border-stone-200 bg-white px-4 py-3.5 text-left transition-colors outline-none hover:border-stone-300 hover:bg-stone-50/60 focus-visible:border-stone-400 focus-visible:ring-2 focus-visible:ring-stone-200"
+      className="flex cursor-pointer flex-col gap-0.5 rounded-[18px] border border-stone-200 bg-white px-4 py-3.5 text-left outline-none transition-colors hover:border-stone-300 hover:bg-stone-50/60 focus-visible:border-stone-400 focus-visible:bg-stone-50/60"
       title={relativizeHome(skill.dir)}
       onClick={() => onSelect(skill)}
     >
-      <div className="truncate font-mono text-[0.84375rem] font-medium text-stone-900">{skill.name}</div>
+      <div className="flex min-w-0 items-center gap-2">
+        <div className="min-w-0 flex-1 truncate font-mono text-[0.84375rem] font-medium text-stone-900">
+          {skill.name}
+        </div>
+        {skill.disableModelInvocation && (
+          <span className="shrink-0 rounded-md bg-stone-100 px-1.5 py-0.5 text-[0.625rem] font-medium text-stone-500">
+            {t('skills.manual')}
+          </span>
+        )}
+      </div>
       <p className="line-clamp-2 text-[0.8125rem] leading-[1.45] text-stone-500">{skill.description}</p>
     </button>
   )
@@ -285,6 +280,11 @@ function SkillDetailDialog({
               <span className="shrink-0 rounded-full bg-stone-100 px-2 py-0.5 text-[0.6875rem] font-medium text-stone-500">
                 {sourceLabel}
               </span>
+              {skill.disableModelInvocation && (
+                <span className="shrink-0 rounded-md bg-stone-100 px-1.5 py-0.5 text-[0.625rem] font-medium text-stone-500">
+                  {t('skills.manual')}
+                </span>
+              )}
             </div>
             <p className="mt-1 text-[0.8125rem] leading-5 text-stone-500">{skill.description}</p>
             <p className="mt-1 truncate font-mono text-[0.6875rem] text-stone-400" title={skill.dir}>

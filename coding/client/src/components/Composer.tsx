@@ -1,5 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
-import { ArrowUp, Check, ChevronDown, Info, LoaderCircle, Plus, Square, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  ArrowUp,
+  BookOpen,
+  Check,
+  ChevronDown,
+  Info,
+  LoaderCircle,
+  Square,
+  X,
+} from 'lucide-react'
 import { DropdownMenu } from 'radix-ui'
 import { isAPIError } from '@/api'
 import type {
@@ -18,7 +27,23 @@ import type {
   WorkspaceSummary,
 } from '@/types'
 import { cn } from '@/lib/utils'
+import {
+  buildSkillInvocation,
+  fetchSkills,
+  filterSkills,
+  parseSkillSlashQuery,
+  skillArgumentsFromDraft,
+  type SkillEntry,
+  type SkillsResponse,
+} from '@/skills'
 import { Approval } from './Approval'
+import { ComposerAddMenu } from './ComposerAddMenu'
+import { ComposerSkillSuggestions } from './ComposerSkillSuggestions'
+import {
+  previewSkillCommandCount,
+  skillSuggestionOptionID,
+  skillSuggestionsID,
+} from './composerPanelStyles'
 import { Question } from './Question'
 import { ModelSettingsMenu } from './ModelSettingsMenu'
 import { PermissionModeMenu } from './PermissionModeMenu'
@@ -91,6 +116,7 @@ export function Composer({
   const { t } = useI18n()
   const ref = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const surfaceRef = useRef<HTMLDivElement>(null)
   const composingRef = useRef(false)
   const submittingRef = useRef(false)
   const compactFeedbackTimerRef = useRef<number | undefined>(undefined)
@@ -101,6 +127,15 @@ export function Composer({
   const [compactFeedback, setCompactFeedback] = useState<CompactFeedback>()
   const [images, setImages] = useState<PendingImage[]>([])
   const [delivery, setDelivery] = useState<DeliveryMode>('steer')
+  const [draftValue, setDraftValue] = useState('')
+  const [selectedSkill, setSelectedSkill] = useState<SkillEntry>()
+  const [skillsData, setSkillsData] = useState<SkillsResponse>()
+  const [skillsLoading, setSkillsLoading] = useState(true)
+  const [skillsFailed, setSkillsFailed] = useState(false)
+  const [skillSuggestionsDismissed, setSkillSuggestionsDismissed] = useState(false)
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0)
+  const [skillKeyboardNavigating, setSkillKeyboardNavigating] = useState(false)
+  const [addPanelOpen, setAddPanelOpen] = useState(false)
   const awaitingApproval = Boolean(approval)
   const awaitingQuestion = Boolean(question)
   // A question blocks the composer exactly as an approval does: the run is
@@ -113,6 +148,24 @@ export function Composer({
   const supportsImages = Boolean(
     models.find((model) => model.provider === modelProvider && model.id === modelID)
       ?.supportsImages,
+  )
+  const availableSkills = useMemo(
+    () => [...(skillsData?.project ?? []), ...(skillsData?.user ?? [])],
+    [skillsData],
+  )
+  const slashQuery =
+    !running && !selectedSkill && !addPanelOpen && !skillSuggestionsDismissed
+      ? parseSkillSlashQuery(draftValue)
+      : undefined
+  const suggestedSkills = slashQuery
+    ? filterSkills(availableSkills, slashQuery.query).slice(0, maxSkillSuggestions)
+    : []
+  const previewCommandCount = slashQuery
+    ? previewSkillCommandCount(slashQuery.query)
+    : 0
+  const suggestionCount = previewCommandCount + suggestedSkills.length
+  const skillSuggestionsVisible = Boolean(
+    slashQuery && !inputDisabled,
   )
 
   const autosize = () => {
@@ -137,6 +190,50 @@ export function Composer({
     if (supportsImages) setAttachmentError('')
   }, [supportsImages])
 
+  useEffect(() => {
+    const controller = new AbortController()
+    setSkillsLoading(true)
+    setSkillsFailed(false)
+    setSkillsData(undefined)
+    void fetchSkills(workspacePath, controller.signal)
+      .then(setSkillsData)
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return
+        setSkillsFailed(true)
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setSkillsLoading(false)
+      })
+    return () => controller.abort()
+  }, [workspacePath])
+
+  useEffect(() => {
+    setActiveSuggestionIndex(0)
+    setSkillKeyboardNavigating(false)
+  }, [slashQuery?.query])
+
+  useEffect(() => {
+    if (!addPanelOpen && !skillSuggestionsVisible) return
+    const closeOutside = (event: PointerEvent) => {
+      const target = event.target
+      if (target instanceof Node && !surfaceRef.current?.contains(target)) {
+        setAddPanelOpen(false)
+        setSkillSuggestionsDismissed(true)
+      }
+    }
+    document.addEventListener('pointerdown', closeOutside, true)
+    return () => document.removeEventListener('pointerdown', closeOutside, true)
+  }, [addPanelOpen, skillSuggestionsVisible])
+
+  useEffect(() => {
+    if (!selectedSkill || !skillsData) return
+    const stillAvailable = availableSkills.some(
+      (skill) =>
+        skill.name === selectedSkill.name && skill.source === selectedSkill.source,
+    )
+    if (!stillAvailable) setSelectedSkill(undefined)
+  }, [availableSkills, selectedSkill, skillsData])
+
   useEffect(
     () => () => {
       if (compactFeedbackTimerRef.current !== undefined) {
@@ -149,7 +246,10 @@ export function Composer({
   const submit = async () => {
     const el = ref.current
     if (!el || submittingRef.current) return
-    const text = el.value.trim()
+    const argumentsText = draftValue.trim()
+    const text = selectedSkill
+      ? buildSkillInvocation(selectedSkill.name, argumentsText)
+      : argumentsText
     if ((!text && images.length === 0) || inputDisabled) return
     if (images.length > 0 && !supportsImages) {
       setAttachmentError(t('composer.modelNoImages'))
@@ -164,10 +264,12 @@ export function Composer({
         running ? delivery : undefined,
       )
       if (!accepted) return
-      el.value = ''
+      setDraftValue('')
+      setSelectedSkill(undefined)
+      setSkillSuggestionsDismissed(false)
       setImages([])
       setAttachmentError('')
-      autosize()
+      requestAnimationFrame(autosize)
     } catch (error) {
       setSendError(error instanceof Error ? error.message : t('composer.couldNotSend'))
     } finally {
@@ -205,6 +307,29 @@ export function Composer({
     } catch {
       setAttachmentError(t('composer.couldNotReadImage'))
     }
+  }
+
+  const selectSkill = (skill: SkillEntry) => {
+    const el = ref.current
+    if (!el) return
+    const argumentsText = selectedSkill
+      ? draftValue
+      : skillArgumentsFromDraft(draftValue)
+    setSelectedSkill(skill)
+    setDraftValue(argumentsText)
+    setAddPanelOpen(false)
+    setSkillSuggestionsDismissed(true)
+    requestAnimationFrame(() => {
+      autosize()
+      el.focus()
+      el.setSelectionRange(argumentsText.length, argumentsText.length)
+    })
+  }
+
+  const clearSelectedSkill = () => {
+    setSelectedSkill(undefined)
+    setSkillSuggestionsDismissed(false)
+    requestAnimationFrame(() => ref.current?.focus())
   }
 
   const changeSettings = async (
@@ -290,30 +415,40 @@ export function Composer({
         )}
 
         <div
+          ref={surfaceRef}
           hidden={awaitingUser}
           className={cn(
-            'rounded-[28px] border border-stone-200 bg-white [container-type:inline-size]',
+            'relative rounded-[28px] border border-stone-200 bg-white [container-type:inline-size]',
             !centered &&
               'transition-colors focus-within:border-stone-300',
           )}
         >
+          <ComposerSkillSuggestions
+            visible={skillSuggestionsVisible}
+            query={slashQuery?.query ?? ''}
+            skills={suggestedSkills}
+            activeIndex={activeSuggestionIndex}
+            keyboardNavigating={skillKeyboardNavigating}
+            loading={skillsLoading}
+            failed={skillsFailed}
+            onActiveIndexChange={setActiveSuggestionIndex}
+            onPointerNavigation={() => setSkillKeyboardNavigating(false)}
+            onSelect={selectSkill}
+          />
           <div
             className="grid min-h-24 grid-cols-[2.5rem_minmax(0,1fr)] grid-rows-[auto_2.5rem] items-center gap-x-3 gap-y-1 px-3 py-2.5 max-sm:gap-x-2"
           >
-            <button
-              className="group relative col-start-1 row-start-2 grid size-10 cursor-pointer place-items-center rounded-full text-stone-700 transition-colors hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-30"
-              type="button"
-              aria-label={
-                supportsImages ? t('composer.attachImages') : t('composer.currentModelNoImages')
-              }
-              title={
-                supportsImages ? t('composer.attachImages') : t('composer.currentModelNoImages')
-              }
-              disabled={inputDisabled || !supportsImages || images.length >= maxImages}
-              onClick={() => fileRef.current?.click()}
-            >
-              <Plus className="size-5" aria-hidden="true" />
-            </button>
+            <ComposerAddMenu
+              disabled={inputDisabled}
+              open={addPanelOpen}
+              imageAttachmentAvailable={supportsImages}
+              imageLimitReached={images.length >= maxImages}
+              onOpenChange={(open) => {
+                setAddPanelOpen(open)
+                if (open) setSkillSuggestionsDismissed(true)
+              }}
+              onAttachImages={() => fileRef.current?.click()}
+            />
             <input
               ref={fileRef}
               className="sr-only"
@@ -356,51 +491,151 @@ export function Composer({
                   ))}
                 </div>
               )}
-              <textarea
-                ref={ref}
-                rows={1}
-                disabled={inputDisabled}
-                className="block max-h-[15rem] min-h-8 w-full min-w-0 resize-none overflow-y-auto border-0 bg-transparent px-1 py-1.5 text-[var(--chat-font-size)] leading-6 text-stone-900 outline-none placeholder:text-stone-400 disabled:cursor-not-allowed disabled:bg-transparent"
-                placeholder={
-                  awaitingQuestion
-                    ? t('composer.answerQuestionPlaceholder')
-                    : awaitingApproval
-                    ? t('composer.resolveApprovalPlaceholder')
-                    : compacting
-                      ? t('composer.compactingContext')
-                      : updatingSettings
-                        ? t('composer.updatingSettings')
-                    : !modelConfigured
-                      ? t('composer.configureModelPlaceholder')
-                    : connected
-                      ? running
-                        ? delivery === 'steer'
-                          ? t('composer.guideRun')
-                          : t('composer.queueFollowUpPlaceholder')
-                        : t('composer.askAnything')
-                      : t('composer.waitingForAPI')
-                }
-                onInput={autosize}
-                onCompositionStart={() => {
-                  composingRef.current = true
-                }}
-                onCompositionEnd={() => {
-                  composingRef.current = false
-                }}
-                onKeyDown={(event) => {
-                  if (
-                    composingRef.current ||
-                    event.nativeEvent.isComposing ||
-                    event.nativeEvent.keyCode === 229
-                  ) {
-                    return
+              <div className="flex min-w-0 items-start px-1">
+                {selectedSkill && (
+                  <button
+                    type="button"
+                    className="mt-1.5 flex h-6 max-w-[45%] shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-1.5 font-mono text-[14px] font-medium text-blue-600 outline-none transition-colors hover:bg-blue-50 focus-visible:bg-blue-50"
+                    aria-label={t('composer.removeSelectedSkill', {
+                      name: selectedSkill.name,
+                    })}
+                    title={t('composer.removeSelectedSkill', {
+                      name: selectedSkill.name,
+                    })}
+                    onClick={clearSelectedSkill}
+                  >
+                    <BookOpen
+                      className="size-4 shrink-0"
+                      strokeWidth={1.9}
+                      aria-hidden="true"
+                    />
+                    <span className="truncate">{selectedSkill.name}</span>
+                  </button>
+                )}
+                <textarea
+                  ref={ref}
+                  rows={1}
+                  value={draftValue}
+                  disabled={inputDisabled}
+                  aria-autocomplete={!selectedSkill ? 'list' : undefined}
+                  aria-controls={skillSuggestionsVisible ? skillSuggestionsID : undefined}
+                  aria-expanded={!selectedSkill ? skillSuggestionsVisible : undefined}
+                  aria-activedescendant={
+                    skillSuggestionsVisible && suggestionCount > 0
+                      ? skillSuggestionOptionID(
+                          Math.min(activeSuggestionIndex, suggestionCount - 1),
+                        )
+                      : undefined
                   }
-                  if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault()
-                    void submit()
+                  className="block max-h-[15rem] min-h-8 min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-1 py-1.5 text-[14px] leading-6 text-stone-900 outline-none placeholder:text-stone-400 disabled:cursor-not-allowed disabled:bg-transparent"
+                  placeholder={
+                    awaitingQuestion
+                      ? t('composer.answerQuestionPlaceholder')
+                      : awaitingApproval
+                      ? t('composer.resolveApprovalPlaceholder')
+                      : compacting
+                        ? t('composer.compactingContext')
+                        : updatingSettings
+                          ? t('composer.updatingSettings')
+                      : !modelConfigured
+                        ? t('composer.configureModelPlaceholder')
+                      : connected
+                        ? running
+                          ? delivery === 'steer'
+                            ? t('composer.guideRun')
+                            : t('composer.queueFollowUpPlaceholder')
+                          : t('composer.askAnything')
+                        : t('composer.waitingForAPI')
                   }
-                }}
-              />
+                  onChange={(event) => {
+                    setDraftValue(event.target.value)
+                    setAddPanelOpen(false)
+                    setSkillSuggestionsDismissed(false)
+                    autosize()
+                  }}
+                  onFocus={() => {
+                    if (!addPanelOpen) return
+                    setAddPanelOpen(false)
+                    setSkillSuggestionsDismissed(false)
+                  }}
+                  onCompositionStart={() => {
+                    composingRef.current = true
+                  }}
+                  onCompositionEnd={() => {
+                    composingRef.current = false
+                  }}
+                  onKeyDown={(event) => {
+                    if (
+                      composingRef.current ||
+                      event.nativeEvent.isComposing ||
+                      event.nativeEvent.keyCode === 229
+                    ) {
+                      return
+                    }
+                    if (
+                      skillSuggestionsVisible &&
+                      suggestionCount > 0 &&
+                      event.key === 'ArrowDown'
+                    ) {
+                      event.preventDefault()
+                      setSkillKeyboardNavigating(true)
+                      setActiveSuggestionIndex(
+                        (activeSuggestionIndex + 1) % suggestionCount,
+                      )
+                      return
+                    }
+                    if (
+                      skillSuggestionsVisible &&
+                      suggestionCount > 0 &&
+                      event.key === 'ArrowUp'
+                    ) {
+                      event.preventDefault()
+                      setSkillKeyboardNavigating(true)
+                      setActiveSuggestionIndex(
+                        (activeSuggestionIndex - 1 + suggestionCount) %
+                          suggestionCount,
+                      )
+                      return
+                    }
+                    if (skillSuggestionsVisible && event.key === 'Escape') {
+                      event.preventDefault()
+                      setSkillSuggestionsDismissed(true)
+                      return
+                    }
+                    if (
+                      skillSuggestionsVisible &&
+                      suggestionCount > 0 &&
+                      event.key === 'Enter' &&
+                      !event.shiftKey
+                    ) {
+                      event.preventDefault()
+                      if (activeSuggestionIndex < previewCommandCount) return
+                      const skill = suggestedSkills[
+                        Math.min(
+                          activeSuggestionIndex - previewCommandCount,
+                          suggestedSkills.length - 1,
+                        )
+                      ]
+                      if (skill) selectSkill(skill)
+                      return
+                    }
+                    if (
+                      selectedSkill &&
+                      event.key === 'Backspace' &&
+                      event.currentTarget.selectionStart === 0 &&
+                      event.currentTarget.selectionEnd === 0
+                    ) {
+                      event.preventDefault()
+                      clearSelectedSkill()
+                      return
+                    }
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault()
+                      void submit()
+                    }
+                  }}
+                />
+              </div>
             </div>
             <div className="col-start-2 row-start-2 flex min-w-0 items-center gap-2.5 max-sm:gap-1.5">
               <div
@@ -442,7 +677,7 @@ export function Composer({
                   <button
                     type="button"
                     onClick={onConfigureModel}
-                    className="inline-flex h-9 min-w-0 cursor-pointer items-center truncate rounded-full px-3 text-[0.8125rem] font-medium text-stone-500 outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-950 focus-visible:bg-[rgb(241,241,241)]"
+                    className="inline-flex h-[30px] min-w-0 cursor-pointer items-center truncate rounded-[10px] px-3 text-[0.8125rem] font-medium text-stone-500 outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-950 focus-visible:bg-[rgb(241,241,241)]"
                   >
                     {t('composer.configureModel')}
                   </button>
@@ -452,7 +687,7 @@ export function Composer({
                 )}
                 {running && !awaitingApproval && (
                   <button
-                    className="group relative grid size-9 shrink-0 cursor-pointer place-items-center rounded-full bg-stone-200 text-stone-700 transition-colors hover:bg-stone-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
+                    className="group relative grid size-[30px] shrink-0 cursor-pointer place-items-center rounded-full bg-stone-200 text-stone-700 outline-none transition-colors hover:bg-stone-300 focus-visible:bg-stone-300"
                     type="button"
                     aria-label={t('composer.stopGenerating')}
                     onClick={onStop}
@@ -468,7 +703,7 @@ export function Composer({
                 )}
                 <button
                   data-testid="composer-send"
-                  className="group relative grid size-10 shrink-0 cursor-pointer place-items-center rounded-full bg-black text-white transition-colors hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
+                  className="group relative grid size-[30px] shrink-0 cursor-pointer place-items-center rounded-full bg-black text-white outline-none transition-colors hover:bg-stone-800 focus-visible:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-25"
                   type="button"
                   aria-label={
                     awaitingApproval
@@ -615,7 +850,7 @@ function PendingQueue({
                   : t('queue.waiting')}
             </span>
             <button
-              className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-lg text-stone-400 outline-none transition-colors hover:bg-stone-200/80 hover:text-stone-700 focus-visible:ring-2 focus-visible:ring-stone-300 disabled:cursor-wait disabled:opacity-55"
+              className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-lg text-stone-400 outline-none transition-colors hover:bg-stone-200/80 hover:text-stone-700 focus-visible:bg-stone-200/80 focus-visible:text-stone-700 disabled:cursor-wait disabled:opacity-55"
               type="button"
               aria-label={
                 message.delivery === 'steer'
@@ -651,7 +886,7 @@ function RunDeliveryMenu({
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <button
-          className="group inline-flex h-9 cursor-pointer items-center gap-1 rounded-full px-2.5 text-[0.8125rem] font-medium text-stone-600 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(237,237,237)]"
+          className="group inline-flex h-[30px] cursor-pointer items-center gap-1 rounded-[10px] px-2.5 text-[0.8125rem] font-medium text-stone-600 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:bg-[rgb(241,241,241)] data-[state=open]:bg-[rgb(237,237,237)]"
           type="button"
           aria-label={t('delivery.choose')}
         >
@@ -710,6 +945,7 @@ function DeliveryOption({ value, label, hint }: { value: DeliveryMode; label: st
 const maxImages = 4
 const maxImageBytes = 10 * 1024 * 1024
 const maxImagesBytes = 20 * 1024 * 1024
+const maxSkillSuggestions = 8
 
 function readImage(file: File): Promise<PendingImage> {
   return new Promise((resolve, reject) => {

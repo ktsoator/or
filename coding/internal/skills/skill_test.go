@@ -63,6 +63,33 @@ func TestLoadParsesFrontmatterAndBody(t *testing.T) {
 	}
 }
 
+func TestLoadParsesDisableModelInvocation(t *testing.T) {
+	root := t.TempDir()
+	writeSkill(t, root, "deploy", `---
+name: deploy
+description: Deploy the application
+disable-model-invocation: true
+---
+
+Deploy $ARGUMENTS.
+`)
+
+	reg, diags := Load(LoadOptions{UserDir: root})
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diagnostics: %+v", diags)
+	}
+	s, ok := reg.Lookup("deploy")
+	if !ok {
+		t.Fatal("manual skill was removed from the complete registry")
+	}
+	if !s.DisableModelInvocation {
+		t.Fatal("disable-model-invocation was not parsed")
+	}
+	if _, ok := reg.ModelLookup("deploy"); ok || len(reg.ModelList()) != 0 {
+		t.Fatal("manual skill remains visible to the model")
+	}
+}
+
 func TestProjectOverridesUser(t *testing.T) {
 	userRoot := t.TempDir()
 	projectRoot := t.TempDir()
@@ -192,6 +219,9 @@ func TestToolLoadsSkillBody(t *testing.T) {
 	if !strings.Contains(text, "root=\""+dir+"\"") {
 		t.Errorf("wrapper should carry skill dir %q: %q", dir, text)
 	}
+	if !strings.Contains(text, relativePathProtocol) {
+		t.Errorf("missing relative-path protocol: %q", text)
+	}
 	if !strings.Contains(text, "stage everything") {
 		t.Errorf("$ARGUMENTS not expanded: %q", text)
 	}
@@ -214,6 +244,64 @@ func TestToolUnknownSkillReturnsError(t *testing.T) {
 	text := resultText(t, res)
 	if !strings.Contains(text, "Unknown skill") || !strings.Contains(text, "commit") {
 		t.Errorf("error should name valid skills, got %q", text)
+	}
+}
+
+func TestToolRejectsManualSkillWithoutRevealingItsName(t *testing.T) {
+	reg := NewRegistry([]Skill{
+		{Name: "review", Description: "review changes", Content: "review"},
+		{
+			Name:                   "deploy",
+			Description:            "deploy the app",
+			Content:                "deploy",
+			DisableModelInvocation: true,
+		},
+	})
+	tool := reg.Tool()
+
+	args, _ := json.Marshal(skillCallArgs{Name: "deploy"})
+	res, err := tool.Execute(t.Context(), "call-1", args, nil)
+	if err == nil {
+		t.Fatal("manual skill should not be callable by the model-facing tool")
+	}
+	text := resultText(t, res)
+	if strings.Contains(text, "deploy") && strings.Contains(text, "Available skills: deploy") {
+		t.Fatalf("manual skill leaked into valid names: %q", text)
+	}
+	if !strings.Contains(text, "Available skills: review") {
+		t.Fatalf("model-visible valid skill missing: %q", text)
+	}
+}
+
+func TestExplicitInvocationExpandsManualSkill(t *testing.T) {
+	reg := NewRegistry([]Skill{{
+		Name:                   "deploy",
+		Description:            "deploy the app",
+		Content:                "target=$ARGUMENTS root=${OR_SKILL_DIR}",
+		Dir:                    "/skills/deploy",
+		DisableModelInvocation: true,
+	}})
+
+	expanded, matched, err := reg.ExpandExplicitInvocation("/skill:deploy staging")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !matched {
+		t.Fatal("explicit invocation was not recognized")
+	}
+	for _, want := range []string{
+		explicitInvocationPrefix,
+		`name="deploy"`,
+		"already loaded; do not call the skill tool again",
+		"target=staging root=/skills/deploy",
+		relativePathProtocol,
+	} {
+		if !strings.Contains(expanded, want) {
+			t.Errorf("expanded invocation missing %q:\n%s", want, expanded)
+		}
+	}
+	if !IsExplicitInvocationText(expanded) {
+		t.Fatal("expanded block was not recognizable by UI projection")
 	}
 }
 

@@ -50,12 +50,20 @@ func (d *DynamicRegistry) Lookup(name string) (Skill, bool) {
 	return d.Snapshot().Lookup(name)
 }
 
-func (d *DynamicRegistry) names() []string {
-	return d.Snapshot().names()
+func (d *DynamicRegistry) ModelList() []Skill {
+	return d.Snapshot().ModelList()
+}
+
+func (d *DynamicRegistry) ModelLookup(name string) (Skill, bool) {
+	return d.Snapshot().ModelLookup(name)
+}
+
+func (d *DynamicRegistry) modelNames() []string {
+	return d.Snapshot().modelNames()
 }
 
 // Tool returns a stable tool whose execution reads the registry snapshot that
 // is current at call time.
 func (d *DynamicRegistry) Tool() agent.AgentTool {
-	return newTool(d.Lookup, d.names)
+	return newTool(d.ModelLookup, d.modelNames)
 }

@@ -669,7 +669,7 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
 
   return (
     <Collapsible className="my-1 animate-[fade-in_160ms_ease-out]">
-      <CollapsibleTrigger className="group inline-flex max-w-full cursor-pointer items-center border-0 bg-transparent p-0 text-left focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-400">
+      <CollapsibleTrigger className="group inline-flex max-w-full cursor-pointer items-center border-0 bg-transparent p-0 text-left outline-none focus-visible:rounded-sm focus-visible:bg-stone-100 focus-visible:text-stone-900">
         {summary}
         <ChevronRight
           className="ml-1 size-3.5 shrink-0 text-stone-400 transition-[transform,color] group-hover:text-stone-950 group-data-[state=open]:rotate-90"

@@ -94,7 +94,7 @@ export function UsageSettings() {
               <div className="flex items-center gap-1">
                 <UsageRangeSelect value={range} onChange={setRange} />
                 <button
-                  className="grid size-8 cursor-pointer place-items-center rounded-[9px] text-stone-400 outline-none transition-colors hover:bg-[rgb(246,246,246)] hover:text-stone-800 focus-visible:ring-2 focus-visible:ring-stone-300 disabled:cursor-wait disabled:opacity-50"
+                  className="grid size-8 cursor-pointer place-items-center rounded-[9px] text-stone-400 outline-none transition-colors hover:bg-[rgb(246,246,246)] hover:text-stone-800 focus-visible:bg-[rgb(246,246,246)] focus-visible:text-stone-800 disabled:cursor-wait disabled:opacity-50"
                   type="button"
                   title={t('usage.refresh')}
                   aria-label={t('usage.refresh')}
@@ -228,7 +228,7 @@ function UsageRangeSelect({
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <button
-          className="group flex h-8 min-w-[5.75rem] cursor-pointer items-center justify-between gap-2 rounded-[9px] bg-[rgb(246,246,246)] px-2.5 text-[0.78125rem] font-normal text-stone-700 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(237,237,237)]"
+          className="group flex h-8 min-w-[5.75rem] cursor-pointer items-center justify-between gap-2 rounded-[9px] bg-[rgb(246,246,246)] px-2.5 text-[0.78125rem] font-normal text-stone-700 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:bg-[rgb(241,241,241)] data-[state=open]:bg-[rgb(237,237,237)]"
           type="button"
           aria-label={t('usage.timeRange')}
         >
@@ -288,7 +288,7 @@ function ProviderSelect({
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <button
-          className="group flex h-9 min-w-[10.75rem] max-w-[14.375rem] shrink-0 cursor-pointer items-center gap-2 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-left text-[0.84375rem] outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(237,237,237)] max-sm:min-w-0"
+          className="group flex h-9 min-w-[10.75rem] max-w-[14.375rem] shrink-0 cursor-pointer items-center gap-2 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-left text-[0.84375rem] outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:bg-[rgb(241,241,241)] data-[state=open]:bg-[rgb(237,237,237)] max-sm:min-w-0"
           type="button"
           aria-label={t('usage.providers')}
         >

@@ -504,7 +504,7 @@ export default function App() {
     workbenchOpen || workbenchClosing || workbenchAutoLayoutChanging
   const workbenchToggleControl = (
     <button
-      className="window-titlebar-control relative grid size-7 shrink-0 cursor-pointer place-items-center rounded-md text-stone-500 outline-none transition-colors duration-100 hover:bg-stone-200/75 hover:text-stone-950 focus-visible:ring-2 focus-visible:ring-stone-300"
+      className="window-titlebar-control relative grid size-7 shrink-0 cursor-pointer place-items-center rounded-md text-stone-500 outline-none transition-colors duration-100 hover:bg-stone-200/75 hover:text-stone-950 focus-visible:bg-stone-200/75 focus-visible:text-stone-950"
       data-testid="workbench-panel-toggle"
       type="button"
       title={workbenchOpen ? t('workbench.hide') : t('workbench.show')}
@@ -574,7 +574,7 @@ export default function App() {
             <div className="window-titlebar-controls">
               <button
                 className={cn(
-                  'sidebar-header-action sidebar-search-action absolute top-4 right-14 grid size-8 cursor-pointer place-items-center rounded-lg text-stone-500 transition-[opacity,color,background-color,transform] duration-100 ease-out motion-reduce:transition-none hover:bg-stone-200/75 hover:text-stone-950 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-stone-400',
+                  'sidebar-header-action sidebar-search-action absolute top-4 right-14 grid size-8 cursor-pointer place-items-center rounded-lg text-stone-500 outline-none transition-[opacity,color,background-color,transform] duration-100 ease-out motion-reduce:transition-none hover:bg-stone-200/75 hover:text-stone-950 active:scale-95 focus-visible:bg-stone-200/75 focus-visible:text-stone-950',
                   sidebarCollapsed ? 'pointer-events-none opacity-0' : 'opacity-100',
                 )}
                 type="button"
@@ -1121,7 +1121,7 @@ function WorkspaceSessions({
           )}
         >
           <button
-            className="grid size-7 cursor-pointer place-items-center rounded-[9px] text-stone-400 transition-colors hover:text-stone-950 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-stone-400"
+            className="grid size-7 cursor-pointer place-items-center rounded-[9px] text-stone-400 outline-none transition-colors hover:bg-stone-100 hover:text-stone-950 focus-visible:bg-stone-100 focus-visible:text-stone-950"
             type="button"
             title={t('workspace.newSession', { name })}
             aria-label={t('workspace.newSession', { name })}
@@ -1132,7 +1132,7 @@ function WorkspaceSessions({
           <DropdownMenu.Root open={menuOpen} onOpenChange={setMenuOpen}>
             <DropdownMenu.Trigger asChild>
               <button
-                className="grid size-7 cursor-pointer place-items-center rounded-[9px] text-stone-400 transition-colors hover:text-stone-950 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-stone-400 data-[state=open]:text-stone-950"
+                className="grid size-7 cursor-pointer place-items-center rounded-[9px] text-stone-400 outline-none transition-colors hover:bg-stone-100 hover:text-stone-950 focus-visible:bg-stone-100 focus-visible:text-stone-950 data-[state=open]:text-stone-950"
                 type="button"
                 title={t('workspace.projectActions')}
                 aria-label={t('workspace.projectActionsNamed', { name })}
@@ -1332,7 +1332,7 @@ function SessionRow({
       >
         <button
           className={cn(
-            'grid size-7 cursor-pointer place-items-center rounded-[9px] text-stone-400 transition-colors hover:text-stone-950 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-stone-400',
+            'grid size-7 cursor-pointer place-items-center rounded-[9px] text-stone-400 outline-none transition-colors hover:bg-stone-100 hover:text-stone-950 focus-visible:bg-stone-100 focus-visible:text-stone-950',
             pinned && 'text-stone-500',
           )}
           type="button"
@@ -1346,7 +1346,7 @@ function SessionRow({
         <DropdownMenu.Root open={menuOpen} onOpenChange={setMenuOpen}>
           <DropdownMenu.Trigger asChild>
             <button
-              className="grid size-7 cursor-pointer place-items-center rounded-[9px] text-stone-400 transition-colors hover:text-stone-950 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-stone-400 data-[state=open]:text-stone-950"
+              className="grid size-7 cursor-pointer place-items-center rounded-[9px] text-stone-400 outline-none transition-colors hover:bg-stone-100 hover:text-stone-950 focus-visible:bg-stone-100 focus-visible:text-stone-950 data-[state=open]:text-stone-950"
               type="button"
               title={t('app.sessionActions')}
               aria-label={t('app.sessionActionsNamed', { title })}
@@ -1429,7 +1429,7 @@ function SidebarNavItem({
   return (
     <button
       className={cn(
-        'group flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[0.875rem] font-normal text-stone-800 transition-[background-color,color,transform] duration-100 active:scale-[0.985] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-stone-400',
+        'group flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[0.875rem] font-normal text-stone-800 outline-none transition-[background-color,color,transform] duration-100 active:scale-[0.985] focus-visible:bg-stone-200/60 focus-visible:text-stone-950',
         !collapsed && 'hover:bg-[rgb(246,246,246)] hover:text-stone-950',
       )}
       type="button"

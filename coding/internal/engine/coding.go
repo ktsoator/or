@@ -254,7 +254,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		promptSections: registry.PromptSections(),
 		skillRegistry:  dynamicSkills,
 		skillLoader:    opts.SkillLoader,
-		skillRevision:  initialRegistry.Revision(),
+		skillRevision:  initialRegistry.ModelRevision(),
 		maxRetries:     maxRetries,
 		contextWindow:  opts.Model.ContextWindow,
 		compactor:      opts.Compactor,
@@ -379,8 +379,37 @@ func (s *Session) snapshotOutcomes() map[string]agent.ToolOutcome {
 // is already in progress.
 func (s *Session) Prompt(ctx context.Context, text string, images ...llm.ImageContent) error {
 	return s.run(ctx, func(ctx context.Context) error {
-		return s.agent.Prompt(ctx, agent.UserMessage(text, images...))
+		message, err := s.promptMessage(text, images...)
+		if err != nil {
+			return err
+		}
+		return s.agent.Prompt(ctx, message)
 	})
+}
+
+func (s *Session) promptMessage(text string, images ...llm.ImageContent) (agent.AgentMessage, error) {
+	registry := s.skillRegistry.Snapshot()
+	if s.pendingSkills != nil {
+		registry = s.pendingSkills
+	}
+	expanded, matched, err := registry.ExpandExplicitInvocation(text)
+	if err != nil {
+		return nil, err
+	}
+	if !matched {
+		return agent.UserMessage(text, images...), nil
+	}
+
+	content := make([]llm.UserContent, 0, 2+len(images))
+	content = append(content,
+		&llm.TextContent{Text: text},
+		&llm.TextContent{Text: expanded},
+	)
+	for index := range images {
+		image := images[index]
+		content = append(content, &image)
+	}
+	return agent.FromLLM(&llm.UserMessage{Content: content}), nil
 }
 
 // Continue resumes a run from the current transcript without adding a message.
@@ -811,7 +840,7 @@ func (s *Session) buildBaseContext() (rendered, revision string) {
 func (s *Session) buildSkillListing() string {
 	return prompt.RenderSkillListing(
 		s.skillRevision,
-		skillInfos(s.skillRegistry.List()),
+		skillInfos(s.skillRegistry.ModelList()),
 	)
 }
 
@@ -823,26 +852,36 @@ func (s *Session) prepareSkillRefresh() {
 		return
 	}
 	next := skills.NewRegistry(s.skillLoader())
-	nextRevision := next.Revision()
+	nextRevision := next.ModelRevision()
 
 	if s.pendingSkills != nil {
 		switch nextRevision {
 		case s.pendingSkillRevision:
+			// The model-visible snapshot is unchanged, but a manual-only skill
+			// may have changed while the update was staged.
+			s.pendingSkills = next
 			return
 		case s.skillRevision:
 			s.pendingSkills = nil
 			s.pendingSkillRevision = ""
 			s.modelContext.CancelStagedSkillsUpdate()
+			s.skillRegistry.Replace(next)
 			return
 		}
 	} else if nextRevision == s.skillRevision {
+		// Manual-only changes require no model-context update, but become
+		// available to explicit user invocation at this top-level boundary.
+		s.skillRegistry.Replace(next)
 		return
 	}
 
-	delta := skills.Diff(s.skillRegistry.Snapshot(), next)
+	delta := skills.Diff(
+		s.skillRegistry.Snapshot().ModelRegistry(),
+		next.ModelRegistry(),
+	)
 	rendered := prompt.RenderSkillsUpdate(
 		nextRevision,
-		skillInfos(next.List()),
+		skillInfos(next.ModelList()),
 		promptSkillDelta(delta),
 	)
 	s.pendingSkills = next

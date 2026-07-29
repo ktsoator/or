@@ -51,7 +51,7 @@ export function Approval({
         </div>
         <div className="flex shrink-0 items-center gap-2 max-sm:w-full">
           <button
-            className="inline-flex h-9 min-w-[5rem] cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3 text-[0.8125rem] font-medium text-stone-600 outline-none transition-[background-color,border-color,color] hover:border-stone-300 hover:bg-stone-50 hover:text-stone-950 focus-visible:ring-2 focus-visible:ring-stone-300 disabled:cursor-wait disabled:opacity-50 max-sm:flex-1"
+            className="inline-flex h-9 min-w-[5rem] cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3 text-[0.8125rem] font-medium text-stone-600 outline-none transition-[background-color,border-color,color] hover:border-stone-300 hover:bg-stone-50 hover:text-stone-950 focus-visible:border-stone-300 focus-visible:bg-stone-50 focus-visible:text-stone-950 disabled:cursor-wait disabled:opacity-50 max-sm:flex-1"
             type="button"
             disabled={busy}
             onClick={() => decide('deny')}
@@ -64,7 +64,7 @@ export function Approval({
             {t('approval.deny')}
           </button>
           <button
-            className="inline-flex h-9 min-w-[7rem] cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-stone-900 bg-stone-900 px-3.5 text-[0.8125rem] font-medium text-white outline-none transition-[background-color,border-color] hover:border-black hover:bg-black focus-visible:ring-2 focus-visible:ring-stone-400 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-50 max-sm:flex-1"
+            className="inline-flex h-9 min-w-[7rem] cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-stone-900 bg-stone-900 px-3.5 text-[0.8125rem] font-medium text-white outline-none transition-[background-color,border-color] hover:border-black hover:bg-black focus-visible:border-black focus-visible:bg-black disabled:cursor-wait disabled:opacity-50 max-sm:flex-1"
             type="button"
             disabled={busy}
             onClick={() => decide('allow_once')}

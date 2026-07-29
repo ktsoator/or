@@ -51,7 +51,7 @@ export function ConversationActionsMenu({
     <DropdownMenu.Root open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenu.Trigger asChild>
           <button
-            className="window-titlebar-control relative grid size-7 shrink-0 cursor-pointer place-items-center rounded-md text-stone-500 outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-900 focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(237,237,237)] data-[state=open]:text-stone-900"
+            className="window-titlebar-control relative grid size-7 shrink-0 cursor-pointer place-items-center rounded-md text-stone-500 outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-900 focus-visible:bg-[rgb(241,241,241)] focus-visible:text-stone-900 data-[state=open]:bg-[rgb(237,237,237)] data-[state=open]:text-stone-900"
             data-testid="conversation-actions-trigger"
             type="button"
             title={t('conversation.actions')}

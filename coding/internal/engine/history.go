@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ktsoator/or/agent"
+	"github.com/ktsoator/or/coding/internal/skills"
 	"github.com/ktsoator/or/coding/internal/transcript"
 	"github.com/ktsoator/or/llm"
 )
@@ -246,12 +247,18 @@ func userMessageContent(message *llm.UserMessage) (string, []llm.ImageContent) {
 	}
 	var text strings.Builder
 	var images []llm.ImageContent
+	textBlocks := 0
 	for _, content := range message.Content {
 		switch block := content.(type) {
 		case *llm.TextContent:
 			if block == nil {
 				continue
 			}
+			if textBlocks > 0 && skills.IsExplicitInvocationText(block.Text) {
+				textBlocks++
+				continue
+			}
+			textBlocks++
 			text.WriteString(block.Text)
 		case *llm.ImageContent:
 			if block != nil {

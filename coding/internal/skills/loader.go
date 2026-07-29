@@ -143,11 +143,12 @@ func loadSkill(dir, dirName string, source Source) (Skill, *Diagnostic, bool) {
 	}
 
 	return Skill{
-		Name:        fm.Name,
-		Description: fm.Description,
-		Content:     body,
-		Dir:         dir,
-		Path:        path,
-		Source:      source,
+		Name:                   fm.Name,
+		Description:            fm.Description,
+		DisableModelInvocation: fm.DisableModelInvocation,
+		Content:                body,
+		Dir:                    dir,
+		Path:                   path,
+		Source:                 source,
 	}, nil, true
 }

@@ -43,6 +43,21 @@ func (r *Registry) List() []Skill {
 	return out
 }
 
+// ModelList returns only skills the model may discover and invoke.
+func (r *Registry) ModelList() []Skill {
+	if r == nil {
+		return nil
+	}
+	out := make([]Skill, 0, len(r.order))
+	for _, name := range r.order {
+		s := r.byName[name]
+		if !s.DisableModelInvocation {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 // Lookup returns the skill registered under name.
 func (r *Registry) Lookup(name string) (Skill, bool) {
 	if r == nil {
@@ -50,6 +65,15 @@ func (r *Registry) Lookup(name string) (Skill, bool) {
 	}
 	s, ok := r.byName[name]
 	return s, ok
+}
+
+// ModelLookup returns a skill only when model invocation is allowed.
+func (r *Registry) ModelLookup(name string) (Skill, bool) {
+	s, ok := r.Lookup(name)
+	if !ok || s.DisableModelInvocation {
+		return Skill{}, false
+	}
+	return s, true
 }
 
 // Len reports how many skills are registered.
@@ -66,4 +90,14 @@ func (r *Registry) names() []string {
 		return nil
 	}
 	return append([]string(nil), r.order...)
+}
+
+// modelNames returns the names the model may pass to the skill tool.
+func (r *Registry) modelNames() []string {
+	list := r.ModelList()
+	names := make([]string, len(list))
+	for i, skill := range list {
+		names[i] = skill.Name
+	}
+	return names
 }

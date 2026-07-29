@@ -318,7 +318,7 @@ export function ProviderConnectionTestDialog({
                 </span>
                 {fixedThinking ? (
                   <FixedThinkingStatus
-                    className="h-9 w-full justify-center rounded-xl bg-[rgb(246,246,246)] px-2.5 text-[0.8125rem] text-stone-500 outline-none focus-visible:ring-2 focus-visible:ring-stone-300"
+                    className="h-9 w-full justify-center rounded-xl bg-[rgb(246,246,246)] px-2.5 text-[0.8125rem] text-stone-500 outline-none hover:bg-[rgb(241,241,241)] focus-visible:bg-[rgb(241,241,241)]"
                     hidden={selectedModel?.thinkingVisibility === 'hidden'}
                   />
                 ) : toggleThinking ? (

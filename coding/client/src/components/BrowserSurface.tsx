@@ -84,7 +84,7 @@ export function BrowserSurface({
               {t('preview.loadFailedHint')}
             </p>
             <button
-              className="mt-4 inline-flex h-8 cursor-pointer items-center gap-2 rounded-md border border-stone-200 bg-white px-3 text-[0.8125rem] font-medium text-stone-700 transition-colors hover:bg-stone-50 hover:text-stone-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-400"
+              className="mt-4 inline-flex h-8 cursor-pointer items-center gap-2 rounded-md border border-stone-200 bg-white px-3 text-[0.8125rem] font-medium text-stone-700 outline-none transition-colors hover:border-stone-300 hover:bg-stone-50 hover:text-stone-950 focus-visible:border-stone-400 focus-visible:bg-stone-50 focus-visible:text-stone-950"
               type="button"
               onClick={onRetry}
             >
