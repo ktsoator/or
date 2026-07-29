@@ -14,6 +14,10 @@ var togetherToggleReasoningEffortModels = map[string]struct{}{
 	"deepseek-ai/DeepSeek-V4-Pro": {},
 }
 
+func normalizeTogetherModel(candidate *model, _ sourceModel) {
+	applyTogetherRequestCompatibility(candidate)
+}
+
 // applyTogetherRequestCompatibility classifies Together models by the
 // reasoning controls accepted by their routed backend. The endpoint alone is
 // insufficient because Together mixes fixed, toggle, and effort-based models.

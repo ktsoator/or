@@ -16,9 +16,9 @@ func TestNormalizeXiaomiToggleThinking(t *testing.T) {
 	for provider := range xiaomiProviders {
 		t.Run(provider, func(t *testing.T) {
 			candidate := normalize("mimo-v2.5-pro", source, providerRule{
-				Provider: provider,
-				Protocol: "openai-completions",
-				Compat:   xiaomiCompat(),
+				Provider:  provider,
+				Protocol:  "openai-completions",
+				Normalize: normalizeXiaomiModel,
 			})
 
 			if !reflect.DeepEqual(candidate.ThinkingLevelMap, wantLevels) {
@@ -27,8 +27,11 @@ func TestNormalizeXiaomiToggleThinking(t *testing.T) {
 			if candidate.Compat.SupportsReasoningEffort == nil || *candidate.Compat.SupportsReasoningEffort {
 				t.Fatalf("SupportsReasoningEffort = %v, want false", candidate.Compat.SupportsReasoningEffort)
 			}
-			if candidate.Compat.ThinkingFormat != "deepseek" {
-				t.Fatalf("ThinkingFormat = %q, want deepseek", candidate.Compat.ThinkingFormat)
+			if candidate.Compat.Kind != "openai" {
+				t.Fatalf("compatibility kind = %q, want openai", candidate.Compat.Kind)
+			}
+			if candidate.Compat.ThinkingFormat != "xiaomi" {
+				t.Fatalf("ThinkingFormat = %q, want xiaomi", candidate.Compat.ThinkingFormat)
 			}
 			if candidate.Compat.RequiresReasoningContentOnAssistantMessages == nil ||
 				!*candidate.Compat.RequiresReasoningContentOnAssistantMessages {
@@ -75,9 +78,10 @@ func TestNormalizeXiaomiToggleRequiresRouteMetadata(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			before := test.model
 			applyXiaomiRequestCompatibility(&test.model, test.options)
-			if test.model.ThinkingLevelMap != nil || test.model.Compat.SupportsReasoningEffort != nil {
-				t.Fatalf("unexpected Xiaomi toggle compatibility: %#v", test.model)
+			if !reflect.DeepEqual(test.model, before) {
+				t.Fatalf("route changed without verified Xiaomi toggle metadata:\n got: %#v\nwant: %#v", test.model, before)
 			}
 		})
 	}

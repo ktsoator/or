@@ -118,6 +118,60 @@ func TestConvertMessagesInjectsEmptyReasoningContentWhenRequired(t *testing.T) {
 	}
 }
 
+func TestGeneratedRoutesReplayReasoningContent(t *testing.T) {
+	for _, ref := range []struct {
+		provider string
+		modelID  string
+	}{
+		{provider: "xiaomi", modelID: "mimo-v2.5-pro"},
+		{provider: "deepseek", modelID: "deepseek-v4-flash"},
+		{provider: "opencode-go", modelID: "mimo-v2.5"},
+		{provider: "opencode-go", modelID: "mimo-v2.5-pro"},
+	} {
+		t.Run(ref.provider+"/"+ref.modelID, func(t *testing.T) {
+			model, ok := llm.LookupModel(ref.provider, ref.modelID)
+			if !ok {
+				t.Fatal("model is missing from the catalog")
+			}
+			compat := resolveCompat(model)
+			if !compat.requiresReasoningContentOnAssistantMessages {
+				t.Fatal("route must require assistant reasoning_content replay")
+			}
+
+			empty := assistantWire(t, toolUseHistory(model, "", ""), model, compat)
+			if value, present := empty["reasoning_content"]; !present || value != "" {
+				t.Fatalf("empty reasoning_content = %#v (present=%v), want empty string", value, present)
+			}
+
+			replayed := assistantWire(t, toolUseHistory(model, "reasoning_content", "plan"), model, compat)
+			if got := replayed["reasoning_content"]; got != "plan" {
+				t.Fatalf("reasoning_content = %#v, want plan", got)
+			}
+		})
+	}
+}
+
+func TestOpenCodeMiMoFamilyDoesNotRequireReasoningContent(t *testing.T) {
+	model, ok := llm.LookupModel("opencode", "mimo-v2.5-free")
+	if !ok {
+		t.Fatal("model is missing from the catalog")
+	}
+	compat := resolveCompat(model)
+	if compat.requiresReasoningContentOnAssistantMessages {
+		t.Fatal("unverified OpenCode MiMo route must not inherit Xiaomi replay behavior")
+	}
+
+	assistant := assistantWire(t, toolUseHistory(model, "", ""), model, compat)
+	if _, present := assistant["reasoning_content"]; present {
+		t.Fatalf("reasoning_content must be absent: %#v", assistant)
+	}
+
+	replayed := assistantWire(t, toolUseHistory(model, "reasoning_content", "plan"), model, compat)
+	if got := replayed["reasoning_content"]; got != "plan" {
+		t.Fatalf("explicit reasoning_content = %#v, want plan", got)
+	}
+}
+
 // A reasoning-only model with requiresThinkingAsText turns the leading thinking
 // block into a text content part instead of a reasoning field, for endpoints
 // that reject reasoning fields on input.

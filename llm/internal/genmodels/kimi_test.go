@@ -54,6 +54,7 @@ func TestApplyOverridesForKimiCodingCompatibility(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			applyKimiRequestCompatibility(&test.model)
 			models := []model{test.model}
 			applyOverrides(models)
 			compatibility := models[0].Compat
@@ -97,9 +98,10 @@ func TestNormalizeMoonshotToggleThinking(t *testing.T) {
 		for _, modelID := range []string{"kimi-k2.5", "kimi-k2.6"} {
 			t.Run(provider+"/"+modelID, func(t *testing.T) {
 				candidate := normalize(modelID, source, providerRule{
-					Provider: provider,
-					Protocol: "openai-completions",
-					Compat:   moonshotCompat(),
+					Provider:  provider,
+					Protocol:  "openai-completions",
+					Compat:    moonshotCompat(),
+					Normalize: normalizeMoonshotModel,
 				})
 
 				if !reflect.DeepEqual(candidate.ThinkingLevelMap, wantLevels) {
@@ -145,6 +147,7 @@ func TestNormalizeKimiEffortMetadata(t *testing.T) {
 			id:   "k3",
 			rule: providerRule{
 				Provider: "kimi-coding", Protocol: "anthropic-messages",
+				Normalize: normalizeKimiCodingModel,
 			},
 			adaptive: true,
 		},
@@ -153,6 +156,7 @@ func TestNormalizeKimiEffortMetadata(t *testing.T) {
 			id:   "kimi-k3",
 			rule: providerRule{
 				Provider: "moonshotai", Protocol: "openai-completions", Compat: moonshotCompat(),
+				Normalize: normalizeMoonshotModel,
 			},
 		},
 		{
@@ -160,6 +164,7 @@ func TestNormalizeKimiEffortMetadata(t *testing.T) {
 			id:   "kimi-k3",
 			rule: providerRule{
 				Provider: "moonshotai-cn", Protocol: "openai-completions", Compat: moonshotCompat(),
+				Normalize: normalizeMoonshotModel,
 			},
 		},
 	}

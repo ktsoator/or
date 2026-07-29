@@ -57,15 +57,10 @@ func applyThinking(
 			"enable_thinking":   hasEffort,
 			"preserve_thinking": true,
 		}
+	case "xiaomi":
+		applyXiaomiThinking(extras, thinking)
 	case "deepseek":
-		if hasEffort {
-			extras["thinking"] = thinkingType(true)
-		} else {
-			extras["thinking"] = thinkingType(false)
-		}
-		if hasEffort && compat.supportsReasoningEffort {
-			extras["reasoning_effort"] = mappedEffort(model, effort)
-		}
+		applyDeepSeekThinking(extras, model, compat, thinking)
 	case "ant-ling":
 		// ant-ling only sends reasoning when the level is explicitly mapped.
 		if hasEffort {
@@ -104,6 +99,26 @@ func thinkingType(enabled bool) map[string]any {
 		return map[string]any{"type": "enabled"}
 	}
 	return map[string]any{"type": "disabled"}
+}
+
+// applyXiaomiThinking writes Xiaomi's binary thinking toggle. Xiaomi does not
+// accept OpenAI reasoning_effort levels on this request path.
+func applyXiaomiThinking(extras map[string]any, thinking resolvedThinking) {
+	extras["thinking"] = thinkingType(thinking.enabled())
+}
+
+// applyDeepSeekThinking writes DeepSeek's thinking toggle and, for routes that
+// support it, the requested reasoning effort.
+func applyDeepSeekThinking(
+	extras map[string]any,
+	model llm.Model,
+	compat resolvedCompat,
+	thinking resolvedThinking,
+) {
+	extras["thinking"] = thinkingType(thinking.enabled())
+	if thinking.enabled() && compat.supportsReasoningEffort {
+		extras["reasoning_effort"] = mappedEffort(model, thinking.level)
+	}
 }
 
 func zaiThinkingType(enabled bool) map[string]any {

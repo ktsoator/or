@@ -2,6 +2,10 @@ package main
 
 import "strings"
 
+func normalizeMiniMaxModel(candidate *model, source sourceModel) {
+	applyMiniMaxThinkingMetadata(candidate, source.ReasoningOptions)
+}
+
 // applyMiniMaxThinkingMetadata narrows models.dev's pure toggle to one off and
 // one on state. MiniMax still uses Anthropic's budget-thinking wire format;
 // "high" selects the existing fixed high budget rather than a named effort.

@@ -96,13 +96,18 @@ type catalogCost struct {
 	CacheWrite float64 `json:"cacheWrite"`
 }
 
+// modelNormalizer compiles source metadata for one routed provider. It must not
+// infer behavior for other endpoints that happen to serve the same model family.
+type modelNormalizer func(*model, sourceModel)
+
 type providerRule struct {
-	Source   string
-	Provider string
-	Protocol string
-	BaseURL  string
-	Compat   compatibility
-	Headers  map[string]string
+	Source    string
+	Provider  string
+	Protocol  string
+	BaseURL   string
+	Compat    compatibility
+	Headers   map[string]string
+	Normalize modelNormalizer
 }
 
 func boolp(value bool) *bool { return &value }

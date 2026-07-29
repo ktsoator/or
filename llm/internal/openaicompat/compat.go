@@ -3,6 +3,7 @@
 package openaicompat
 
 import (
+	"net/url"
 	"strings"
 
 	"github.com/ktsoator/or/llm"
@@ -14,6 +15,7 @@ type ThinkingFormat string
 const (
 	ThinkingFormatOpenAI           ThinkingFormat = "openai"
 	ThinkingFormatDeepSeek         ThinkingFormat = "deepseek"
+	ThinkingFormatXiaomi           ThinkingFormat = "xiaomi"
 	ThinkingFormatTogether         ThinkingFormat = "together"
 	ThinkingFormatZAI              ThinkingFormat = "zai"
 	ThinkingFormatQwen             ThinkingFormat = "qwen"
@@ -79,6 +81,10 @@ func Resolve(model llm.Model) Resolved {
 func Detect(model llm.Model) Resolved {
 	provider := model.Provider
 	contains := func(needle string) bool { return strings.Contains(model.BaseURL, needle) }
+	hostname := ""
+	if endpoint, err := url.Parse(model.BaseURL); err == nil {
+		hostname = endpoint.Hostname()
+	}
 
 	isZAI := provider == "zai" || provider == "zai-coding-cn" ||
 		contains("api.z.ai") || contains("open.bigmodel.cn")
@@ -88,6 +94,14 @@ func Detect(model llm.Model) Resolved {
 	isCloudflareAIGateway := provider == "cloudflare-ai-gateway" || contains("gateway.ai.cloudflare.com")
 	isNVIDIA := provider == "nvidia" || contains("integrate.api.nvidia.com")
 	isAntLing := provider == "ant-ling" || contains("api.ant-ling.com")
+	isXiaomi := provider == "xiaomi" ||
+		provider == "xiaomi-token-plan-cn" ||
+		provider == "xiaomi-token-plan-ams" ||
+		provider == "xiaomi-token-plan-sgp" ||
+		hostname == "api.xiaomimimo.com" ||
+		hostname == "token-plan-cn.xiaomimimo.com" ||
+		hostname == "token-plan-ams.xiaomimimo.com" ||
+		hostname == "token-plan-sgp.xiaomimimo.com"
 
 	isNonStandard := isNVIDIA ||
 		provider == "cerebras" || contains("cerebras.ai") ||
@@ -111,6 +125,8 @@ func Detect(model llm.Model) Resolved {
 	switch {
 	case isDeepSeek:
 		thinkingFormat = ThinkingFormatDeepSeek
+	case isXiaomi:
+		thinkingFormat = ThinkingFormatXiaomi
 	case isZAI:
 		thinkingFormat = ThinkingFormatZAI
 	case isTogether:
@@ -122,10 +138,10 @@ func Detect(model llm.Model) Resolved {
 	return Resolved{
 		SupportsStore:         !isNonStandard,
 		SupportsDeveloperRole: !isNonStandard,
-		SupportsReasoningEffort: !isGrok && !isZAI && !isMoonshot && !isTogether &&
+		SupportsReasoningEffort: !isGrok && !isZAI && !isXiaomi && !isMoonshot && !isTogether &&
 			!isCloudflareAIGateway && !isNVIDIA && !isAntLing,
 		MaxTokensField: maxTokensField,
-		RequiresReasoningContentOnAssistantMessages: isDeepSeek,
+		RequiresReasoningContentOnAssistantMessages: isDeepSeek || isXiaomi,
 		ThinkingFormat:     thinkingFormat,
 		SupportsStrictMode: !isMoonshot && !isTogether && !isCloudflareAIGateway && !isNVIDIA,
 	}

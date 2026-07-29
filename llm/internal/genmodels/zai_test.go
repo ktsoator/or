@@ -18,9 +18,10 @@ func TestNormalizeZAIToggleThinking(t *testing.T) {
 		for _, modelID := range modelIDs {
 			t.Run(provider+"/"+modelID, func(t *testing.T) {
 				candidate := normalize(modelID, source, providerRule{
-					Provider: provider,
-					Protocol: "openai-completions",
-					Compat:   zaiCompat(),
+					Provider:  provider,
+					Protocol:  "openai-completions",
+					Compat:    zaiCompat(),
+					Normalize: normalizeZAIModel,
 				})
 
 				if !reflect.DeepEqual(candidate.ThinkingLevelMap, wantLevels) {
@@ -67,9 +68,10 @@ func TestNormalizeZAIEffortModelIsNotTreatedAsToggle(t *testing.T) {
 	for provider := range zaiProviders {
 		t.Run(provider, func(t *testing.T) {
 			models := []model{normalize("glm-5.2", source, providerRule{
-				Provider: provider,
-				Protocol: "openai-completions",
-				Compat:   zaiCompat(),
+				Provider:  provider,
+				Protocol:  "openai-completions",
+				Compat:    zaiCompat(),
+				Normalize: normalizeZAIModel,
 			})}
 			applyOverrides(models)
 			candidate := models[0]

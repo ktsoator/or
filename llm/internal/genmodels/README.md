@@ -45,9 +45,10 @@ The generator draws on one public catalog source:
   [`sst/models.dev`](https://github.com/sst/models.dev).
 Models.dev is a catalog aggregator, not an authoritative model vendor. Provider
 API documentation remains the source of truth when metadata conflicts. Local
-normalization and compatibility overrides live in `provider_*.go` and
-`overrides.go` and should stay small and explicit. Source-specific fetching is
-kept in `source_*.go`, while `render.go` owns deterministic catalog output.
+route normalization lives in vendor-named files such as `deepseek.go` and
+`xiaomi.go`, attached through each `providerRule.Normalize` hook. `overrides.go`
+is reserved for small cross-route catalog corrections. Source-specific fetching
+is kept in `source_*.go`, while `render.go` owns deterministic catalog output.
 
 Compatibility belongs to a routed model, identified by provider endpoint and
 model ID. Models with the same ID on a native API and an aggregation gateway do
@@ -59,9 +60,12 @@ provider's fixed default instead of advertising a control that may do nothing.
 Verified models.dev `reasoning_options` effort values are normalized into the
 SDK's thinking levels for standard OpenAI-compatible and Anthropic adaptive-
 thinking models. Toggle and token budget controls remain provider-specific, and
-local compatibility overrides keep verified provider behavior authoritative
-when source metadata is incomplete. Xiaomi routes compile their verified toggle
-metadata into the SDK's binary `off`/`high` contract.
+local compatibility rules keep verified provider behavior authoritative when
+source metadata is incomplete. Xiaomi routes compile toggle metadata into the
+SDK's binary `off`/`high` contract. Official DeepSeek routes compile toggle plus
+effort metadata into explicit `off`/`high`/`max` controls. Aggregation gateways
+retain exact route profiles instead of inheriting behavior from model family
+names.
 
 The catalog includes models for the implemented `openai-completions` and
 `anthropic-messages` protocols, plus selected catalog-only protocols planned

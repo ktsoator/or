@@ -7,25 +7,25 @@ import (
 
 var providerRules = []providerRule{
 	{Source: "anthropic", Provider: "anthropic", Protocol: "anthropic-messages", BaseURL: "https://api.anthropic.com"},
-	{Source: "deepseek", Provider: "deepseek", Protocol: "openai-completions", BaseURL: "https://api.deepseek.com"},
+	{Source: "deepseek", Provider: "deepseek", Protocol: "openai-completions", BaseURL: "https://api.deepseek.com", Normalize: normalizeDeepSeekModel},
 	{Source: "groq", Provider: "groq", Protocol: "openai-completions", BaseURL: "https://api.groq.com/openai/v1"},
 	{Source: "cerebras", Provider: "cerebras", Protocol: "openai-completions", BaseURL: "https://api.cerebras.ai/v1"},
 	{Source: "xai", Provider: "xai", Protocol: "openai-completions", BaseURL: "https://api.x.ai/v1"},
-	{Source: "nvidia", Provider: "nvidia", Protocol: "openai-completions", BaseURL: "https://integrate.api.nvidia.com/v1"},
-	{Source: "togetherai", Provider: "together", Protocol: "openai-completions", BaseURL: "https://api.together.ai/v1"},
+	{Source: "nvidia", Provider: "nvidia", Protocol: "openai-completions", BaseURL: "https://integrate.api.nvidia.com/v1", Normalize: normalizeNVIDIAModel},
+	{Source: "togetherai", Provider: "together", Protocol: "openai-completions", BaseURL: "https://api.together.ai/v1", Normalize: normalizeTogetherModel},
 	{Source: "huggingface", Provider: "huggingface", Protocol: "openai-completions", BaseURL: "https://router.huggingface.co/v1", Compat: openAICompat(withDeveloperRole(false))},
-	{Source: "fireworks-ai", Provider: "fireworks", Protocol: "anthropic-messages", BaseURL: "https://api.fireworks.ai/inference"},
-	{Source: "minimax", Provider: "minimax", Protocol: "anthropic-messages", BaseURL: "https://api.minimax.io/anthropic"},
-	{Source: "minimax-cn", Provider: "minimax-cn", Protocol: "anthropic-messages", BaseURL: "https://api.minimaxi.com/anthropic"},
-	{Source: "moonshotai", Provider: "moonshotai", Protocol: "openai-completions", BaseURL: "https://api.moonshot.ai/v1", Compat: moonshotCompat()},
-	{Source: "moonshotai-cn", Provider: "moonshotai-cn", Protocol: "openai-completions", BaseURL: "https://api.moonshot.cn/v1", Compat: moonshotCompat()},
-	{Source: "xiaomi", Provider: "xiaomi", Protocol: "openai-completions", BaseURL: "https://api.xiaomimimo.com/v1", Compat: xiaomiCompat()},
-	{Source: "xiaomi-token-plan-cn", Provider: "xiaomi-token-plan-cn", Protocol: "openai-completions", BaseURL: "https://token-plan-cn.xiaomimimo.com/v1", Compat: xiaomiCompat()},
-	{Source: "xiaomi-token-plan-ams", Provider: "xiaomi-token-plan-ams", Protocol: "openai-completions", BaseURL: "https://token-plan-ams.xiaomimimo.com/v1", Compat: xiaomiCompat()},
-	{Source: "xiaomi-token-plan-sgp", Provider: "xiaomi-token-plan-sgp", Protocol: "openai-completions", BaseURL: "https://token-plan-sgp.xiaomimimo.com/v1", Compat: xiaomiCompat()},
-	{Source: "zai-coding-plan", Provider: "zai", Protocol: "openai-completions", BaseURL: "https://api.z.ai/api/coding/paas/v4", Compat: zaiCompat()},
-	{Source: "zai-coding-plan", Provider: "zai-coding-cn", Protocol: "openai-completions", BaseURL: "https://open.bigmodel.cn/api/coding/paas/v4", Compat: zaiCompat()},
-	{Source: "kimi-for-coding", Provider: "kimi-coding", Protocol: "anthropic-messages", BaseURL: "https://api.kimi.com/coding", Headers: map[string]string{"User-Agent": "KimiCLI/1.5"}},
+	{Source: "fireworks-ai", Provider: "fireworks", Protocol: "anthropic-messages", BaseURL: "https://api.fireworks.ai/inference", Normalize: normalizeFireworksModel},
+	{Source: "minimax", Provider: "minimax", Protocol: "anthropic-messages", BaseURL: "https://api.minimax.io/anthropic", Normalize: normalizeMiniMaxModel},
+	{Source: "minimax-cn", Provider: "minimax-cn", Protocol: "anthropic-messages", BaseURL: "https://api.minimaxi.com/anthropic", Normalize: normalizeMiniMaxModel},
+	{Source: "moonshotai", Provider: "moonshotai", Protocol: "openai-completions", BaseURL: "https://api.moonshot.ai/v1", Compat: moonshotCompat(), Normalize: normalizeMoonshotModel},
+	{Source: "moonshotai-cn", Provider: "moonshotai-cn", Protocol: "openai-completions", BaseURL: "https://api.moonshot.cn/v1", Compat: moonshotCompat(), Normalize: normalizeMoonshotModel},
+	{Source: "xiaomi", Provider: "xiaomi", Protocol: "openai-completions", BaseURL: "https://api.xiaomimimo.com/v1", Normalize: normalizeXiaomiModel},
+	{Source: "xiaomi-token-plan-cn", Provider: "xiaomi-token-plan-cn", Protocol: "openai-completions", BaseURL: "https://token-plan-cn.xiaomimimo.com/v1", Normalize: normalizeXiaomiModel},
+	{Source: "xiaomi-token-plan-ams", Provider: "xiaomi-token-plan-ams", Protocol: "openai-completions", BaseURL: "https://token-plan-ams.xiaomimimo.com/v1", Normalize: normalizeXiaomiModel},
+	{Source: "xiaomi-token-plan-sgp", Provider: "xiaomi-token-plan-sgp", Protocol: "openai-completions", BaseURL: "https://token-plan-sgp.xiaomimimo.com/v1", Normalize: normalizeXiaomiModel},
+	{Source: "zai-coding-plan", Provider: "zai", Protocol: "openai-completions", BaseURL: "https://api.z.ai/api/coding/paas/v4", Compat: zaiCompat(), Normalize: normalizeZAIModel},
+	{Source: "zai-coding-plan", Provider: "zai-coding-cn", Protocol: "openai-completions", BaseURL: "https://open.bigmodel.cn/api/coding/paas/v4", Compat: zaiCompat(), Normalize: normalizeZAIModel},
+	{Source: "kimi-for-coding", Provider: "kimi-coding", Protocol: "anthropic-messages", BaseURL: "https://api.kimi.com/coding", Headers: map[string]string{"User-Agent": "KimiCLI/1.5"}, Normalize: normalizeKimiCodingModel},
 
 	// Catalog-only providers are listed for discovery, but no adapter implements
 	// their protocol yet. Keep them free of protocol compatibility overrides.
@@ -57,14 +57,6 @@ func moonshotCompat() compatibility {
 		MaxTokensField:          "max_tokens",
 		SupportsStrictMode:      boolp(false),
 		ThinkingFormat:          "deepseek",
-	}
-}
-
-func xiaomiCompat() compatibility {
-	return compatibility{
-		Kind: "openai",
-		RequiresReasoningContentOnAssistantMessages: boolp(true),
-		ThinkingFormat: "deepseek",
 	}
 }
 
@@ -160,12 +152,9 @@ func normalize(id string, source sourceModel, rule providerRule) model {
 		Headers:        cloneMap(rule.Headers),
 		Compat:         rule.Compat,
 	}
-	applyKimiRequestCompatibility(&candidate)
-	applyMoonshotThinkingCompatibility(&candidate, source.ReasoningOptions)
-	applyMiniMaxThinkingMetadata(&candidate, source.ReasoningOptions)
-	applyTogetherRequestCompatibility(&candidate)
-	applyXiaomiRequestCompatibility(&candidate, source.ReasoningOptions)
-	applyZAIThinkingCompatibility(&candidate, source.ReasoningOptions)
+	if rule.Normalize != nil {
+		rule.Normalize(&candidate, source)
+	}
 	applyReasoningOptionMetadata(&candidate, source.ReasoningOptions)
 	return candidate
 }

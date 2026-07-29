@@ -97,6 +97,23 @@ func TestEffortThinkingLevelMapIgnoresNonEffortControls(t *testing.T) {
 	}
 }
 
+func TestApplyVerifiedGatewayReasoningMetadataPreservesOnlyControls(t *testing.T) {
+	high, max := "high", "max"
+	candidate := model{Reasoning: true}
+	applyVerifiedGatewayReasoningMetadata(&candidate, []sourceReasoningOption{
+		{Type: "toggle"},
+		{Type: "effort", Values: []*string{nil, &high, &max}},
+	})
+
+	want := explicitThinkingLevels([]string{"off", "high", "max"})
+	if !reflect.DeepEqual(candidate.ThinkingLevelMap, want) {
+		t.Fatalf("ThinkingLevelMap = %#v, want %#v", candidate.ThinkingLevelMap, want)
+	}
+	if !reflect.DeepEqual(candidate.Compat, compatibility{}) {
+		t.Fatalf("gateway metadata assigned a wire dialect: %#v", candidate.Compat)
+	}
+}
+
 func TestApplyReasoningOptionMetadataRequiresNamedEffort(t *testing.T) {
 	none := "none"
 	options := reasoningValues(&none)

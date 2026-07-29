@@ -261,9 +261,10 @@ func TestApplyOpenCodeOverridesKeepsRoutesIndependent(t *testing.T) {
 		ID: "mimo-v2.5", Provider: "xiaomi", Protocol: "openai-completions", Reasoning: true,
 		Compat: compatibility{Kind: "openai", ThinkingFormat: "deepseek"},
 	}
+	before := candidate
 	applyOpenCodeOverrides(&candidate)
-	if candidate.ThinkingLevelMap != nil || candidate.Compat.SupportsReasoningEffort != nil {
-		t.Fatalf("OpenCode override leaked into Xiaomi route: %#v", candidate)
+	if !reflect.DeepEqual(candidate, before) {
+		t.Fatalf("OpenCode override leaked into Xiaomi route:\n got: %#v\nwant: %#v", candidate, before)
 	}
 }
 

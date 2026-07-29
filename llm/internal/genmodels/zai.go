@@ -5,6 +5,10 @@ var zaiProviders = map[string]struct{}{
 	"zai-coding-cn": {},
 }
 
+func normalizeZAIModel(candidate *model, source sourceModel) {
+	applyZAIThinkingCompatibility(candidate, source.ReasoningOptions)
+}
+
 // applyZAIThinkingCompatibility compiles models.dev's pure toggle into Z.AI's
 // thinking object. Effort-capable models remain on their separate mapping.
 func applyZAIThinkingCompatibility(candidate *model, options []sourceReasoningOption) {
