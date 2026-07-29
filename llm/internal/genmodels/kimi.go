@@ -7,6 +7,15 @@ var moonshotProviders = map[string]struct{}{
 	"moonshotai-cn": {},
 }
 
+func normalizeMoonshotModel(candidate *model, source sourceModel) {
+	applyKimiRequestCompatibility(candidate)
+	applyMoonshotThinkingCompatibility(candidate, source.ReasoningOptions)
+}
+
+func normalizeKimiCodingModel(candidate *model, _ sourceModel) {
+	applyKimiRequestCompatibility(candidate)
+}
+
 // applyMoonshotThinkingCompatibility compiles models.dev's pure toggle into
 // Moonshot's DeepSeek-style thinking object. Models that also declare effort,
 // such as Kimi K3, stay on their dedicated effort path.
@@ -44,7 +53,6 @@ func applyKimiOverrides(candidate *model) {
 	if candidate == nil {
 		return
 	}
-	applyKimiRequestCompatibility(candidate)
 	provider := strings.ToLower(candidate.Provider)
 	id := strings.ToLower(candidate.ID)
 

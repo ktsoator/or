@@ -11,6 +11,63 @@ func hasOnlyReasoningOption(options []sourceReasoningOption, optionType string) 
 	return len(options) == 1 && options[0].Type == optionType
 }
 
+func hasReasoningOption(options []sourceReasoningOption, optionType string) bool {
+	for _, option := range options {
+		if option.Type == optionType {
+			return true
+		}
+	}
+	return false
+}
+
+func reasoningEffortLevels(options []sourceReasoningOption) []string {
+	var levels []string
+	for _, option := range options {
+		if option.Type != "effort" {
+			continue
+		}
+		for _, value := range option.Values {
+			if value == nil {
+				continue
+			}
+			level := *value
+			if level == "none" {
+				level = "off"
+			}
+			if !isGeneratedThinkingLevel(level) || containsThinkingLevel(levels, level) {
+				continue
+			}
+			levels = append(levels, level)
+		}
+	}
+	return levels
+}
+
+func containsThinkingLevel(levels []string, candidate string) bool {
+	for _, level := range levels {
+		if level == candidate {
+			return true
+		}
+	}
+	return false
+}
+
+// applyVerifiedGatewayReasoningMetadata preserves source-declared controls for
+// an exact gateway route without assigning the native model vendor's wire
+// dialect. The owning provider normalizer decides which routes are verified.
+func applyVerifiedGatewayReasoningMetadata(candidate *model, options []sourceReasoningOption) {
+	if candidate == nil {
+		return
+	}
+	levels := reasoningEffortLevels(options)
+	if hasReasoningOption(options, "toggle") && !containsThinkingLevel(levels, "off") {
+		levels = append([]string{"off"}, levels...)
+	}
+	if len(levels) > 0 {
+		candidate.ThinkingLevelMap = explicitThinkingLevels(levels)
+	}
+}
+
 // applyReasoningOptionMetadata converts verified models.dev effort values for
 // models whose wire protocol accepts named effort levels. Toggle and
 // token-budget controls belong to their protocol-specific compatibility rules.

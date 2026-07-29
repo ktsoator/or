@@ -70,6 +70,29 @@ func TestValidateProviderRuleSet(t *testing.T) {
 	})
 }
 
+func TestNormalizeUsesOnlyCurrentRuleHook(t *testing.T) {
+	calls := 0
+	source := sourceModel{Reasoning: true}
+	candidate := normalize("model", source, providerRule{
+		Provider: "test",
+		Protocol: "openai-completions",
+		Normalize: func(candidate *model, gotSource sourceModel) {
+			calls++
+			if !gotSource.Reasoning {
+				t.Fatal("normalizer did not receive the source model")
+			}
+			candidate.ThinkingVisibility = "hidden"
+		},
+	})
+
+	if calls != 1 {
+		t.Fatalf("normalizer calls = %d, want 1", calls)
+	}
+	if candidate.ThinkingVisibility != "hidden" {
+		t.Fatalf("ThinkingVisibility = %q, want hidden", candidate.ThinkingVisibility)
+	}
+}
+
 func TestLoadModelsDevModelsPropagatesProviderRuleValidation(t *testing.T) {
 	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 		return &http.Response{

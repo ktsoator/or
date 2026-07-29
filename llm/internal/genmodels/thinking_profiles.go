@@ -238,7 +238,7 @@ func isGeneratedThinkingLevel(candidate string) bool {
 
 func isKnownThinkingFormat(candidate string) bool {
 	switch candidate {
-	case "openai", "deepseek", "together", "zai", "qwen", "qwen-chat-template", "string-thinking", "ant-ling":
+	case "openai", "deepseek", "xiaomi", "together", "zai", "qwen", "qwen-chat-template", "string-thinking", "ant-ling":
 		return true
 	default:
 		return false

@@ -24,8 +24,9 @@ func TestNormalizeMiniMaxToggleThinking(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.provider+"/"+test.modelID, func(t *testing.T) {
 			models := []model{normalize(test.modelID, source, providerRule{
-				Provider: test.provider,
-				Protocol: "anthropic-messages",
+				Provider:  test.provider,
+				Protocol:  "anthropic-messages",
+				Normalize: normalizeMiniMaxModel,
 			})}
 			applyOverrides(models)
 			candidate := models[0]

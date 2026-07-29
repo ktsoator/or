@@ -431,7 +431,11 @@
       "cacheWrite": 0
     },
     "contextWindow": 1000000,
-    "maxTokens": 384000
+    "maxTokens": 384000,
+    "compat": {
+      "requiresReasoningContentOnAssistantMessages": true,
+      "thinkingFormat": "deepseek"
+    }
   },
   {
     "id": "deepseek-v4-flash",
@@ -445,7 +449,9 @@
       "low": null,
       "max": "max",
       "medium": null,
-      "minimal": null
+      "minimal": null,
+      "off": "none",
+      "xhigh": null
     },
     "input": [
       "text"
@@ -457,7 +463,12 @@
       "cacheWrite": 0
     },
     "contextWindow": 1000000,
-    "maxTokens": 384000
+    "maxTokens": 384000,
+    "compat": {
+      "supportsReasoningEffort": true,
+      "requiresReasoningContentOnAssistantMessages": true,
+      "thinkingFormat": "deepseek"
+    }
   },
   {
     "id": "deepseek-v4-pro",
@@ -471,7 +482,9 @@
       "low": null,
       "max": "max",
       "medium": null,
-      "minimal": null
+      "minimal": null,
+      "off": "none",
+      "xhigh": null
     },
     "input": [
       "text"
@@ -483,7 +496,12 @@
       "cacheWrite": 0
     },
     "contextWindow": 1000000,
-    "maxTokens": 384000
+    "maxTokens": 384000,
+    "compat": {
+      "supportsReasoningEffort": true,
+      "requiresReasoningContentOnAssistantMessages": true,
+      "thinkingFormat": "deepseek"
+    }
   },
   {
     "id": "accounts/fireworks/models/deepseek-v4-flash",
@@ -497,7 +515,9 @@
       "low": null,
       "max": "max",
       "medium": null,
-      "minimal": null
+      "minimal": null,
+      "off": "none",
+      "xhigh": null
     },
     "input": [
       "text"
@@ -523,7 +543,9 @@
       "low": null,
       "max": "max",
       "medium": null,
-      "minimal": null
+      "minimal": null,
+      "off": "none",
+      "xhigh": null
     },
     "input": [
       "text"
@@ -4615,7 +4637,9 @@
       "low": null,
       "max": "max",
       "medium": null,
-      "minimal": null
+      "minimal": null,
+      "off": "none",
+      "xhigh": null
     },
     "input": [
       "text"
@@ -4641,7 +4665,9 @@
       "low": null,
       "max": "max",
       "medium": null,
-      "minimal": null
+      "minimal": null,
+      "off": "none",
+      "xhigh": null
     },
     "input": [
       "text"
@@ -8329,7 +8355,7 @@
     "compat": {
       "supportsReasoningEffort": false,
       "requiresReasoningContentOnAssistantMessages": true,
-      "thinkingFormat": "deepseek"
+      "thinkingFormat": "xiaomi"
     }
   },
   {
@@ -8358,7 +8384,7 @@
     "compat": {
       "supportsReasoningEffort": false,
       "requiresReasoningContentOnAssistantMessages": true,
-      "thinkingFormat": "deepseek"
+      "thinkingFormat": "xiaomi"
     }
   },
   {
@@ -8387,7 +8413,7 @@
     "compat": {
       "supportsReasoningEffort": false,
       "requiresReasoningContentOnAssistantMessages": true,
-      "thinkingFormat": "deepseek"
+      "thinkingFormat": "xiaomi"
     }
   },
   {
@@ -8417,7 +8443,7 @@
     "compat": {
       "supportsReasoningEffort": false,
       "requiresReasoningContentOnAssistantMessages": true,
-      "thinkingFormat": "deepseek"
+      "thinkingFormat": "xiaomi"
     }
   },
   {
@@ -8446,7 +8472,7 @@
     "compat": {
       "supportsReasoningEffort": false,
       "requiresReasoningContentOnAssistantMessages": true,
-      "thinkingFormat": "deepseek"
+      "thinkingFormat": "xiaomi"
     }
   },
   {
@@ -8476,7 +8502,7 @@
     "compat": {
       "supportsReasoningEffort": false,
       "requiresReasoningContentOnAssistantMessages": true,
-      "thinkingFormat": "deepseek"
+      "thinkingFormat": "xiaomi"
     }
   },
   {
@@ -8505,7 +8531,7 @@
     "compat": {
       "supportsReasoningEffort": false,
       "requiresReasoningContentOnAssistantMessages": true,
-      "thinkingFormat": "deepseek"
+      "thinkingFormat": "xiaomi"
     }
   },
   {
@@ -8535,7 +8561,7 @@
     "compat": {
       "supportsReasoningEffort": false,
       "requiresReasoningContentOnAssistantMessages": true,
-      "thinkingFormat": "deepseek"
+      "thinkingFormat": "xiaomi"
     }
   },
   {
@@ -8564,7 +8590,7 @@
     "compat": {
       "supportsReasoningEffort": false,
       "requiresReasoningContentOnAssistantMessages": true,
-      "thinkingFormat": "deepseek"
+      "thinkingFormat": "xiaomi"
     }
   },
   {

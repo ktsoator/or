@@ -153,6 +153,7 @@ func TestBuildParamsUnsetOmitsThinkingControlsForEveryFormat(t *testing.T) {
 		"zai",
 		"qwen",
 		"qwen-chat-template",
+		"xiaomi",
 		"deepseek",
 		"ant-ling",
 		"together",
@@ -499,31 +500,6 @@ func TestApplyThinkingQwenChatTemplate(t *testing.T) {
 	}
 }
 
-func TestApplyThinkingDeepSeekEnabled(t *testing.T) {
-	model := reasoningModel(nil)
-	params := oai.ChatCompletionNewParams{}
-	applyThinking(&params, model, resolvedCompat{thinkingFormat: "deepseek", supportsReasoningEffort: true}, explicitThinking(llm.ModelThinkingHigh))
-
-	extras := extraFields(t, params)
-	if !reflect.DeepEqual(extras["thinking"], map[string]any{"type": "enabled"}) {
-		t.Fatalf("thinking = %#v, want enabled", extras["thinking"])
-	}
-	if got := extras["reasoning_effort"]; got != "high" {
-		t.Fatalf("reasoning_effort = %#v, want high", got)
-	}
-}
-
-func TestApplyThinkingDeepSeekDisabled(t *testing.T) {
-	model := reasoningModel(nil)
-	params := oai.ChatCompletionNewParams{}
-	applyThinking(&params, model, resolvedCompat{thinkingFormat: "deepseek"}, explicitThinking(llm.ModelThinkingOff))
-
-	extras := extraFields(t, params)
-	if !reflect.DeepEqual(extras["thinking"], map[string]any{"type": "disabled"}) {
-		t.Fatalf("thinking = %#v, want disabled", extras["thinking"])
-	}
-}
-
 func TestBuildParamsClampsUnsupportedDeepSeekOff(t *testing.T) {
 	// An explicit off request is clamped to the nearest supported level before
 	// request serialization. It must not emit a disable parameter the model
@@ -722,46 +698,83 @@ func TestGeneratedXiaomiToggleThinking(t *testing.T) {
 		llm.ModelThinkingOff,
 		llm.ModelThinkingHigh,
 	}
-	for _, provider := range []string{
-		"xiaomi",
-		"xiaomi-token-plan-cn",
-		"xiaomi-token-plan-ams",
-		"xiaomi-token-plan-sgp",
+	for _, ref := range []struct {
+		provider string
+		modelID  string
+	}{
+		{provider: "xiaomi", modelID: "mimo-v2.5"},
+		{provider: "xiaomi", modelID: "mimo-v2.5-pro"},
+		{provider: "xiaomi", modelID: "mimo-v2.5-pro-ultraspeed"},
+		{provider: "xiaomi-token-plan-cn", modelID: "mimo-v2.5"},
+		{provider: "xiaomi-token-plan-cn", modelID: "mimo-v2.5-pro"},
+		{provider: "xiaomi-token-plan-ams", modelID: "mimo-v2.5"},
+		{provider: "xiaomi-token-plan-ams", modelID: "mimo-v2.5-pro"},
+		{provider: "xiaomi-token-plan-sgp", modelID: "mimo-v2.5"},
+		{provider: "xiaomi-token-plan-sgp", modelID: "mimo-v2.5-pro"},
 	} {
-		model, ok := llm.LookupModel(provider, "mimo-v2.5-pro")
-		if !ok {
-			t.Fatalf("model %s/mimo-v2.5-pro is missing from the catalog", provider)
-		}
-		if got := llm.SupportedThinkingLevels(model); !reflect.DeepEqual(got, wantLevels) {
-			t.Errorf("%s/mimo-v2.5-pro thinking levels = %v, want %v", provider, got, wantLevels)
-		}
+		t.Run(ref.provider+"/"+ref.modelID, func(t *testing.T) {
+			model, ok := llm.LookupModel(ref.provider, ref.modelID)
+			if !ok {
+				t.Fatal("verified Xiaomi toggle route is missing from the catalog")
+			}
+			if got := llm.SupportedThinkingLevels(model); !reflect.DeepEqual(got, wantLevels) {
+				t.Errorf("thinking levels = %v, want %v", got, wantLevels)
+			}
 
-		compat := resolveCompat(model)
-		if compat.thinkingFormat != "deepseek" || compat.supportsReasoningEffort {
-			t.Errorf(
-				"%s/mimo-v2.5-pro compatibility = {format:%q effort:%v}, want {deepseek false}",
-				provider,
-				compat.thinkingFormat,
-				compat.supportsReasoningEffort,
-			)
-		}
-		for _, test := range []struct {
-			level llm.ModelThinkingLevel
-			want  string
-		}{
-			{level: llm.ModelThinkingOff, want: "disabled"},
-			{level: llm.ModelThinkingHigh, want: "enabled"},
-		} {
-			params := oai.ChatCompletionNewParams{}
-			applyThinking(&params, model, compat, explicitThinking(test.level))
-			extras := extraFields(t, params)
-			if !reflect.DeepEqual(extras["thinking"], map[string]any{"type": test.want}) {
-				t.Errorf("%s/%s thinking = %#v, want %s", provider, test.level, extras["thinking"], test.want)
+			compat := resolveCompat(model)
+			if compat.thinkingFormat != "xiaomi" || compat.supportsReasoningEffort {
+				t.Errorf(
+					"compatibility = {format:%q effort:%v}, want {xiaomi false}",
+					compat.thinkingFormat,
+					compat.supportsReasoningEffort,
+				)
 			}
-			if _, present := extras["reasoning_effort"]; present {
-				t.Errorf("%s/%s unexpectedly sends reasoning_effort: %#v", provider, test.level, extras)
+			for _, test := range []struct {
+				level llm.ModelThinkingLevel
+				want  string
+			}{
+				{level: llm.ModelThinkingOff, want: "disabled"},
+				{level: llm.ModelThinkingHigh, want: "enabled"},
+			} {
+				params := oai.ChatCompletionNewParams{}
+				applyThinking(&params, model, compat, explicitThinking(test.level))
+				extras := extraFields(t, params)
+				if !reflect.DeepEqual(extras["thinking"], map[string]any{"type": test.want}) {
+					t.Errorf("%s thinking = %#v, want %s", test.level, extras["thinking"], test.want)
+				}
+				if _, present := extras["reasoning_effort"]; present {
+					t.Errorf("%s unexpectedly sends reasoning_effort: %#v", test.level, extras)
+				}
 			}
-		}
+		})
+	}
+}
+
+func TestGeneratedThinkingDialectIsolation(t *testing.T) {
+	tests := []struct {
+		provider string
+		modelID  string
+		want     string
+	}{
+		{provider: "xiaomi", modelID: "mimo-v2.5", want: "xiaomi"},
+		{provider: "opencode-go", modelID: "mimo-v2.5", want: "deepseek"},
+		{provider: "opencode-go", modelID: "mimo-v2.5-pro", want: "openai"},
+		{provider: "deepseek", modelID: "deepseek-v4-flash", want: "deepseek"},
+		{provider: "opencode", modelID: "deepseek-v4-flash", want: "openai"},
+		{provider: "opencode-go", modelID: "deepseek-v4-flash", want: "deepseek"},
+		{provider: "together", modelID: "deepseek-ai/DeepSeek-V4-Pro", want: "together"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.provider+"/"+test.modelID, func(t *testing.T) {
+			model, ok := llm.LookupModel(test.provider, test.modelID)
+			if !ok {
+				t.Fatalf("model is missing from the catalog")
+			}
+			if got := resolveCompat(model).thinkingFormat; got != test.want {
+				t.Fatalf("thinking format = %q, want %q", got, test.want)
+			}
+		})
 	}
 }
 

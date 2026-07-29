@@ -78,6 +78,7 @@ func TestTogetherEffortMetadataUsesModelOptions(t *testing.T) {
 		ReasoningOptions: reasoningValues(&low, &high),
 	}, providerRule{
 		Provider: "together", Protocol: "openai-completions", BaseURL: "https://api.together.ai/v1",
+		Normalize: normalizeTogetherModel,
 	})
 	want := map[string]*string{
 		"off": nil, "minimal": nil, "low": stringPointer("low"), "medium": nil,

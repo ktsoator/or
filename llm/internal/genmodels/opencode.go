@@ -29,6 +29,10 @@ var openCodeThinkingProfiles = map[modelRouteKey]thinkingProfile{
 	{Provider: "opencode-go", ModelID: "qwen3.6-plus"}:      toggleThinking("qwen", false),
 }
 
+func normalizeOpenCodeModel(candidate *model, source sourceModel) {
+	applyMiniMaxThinkingMetadata(candidate, source.ReasoningOptions)
+}
+
 func fromOpenCode(catalog map[string]sourceProvider) []model {
 	var models []model
 	for _, variant := range openCodeVariants {
@@ -62,6 +66,7 @@ func fromOpenCode(catalog map[string]sourceProvider) []model {
 			}
 			models = append(models, normalize(id, source, providerRule{
 				Provider: variant.Provider, Protocol: protocol, BaseURL: baseURL, Compat: compat,
+				Normalize: normalizeOpenCodeModel,
 			}))
 		}
 	}

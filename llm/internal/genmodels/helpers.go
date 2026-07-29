@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"strings"
 )
@@ -54,8 +55,6 @@ func cloneMap(source map[string]string) map[string]string {
 		return nil
 	}
 	result := make(map[string]string, len(source))
-	for k, v := range source {
-		result[k] = v
-	}
+	maps.Copy(result, source)
 	return result
 }

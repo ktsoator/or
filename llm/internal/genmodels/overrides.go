@@ -17,13 +17,6 @@ func applyOverrides(models []model) {
 			m.Compat.Kind = "anthropic"
 			m.Compat.SupportsTemperature = boolp(false)
 		}
-		if strings.Contains(m.ID, "deepseek-v4") {
-			high, max := "high", "max"
-			m.ThinkingLevelMap = map[string]*string{"minimal": nil, "low": nil, "medium": nil, "high": &high, "max": &max}
-			if m.Provider == "opencode" {
-				m.ThinkingLevelMap["off"] = nil
-			}
-		}
 		if m.Provider == "zai" || m.Provider == "zai-coding-cn" {
 			if m.ID == "glm-5.2" {
 				high, max := "high", "max"
