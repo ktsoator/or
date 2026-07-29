@@ -6,8 +6,14 @@ import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 import { ProviderIcon } from '@/components/ProviderIdentity'
 import { FixedThinkingStatus } from '@/components/FixedThinkingStatus'
+import { ThinkingSwitchIndicator } from '@/components/ThinkingModeToggle'
 import { providerName } from '@/lib/provider'
-import { isFixedThinking } from '@/modelThinking'
+import {
+  isFixedThinking,
+  isToggleThinking,
+  thinkingLevelLabelKey,
+  toggleThinkingLevel,
+} from '@/modelThinking'
 import { composerMenuTriggerClass } from './composerControlStyles'
 
 export function ModelSettingsMenu({
@@ -42,6 +48,7 @@ export function ModelSettingsMenu({
     (model) => model.provider === modelProvider && model.id === modelID,
   )
   const fixedThinking = isFixedThinking(currentModel)
+  const toggleThinking = isToggleThinking(currentModel)
   const modelKey = modelProvider && modelID ? JSON.stringify([modelProvider, modelID]) : ''
   const thinkingLevels = currentModel?.thinkingLevels ?? (thinkingLevel ? [thinkingLevel] : [])
   const groupedModels = useMemo(
@@ -57,11 +64,11 @@ export function ModelSettingsMenu({
   const modelName = currentModel?.name ?? modelID ?? t('model.fallback')
   const selectedModelName = selectedProvider === modelProvider ? modelName : t('model.select')
   const selectedProviderName = providerName(selectedProvider || modelProvider || '')
-  const effortName = fixedThinking
+  const thinkingName = fixedThinking
     ? t('model.fixedThinking')
     : thinkingLevel
-      ? t(`effort.${thinkingLevel}`)
-      : t('model.effort')
+      ? t(thinkingLevelLabelKey(currentModel, thinkingLevel))
+      : t(toggleThinking ? 'model.thinkingOff' : 'model.effort')
   const unavailable = disabled || !modelKey || models.length === 0
   const contextWindow = currentModel?.contextWindow ?? contextUsage?.contextWindow ?? 0
   const currentContextUsage =
@@ -126,7 +133,7 @@ export function ModelSettingsMenu({
               data-testid="model-settings-effort"
               className="shrink-0 text-stone-400 @max-[430px]:hidden max-sm:hidden"
             >
-              {effortName}
+              {thinkingName}
             </span>
           )}
           <ChevronDown
@@ -237,6 +244,23 @@ export function ModelSettingsMenu({
                 hidden={currentModel?.thinkingVisibility === 'hidden'}
               />
             </div>
+          ) : toggleThinking ? (
+            <DropdownMenu.CheckboxItem
+              data-testid="model-thinking-toggle"
+              checked={thinkingLevel === 'high'}
+              disabled={selectedProvider !== modelProvider}
+              onCheckedChange={(checked) => selectEffort(toggleThinkingLevel(checked === true))}
+              className={cn(
+                'mb-0.5 flex h-[30px] cursor-default select-none items-center rounded-[10px] px-2.5 outline-none',
+                'data-[highlighted]:bg-[rgb(241,241,241)] data-[disabled]:opacity-40',
+              )}
+            >
+              <span>{t('model.thinking')}</span>
+              <span className="ml-auto flex items-center gap-2 text-stone-500">
+                <span>{thinkingName}</span>
+                <ThinkingSwitchIndicator checked={thinkingLevel === 'high'} />
+              </span>
+            </DropdownMenu.CheckboxItem>
           ) : (
             <DropdownMenu.Sub>
               <DropdownMenu.SubTrigger
@@ -245,7 +269,7 @@ export function ModelSettingsMenu({
               >
                 <span>{t('model.effort')}</span>
                 <span className="ml-auto flex items-center gap-1.5 text-stone-500">
-                  <span>{effortName}</span>
+                  <span>{thinkingName}</span>
                   <ChevronRight className="size-3.5" aria-hidden="true" />
                 </span>
               </DropdownMenu.SubTrigger>

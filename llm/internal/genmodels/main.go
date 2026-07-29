@@ -17,6 +17,7 @@ import (
 
 func main() {
 	output := flag.String("output", "catalog.generated.json", "generated JSON catalog")
+	inspectDir := flag.String("inspect-dir", "", "write a per-provider inspection snapshot instead of the catalog")
 	timeout := flag.Duration("timeout", 45*time.Second, "HTTP timeout")
 	allowPartial := flag.Bool("allow-partial", false, "allow output when catalog sources are unavailable")
 	flag.Parse()
@@ -25,10 +26,20 @@ func main() {
 	defer cancel()
 	client := &http.Client{Timeout: *timeout}
 
-	if err := generateCatalog(ctx, client, *output, collectOptions{
+	if *inspectDir != "" {
+		if *allowPartial {
+			fatal(errors.New("-allow-partial cannot be used with -inspect-dir"))
+		}
+		if err := generateInspection(ctx, client, *inspectDir, os.Stdout); err != nil {
+			fatal(err)
+		}
+		return
+	}
+	options := collectOptions{
 		AllowPartial: *allowPartial,
 		Warnings:     os.Stderr,
-	}, os.Stdout); err != nil {
+	}
+	if err := generateCatalog(ctx, client, *output, options, os.Stdout); err != nil {
 		fatal(err)
 	}
 }

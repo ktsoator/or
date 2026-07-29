@@ -3054,6 +3054,30 @@ test('fixed provider thinking is shown without an effort menu', async ({ page })
   )
 })
 
+test('binary thinking capability is presented as an off/on switch', async ({ page }) => {
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    modelThinkingLevels: ['off', 'high'],
+  })
+
+  const trigger = page.getByTestId('model-settings-trigger')
+  await expect(page.getByTestId('model-settings-effort')).toHaveText('Off')
+  await trigger.click()
+
+  const toggle = page.getByTestId('model-thinking-toggle')
+  await expect(toggle).toHaveRole('menuitemcheckbox')
+  await expect(toggle).toHaveText(/Thinking.*Off/)
+  await expect(toggle).toHaveAttribute('aria-checked', 'false')
+
+  await toggle.click()
+  await expect.poll(() =>
+    requests.find(
+      (request) =>
+        request.path === '/api/sessions/test-session/settings' && request.method === 'PATCH',
+    )?.body,
+  ).toEqual({ provider: 'openai', model: 'test-model', thinkingLevel: 'high' })
+})
+
 test('first send creates a session and renders the user message', async ({ page }) => {
   const requests = await openDesktopClient(page)
   const message = 'Desktop first-send regression'

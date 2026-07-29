@@ -9,6 +9,32 @@ func reasoningValues(values ...*string) []sourceReasoningOption {
 	return []sourceReasoningOption{{Type: "effort", Values: values}}
 }
 
+func TestHasOnlyReasoningOption(t *testing.T) {
+	tests := []struct {
+		name    string
+		options []sourceReasoningOption
+		want    bool
+	}{
+		{name: "single toggle", options: []sourceReasoningOption{{Type: "toggle"}}, want: true},
+		{name: "missing"},
+		{name: "single effort", options: []sourceReasoningOption{{Type: "effort"}}},
+		{
+			name: "toggle and effort",
+			options: []sourceReasoningOption{
+				{Type: "toggle"},
+				{Type: "effort"},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := hasOnlyReasoningOption(test.options, "toggle"); got != test.want {
+				t.Fatalf("hasOnlyReasoningOption() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
 func TestEffortThinkingLevelMap(t *testing.T) {
 	none, low, high := "none", "low", "high"
 	got := effortThinkingLevelMap(reasoningValues(&none, nil, &low, &high))

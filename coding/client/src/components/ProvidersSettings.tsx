@@ -16,9 +16,10 @@ import { cn } from '@/lib/utils'
 import { ProviderIcon } from '@/components/ProviderIdentity'
 import { ProviderConnectionTestDialog } from '@/components/ProviderConnectionTestDialog'
 import { FixedThinkingStatus } from '@/components/FixedThinkingStatus'
+import { ThinkingModeToggle } from '@/components/ThinkingModeToggle'
 import { UtilityModelSection } from '@/components/UtilityModelSection'
 import { providerName } from '@/lib/provider'
-import { isFixedThinking } from '@/modelThinking'
+import { isFixedThinking, isToggleThinking, toggleThinkingLevel } from '@/modelThinking'
 import type {
   ModelOption,
   ProviderConnectionInfo,
@@ -206,9 +207,9 @@ type ModelsResponse = {
 }
 
 // DefaultModelSection lets the user pick the application-wide default model and
-// thinking effort that new sessions start with. It reads the model catalog and
+// thinking mode that new sessions start with. It reads the model catalog and
 // current default from /api/models and persists changes to /api/model-selection.
-// The UI uses three cascading rows: Provider → Model → Thinking effort.
+// The UI uses provider, model, and model-specific thinking controls.
 function DefaultModelSection({
   onChanged,
   utilityModel,
@@ -264,6 +265,7 @@ function DefaultModelSection({
   const current = models.find((entry) => entry.provider === provider && entry.id === model)
   const thinkingLevels = current?.thinkingLevels ?? []
   const fixedThinking = isFixedThinking(current)
+  const toggleThinking = isToggleThinking(current)
 
   const persist = async (nextProvider: string, nextModel: string, nextThinking: ThinkingLevel) => {
     setSaving(true)
@@ -447,11 +449,24 @@ function DefaultModelSection({
                   </DropdownMenu.Portal>
                 </DropdownMenu.Root>
 
-                {/* Thinking effort */}
+                {/* Model-specific thinking control */}
                 {fixedThinking ? (
                   <FixedThinkingStatus
                     className="h-9 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-[0.8125rem] text-stone-500 outline-none focus-visible:ring-2 focus-visible:ring-stone-300"
                     hidden={current?.thinkingVisibility === 'hidden'}
+                  />
+                ) : toggleThinking ? (
+                  <ThinkingModeToggle
+                    checked={thinking === 'high'}
+                    disabled={saving}
+                    ariaLabel={t('model.thinking')}
+                    className="bg-[rgb(246,246,246)]"
+                    onCheckedChange={(checked) => {
+                      const level = toggleThinkingLevel(checked)
+                      if (provider && model && level !== thinking) {
+                        void persist(provider, model, level)
+                      }
+                    }}
                   />
                 ) : (
                   <DropdownMenu.Root>

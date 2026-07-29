@@ -2,9 +2,15 @@ package main
 
 import "strings"
 
+const (
+	githubCopilotSource   = "github-copilot"
+	githubCopilotProvider = "github-copilot"
+	githubCopilotBaseURL  = "https://api.individual.githubcopilot.com"
+)
+
 func fromCopilot(catalog map[string]sourceProvider) []model {
 	var models []model
-	for id, source := range catalog["github-copilot"].Models {
+	for id, source := range catalog[githubCopilotSource].Models {
 		if !source.ToolCall || source.Status == "deprecated" || strings.HasPrefix(id, "gpt-5") || strings.HasPrefix(id, "oswe") {
 			continue
 		}
@@ -17,7 +23,7 @@ func fromCopilot(catalog map[string]sourceProvider) []model {
 			compat = compatibility{Kind: "anthropic"}
 		}
 		models = append(models, normalize(id, source, providerRule{
-			Provider: "github-copilot", Protocol: protocol, BaseURL: "https://api.individual.githubcopilot.com",
+			Provider: githubCopilotProvider, Protocol: protocol, BaseURL: githubCopilotBaseURL,
 			Compat: compat,
 			Headers: map[string]string{
 				"User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0",

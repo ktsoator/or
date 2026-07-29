@@ -280,12 +280,16 @@ func TestThinkingRequestClampsUnsupportedLevels(t *testing.T) {
 	}
 }
 
-func TestMiniMaxThinkingOffPayloads(t *testing.T) {
+func TestMiniMaxThinkingPayloads(t *testing.T) {
 	m27, ok := llm.LookupModel("minimax-cn", "MiniMax-M2.7")
 	if !ok {
 		t.Fatal("minimax-cn/MiniMax-M2.7 is missing from the catalog")
 	}
-	m27Payload := marshalThinkingRequest(t, m27, false, llm.ModelThinkingOff)
+	m27Compat := resolveCompat(m27)
+	if m27Compat.forceAdaptiveThinking {
+		t.Fatal("M2.7 must use budget thinking, not adaptive thinking")
+	}
+	m27Payload := marshalThinkingRequest(t, m27, m27Compat.forceAdaptiveThinking, llm.ModelThinkingOff)
 	if m27Payload.Thinking == nil || m27Payload.Thinking.Type != "enabled" {
 		t.Fatalf("M2.7 thinking = %#v, want enabled after unsupported off is clamped", m27Payload.Thinking)
 	}
@@ -293,13 +297,50 @@ func TestMiniMaxThinkingOffPayloads(t *testing.T) {
 		t.Fatal("M2.7 enabled thinking is missing budget_tokens")
 	}
 
-	m3, ok := llm.LookupModel("minimax-cn", "MiniMax-M3")
-	if !ok {
-		t.Fatal("minimax-cn/MiniMax-M3 is missing from the catalog")
-	}
-	m3Payload := marshalThinkingRequest(t, m3, false, llm.ModelThinkingOff)
-	if m3Payload.Thinking == nil || m3Payload.Thinking.Type != "disabled" {
-		t.Fatalf("M3 thinking = %#v, want disabled", m3Payload.Thinking)
+	for _, route := range []struct {
+		provider string
+		modelID  string
+	}{
+		{provider: "minimax", modelID: "MiniMax-M3"},
+		{provider: "minimax-cn", modelID: "MiniMax-M3"},
+		{provider: "opencode-go", modelID: "minimax-m3"},
+	} {
+		t.Run(route.provider+"/"+route.modelID, func(t *testing.T) {
+			model, ok := llm.LookupModel(route.provider, route.modelID)
+			if !ok {
+				t.Fatalf("%s/%s is missing from the catalog", route.provider, route.modelID)
+			}
+			wantLevels := []llm.ModelThinkingLevel{llm.ModelThinkingOff, llm.ModelThinkingHigh}
+			if got := llm.SupportedThinkingLevels(model); !reflect.DeepEqual(got, wantLevels) {
+				t.Fatalf("thinking levels = %v, want %v", got, wantLevels)
+			}
+			compatibility := resolveCompat(model)
+			if compatibility.forceAdaptiveThinking {
+				t.Fatal("M3 must use budget thinking, not adaptive thinking")
+			}
+
+			unset := marshalThinkingRequest(t, model, compatibility.forceAdaptiveThinking, "")
+			if unset.Thinking != nil || unset.OutputConfig != nil {
+				t.Fatalf("unset thinking payload = %#v, %#v; want absent", unset.Thinking, unset.OutputConfig)
+			}
+
+			off := marshalThinkingRequest(t, model, compatibility.forceAdaptiveThinking, llm.ModelThinkingOff)
+			if off.Thinking == nil || off.Thinking.Type != "disabled" || off.Thinking.BudgetTokens != nil {
+				t.Fatalf("off thinking = %#v, want disabled without budget", off.Thinking)
+			}
+			if off.OutputConfig != nil {
+				t.Fatalf("off output_config = %#v, want absent", off.OutputConfig)
+			}
+
+			high := marshalThinkingRequest(t, model, compatibility.forceAdaptiveThinking, llm.ModelThinkingHigh)
+			if high.Thinking == nil || high.Thinking.Type != "enabled" ||
+				high.Thinking.BudgetTokens == nil || *high.Thinking.BudgetTokens != 16384 {
+				t.Fatalf("high thinking = %#v, want enabled with budget 16384", high.Thinking)
+			}
+			if high.Thinking.Display != "summarized" || high.OutputConfig != nil {
+				t.Fatalf("high payload = thinking %#v output_config %#v", high.Thinking, high.OutputConfig)
+			}
+		})
 	}
 }
 

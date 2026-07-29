@@ -33,15 +33,20 @@ func deduplicate(models []model) []model {
 func render(models []model) ([]byte, error) {
 	// models arrives deduplicated and sorted by provider then ID, so the flat
 	// catalog stays grouped and stable without an intermediate map.
-	catalog := make([]catalogModel, 0, len(models))
-	for _, source := range models {
-		catalog = append(catalog, toCatalogModel(source))
-	}
+	catalog := toCatalogModels(models)
 	encoded, err := json.MarshalIndent(catalog, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("encode generated catalog: %w", err)
 	}
 	return append(encoded, '\n'), nil
+}
+
+func toCatalogModels(models []model) []catalogModel {
+	catalog := make([]catalogModel, 0, len(models))
+	for _, source := range models {
+		catalog = append(catalog, toCatalogModel(source))
+	}
+	return catalog
 }
 
 func toCatalogModel(source model) catalogModel {

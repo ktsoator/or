@@ -85,6 +85,43 @@ func TestApplyOverridesForKimiCodingCompatibility(t *testing.T) {
 	}
 }
 
+func TestNormalizeMoonshotToggleThinking(t *testing.T) {
+	source := sourceModel{
+		ToolCall:         true,
+		Reasoning:        true,
+		ReasoningOptions: []sourceReasoningOption{{Type: "toggle"}},
+	}
+	wantLevels := unsupportedThinkingLevels("minimal", "low", "medium")
+
+	for provider := range moonshotProviders {
+		for _, modelID := range []string{"kimi-k2.5", "kimi-k2.6"} {
+			t.Run(provider+"/"+modelID, func(t *testing.T) {
+				candidate := normalize(modelID, source, providerRule{
+					Provider: provider,
+					Protocol: "openai-completions",
+					Compat:   moonshotCompat(),
+				})
+
+				if !reflect.DeepEqual(candidate.ThinkingLevelMap, wantLevels) {
+					t.Fatalf("ThinkingLevelMap = %#v, want %#v", candidate.ThinkingLevelMap, wantLevels)
+				}
+				if candidate.Compat.SupportsReasoningEffort == nil || *candidate.Compat.SupportsReasoningEffort {
+					t.Fatalf("SupportsReasoningEffort = %v, want false", candidate.Compat.SupportsReasoningEffort)
+				}
+				if candidate.Compat.ThinkingFormat != "deepseek" {
+					t.Fatalf("ThinkingFormat = %q, want deepseek", candidate.Compat.ThinkingFormat)
+				}
+				if candidate.Compat.RequiresReasoningContentOnAssistantMessages != nil {
+					t.Fatalf(
+						"RequiresReasoningContentOnAssistantMessages = %v, want unset",
+						candidate.Compat.RequiresReasoningContentOnAssistantMessages,
+					)
+				}
+			})
+		}
+	}
+}
+
 func TestNormalizeKimiEffortMetadata(t *testing.T) {
 	low, high, max := "low", "high", "max"
 	source := sourceModel{

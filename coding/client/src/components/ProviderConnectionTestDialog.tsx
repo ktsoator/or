@@ -15,8 +15,14 @@ import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { ProviderIcon } from '@/components/ProviderIdentity'
 import { FixedThinkingStatus } from '@/components/FixedThinkingStatus'
+import { ThinkingModeToggle } from '@/components/ThinkingModeToggle'
 import { composerMenuTriggerClass } from '@/components/composerControlStyles'
-import { isFixedThinking } from '@/modelThinking'
+import {
+  isFixedThinking,
+  isToggleThinking,
+  thinkingLevelLabelKey,
+  toggleThinkingLevel,
+} from '@/modelThinking'
 import type { ModelOption, ThinkingLevel } from '@/types'
 
 type TestConnection = {
@@ -113,6 +119,7 @@ export function ProviderConnectionTestDialog({
 
   const selectedModel = models.find((model) => model.id === selectedModelId)
   const fixedThinking = isFixedThinking(selectedModel)
+  const toggleThinking = isToggleThinking(selectedModel)
   const connectionName = connection.official
     ? t('providers.officialConnection')
     : connection.name || t('providers.customConnection')
@@ -314,6 +321,16 @@ export function ProviderConnectionTestDialog({
                     className="h-9 w-full justify-center rounded-xl bg-[rgb(246,246,246)] px-2.5 text-[0.8125rem] text-stone-500 outline-none focus-visible:ring-2 focus-visible:ring-stone-300"
                     hidden={selectedModel?.thinkingVisibility === 'hidden'}
                   />
+                ) : toggleThinking ? (
+                  <ThinkingModeToggle
+                    checked={selectedThinkingLevel === 'high'}
+                    disabled={testing}
+                    ariaLabel={t('providers.testThinking')}
+                    className="w-full justify-between bg-[rgb(246,246,246)]"
+                    onCheckedChange={(checked) => {
+                      chooseThinkingLevel(toggleThinkingLevel(checked))
+                    }}
+                  />
                 ) : (
                   <DropdownMenu.Root>
                     <DropdownMenu.Trigger asChild>
@@ -422,7 +439,7 @@ export function ProviderConnectionTestDialog({
                     <p className="mt-0.5 truncate text-[0.71875rem] text-stone-400">
                       {result.modelName || selectedModel?.name || result.model}
                       {' · '}
-                      {t(`effort.${result.thinkingLevel}`)}
+                      {t(thinkingLevelLabelKey(selectedModel, result.thinkingLevel))}
                       {' · '}
                       {t('providers.testTokens', {
                         input: result.inputTokens,

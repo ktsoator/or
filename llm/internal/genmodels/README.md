@@ -23,6 +23,21 @@ go run ./llm/internal/genmodels \
 
 Do not commit a partial catalog.
 
+For an on-demand, per-provider view of the typed models.dev input and the final
+catalog output, run:
+
+```sh
+go run ./llm/internal/genmodels -inspect-dir llm/.genmodels-inspect
+```
+
+Inspection mode does not update `catalog.generated.json`. The ignored output
+contains `route.json`, `before.json`, and `after.json` for each provider plus a
+top-level `index.json`. `before.json` is the subset of models.dev fields parsed
+by this generator, not the complete upstream provider document. The inspection
+directory is a disposable snapshot and is replaced in full on every run; do not
+store other files in it. Inspection mode is strict and cannot be combined with
+`-allow-partial`.
+
 The generator draws on one public catalog source:
 
 - [Models.dev](https://models.dev) is the primary source. It is an open-source
@@ -45,7 +60,8 @@ Verified models.dev `reasoning_options` effort values are normalized into the
 SDK's thinking levels for standard OpenAI-compatible and Anthropic adaptive-
 thinking models. Toggle and token budget controls remain provider-specific, and
 local compatibility overrides keep verified provider behavior authoritative
-when source metadata is incomplete.
+when source metadata is incomplete. Xiaomi routes compile their verified toggle
+metadata into the SDK's binary `off`/`high` contract.
 
 The catalog includes models for the implemented `openai-completions` and
 `anthropic-messages` protocols, plus selected catalog-only protocols planned

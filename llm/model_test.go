@@ -438,6 +438,32 @@ func TestBuiltInKimiCodingCompatibilityMetadata(t *testing.T) {
 
 func TestBuiltInMoonshotKimiThinkingMetadata(t *testing.T) {
 	for _, provider := range []string{"moonshotai", "moonshotai-cn"} {
+		for _, modelID := range []string{"kimi-k2.5", "kimi-k2.6"} {
+			t.Run(provider+"/"+modelID, func(t *testing.T) {
+				model, ok := LookupModel(provider, modelID)
+				if !ok {
+					t.Fatalf("%s/%s is missing from the built-in catalog", provider, modelID)
+				}
+				want := []ModelThinkingLevel{ModelThinkingOff, ModelThinkingHigh}
+				if got := SupportedThinkingLevels(model); !slices.Equal(got, want) {
+					t.Fatalf("thinking levels = %v, want %v", got, want)
+				}
+				compatibility, ok := model.Compatibility.(*OpenAICompletionsCompatibility)
+				if !ok || compatibility == nil {
+					t.Fatalf("compatibility = %T, want OpenAI Completions", model.Compatibility)
+				}
+				if compatibility.SupportsReasoningEffort == nil || *compatibility.SupportsReasoningEffort {
+					t.Error("Kimi toggle model must not support reasoning_effort")
+				}
+				if compatibility.ThinkingFormat != "deepseek" {
+					t.Errorf("thinking format = %q, want deepseek", compatibility.ThinkingFormat)
+				}
+				if compatibility.RequiresReasoningContentOnAssistantMessages != nil {
+					t.Error("Kimi toggle model must not require empty reasoning_content on assistant messages")
+				}
+			})
+		}
+
 		t.Run(provider+"/kimi-k3", func(t *testing.T) {
 			model, ok := LookupModel(provider, "kimi-k3")
 			if !ok {
@@ -483,6 +509,38 @@ func TestBuiltInMoonshotKimiThinkingMetadata(t *testing.T) {
 	}
 }
 
+func TestBuiltInZAIToggleThinkingMetadata(t *testing.T) {
+	modelIDs := []string{"glm-4.5-air", "glm-4.7", "glm-5-turbo", "glm-5.1", "glm-5v-turbo"}
+	want := []ModelThinkingLevel{ModelThinkingOff, ModelThinkingHigh}
+
+	for _, provider := range []string{"zai", "zai-coding-cn"} {
+		for _, modelID := range modelIDs {
+			t.Run(provider+"/"+modelID, func(t *testing.T) {
+				model, ok := LookupModel(provider, modelID)
+				if !ok {
+					t.Fatalf("%s/%s is missing from the built-in catalog", provider, modelID)
+				}
+				if got := SupportedThinkingLevels(model); !slices.Equal(got, want) {
+					t.Fatalf("thinking levels = %v, want %v", got, want)
+				}
+				compatibility, ok := model.Compatibility.(*OpenAICompletionsCompatibility)
+				if !ok || compatibility == nil {
+					t.Fatalf("compatibility = %T, want OpenAI Completions", model.Compatibility)
+				}
+				if compatibility.SupportsReasoningEffort == nil || *compatibility.SupportsReasoningEffort {
+					t.Error("ZAI toggle model must not support reasoning_effort")
+				}
+				if compatibility.ThinkingFormat != "zai" {
+					t.Errorf("thinking format = %q, want zai", compatibility.ThinkingFormat)
+				}
+				if compatibility.ZAIToolStream == nil || !*compatibility.ZAIToolStream {
+					t.Error("ZAI toggle model must retain zaiToolStream")
+				}
+			})
+		}
+	}
+}
+
 func TestBuiltInMiniMaxThinkingMetadata(t *testing.T) {
 	for _, provider := range []string{"minimax", "minimax-cn"} {
 		for _, modelID := range []string{"MiniMax-M2.7", "MiniMax-M2.7-highspeed"} {
@@ -503,9 +561,12 @@ func TestBuiltInMiniMaxThinkingMetadata(t *testing.T) {
 			if !ok {
 				t.Fatalf("%s/MiniMax-M3 is missing from the built-in catalog", provider)
 			}
-			levels := SupportedThinkingLevels(model)
-			if !slices.Contains(levels, ModelThinkingOff) {
-				t.Fatalf("thinking levels = %v, want off included", levels)
+			if model.Protocol != ProtocolAnthropicMessages {
+				t.Fatalf("protocol = %q, want Anthropic Messages", model.Protocol)
+			}
+			want := []ModelThinkingLevel{ModelThinkingOff, ModelThinkingHigh}
+			if got := SupportedThinkingLevels(model); !slices.Equal(got, want) {
+				t.Fatalf("thinking levels = %v, want %v", got, want)
 			}
 		})
 	}
@@ -534,9 +595,11 @@ func TestBuiltInOpenCodeGoMiniMaxThinkingMetadata(t *testing.T) {
 	if !ok {
 		t.Fatal("opencode-go/minimax-m3 is missing from the built-in catalog")
 	}
-	m3Levels := SupportedThinkingLevels(m3)
-	if !slices.Contains(m3Levels, ModelThinkingOff) || !slices.Contains(m3Levels, ModelThinkingHigh) {
-		t.Fatalf("M3 thinking levels = %v, want off and high included", m3Levels)
+	if m3.Protocol != ProtocolAnthropicMessages {
+		t.Fatalf("M3 protocol = %q, want Anthropic Messages", m3.Protocol)
+	}
+	if got, want := SupportedThinkingLevels(m3), []ModelThinkingLevel{ModelThinkingOff, ModelThinkingHigh}; !slices.Equal(got, want) {
+		t.Fatalf("M3 thinking levels = %v, want %v", got, want)
 	}
 	if m3.ThinkingVisibility == ModelThinkingHidden {
 		t.Fatalf("M3 thinking visibility = %q, want provider default", m3.ThinkingVisibility)

@@ -2,6 +2,17 @@ package main
 
 import "strings"
 
+type openCodeVariant struct {
+	Source   string
+	Provider string
+	BaseURL  string
+}
+
+var openCodeVariants = []openCodeVariant{
+	{Source: "opencode", Provider: "opencode", BaseURL: "https://opencode.ai/zen"},
+	{Source: "opencode-go", Provider: "opencode-go", BaseURL: "https://opencode.ai/zen/go"},
+}
+
 var openCodeThinkingProfiles = map[modelRouteKey]thinkingProfile{
 	{Provider: "opencode", ModelID: "deepseek-v4-flash"}:      effortThinking("", true, "high", "max"),
 	{Provider: "opencode", ModelID: "deepseek-v4-flash-free"}: effortThinking("", true, "high", "max"),
@@ -19,32 +30,28 @@ var openCodeThinkingProfiles = map[modelRouteKey]thinkingProfile{
 }
 
 func fromOpenCode(catalog map[string]sourceProvider) []model {
-	variants := []struct{ source, provider, base string }{
-		{"opencode", "opencode", "https://opencode.ai/zen"},
-		{"opencode-go", "opencode-go", "https://opencode.ai/zen/go"},
-	}
 	var models []model
-	for _, variant := range variants {
-		for id, source := range catalog[variant.source].Models {
+	for _, variant := range openCodeVariants {
+		for id, source := range catalog[variant.Source].Models {
 			if !source.ToolCall || source.Status == "deprecated" {
 				continue
 			}
 			protocol := "openai-completions"
-			baseURL := variant.base + "/v1"
+			baseURL := variant.BaseURL + "/v1"
 			compat := compatibility{Kind: "openai", MaxTokensField: "max_tokens"}
 			switch source.Provider.NPM {
 			case "@ai-sdk/anthropic":
 				protocol = "anthropic-messages"
-				baseURL = variant.base
+				baseURL = variant.BaseURL
 				compat = compatibility{}
 			case "@ai-sdk/openai", "@ai-sdk/google":
 				// These require protocols that the Go package does not implement yet.
 				continue
 			}
 			// These models are mislabeled upstream and use the OpenAI-compatible path.
-			if variant.provider == "opencode-go" && (id == "minimax-m2.7" || id == "qwen3.5-plus" || id == "qwen3.6-plus") {
+			if variant.Provider == "opencode-go" && (id == "minimax-m2.7" || id == "qwen3.5-plus" || id == "qwen3.6-plus") {
 				protocol = "openai-completions"
-				baseURL = variant.base + "/v1"
+				baseURL = variant.BaseURL + "/v1"
 				compat = compatibility{Kind: "openai", MaxTokensField: "max_tokens"}
 				if strings.HasPrefix(id, "qwen") {
 					compat.ThinkingFormat = "qwen"
@@ -54,7 +61,7 @@ func fromOpenCode(catalog map[string]sourceProvider) []model {
 				continue
 			}
 			models = append(models, normalize(id, source, providerRule{
-				Provider: variant.provider, Protocol: protocol, BaseURL: baseURL, Compat: compat,
+				Provider: variant.Provider, Protocol: protocol, BaseURL: baseURL, Compat: compat,
 			}))
 		}
 	}

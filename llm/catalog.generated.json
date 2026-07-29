@@ -3392,6 +3392,11 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://api.minimax.io/anthropic",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text",
       "image"
@@ -3532,6 +3537,11 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://api.minimaxi.com/anthropic",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text",
       "image"
@@ -4097,6 +4107,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.moonshot.ai/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text",
       "image"
@@ -4125,6 +4140,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.moonshot.ai/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text",
       "image"
@@ -4387,6 +4407,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.moonshot.cn/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text",
       "image"
@@ -4415,6 +4440,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.moonshot.cn/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text",
       "image"
@@ -7543,6 +7573,11 @@
     "protocol": "anthropic-messages",
     "baseUrl": "https://opencode.ai/zen/go",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text",
       "image"
@@ -8274,6 +8309,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.xiaomimimo.com/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text",
       "image"
@@ -8287,6 +8327,7 @@
     "contextWindow": 1048576,
     "maxTokens": 131072,
     "compat": {
+      "supportsReasoningEffort": false,
       "requiresReasoningContentOnAssistantMessages": true,
       "thinkingFormat": "deepseek"
     }
@@ -8298,6 +8339,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.xiaomimimo.com/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text"
     ],
@@ -8310,6 +8356,7 @@
     "contextWindow": 1048576,
     "maxTokens": 131072,
     "compat": {
+      "supportsReasoningEffort": false,
       "requiresReasoningContentOnAssistantMessages": true,
       "thinkingFormat": "deepseek"
     }
@@ -8321,6 +8368,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.xiaomimimo.com/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text"
     ],
@@ -8333,6 +8385,7 @@
     "contextWindow": 1048576,
     "maxTokens": 131072,
     "compat": {
+      "supportsReasoningEffort": false,
       "requiresReasoningContentOnAssistantMessages": true,
       "thinkingFormat": "deepseek"
     }
@@ -8344,6 +8397,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://token-plan-ams.xiaomimimo.com/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text",
       "image"
@@ -8357,6 +8415,7 @@
     "contextWindow": 1048576,
     "maxTokens": 131072,
     "compat": {
+      "supportsReasoningEffort": false,
       "requiresReasoningContentOnAssistantMessages": true,
       "thinkingFormat": "deepseek"
     }
@@ -8368,6 +8427,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://token-plan-ams.xiaomimimo.com/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text"
     ],
@@ -8380,6 +8444,7 @@
     "contextWindow": 1048576,
     "maxTokens": 131072,
     "compat": {
+      "supportsReasoningEffort": false,
       "requiresReasoningContentOnAssistantMessages": true,
       "thinkingFormat": "deepseek"
     }
@@ -8391,6 +8456,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://token-plan-cn.xiaomimimo.com/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text",
       "image"
@@ -8404,6 +8474,7 @@
     "contextWindow": 1048576,
     "maxTokens": 131072,
     "compat": {
+      "supportsReasoningEffort": false,
       "requiresReasoningContentOnAssistantMessages": true,
       "thinkingFormat": "deepseek"
     }
@@ -8415,6 +8486,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://token-plan-cn.xiaomimimo.com/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text"
     ],
@@ -8427,6 +8503,7 @@
     "contextWindow": 1048576,
     "maxTokens": 131072,
     "compat": {
+      "supportsReasoningEffort": false,
       "requiresReasoningContentOnAssistantMessages": true,
       "thinkingFormat": "deepseek"
     }
@@ -8438,6 +8515,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://token-plan-sgp.xiaomimimo.com/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text",
       "image"
@@ -8451,6 +8533,7 @@
     "contextWindow": 1048576,
     "maxTokens": 131072,
     "compat": {
+      "supportsReasoningEffort": false,
       "requiresReasoningContentOnAssistantMessages": true,
       "thinkingFormat": "deepseek"
     }
@@ -8462,6 +8545,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://token-plan-sgp.xiaomimimo.com/v1",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text"
     ],
@@ -8474,6 +8562,7 @@
     "contextWindow": 1048576,
     "maxTokens": 131072,
     "compat": {
+      "supportsReasoningEffort": false,
       "requiresReasoningContentOnAssistantMessages": true,
       "thinkingFormat": "deepseek"
     }
@@ -8485,6 +8574,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.z.ai/api/coding/paas/v4",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text"
     ],
@@ -8510,6 +8604,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.z.ai/api/coding/paas/v4",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text"
     ],
@@ -8535,6 +8634,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.z.ai/api/coding/paas/v4",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text"
     ],
@@ -8560,6 +8664,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.z.ai/api/coding/paas/v4",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text"
     ],
@@ -8617,6 +8726,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://api.z.ai/api/coding/paas/v4",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text",
       "image"
@@ -8643,6 +8757,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://open.bigmodel.cn/api/coding/paas/v4",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text"
     ],
@@ -8668,6 +8787,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://open.bigmodel.cn/api/coding/paas/v4",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text"
     ],
@@ -8693,6 +8817,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://open.bigmodel.cn/api/coding/paas/v4",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text"
     ],
@@ -8718,6 +8847,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://open.bigmodel.cn/api/coding/paas/v4",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text"
     ],
@@ -8775,6 +8909,11 @@
     "protocol": "openai-completions",
     "baseUrl": "https://open.bigmodel.cn/api/coding/paas/v4",
     "reasoning": true,
+    "thinkingLevelMap": {
+      "low": null,
+      "medium": null,
+      "minimal": null
+    },
     "input": [
       "text",
       "image"
