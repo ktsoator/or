@@ -221,7 +221,7 @@ function UtilitySelect({
           aria-busy={busy}
           disabled={busy || disabled || options.length === 0}
           className={cn(
-            'inline-flex h-9 w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-left text-[0.8125rem] text-stone-800 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(237,237,237)]',
+            'inline-flex h-9 w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-left text-[0.8125rem] text-stone-800 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:bg-[rgb(241,241,241)] data-[state=open]:bg-[rgb(237,237,237)]',
             busy
               ? 'disabled:cursor-wait disabled:opacity-100'
               : 'disabled:cursor-not-allowed disabled:opacity-60',
@@ -301,7 +301,7 @@ function AdvancedRouteMenu({
           title={t('settings.utilityModelAdvanced')}
           aria-busy={busy}
           disabled={busy}
-          className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-[10px] bg-[rgb(246,246,246)] text-stone-500 outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-800 focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(237,237,237)] disabled:cursor-wait disabled:opacity-100"
+          className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-[10px] bg-[rgb(246,246,246)] text-stone-500 outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-800 focus-visible:bg-[rgb(241,241,241)] focus-visible:text-stone-800 data-[state=open]:bg-[rgb(237,237,237)] disabled:cursor-wait disabled:opacity-100"
         >
           <Ellipsis className="size-4" aria-hidden="true" />
         </button>

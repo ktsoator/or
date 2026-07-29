@@ -119,7 +119,7 @@ export function SettingsPage({
       <div className="window-titlebar-drag-surface" aria-hidden="true" />
       <aside className="settings-sidebar flex min-h-0 flex-col border-r border-stone-200/80 bg-[#fbfbfa] px-3 py-4 max-md:border-r-0 max-md:border-b max-md:px-3 max-md:py-2.5">
         <button
-          className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-[10px] px-2.5 text-[0.84375rem] font-normal text-stone-500 outline-none transition-colors hover:bg-stone-200/65 hover:text-stone-900 focus-visible:ring-2 focus-visible:ring-stone-300 max-md:w-fit"
+          className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-[10px] px-2.5 text-[0.84375rem] font-normal text-stone-500 outline-none transition-colors hover:bg-stone-200/65 hover:text-stone-900 focus-visible:bg-stone-200/65 focus-visible:text-stone-900 max-md:w-fit"
           type="button"
           onClick={onBack}
         >
@@ -216,7 +216,7 @@ function SettingsNavItem({
   return (
     <button
       className={cn(
-        'mb-0.5 flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[0.84375rem] font-normal text-stone-700 outline-none transition-colors hover:bg-stone-200/60 hover:text-stone-950 focus-visible:ring-2 focus-visible:ring-stone-300 max-md:mb-0 max-md:w-auto max-md:shrink-0 max-md:pr-3',
+        'mb-0.5 flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[0.84375rem] font-normal text-stone-700 outline-none transition-colors hover:bg-stone-200/60 hover:text-stone-950 focus-visible:bg-stone-200/60 focus-visible:text-stone-950 max-md:mb-0 max-md:w-auto max-md:shrink-0 max-md:pr-3',
         active && 'bg-[rgb(237,237,237)] text-stone-950 hover:bg-[rgb(237,237,237)]',
       )}
       type="button"
@@ -447,7 +447,7 @@ function Toggle({
   return (
     <button
       className={cn(
-        'relative h-[1.375rem] w-9 cursor-pointer rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-stone-400 focus-visible:ring-offset-2',
+        'relative h-[1.375rem] w-9 cursor-pointer rounded-full outline-none transition-[background-color,filter] focus-visible:brightness-90',
         checked ? 'bg-stone-900' : 'bg-stone-300',
       )}
       type="button"
@@ -499,7 +499,7 @@ function SelectControl({
     >
       <DropdownMenu.Trigger asChild>
         <button
-          className="group inline-flex h-9 min-w-[9.75rem] max-w-[14rem] cursor-pointer items-center justify-between gap-2 rounded-[11px] border border-stone-200 bg-white px-3 text-[0.8125rem] font-normal text-stone-800 outline-none transition-[background-color,border-color,box-shadow] hover:bg-[rgb(241,241,241)] focus-visible:border-stone-400 focus-visible:ring-2 focus-visible:ring-stone-200 data-[state=open]:bg-[rgb(237,237,237)] max-sm:min-w-[7.75rem] max-sm:max-w-[9.75rem]"
+          className="group inline-flex h-9 min-w-[9.75rem] max-w-[14rem] cursor-pointer items-center justify-between gap-2 rounded-[11px] border border-stone-200 bg-white px-3 text-[0.8125rem] font-normal text-stone-800 outline-none transition-[background-color,border-color] hover:bg-[rgb(241,241,241)] focus-visible:border-stone-400 focus-visible:bg-[rgb(241,241,241)] data-[state=open]:bg-[rgb(237,237,237)] max-sm:min-w-[7.75rem] max-sm:max-w-[9.75rem]"
           type="button"
           aria-label={ariaLabel}
         >

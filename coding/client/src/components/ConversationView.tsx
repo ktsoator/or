@@ -43,6 +43,7 @@ export function ConversationView({
       centered={centered}
       projectPickerVisible={false}
       workspaces={workspaces}
+      workspacePath={thread.session.workspacePath}
       models={models}
       modelProvider={thread.session.modelProvider}
       modelID={thread.session.modelId}

@@ -175,7 +175,7 @@ export function WorkbenchPanel({
             {creationError}
           </span>
           <button
-            className="grid size-5 shrink-0 cursor-pointer place-items-center rounded text-red-500 hover:bg-red-50 hover:text-red-800 focus-visible:outline-2 focus-visible:outline-red-300"
+            className="grid size-5 shrink-0 cursor-pointer place-items-center rounded text-red-500 outline-none hover:bg-red-50 hover:text-red-800 focus-visible:bg-red-50 focus-visible:text-red-800"
             type="button"
             title={t('workbench.dismissError')}
             aria-label={t('workbench.dismissError')}

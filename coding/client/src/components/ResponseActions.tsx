@@ -89,7 +89,7 @@ export function ResponseActions({
             <Tooltip.Root>
               <Tooltip.Trigger asChild>
                 <button
-                  className="group inline-flex h-7 min-w-0 max-w-full shrink cursor-pointer items-center rounded-lg px-2 text-[0.75rem] leading-5 text-stone-400 tabular-nums outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-600 focus-visible:bg-[rgb(241,241,241)] focus-visible:text-stone-600 focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=delayed-open]:bg-[rgb(241,241,241)] data-[state=delayed-open]:text-stone-600"
+                  className="group inline-flex h-7 min-w-0 max-w-full shrink cursor-pointer items-center rounded-lg px-2 text-[0.75rem] leading-5 text-stone-400 tabular-nums outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-600 focus-visible:bg-[rgb(241,241,241)] focus-visible:text-stone-600 data-[state=delayed-open]:bg-[rgb(241,241,241)] data-[state=delayed-open]:text-stone-600"
                   type="button"
                   aria-label={t('actions.showUsage')}
                   data-testid="response-usage-trigger"
@@ -180,7 +180,7 @@ function ActionButton({
       <Tooltip.Trigger asChild>
         <button
           className={cn(
-            'grid size-7 shrink-0 cursor-pointer place-items-center rounded-lg text-stone-400 outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-700 focus-visible:ring-2 focus-visible:ring-stone-300 disabled:cursor-not-allowed disabled:opacity-30',
+            'grid size-7 shrink-0 cursor-pointer place-items-center rounded-lg text-stone-400 outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-700 focus-visible:bg-[rgb(241,241,241)] focus-visible:text-stone-700 disabled:cursor-not-allowed disabled:opacity-30',
             pressed && 'bg-[rgb(237,237,237)] text-stone-800',
           )}
           type="button"

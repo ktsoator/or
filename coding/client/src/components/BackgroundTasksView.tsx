@@ -114,7 +114,7 @@ function TaskListItem({
   return (
     <button
       className={cn(
-        'mb-0.5 grid w-full cursor-pointer grid-cols-[1rem_minmax(0,1fr)] gap-x-2 rounded-md px-2 py-2 text-left outline-none transition-colors last:mb-0 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-stone-300',
+        'mb-0.5 grid w-full cursor-pointer grid-cols-[1rem_minmax(0,1fr)] gap-x-2 rounded-md px-2 py-2 text-left outline-none transition-colors last:mb-0 focus-visible:bg-stone-100',
         active
           ? 'bg-white text-stone-900 shadow-[0_1px_2px_rgba(28,25,23,0.08)] ring-1 ring-stone-200'
           : 'text-stone-600 hover:bg-stone-100',

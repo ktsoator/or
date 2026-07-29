@@ -17,7 +17,7 @@ export function Thinking({ item }: { item: ThinkingItem }) {
     <Collapsible open={open} onOpenChange={setOpen} className="my-0.5 animate-[fade-in_160ms_ease-out] text-stone-400">
       <CollapsibleTrigger
         className={cn(
-          'group flex cursor-pointer items-center gap-1.5 border-0 bg-transparent py-0.5 text-[0.8125rem] font-normal text-inherit hover:text-stone-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400',
+          'group flex cursor-pointer items-center gap-1.5 border-0 bg-transparent py-0.5 text-[0.8125rem] font-normal text-inherit outline-none hover:text-stone-700 focus-visible:rounded-sm focus-visible:bg-stone-100 focus-visible:text-stone-700',
           item.streaming && 'streaming-sheen',
         )}
       >

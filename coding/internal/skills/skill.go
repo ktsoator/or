@@ -32,6 +32,10 @@ type Skill struct {
 	Name string
 	// Description is the model-visible note on when to use the skill. Required.
 	Description string
+	// DisableModelInvocation keeps the skill out of the model-visible listing
+	// and prevents the skill tool from loading it. The product may still list
+	// and explicitly invoke the skill on behalf of the user.
+	DisableModelInvocation bool
 	// Content is the SKILL.md body, injected verbatim (after placeholder
 	// expansion) when the skill is invoked. It is not part of the initial context.
 	Content string

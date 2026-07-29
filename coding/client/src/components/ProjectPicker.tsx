@@ -46,7 +46,7 @@ export function ProjectPicker({
           type="button"
           className={cn(
             composerMenuTriggerClass,
-            'max-w-full gap-2 disabled:opacity-45 max-sm:size-9 max-sm:justify-center max-sm:p-0',
+            'h-[30px] max-w-full gap-2 rounded-[10px] disabled:opacity-45 max-sm:size-[30px] max-sm:justify-center max-sm:p-0',
           )}
           aria-label={t('workspace.chooseProject')}
           disabled={disabled}

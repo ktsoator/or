@@ -11,8 +11,9 @@ import (
 // understands. Additional fields (allowed-tools, hooks, ...) are intentionally
 // ignored for now.
 type frontmatter struct {
-	Name        string `yaml:"name"`
-	Description string `yaml:"description"`
+	Name                   string `yaml:"name"`
+	Description            string `yaml:"description"`
+	DisableModelInvocation bool   `yaml:"disable-model-invocation"`
 }
 
 // parseSKILL splits a SKILL.md file into its frontmatter and body. It requires a

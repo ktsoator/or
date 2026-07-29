@@ -32,7 +32,7 @@ export function ProfileMenu({
           <DropdownMenu.Trigger asChild>
             <button
               className={cn(
-                'flex h-8 cursor-pointer items-center overflow-hidden outline-none transition-colors hover:bg-[rgb(246,246,246)] focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(237,237,237)]',
+                'flex h-8 cursor-pointer items-center overflow-hidden outline-none transition-colors hover:bg-[rgb(246,246,246)] focus-visible:bg-[rgb(246,246,246)] data-[state=open]:bg-[rgb(237,237,237)]',
                 collapsed
                   ? 'w-8 flex-none justify-center rounded-full p-0.5'
                   : 'min-w-0 flex-1 gap-2.5 rounded-[10px] px-2.5 text-left',

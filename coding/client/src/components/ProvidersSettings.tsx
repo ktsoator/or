@@ -340,7 +340,7 @@ function DefaultModelSection({
   // cursor has to say why a trigger is dead: a wait cursor during a save, and
   // not-allowed when there is simply nothing to choose from yet.
   const triggerClass = cn(
-    'inline-flex h-9 min-w-0 items-center gap-1.5 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-left text-[0.8125rem] text-stone-800 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(237,237,237)] disabled:opacity-60',
+    'inline-flex h-9 min-w-0 items-center gap-1.5 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-left text-[0.8125rem] text-stone-800 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:bg-[rgb(241,241,241)] data-[state=open]:bg-[rgb(237,237,237)] disabled:opacity-60',
     saving ? 'cursor-wait' : 'cursor-pointer disabled:cursor-not-allowed',
   )
 
@@ -452,7 +452,7 @@ function DefaultModelSection({
                 {/* Model-specific thinking control */}
                 {fixedThinking ? (
                   <FixedThinkingStatus
-                    className="h-9 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-[0.8125rem] text-stone-500 outline-none focus-visible:ring-2 focus-visible:ring-stone-300"
+                    className="h-9 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-[0.8125rem] text-stone-500 outline-none hover:bg-[rgb(241,241,241)] focus-visible:bg-[rgb(241,241,241)]"
                     hidden={current?.thinkingVisibility === 'hidden'}
                   />
                 ) : toggleThinking ? (
@@ -556,7 +556,7 @@ function ProviderPicker({
         <button
           type="button"
           aria-label={t('providers.provider')}
-          className="group flex h-9 min-w-[10.5rem] max-w-[15rem] shrink-0 cursor-pointer items-center gap-2 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-left text-[0.8125rem] outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(237,237,237)] max-sm:min-w-0"
+          className="group flex h-9 min-w-[10.5rem] max-w-[15rem] shrink-0 cursor-pointer items-center gap-2 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-left text-[0.8125rem] outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:bg-[rgb(241,241,241)] data-[state=open]:bg-[rgb(237,237,237)] max-sm:min-w-0"
         >
           {selected && <ProviderIcon provider={selected.id} />}
           <span className={cn('min-w-0 flex-1 truncate', selected ? 'text-stone-800' : 'text-stone-500')}>
@@ -622,7 +622,7 @@ function ConnectionPicker({
         <button
           type="button"
           aria-label={t('providers.connection')}
-          className="group flex h-9 min-w-[10.5rem] max-w-[15rem] shrink-0 cursor-pointer items-center gap-2 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-left text-[0.8125rem] outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:ring-2 focus-visible:ring-stone-300 data-[state=open]:bg-[rgb(237,237,237)] max-sm:min-w-0"
+          className="group flex h-9 min-w-[10.5rem] max-w-[15rem] shrink-0 cursor-pointer items-center gap-2 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-left text-[0.8125rem] outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:bg-[rgb(241,241,241)] data-[state=open]:bg-[rgb(237,237,237)] max-sm:min-w-0"
         >
           <span className={cn('size-2 shrink-0 rounded-full', selected.id === activeValue ? 'bg-stone-800' : 'bg-stone-300')} />
           <span className="min-w-0 flex-1 truncate text-stone-800">{selectedName}</span>
@@ -836,7 +836,7 @@ function ProviderConfigPanel({
             onClick={addConnection}
             aria-label={t('providers.addConnection')}
             title={t('providers.addConnection')}
-            className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-[10px] bg-[rgb(246,246,246)] text-stone-500 outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-950 focus-visible:ring-2 focus-visible:ring-stone-300"
+            className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-[10px] bg-[rgb(246,246,246)] text-stone-500 outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-950 focus-visible:bg-[rgb(241,241,241)] focus-visible:text-stone-950"
           >
             <Plus className="size-4" aria-hidden="true" />
           </button>

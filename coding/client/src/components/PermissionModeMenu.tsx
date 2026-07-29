@@ -63,7 +63,10 @@ export function PermissionModeMenu({
         <button
           data-testid="permission-mode-trigger"
           type="button"
-          className={cn(composerMenuTriggerClass, 'max-w-[10rem] max-sm:px-2')}
+          className={cn(
+            composerMenuTriggerClass,
+            'h-[30px] max-w-[10rem] rounded-[10px] max-sm:px-2',
+          )}
           aria-label={t('permission.choose')}
           title={t(selected.labelKey)}
           disabled={disabled}

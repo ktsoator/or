@@ -76,6 +76,24 @@ func TestHandleSkillsUserOnly(t *testing.T) {
 	}
 }
 
+func TestHandleSkillsIncludesInvocationControl(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	root := filepath.Join(home, ".or", "skills", "deploy")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "---\nname: deploy\ndescription: deploy the app\ndisable-model-invocation: true\n---\nbody\n"
+	if err := os.WriteFile(filepath.Join(root, "SKILL.md"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	resp := getSkills(t, "")
+	if len(resp.User) != 1 || !resp.User[0].DisableModelInvocation {
+		t.Fatalf("user skills = %+v, want manual deploy skill", resp.User)
+	}
+}
+
 func TestHandleSkillsProjectOverridesUser(t *testing.T) {
 	home := t.TempDir()
 	workspace := t.TempDir()

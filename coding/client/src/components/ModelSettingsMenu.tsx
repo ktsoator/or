@@ -109,7 +109,7 @@ export function ModelSettingsMenu({
           type="button"
           className={cn(
             composerMenuTriggerClass,
-            'max-w-[15.5rem] max-sm:max-w-[8rem] max-sm:px-2',
+            'h-[30px] max-w-[15.5rem] rounded-[10px] max-sm:max-w-[8rem] max-sm:px-2',
           )}
           aria-label={t('model.settings')}
           disabled={unavailable}
@@ -240,7 +240,7 @@ export function ModelSettingsMenu({
             <div className="mb-0.5 flex h-[30px] select-none items-center rounded-[10px] px-2.5">
               <span>{t('model.effort')}</span>
               <FixedThinkingStatus
-                className="ml-auto text-stone-500 outline-none focus-visible:ring-2 focus-visible:ring-stone-300"
+                className="ml-auto rounded-md text-stone-500 outline-none focus-visible:bg-stone-100"
                 hidden={currentModel?.thinkingVisibility === 'hidden'}
               />
             </div>

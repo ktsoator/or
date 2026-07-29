@@ -124,7 +124,7 @@ export function Question({
       disabled={(last ? !allAnswered : !answered) || busy}
       onClick={advance}
       aria-label={last ? t('question.submit') : t('question.next')}
-      className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-full bg-black text-white transition-colors hover:bg-stone-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400 disabled:cursor-not-allowed disabled:opacity-25"
+      className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-full bg-black text-white outline-none transition-colors hover:bg-stone-800 focus-visible:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-25"
     >
       {busy ? (
         <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
@@ -211,7 +211,7 @@ export function Question({
             disabled={step === 0 || busy}
             onClick={() => setStep((current) => Math.max(0, current - 1))}
             aria-label={t('question.back')}
-            className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-full text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400 disabled:cursor-not-allowed disabled:opacity-25"
+            className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-full text-stone-500 outline-none transition-colors hover:bg-stone-100 hover:text-stone-900 focus-visible:bg-stone-100 focus-visible:text-stone-900 disabled:cursor-not-allowed disabled:opacity-25"
           >
             <ArrowLeft className="size-3.5" aria-hidden="true" />
           </button>

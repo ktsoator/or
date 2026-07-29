@@ -50,7 +50,7 @@ export function FileChange({ change }: { change: Change }) {
           <span className="text-rose-700">-{change.deletions || 0}</span>
         </span>
         <button
-          className="ml-auto grid size-6 shrink-0 cursor-pointer place-items-center text-stone-400 transition-colors hover:text-stone-950 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-stone-400"
+          className="ml-auto grid size-6 shrink-0 cursor-pointer place-items-center rounded text-stone-400 outline-none transition-colors hover:bg-stone-100 hover:text-stone-950 focus-visible:bg-stone-100 focus-visible:text-stone-950"
           type="button"
           title={copied ? t('diff.copied') : t('diff.copy')}
           aria-label={copied ? t('diff.copied') : t('diff.copy')}
