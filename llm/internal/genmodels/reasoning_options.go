@@ -7,6 +7,10 @@ import (
 
 var generatedThinkingLevels = []string{"off", "minimal", "low", "medium", "high", "xhigh", "max"}
 
+func hasOnlyReasoningOption(options []sourceReasoningOption, optionType string) bool {
+	return len(options) == 1 && options[0].Type == optionType
+}
+
 // applyReasoningOptionMetadata converts verified models.dev effort values for
 // models whose wire protocol accepts named effort levels. Toggle and
 // token-budget controls belong to their protocol-specific compatibility rules.

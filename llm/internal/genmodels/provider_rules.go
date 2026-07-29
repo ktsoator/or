@@ -161,7 +161,11 @@ func normalize(id string, source sourceModel, rule providerRule) model {
 		Compat:         rule.Compat,
 	}
 	applyKimiRequestCompatibility(&candidate)
+	applyMoonshotThinkingCompatibility(&candidate, source.ReasoningOptions)
+	applyMiniMaxThinkingMetadata(&candidate, source.ReasoningOptions)
 	applyTogetherRequestCompatibility(&candidate)
+	applyXiaomiRequestCompatibility(&candidate, source.ReasoningOptions)
+	applyZAIThinkingCompatibility(&candidate, source.ReasoningOptions)
 	applyReasoningOptionMetadata(&candidate, source.ReasoningOptions)
 	return candidate
 }

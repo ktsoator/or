@@ -42,5 +42,8 @@ site/
 # Local code analysis notes
 .analysis/
 
+# On-demand model catalog inspection snapshots
+llm/.genmodels-inspect/
+
 # Coding agent runtime session data
 .coding/

@@ -61,12 +61,7 @@ func collect(ctx context.Context, client *http.Client, options collectOptions) (
 		return nil, errors.New("no catalog source produced models")
 	}
 
-	applyOverrides(models)
-	models = deduplicate(models)
-	if err := validateCatalog(models, options.AllowPartial); err != nil {
-		return nil, err
-	}
-	return models, nil
+	return finalizeModels(models, options.AllowPartial)
 }
 
 func defaultCatalogSources() []catalogSource {
@@ -76,14 +71,36 @@ func defaultCatalogSources() []catalogSource {
 }
 
 func loadModelsDevModels(ctx context.Context, client *http.Client) ([]model, error) {
-	catalog, err := loadModelsDev(ctx, client)
+	snapshot, err := loadModelsDevSnapshot(ctx, client)
 	if err != nil {
 		return nil, err
 	}
-	if err := validateProviderRules(catalog); err != nil {
-		return nil, fmt.Errorf("validate models.dev provider rules: %w", err)
+	return snapshot.Models, nil
+}
+
+type modelsDevSnapshot struct {
+	Catalog map[string]sourceProvider
+	Models  []model
+}
+
+func loadModelsDevSnapshot(ctx context.Context, client *http.Client) (modelsDevSnapshot, error) {
+	catalog, err := loadModelsDev(ctx, client)
+	if err != nil {
+		return modelsDevSnapshot{}, err
 	}
-	return fromModelsDev(catalog), nil
+	if err := validateProviderRules(catalog); err != nil {
+		return modelsDevSnapshot{}, fmt.Errorf("validate models.dev provider rules: %w", err)
+	}
+	return modelsDevSnapshot{Catalog: catalog, Models: fromModelsDev(catalog)}, nil
+}
+
+func finalizeModels(models []model, allowPartial bool) ([]model, error) {
+	applyOverrides(models)
+	models = deduplicate(models)
+	if err := validateCatalog(models, allowPartial); err != nil {
+		return nil, err
+	}
+	return models, nil
 }
 
 func validateCatalog(models []model, allowPartial bool) error {

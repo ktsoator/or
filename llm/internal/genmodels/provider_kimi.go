@@ -2,6 +2,24 @@ package main
 
 import "strings"
 
+var moonshotProviders = map[string]struct{}{
+	"moonshotai":    {},
+	"moonshotai-cn": {},
+}
+
+// applyMoonshotThinkingCompatibility compiles models.dev's pure toggle into
+// Moonshot's DeepSeek-style thinking object. Models that also declare effort,
+// such as Kimi K3, stay on their dedicated effort path.
+func applyMoonshotThinkingCompatibility(candidate *model, options []sourceReasoningOption) {
+	if candidate == nil || !candidate.Reasoning || candidate.Protocol != "openai-completions" {
+		return
+	}
+	if _, ok := moonshotProviders[candidate.Provider]; !ok || !hasOnlyReasoningOption(options, "toggle") {
+		return
+	}
+	applyThinkingProfile(candidate, toggleThinking("deepseek", false))
+}
+
 func applyKimiRequestCompatibility(candidate *model) {
 	if candidate == nil {
 		return

@@ -204,6 +204,17 @@ func TestBuildParamsProviderThinkingWireMatrix(t *testing.T) {
 			},
 		},
 		{
+			name:     "moonshot kimi k2.6 toggle",
+			provider: "moonshotai",
+			modelID:  "kimi-k2.6",
+			cases: []thinkingWireCase{
+				{name: "unset", want: map[string]any{}},
+				{name: "off", reasoning: llm.ModelThinkingOff, want: map[string]any{"thinking": disabled}},
+				{name: "high", reasoning: llm.ModelThinkingHigh, want: map[string]any{"thinking": enabled}},
+				{name: "max clamps high", reasoning: llm.ModelThinkingMax, want: map[string]any{"thinking": enabled}},
+			},
+		},
+		{
 			name:     "moonshot kimi k2.7 always thinking",
 			provider: "moonshotai",
 			modelID:  "kimi-k2.7-code",
@@ -339,6 +350,17 @@ func TestBuildParamsProviderThinkingWireMatrix(t *testing.T) {
 				{name: "off", reasoning: llm.ModelThinkingOff, want: map[string]any{"reasoning": map[string]any{"enabled": false}}},
 				{name: "high", reasoning: llm.ModelThinkingHigh, want: map[string]any{"reasoning": map[string]any{"enabled": true}}},
 				{name: "max clamps high", reasoning: llm.ModelThinkingMax, want: map[string]any{"reasoning": map[string]any{"enabled": true}}},
+			},
+		},
+		{
+			name:     "zai glm toggle",
+			provider: "zai",
+			modelID:  "glm-5.1",
+			cases: []thinkingWireCase{
+				{name: "unset", want: map[string]any{}},
+				{name: "off", reasoning: llm.ModelThinkingOff, want: map[string]any{"thinking": disabled}},
+				{name: "high", reasoning: llm.ModelThinkingHigh, want: map[string]any{"thinking": zaiEnabled}},
+				{name: "max clamps high", reasoning: llm.ModelThinkingMax, want: map[string]any{"thinking": zaiEnabled}},
 			},
 		},
 		{
@@ -691,6 +713,54 @@ func TestGeneratedDirectEffortThinkingLevels(t *testing.T) {
 		}
 		if got := llm.SupportedThinkingLevels(model); !reflect.DeepEqual(got, want) {
 			t.Errorf("%s/%s thinking levels = %v, want %v", ref.provider, ref.modelID, got, want)
+		}
+	}
+}
+
+func TestGeneratedXiaomiToggleThinking(t *testing.T) {
+	wantLevels := []llm.ModelThinkingLevel{
+		llm.ModelThinkingOff,
+		llm.ModelThinkingHigh,
+	}
+	for _, provider := range []string{
+		"xiaomi",
+		"xiaomi-token-plan-cn",
+		"xiaomi-token-plan-ams",
+		"xiaomi-token-plan-sgp",
+	} {
+		model, ok := llm.LookupModel(provider, "mimo-v2.5-pro")
+		if !ok {
+			t.Fatalf("model %s/mimo-v2.5-pro is missing from the catalog", provider)
+		}
+		if got := llm.SupportedThinkingLevels(model); !reflect.DeepEqual(got, wantLevels) {
+			t.Errorf("%s/mimo-v2.5-pro thinking levels = %v, want %v", provider, got, wantLevels)
+		}
+
+		compat := resolveCompat(model)
+		if compat.thinkingFormat != "deepseek" || compat.supportsReasoningEffort {
+			t.Errorf(
+				"%s/mimo-v2.5-pro compatibility = {format:%q effort:%v}, want {deepseek false}",
+				provider,
+				compat.thinkingFormat,
+				compat.supportsReasoningEffort,
+			)
+		}
+		for _, test := range []struct {
+			level llm.ModelThinkingLevel
+			want  string
+		}{
+			{level: llm.ModelThinkingOff, want: "disabled"},
+			{level: llm.ModelThinkingHigh, want: "enabled"},
+		} {
+			params := oai.ChatCompletionNewParams{}
+			applyThinking(&params, model, compat, explicitThinking(test.level))
+			extras := extraFields(t, params)
+			if !reflect.DeepEqual(extras["thinking"], map[string]any{"type": test.want}) {
+				t.Errorf("%s/%s thinking = %#v, want %s", provider, test.level, extras["thinking"], test.want)
+			}
+			if _, present := extras["reasoning_effort"]; present {
+				t.Errorf("%s/%s unexpectedly sends reasoning_effort: %#v", provider, test.level, extras)
+			}
 		}
 	}
 }

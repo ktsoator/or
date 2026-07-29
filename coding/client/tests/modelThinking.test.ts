@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test'
-import { isFixedThinking } from '../src/modelThinking'
+import {
+  isFixedThinking,
+  isToggleThinking,
+  thinkingLevelLabelKey,
+  toggleThinkingLevel,
+} from '../src/modelThinking'
 import type { ModelOption } from '../src/types'
 
 function model(overrides: Partial<ModelOption> = {}): ModelOption {
@@ -31,5 +36,27 @@ describe('isFixedThinking', () => {
         model({ thinkingVisibility: 'hidden', thinkingLevels: ['off'] }),
       ),
     ).toBe(false)
+  })
+})
+
+describe('toggle thinking presentation', () => {
+  test('recognizes only the normalized off/high capability pair', () => {
+    expect(isToggleThinking(model({ thinkingLevels: ['off', 'high'] }))).toBe(true)
+    expect(isToggleThinking(model({ thinkingLevels: ['high', 'off'] }))).toBe(true)
+    expect(isToggleThinking(model({ thinkingLevels: ['high'] }))).toBe(false)
+    expect(isToggleThinking(model({ thinkingLevels: ['off'] }))).toBe(false)
+    expect(isToggleThinking(model({ thinkingLevels: ['off', 'medium'] }))).toBe(false)
+    expect(isToggleThinking(model({ thinkingLevels: ['off', 'high', 'max'] }))).toBe(false)
+  })
+
+  test('presents binary values as off/on while preserving wire levels', () => {
+    const toggle = model({ thinkingLevels: ['off', 'high'] })
+    const effort = model({ thinkingLevels: ['off', 'low', 'high'] })
+
+    expect(thinkingLevelLabelKey(toggle, 'off')).toBe('model.thinkingOff')
+    expect(thinkingLevelLabelKey(toggle, 'high')).toBe('model.thinkingOn')
+    expect(thinkingLevelLabelKey(effort, 'high')).toBe('effort.high')
+    expect(toggleThinkingLevel(false)).toBe('off')
+    expect(toggleThinkingLevel(true)).toBe('high')
   })
 })

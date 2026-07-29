@@ -211,6 +211,51 @@ func TestFromOpenCodeManualReasoningOverrideWins(t *testing.T) {
 	}
 }
 
+func TestFromOpenCodeKeepsMiniMaxRoutesDistinct(t *testing.T) {
+	m27 := sourceModel{Name: "MiniMax M2.7", ToolCall: true, Reasoning: true}
+	m27.Provider.NPM = "@ai-sdk/anthropic"
+	m3 := sourceModel{
+		Name:             "MiniMax M3",
+		ToolCall:         true,
+		Reasoning:        true,
+		ReasoningOptions: []sourceReasoningOption{{Type: "toggle"}},
+	}
+	m3.Provider.NPM = "@ai-sdk/anthropic"
+	catalog := map[string]sourceProvider{
+		"opencode-go": {Models: map[string]sourceModel{
+			"minimax-m2.7": m27,
+			"minimax-m3":   m3,
+		}},
+	}
+
+	models := fromOpenCode(catalog)
+	applyOverrides(models)
+	if len(models) != 2 {
+		t.Fatalf("generated %d models, want 2", len(models))
+	}
+	byID := make(map[string]model, len(models))
+	for _, candidate := range models {
+		byID[candidate.ID] = candidate
+	}
+
+	gotM27 := byID["minimax-m2.7"]
+	if gotM27.Protocol != "openai-completions" || gotM27.BaseURL != "https://opencode.ai/zen/go/v1" {
+		t.Fatalf("M2.7 route = %s %s, want OpenAI /v1", gotM27.Protocol, gotM27.BaseURL)
+	}
+	if gotM27.ThinkingVisibility != "hidden" ||
+		!reflect.DeepEqual(gotM27.ThinkingLevelMap, unsupportedThinkingLevels("off", "minimal", "low", "medium")) {
+		t.Fatalf("M2.7 thinking profile = %#v visibility=%q, want fixed hidden", gotM27.ThinkingLevelMap, gotM27.ThinkingVisibility)
+	}
+
+	gotM3 := byID["minimax-m3"]
+	if gotM3.Protocol != "anthropic-messages" || gotM3.BaseURL != "https://opencode.ai/zen/go" {
+		t.Fatalf("M3 route = %s %s, want Anthropic base route", gotM3.Protocol, gotM3.BaseURL)
+	}
+	if !reflect.DeepEqual(gotM3.ThinkingLevelMap, unsupportedThinkingLevels("minimal", "low", "medium")) {
+		t.Fatalf("M3 thinking profile = %#v, want binary toggle", gotM3.ThinkingLevelMap)
+	}
+}
+
 func TestApplyOpenCodeOverridesKeepsRoutesIndependent(t *testing.T) {
 	candidate := model{
 		ID: "mimo-v2.5", Provider: "xiaomi", Protocol: "openai-completions", Reasoning: true,
