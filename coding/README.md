@@ -75,8 +75,14 @@ cd coding/desktop
 bun run package:dir
 ```
 
-Use `bun run package -- --mac --publish never` to create macOS distributables
-under `coding/desktop/release`.
+Use the following command to create ad-hoc signed macOS distributables under
+`coding/desktop/release`:
+
+```sh
+bun run package -- --mac --publish never \
+  --config.mac.identity=- \
+  --config.mac.hardenedRuntime=false
+```
 
 Repository `vX.Y.Z` tags build Apple Silicon and Intel Mac installers. See
 [`RELEASING.md`](../RELEASING.md).

@@ -49,5 +49,6 @@ Do not move a published tag. Publish a new patch version instead.
 
 ## macOS signing
 
-The current installers are unsigned. Configure signing and notarization before
-public distribution.
+The workflow ad-hoc signs the macOS bundle and verifies its internal signature
+before uploading it. The installers are not signed with an Apple Developer ID
+certificate and are not notarized. Configure both before public distribution.

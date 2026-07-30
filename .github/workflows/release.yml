@@ -87,7 +87,16 @@ jobs:
 
       - name: Package Coding
         working-directory: coding/desktop
-        run: bun run package -- --mac --publish never
+        run: >-
+          bun run package --
+          --mac
+          --publish never
+          --config.mac.identity=-
+          --config.mac.hardenedRuntime=false
+
+      - name: Verify application signature
+        working-directory: coding/desktop
+        run: codesign --verify --deep --strict --verbose=2 release/mac*/Coding.app
 
       - name: Collect installers
         uses: actions/upload-artifact@v4
