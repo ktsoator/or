@@ -107,9 +107,48 @@ jobs:
             coding/desktop/release/*.dmg
             coding/desktop/release/*.zip
 
+  build-coding-windows:
+    name: Build Coding (Windows x64)
+    needs: validate
+    runs-on: windows-2025
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install client dependencies
+        working-directory: coding/client
+        run: bun install --frozen-lockfile
+
+      - name: Install desktop dependencies
+        working-directory: coding/desktop
+        run: bun install --frozen-lockfile
+
+      - name: Package Coding
+        working-directory: coding/desktop
+        run: bun run package -- --win nsis --x64 --publish never
+
+      - name: Collect installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: coding-windows-x64
+          if-no-files-found: error
+          path: coding/desktop/release/*.exe
+
   publish:
     name: Publish release
-    needs: build-coding
+    needs:
+      - build-coding
+      - build-coding-windows
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -121,7 +160,7 @@ jobs:
       - name: Download installers
         uses: actions/download-artifact@v8
         with:
-          pattern: coding-mac-*
+          pattern: coding-*
           path: release-assets
           merge-multiple: true
 

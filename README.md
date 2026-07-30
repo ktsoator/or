@@ -133,7 +133,7 @@ API reference: [`or/llm`](https://pkg.go.dev/github.com/ktsoator/or/llm) ·
 ## Releases
 
 The Go SDK and Coding share a version. Pushing a `vX.Y.Z` tag creates the
-GitHub Release and attaches the macOS builds. See
+GitHub Release and attaches the macOS and Windows builds. See
 [RELEASING.md](RELEASING.md).
 
 ## Supported protocols

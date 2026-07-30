@@ -200,14 +200,15 @@ func localWriteTarget(path string) (string, error) {
 // non-zero exit is returned in ExecResult with a nil error; only a failure to
 // start the process is a Go error. ctx cancellation stops the command.
 func (LocalOps) Exec(ctx context.Context, command string, dir string) (ExecResult, error) {
-	cmd := exec.CommandContext(ctx, "bash", "-c", command)
-	cmd.Dir = dir
+	cmd, err := newBashCommandContext(ctx, command, dir)
+	if err != nil {
+		return ExecResult{}, err
+	}
 	// Run in a dedicated process group and, on cancellation or timeout, kill the
 	// whole group. The stock CommandContext cancel signals only `bash -c`, which
 	// leaves grandchildren — the binary `go run` compiles and execs, a dev server,
 	// npm's child — alive and holding their ports. WaitDelay bounds how long we
 	// wait for the pipe to drain if a stray child keeps it open.
-	configureProcessGroup(cmd)
 	cmd.Cancel = func() error { return terminateProcessGroup(cmd, syscall.SIGKILL) }
 	cmd.WaitDelay = 10 * time.Second
 	out, err := cmd.CombinedOutput()

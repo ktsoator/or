@@ -1,6 +1,6 @@
 {
   "name": "coding-desktop",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "private": true,
   "description": "Electron desktop shell for Coding",
   "author": "Kt <ktsoator@gmail.com>",
@@ -54,6 +54,7 @@
       ]
     },
     "win": {
+      "icon": "build/appicon.png",
       "target": "nsis"
     },
     "linux": {

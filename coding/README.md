@@ -75,6 +75,11 @@ cd coding/desktop
 bun run package:dir
 ```
 
+Windows builds require Git for Windows. Coding looks for Git Bash in the
+standard system and per-user install locations, then checks for Git on `PATH`.
+Set `CODING_GIT_BASH_PATH` to the full path of `bash.exe` for a custom
+installation.
+
 Use the following command to create ad-hoc signed macOS distributables under
 `coding/desktop/release`:
 
@@ -84,8 +89,8 @@ bun run package -- --mac --publish never \
   --config.mac.hardenedRuntime=false
 ```
 
-Repository `vX.Y.Z` tags build Apple Silicon and Intel Mac installers. See
-[`RELEASING.md`](../RELEASING.md).
+Repository `vX.Y.Z` tags build Apple Silicon and Intel Mac installers plus a
+Windows x64 installer. See [`RELEASING.md`](../RELEASING.md).
 
 The desktop and standalone shells share provider settings, sessions and
 transcripts under `~/.or/coding`. Set `OR_DATA_DIR` to use another location.

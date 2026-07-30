@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { stat } from 'node:fs/promises'
 import http from 'node:http'
 import path from 'node:path'
@@ -292,7 +292,18 @@ function focusMainWindow(): void {
 }
 
 function stopChild(child: ChildProcessWithoutNullStreams | null): void {
-  if (child && child.exitCode === null && child.signalCode === null) child.kill('SIGTERM')
+  if (!child || child.exitCode !== null || child.signalCode !== null) return
+  if (process.platform === 'win32' && child.pid !== undefined) {
+    const taskkill = process.env.SystemRoot
+      ? path.join(process.env.SystemRoot, 'System32', 'taskkill.exe')
+      : 'taskkill.exe'
+    const result = spawnSync(taskkill, ['/PID', String(child.pid), '/T', '/F'], {
+      windowsHide: true,
+      stdio: 'ignore',
+    })
+    if (!result.error && result.status === 0) return
+  }
+  child.kill('SIGTERM')
 }
 
 function failStartup(error: unknown): void {

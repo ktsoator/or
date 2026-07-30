@@ -2,7 +2,7 @@
 
 The Go packages and Coding share one `vX.Y.Z` version. A tag publishes the Go
 module and creates a GitHub Release with Coding installers for Apple Silicon and
-Intel Macs.
+Intel Macs and Windows x64.
 
 ## Prepare
 
@@ -43,7 +43,8 @@ git push origin v0.6.0
 ```
 
 The release workflow checks the package versions, runs the tests, builds the
-macOS installers, generates `SHA256SUMS`, and creates the GitHub Release.
+macOS and Windows installers, generates `SHA256SUMS`, and creates the GitHub
+Release.
 
 Do not move a published tag. Publish a new patch version instead.
 
@@ -52,3 +53,8 @@ Do not move a published tag. Publish a new patch version instead.
 The workflow ad-hoc signs the macOS bundle and verifies its internal signature
 before uploading it. The installers are not signed with an Apple Developer ID
 certificate and are not notarized. Configure both before public distribution.
+
+## Windows
+
+The workflow creates an unsigned x64 NSIS installer. Running Coding on Windows
+requires Git for Windows.
