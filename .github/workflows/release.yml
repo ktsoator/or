@@ -1,0 +1,134 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate version
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Match Coding versions to tag
+        run: node scripts/set-version.mjs "${GITHUB_REF_NAME}" --check
+
+      - name: Check release notes
+        run: test -f ".github/release-notes/${GITHUB_REF_NAME}.md"
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Test SDK and Coding service
+        run: go test ./...
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install client dependencies
+        working-directory: coding/client
+        run: bun install --frozen-lockfile
+
+      - name: Lint Coding client
+        working-directory: coding/client
+        run: bun run lint
+
+      - name: Test Coding client
+        working-directory: coding/client
+        run: bun run test
+
+  build-coding:
+    name: Build Coding (${{ matrix.arch }})
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            arch: arm64
+          - os: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install client dependencies
+        working-directory: coding/client
+        run: bun install --frozen-lockfile
+
+      - name: Install desktop dependencies
+        working-directory: coding/desktop
+        run: bun install --frozen-lockfile
+
+      - name: Package Coding
+        working-directory: coding/desktop
+        run: bun run package -- --mac --publish never
+
+      - name: Collect installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: coding-mac-${{ matrix.arch }}
+          if-no-files-found: error
+          path: |
+            coding/desktop/release/*.dmg
+            coding/desktop/release/*.zip
+
+  publish:
+    name: Publish release
+    needs: build-coding
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Download installers
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coding-mac-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate checksums
+        working-directory: release-assets
+        run: |
+          find . -maxdepth 1 -type f -print0 \
+            | sort -z \
+            | xargs -0 sha256sum > SHA256SUMS
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: or ${{ github.ref_name }}
+          body_path: .github/release-notes/${{ github.ref_name }}.md
+          files: release-assets/*
+          generate_release_notes: true
+          make_latest: ${{ contains(github.ref_name, '-') && 'false' || 'true' }}
+          prerelease: ${{ contains(github.ref_name, '-') }}

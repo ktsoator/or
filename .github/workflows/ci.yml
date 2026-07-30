@@ -33,6 +33,11 @@ jobs:
           go mod tidy
           git diff --exit-code -- go.mod go.sum
 
+      - name: Check Coding package versions
+        run: |
+          version=$(node -p "require('./coding/desktop/package.json').version")
+          node scripts/set-version.mjs "$version" --check
+
       - name: Vet
         run: go vet ./...
 
@@ -89,3 +94,59 @@ jobs:
 
       - name: Test with race detector
         run: go test -race ./...
+
+  coding-client:
+    name: Coding client
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        working-directory: coding/client
+        run: bun install --frozen-lockfile
+
+      - name: Lint
+        working-directory: coding/client
+        run: bun run lint
+
+      - name: Test
+        working-directory: coding/client
+        run: bun run test
+
+      - name: Build
+        working-directory: coding/client
+        run: bun run build
+
+  coding-desktop:
+    name: Coding desktop
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install desktop dependencies
+        working-directory: coding/desktop
+        run: bun install --frozen-lockfile
+
+      - name: Build desktop main process
+        working-directory: coding/desktop
+        run: bun run build:main
+
+      - name: Build Go sidecar
+        working-directory: coding/desktop
+        run: bun run build:sidecar

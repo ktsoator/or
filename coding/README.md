@@ -3,6 +3,8 @@
 Coding is the product built on the reusable `agent` and `llm` libraries. Its
 packages are product implementation details and are not a public SDK.
 
+Coding and the Go packages use the same version.
+
 ## Layout
 
 ```text
@@ -73,8 +75,11 @@ cd coding/desktop
 bun run package:dir
 ```
 
-Use `bun run package` to create the configured macOS, Windows or Linux
-distributable under `coding/desktop/release`.
+Use `bun run package -- --mac --publish never` to create macOS distributables
+under `coding/desktop/release`.
+
+Repository `vX.Y.Z` tags build Apple Silicon and Intel Mac installers. See
+[`RELEASING.md`](../RELEASING.md).
 
 The desktop and standalone shells share provider settings, sessions and
 transcripts under `~/.or/coding`. Set `OR_DATA_DIR` to use another location.

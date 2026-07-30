@@ -16,6 +16,7 @@
 `or` 是一个模块化的 Go 工具集,用于构建基于语言模型和上层 agent 的应用。它的
 LLM 包与具体提供方无关,在底层模型和通信协议不断更替的同时,让对话、工具、推理
 和流式事件保持稳定;agent 包则在此之上构建工具调用循环、状态管理和流式事件。
+仓库中的 Coding 是基于这些包开发的 coding agent。
 
 ## 为什么选择 `or`
 
@@ -34,7 +35,8 @@ LLM 包与具体提供方无关,在底层模型和通信协议不断更替的同
 |---|---|---|
 | [`or/llm`](docs/llm/README.zh.md) | 可用 | 统一的模型访问、流式、工具、推理、图像与对话历史 |
 | [`or/agent`](docs/agent/README.zh.md) | 可用 | 有状态的 agent 循环,含工具、流式事件、引导、追加与中止 |
-| [`or/agent/harness`](https://pkg.go.dev/github.com/ktsoator/or/agent/harness) | 可用 | agent 之上的编排层:transcript 持久化、上下文压缩、逐轮系统提示、技能与提示模板 |
+| [`or/harness`](https://pkg.go.dev/github.com/ktsoator/or/harness) | 可用 | agent 之上的编排层:transcript 持久化、上下文压缩、逐轮系统提示、技能与提示模板 |
+| [`Coding`](coding/README.md) | 产品 | Coding agent 服务、React 客户端和 Electron 桌面应用 |
 
 未来的包可以在同样的基础之上构建更上层的编排能力,而无需把根包变成一个庞大的
 单一 API。
@@ -114,11 +116,17 @@ for event := range events {
 
 ## 文档
 
-两个包的指南都在
+SDK 包的指南位于
 **[ktsoator.github.io/or](https://ktsoator.github.io/or/)**。
 
 API 参考:[`or/llm`](https://pkg.go.dev/github.com/ktsoator/or/llm) ·
-[`or/agent`](https://pkg.go.dev/github.com/ktsoator/or/agent)
+[`or/agent`](https://pkg.go.dev/github.com/ktsoator/or/agent) ·
+[`or/harness`](https://pkg.go.dev/github.com/ktsoator/or/harness)
+
+## 发布
+
+Go SDK 和 Coding 共用版本。推送 `vX.Y.Z` tag 后会创建 GitHub Release,并附加
+macOS 安装包。具体流程参见 [RELEASING.md](RELEASING.md)。
 
 ## 支持的协议
 
@@ -133,10 +141,9 @@ OpenCode 等兼容提供方提供了明确的兼容性元数据。目录中存�
 
 ## 项目状态
 
-`v0.5.x` 在 `or/agent` 包之上新增了 `or/agent/harness`——一个有状态的编排层
-(transcript 持久化、上下文压缩、逐轮系统提示与技能),是新接入的推荐基线版本。
-项目仍处于 1.0 之前,因此 API 在次要版本之间可能继续演进。破坏性变更会在发布说明
-中标注。
+`v0.6.0` 是 Coding 的第一个公开版本,同时将 `or/agent` 的有状态编排层
+`or/harness` 移到顶层包。项目仍处于 1.0 之前,因此 API 在次要版本之间可能继续
+演进。破坏性变更会在发布说明中标注。
 
 ## 致谢
 

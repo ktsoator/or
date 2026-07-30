@@ -24,7 +24,7 @@
 如果你只想手动控制一次模型请求，直接用 [`or/llm`](../llm/README.md)。如果你还需要会话
 持久化、自动上下文压缩、按回合构造系统提示词、skills 或 prompt templates，可以在
 `agent` 之上使用
-[`or/agent/harness`](https://pkg.go.dev/github.com/ktsoator/or/agent/harness)。
+[`or/harness`](https://pkg.go.dev/github.com/ktsoator/or/harness)。
 
 ## 一次运行发生什么
 

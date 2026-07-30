@@ -8,7 +8,12 @@ on:
       - "mkdocs.yml"
       - ".github/workflows/docs.yml"
       - ".github/scripts/check_llm_docs.go"
+      - "README.md"
+      - "README.zh.md"
+      - "agent/**"
+      - "harness/**"
       - "llm/**"
+      - "example/agent/**"
       - "example/llm/**"
   pull_request:
     paths:
@@ -16,7 +21,12 @@ on:
       - "mkdocs.yml"
       - ".github/workflows/docs.yml"
       - ".github/scripts/check_llm_docs.go"
+      - "README.md"
+      - "README.zh.md"
+      - "agent/**"
+      - "harness/**"
       - "llm/**"
+      - "example/agent/**"
       - "example/llm/**"
   workflow_dispatch:
 
@@ -40,8 +50,8 @@ jobs:
         run: go run ./.github/scripts/check_llm_docs.go
       - name: Build documentation
         run: mkdocs build --strict
-      - name: Compile LLM examples
-        run: go test ./example/llm/...
+      - name: Compile SDK examples
+        run: go test ./example/llm/... ./example/agent/...
 
   deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

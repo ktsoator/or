@@ -12,7 +12,7 @@ started and the conventions this project follows.
 
 ## Development setup
 
-This is a Go project. To work on it:
+For Go changes:
 
 ```bash
 git clone https://github.com/ktsoator/or.git
@@ -20,6 +20,24 @@ cd or
 go test ./...      # run the full test suite
 go vet ./...       # static checks
 ```
+
+For Coding client or desktop changes, install
+[Bun](https://bun.sh/) and run:
+
+```bash
+cd coding/client
+bun install --frozen-lockfile
+bun run lint
+bun run test
+bun run build
+
+cd ../desktop
+bun install --frozen-lockfile
+bun run build:main
+bun run build:sidecar
+```
+
+See [RELEASING.md](RELEASING.md) for release steps.
 
 ## Branching
 

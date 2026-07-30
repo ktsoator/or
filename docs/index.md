@@ -36,6 +36,7 @@ applications with language models and higher-level agents.
 |---|---|---|
 | [`or/llm`](llm/README.md) | Available | Unified model access, streaming, tools, reasoning, images, and conversation history |
 | [`or/agent`](agent/README.md) | Available | Stateful agent loop with tools, streaming events, steering, follow-ups, and abort |
+| [`or/harness`](https://pkg.go.dev/github.com/ktsoator/or/harness) | Available | Transcript persistence, context compaction, per-turn prompts, and skills over the agent |
 
 Beyond the package guides, the [Internals](internals/overview.md) section walks
 through how the `llm` package works inside, and [Notes](notes/README.md) gathers

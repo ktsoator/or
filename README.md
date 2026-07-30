@@ -17,7 +17,8 @@
 higher-level agents. A provider-neutral LLM package keeps conversations, tools,
 reasoning, and streaming events stable while models and wire protocols change
 underneath, and an agent package builds the tool-call loop, state, and streaming
-events on top.
+events on top. The repository also includes Coding, a coding agent built with
+these packages.
 
 ## Why `or`
 
@@ -39,7 +40,8 @@ events on top.
 |---|---|---|
 | [`or/llm`](docs/llm/README.md) | Available | Unified model access, streaming, tools, reasoning, images, and conversation history |
 | [`or/agent`](docs/agent/README.md) | Available | Stateful agent loop with tools, streaming events, steering, follow-ups, and abort |
-| [`or/agent/harness`](https://pkg.go.dev/github.com/ktsoator/or/agent/harness) | Available | Orchestration over the agent: transcript persistence, context compaction, per-turn system prompt, skills, and prompt templates |
+| [`or/harness`](https://pkg.go.dev/github.com/ktsoator/or/harness) | Available | Orchestration over the agent: transcript persistence, context compaction, per-turn system prompt, skills, and prompt templates |
+| [`Coding`](coding/README.md) | Product | Coding agent service, React client, and Electron desktop application |
 
 Future packages can build higher-level orchestration on the same foundations
 without turning the root package into a single large API.
@@ -121,11 +123,18 @@ for event := range events {
 
 ## Documentation
 
-Guides for both packages live at
+Guides for the SDK packages live at
 **[ktsoator.github.io/or](https://ktsoator.github.io/or/)**.
 
 API reference: [`or/llm`](https://pkg.go.dev/github.com/ktsoator/or/llm) ·
-[`or/agent`](https://pkg.go.dev/github.com/ktsoator/or/agent)
+[`or/agent`](https://pkg.go.dev/github.com/ktsoator/or/agent) ·
+[`or/harness`](https://pkg.go.dev/github.com/ktsoator/or/harness)
+
+## Releases
+
+The Go SDK and Coding share a version. Pushing a `vX.Y.Z` tag creates the
+GitHub Release and attaches the macOS builds. See
+[RELEASING.md](RELEASING.md).
 
 ## Supported protocols
 
@@ -141,11 +150,10 @@ been live-tested; both wire adapters are covered by automated mock-server tests.
 
 ## Project status
 
-`v0.5.x` builds on the `or/agent` package with `or/agent/harness`, a stateful
-orchestration layer (transcript persistence, context compaction, per-turn system
-prompt, and skills), and is the recommended baseline for new integrations. The
-project remains pre-1.0, so APIs may continue to evolve between minor versions.
-Breaking changes will be called out in release notes.
+`v0.6.0` is the first public release of Coding. It also moves `or/harness`, the
+stateful orchestration layer for `or/agent`, to a top-level package. The project
+remains pre-1.0, so APIs may continue to evolve between minor versions. Breaking
+changes will be called out in release notes.
 
 ## Acknowledgements
 
