@@ -6,6 +6,11 @@ import {
   skillArgumentsFromDraft,
   type SkillEntry,
 } from '../src/skills'
+import {
+  composerPreviewCommands,
+  parseExecutableComposerCommand,
+  previewSkillCommandCount,
+} from '../src/components/composerPanelStyles'
 
 describe('Skill composer commands', () => {
   test('recognizes slash search and preserves arguments', () => {
@@ -51,5 +56,20 @@ describe('filterSkills', () => {
     expect(filterSkills(skills, 'PDF')).toEqual([skills[0]])
     expect(filterSkills(skills, 'polished')).toEqual([skills[1]])
     expect(filterSkills(skills, '')).toEqual(skills)
+  })
+})
+
+describe('Composer preview commands', () => {
+  test('keeps compact at a stable keyboard index', () => {
+    expect(composerPreviewCommands[1]).toBe('compact')
+    expect(previewSkillCommandCount('')).toBe(composerPreviewCommands.length)
+    expect(previewSkillCommandCount('compact')).toBe(0)
+  })
+
+  test('recognizes only the executable compact command', () => {
+    expect(parseExecutableComposerCommand('/compact')).toBe('compact')
+    expect(parseExecutableComposerCommand('  /compact  ')).toBe('compact')
+    expect(parseExecutableComposerCommand('/compact now')).toBeUndefined()
+    expect(parseExecutableComposerCommand('/review')).toBeUndefined()
   })
 })

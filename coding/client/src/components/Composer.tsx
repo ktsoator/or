@@ -40,6 +40,9 @@ import { Approval } from './Approval'
 import { ComposerAddMenu } from './ComposerAddMenu'
 import { ComposerSkillSuggestions } from './ComposerSkillSuggestions'
 import {
+  composerPreviewCommands,
+  type ComposerPreviewCommand,
+  parseExecutableComposerCommand,
   previewSkillCommandCount,
   skillSuggestionOptionID,
   skillSuggestionsID,
@@ -243,9 +246,61 @@ export function Composer({
     [],
   )
 
+  const dismissCompactFeedback = () => {
+    if (compactFeedbackTimerRef.current !== undefined) {
+      window.clearTimeout(compactFeedbackTimerRef.current)
+      compactFeedbackTimerRef.current = undefined
+    }
+    setCompactFeedback(undefined)
+  }
+
+  const showCompactFeedback = (feedback: CompactFeedback) => {
+    dismissCompactFeedback()
+    setCompactFeedback(feedback)
+    compactFeedbackTimerRef.current = window.setTimeout(() => {
+      compactFeedbackTimerRef.current = undefined
+      setCompactFeedback(undefined)
+    }, 4000)
+  }
+
+  const compactContext = async () => {
+    if (!onCompact) {
+      showCompactFeedback({
+        kind: 'notice',
+        message: t('model.nothingToCompact'),
+      })
+      return
+    }
+    dismissCompactFeedback()
+    try {
+      await onCompact()
+    } catch (error) {
+      showCompactFeedback({
+        kind: isAPIError(error, 'nothing_to_compact') ? 'notice' : 'error',
+        message: isAPIError(error, 'nothing_to_compact')
+          ? t('model.nothingToCompact')
+          : t('model.compactFailed'),
+      })
+    }
+  }
+
+  const runPreviewCommand = async (command: ComposerPreviewCommand) => {
+    if (command !== 'compact') return
+    setDraftValue('')
+    setAddPanelOpen(false)
+    setSkillSuggestionsDismissed(true)
+    requestAnimationFrame(autosize)
+    await compactContext()
+  }
+
   const submit = async () => {
     const el = ref.current
     if (!el || submittingRef.current) return
+    const command = parseExecutableComposerCommand(draftValue)
+    if (command) {
+      await runPreviewCommand(command)
+      return
+    }
     const argumentsText = draftValue.trim()
     const text = selectedSkill
       ? buildSkillInvocation(selectedSkill.name, argumentsText)
@@ -363,38 +418,6 @@ export function Composer({
     }
   }
 
-  const compactContext = async () => {
-    if (!onCompact) return
-    dismissCompactFeedback()
-    try {
-      await onCompact()
-    } catch (error) {
-      showCompactFeedback({
-        kind: isAPIError(error, 'nothing_to_compact') ? 'notice' : 'error',
-        message: isAPIError(error, 'nothing_to_compact')
-          ? t('model.nothingToCompact')
-          : t('model.compactFailed'),
-      })
-    }
-  }
-
-  const dismissCompactFeedback = () => {
-    if (compactFeedbackTimerRef.current !== undefined) {
-      window.clearTimeout(compactFeedbackTimerRef.current)
-      compactFeedbackTimerRef.current = undefined
-    }
-    setCompactFeedback(undefined)
-  }
-
-  const showCompactFeedback = (feedback: CompactFeedback) => {
-    dismissCompactFeedback()
-    setCompactFeedback(feedback)
-    compactFeedbackTimerRef.current = window.setTimeout(() => {
-      compactFeedbackTimerRef.current = undefined
-      setCompactFeedback(undefined)
-    }, 4000)
-  }
-
   return (
     <footer
       data-testid="composer"
@@ -433,6 +456,7 @@ export function Composer({
             failed={skillsFailed}
             onActiveIndexChange={setActiveSuggestionIndex}
             onPointerNavigation={() => setSkillKeyboardNavigating(false)}
+            onCommandSelect={(command) => void runPreviewCommand(command)}
             onSelect={selectSkill}
           />
           <div
@@ -602,6 +626,15 @@ export function Composer({
                       setSkillSuggestionsDismissed(true)
                       return
                     }
+                    const directCommand =
+                      event.key === 'Enter' && !event.shiftKey
+                        ? parseExecutableComposerCommand(draftValue)
+                        : undefined
+                    if (directCommand) {
+                      event.preventDefault()
+                      void runPreviewCommand(directCommand)
+                      return
+                    }
                     if (
                       skillSuggestionsVisible &&
                       suggestionCount > 0 &&
@@ -609,7 +642,12 @@ export function Composer({
                       !event.shiftKey
                     ) {
                       event.preventDefault()
-                      if (activeSuggestionIndex < previewCommandCount) return
+                      if (activeSuggestionIndex < previewCommandCount) {
+                        const command =
+                          composerPreviewCommands[activeSuggestionIndex]
+                        if (command) void runPreviewCommand(command)
+                        return
+                      }
                       const skill = suggestedSkills[
                         Math.min(
                           activeSuggestionIndex - previewCommandCount,

@@ -11,7 +11,9 @@ import { useI18n } from '@/i18n'
 import type { SkillEntry } from '@/skills'
 import { cn } from '@/lib/utils'
 import {
+  composerPreviewCommands,
   composerFloatingPanelClass,
+  type ComposerPreviewCommand,
   skillSuggestionOptionID,
   skillSuggestionsID,
 } from './composerPanelStyles'
@@ -26,6 +28,7 @@ export function ComposerSkillSuggestions({
   failed,
   onActiveIndexChange,
   onPointerNavigation,
+  onCommandSelect,
   onSelect,
 }: {
   visible: boolean
@@ -37,42 +40,51 @@ export function ComposerSkillSuggestions({
   failed: boolean
   onActiveIndexChange: (index: number) => void
   onPointerNavigation: () => void
+  onCommandSelect: (command: ComposerPreviewCommand) => void
   onSelect: (skill: SkillEntry) => void
 }) {
   const { t } = useI18n()
   if (!visible) return null
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const previewCommands: Array<{
-    command: string
+    command: ComposerPreviewCommand
     icon: LucideIcon
     label: string
     description: string
-  }> = normalizedQuery ? [] : [
-    {
-      command: 'review',
-      icon: Bug,
-      label: t('composer.codeReview'),
-      description: t('composer.codeReviewDescription'),
-    },
-    {
-      command: 'compact',
-      icon: Minimize2,
-      label: t('composer.compactCommand'),
-      description: t('composer.compactCommandDescription'),
-    },
-    {
-      command: 'continue',
-      icon: MessageSquarePlus,
-      label: t('composer.continueInNewChat'),
-      description: t('composer.continueInNewChatDescription'),
-    },
-    {
-      command: 'plan',
-      icon: ListChecks,
-      label: t('composer.planMode'),
-      description: t('composer.planModeDescription'),
-    },
-  ]
+  }> = normalizedQuery
+    ? []
+    : composerPreviewCommands.map((command) => {
+        switch (command) {
+          case 'review':
+            return {
+              command,
+              icon: Bug,
+              label: t('composer.codeReview'),
+              description: t('composer.codeReviewDescription'),
+            }
+          case 'compact':
+            return {
+              command,
+              icon: Minimize2,
+              label: t('composer.compactCommand'),
+              description: t('composer.compactCommandDescription'),
+            }
+          case 'continue':
+            return {
+              command,
+              icon: MessageSquarePlus,
+              label: t('composer.continueInNewChat'),
+              description: t('composer.continueInNewChatDescription'),
+            }
+          case 'plan':
+            return {
+              command,
+              icon: ListChecks,
+              label: t('composer.planMode'),
+              description: t('composer.planModeDescription'),
+            }
+        }
+      })
 
   return (
     <div
@@ -104,7 +116,10 @@ export function ComposerSkillSuggestions({
               )}
               onMouseEnter={() => onActiveIndexChange(index)}
               onMouseDown={(event) => event.preventDefault()}
-              onClick={() => onActiveIndexChange(index)}
+              onClick={() => {
+                onActiveIndexChange(index)
+                onCommandSelect(item.command)
+              }}
             >
               <Icon
                 className={cn(
@@ -117,9 +132,11 @@ export function ComposerSkillSuggestions({
                 {item.label}
               </span>
               <span className="truncate text-stone-400">{item.description}</span>
-              <span className="text-[0.6875rem] text-stone-400">
-                {t('composer.comingSoon')}
-              </span>
+              {item.command !== 'compact' && (
+                <span className="text-[0.6875rem] text-stone-400">
+                  {t('composer.comingSoon')}
+                </span>
+              )}
             </button>
           )
         })}
