@@ -87,10 +87,19 @@ jobs:
 
       - name: Package Coding
         working-directory: coding/desktop
-        run: bun run package -- --mac --publish never
+        run: >-
+          bun run package --
+          --mac
+          --publish never
+          --config.mac.identity=-
+          --config.mac.hardenedRuntime=false
+
+      - name: Verify application signature
+        working-directory: coding/desktop
+        run: codesign --verify --deep --strict --verbose=2 release/mac*/Coding.app
 
       - name: Collect installers
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coding-mac-${{ matrix.arch }}
           if-no-files-found: error
@@ -110,7 +119,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Download installers
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: coding-mac-*
           path: release-assets
@@ -119,16 +128,15 @@ jobs:
       - name: Generate checksums
         working-directory: release-assets
         run: |
-          find . -maxdepth 1 -type f -print0 \
+          find . -maxdepth 1 -type f ! -name SHA256SUMS -print0 \
             | sort -z \
             | xargs -0 sha256sum > SHA256SUMS
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: or ${{ github.ref_name }}
           body_path: .github/release-notes/${{ github.ref_name }}.md
           files: release-assets/*
-          generate_release_notes: true
           make_latest: ${{ contains(github.ref_name, '-') && 'false' || 'true' }}
           prerelease: ${{ contains(github.ref_name, '-') }}
