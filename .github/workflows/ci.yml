@@ -122,6 +122,37 @@ jobs:
         working-directory: coding/client
         run: bun run build
 
+  coding-client-ui:
+    name: Coding client UI
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        working-directory: coding/client
+        run: bun install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        working-directory: coding/client
+        run: bunx playwright install --with-deps chromium
+
+      - name: Test UI
+        working-directory: coding/client
+        run: bun run test:ui
+
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coding-client-ui-test-results
+          path: coding/client/test-results
+          if-no-files-found: ignore
+
   coding-desktop:
     name: Coding desktop
     runs-on: ubuntu-latest

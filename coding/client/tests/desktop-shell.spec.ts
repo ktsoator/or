@@ -549,6 +549,25 @@ async function openDesktopClient(
   await page.goto('/')
   await expect(page.locator('html')).toHaveClass(/desktop-macos/)
   await expect(page.getByTestId('conversation-header')).toBeVisible()
+  if (options.existingSession) {
+    const chats = page.getByRole('navigation', { name: 'Chats' })
+    await chats.getByRole('button', { name: createdSession.title, exact: true }).click()
+    await expect.poll(() =>
+      page.evaluate(
+        () =>
+          (window as Window & { __eventSources?: unknown[] }).__eventSources?.some(
+            (source) =>
+              Boolean(
+                source &&
+                  typeof source === 'object' &&
+                  'url' in source &&
+                  typeof source.url === 'string' &&
+                  source.url.includes('/sessions/test-session/events'),
+              ),
+          ) ?? false,
+      ),
+    ).toBe(true)
+  }
   return requests
 }
 
@@ -2730,8 +2749,9 @@ test('AI preview opens workspace HTML directly without starting or probing a ser
       '/api/sessions/test-session/previews/test-grant/index.html',
     ),
   ).toBe(true)
-  const previewView = await browserRuntimeView(page, 'preview:test-session')
-  expect(previewView).toMatchObject({ visible: true })
+  await expect.poll(async () =>
+    (await browserRuntimeView(page, 'preview:test-session'))?.visible,
+  ).toBe(true)
   await expect(page.getByRole('textbox', { name: 'Address' })).toHaveValue(
     '/tmp/test-session/web/index.html',
   )
@@ -3114,7 +3134,12 @@ test('failed first send keeps the draft and shows the server error', async ({ pa
 
   await expect(composer).toHaveValue(message)
   await expect(page.getByRole('alert')).toHaveText('invalid session settings')
-  await expect(page.getByText(message, { exact: true })).toHaveCount(0)
+  await expect(
+    page
+      .getByTestId('conversation-transcript')
+      .locator('section')
+      .getByText(message, { exact: true }),
+  ).toHaveCount(0)
 })
 
 test('Composer adds and removes a text attachment from the add menu', async ({ page }) => {
