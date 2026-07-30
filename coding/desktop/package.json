@@ -18,7 +18,7 @@
     "package:dir": "bun run build && electron-builder --dir"
   },
   "devDependencies": {
-    "@types/node": "^24.13.2",
+    "@types/node": "^26.1.2",
     "electron": "^43.0.0",
     "electron-builder": "^26.0.12",
     "typescript": "~6.0.2"
