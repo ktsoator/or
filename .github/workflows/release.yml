@@ -129,6 +129,5 @@ jobs:
           name: or ${{ github.ref_name }}
           body_path: .github/release-notes/${{ github.ref_name }}.md
           files: release-assets/*
-          generate_release_notes: true
           make_latest: ${{ contains(github.ref_name, '-') && 'false' || 'true' }}
           prerelease: ${{ contains(github.ref_name, '-') }}
