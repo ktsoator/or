@@ -42,8 +42,8 @@ type Transport interface {
 	Close()
 }
 
-// NewTransport builds the delivery link for one session. Manager calls it once
-// per session and owns closing the returned transport.
+// NewTransport builds the delivery link for one opened session. Manager calls
+// it once when the session runtime loads and owns closing the returned transport.
 type NewTransport func(sessionID string) Transport
 
 // MessageAccepted reports a user message the server has taken responsibility
@@ -86,7 +86,15 @@ func (TitleGenerationChanged) Event() {}
 
 // emit hands one state change to the transport. It must not block: a session
 // raising an event is often mid-run.
-func (s *sessionRuntime) emit(event Event) { s.transport.Publish(event) }
+func (s *sessionRuntime) emit(event Event) {
+	if s.transport != nil {
+		s.transport.Publish(event)
+	}
+}
 
 // forward hands on an event raised by the agent below.
-func (s *sessionRuntime) forward(event engine.Event) { s.transport.PublishAgent(event) }
+func (s *sessionRuntime) forward(event engine.Event) {
+	if s.transport != nil {
+		s.transport.PublishAgent(event)
+	}
+}

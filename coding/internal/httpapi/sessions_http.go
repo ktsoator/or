@@ -195,7 +195,19 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 }
 
 func (s *Server) sessionTransport(c *gin.Context) (*sessionTransport, bool) {
-	transport, ok := s.transports.get(c.Param("sessionID"))
+	sessionID := c.Param("sessionID")
+	transport, ok := s.transports.get(sessionID)
+	if !ok && s.conversations != nil {
+		if err := s.conversations.EnsureLoaded(sessionID); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+			} else {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			}
+			return nil, false
+		}
+		transport, ok = s.transports.get(sessionID)
+	}
 	if !ok {
 		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
 	}

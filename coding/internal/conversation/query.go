@@ -26,18 +26,15 @@ type Snapshot struct {
 // Snapshot returns the current client-readable state without exposing the
 // runtime that owns the engine session.
 func (m *Manager) Snapshot(id string) (Snapshot, error) {
-	m.mu.RLock()
-	runtime, ok := m.sessions[id]
-	var title TitleChanged
-	var titleGeneration TitleGeneration
-	if ok {
-		title = runtime.titleChanged()
-		titleGeneration = runtime.titleGeneration
+	m.mu.Lock()
+	runtime, err := m.loadRuntimeLocked(id)
+	if err != nil {
+		m.mu.Unlock()
+		return Snapshot{}, err
 	}
-	m.mu.RUnlock()
-	if !ok {
-		return Snapshot{}, os.ErrNotExist
-	}
+	title := runtime.titleChanged()
+	titleGeneration := runtime.titleGeneration
+	m.mu.Unlock()
 	return Snapshot{
 		History:         runtime.session.History(),
 		Queue:           runtime.pendingEvents(),
@@ -53,22 +50,22 @@ func (m *Manager) Snapshot(id string) (Snapshot, error) {
 
 // StopTask terminates one background task owned by the conversation.
 func (m *Manager) StopTask(sessionID, taskID string) error {
-	m.mu.RLock()
-	runtime, ok := m.sessions[sessionID]
-	m.mu.RUnlock()
-	if !ok {
-		return os.ErrNotExist
+	m.mu.Lock()
+	runtime, err := m.loadRuntimeLocked(sessionID)
+	m.mu.Unlock()
+	if err != nil {
+		return err
 	}
 	return runtime.session.StopTask(taskID)
 }
 
 // TaskOutput returns a bounded tail of one conversation task's logs.
 func (m *Manager) TaskOutput(sessionID, taskID string) (engine.TaskOutput, error) {
-	m.mu.RLock()
-	runtime, ok := m.sessions[sessionID]
-	m.mu.RUnlock()
-	if !ok {
-		return engine.TaskOutput{}, os.ErrNotExist
+	m.mu.Lock()
+	runtime, err := m.loadRuntimeLocked(sessionID)
+	m.mu.Unlock()
+	if err != nil {
+		return engine.TaskOutput{}, err
 	}
 	return runtime.session.TaskOutput(taskID)
 }
@@ -81,7 +78,7 @@ func (m *Manager) WorkspacePath(id string) (string, error) {
 	if !ok {
 		return "", os.ErrNotExist
 	}
-	return runtime.session.Cwd(), nil
+	return runtime.record.WorkspacePath, nil
 }
 
 // Abort cancels the active run, if any.
@@ -92,7 +89,9 @@ func (m *Manager) Abort(id string) error {
 	if !ok {
 		return os.ErrNotExist
 	}
-	runtime.session.Abort()
+	if runtime.session != nil {
+		runtime.session.Abort()
+	}
 	return nil
 }
 
@@ -140,6 +139,12 @@ func (s *sessionRuntime) summary() Summary {
 	if model, ok := llm.LookupModel(s.record.Provider, s.record.Model); ok && model.Name != "" {
 		modelName = model.Name
 	}
+	hasApproval := false
+	hasQuestion := false
+	if s.transport != nil {
+		hasApproval = s.transport.HasPendingApproval()
+		hasQuestion = s.transport.HasPendingQuestion()
+	}
 	return Summary{
 		ID:              s.record.ID,
 		Title:           s.displayTitle(),
@@ -153,8 +158,8 @@ func (s *sessionRuntime) summary() Summary {
 		CreatedAt:       s.record.CreatedAt,
 		UpdatedAt:       s.record.UpdatedAt,
 		Running:         s.live.Load(),
-		HasApproval:     s.transport.HasPendingApproval(),
-		HasQuestion:     s.transport.HasPendingQuestion(),
+		HasApproval:     hasApproval,
+		HasQuestion:     hasQuestion,
 		ModelProvider:   s.record.Provider,
 		ModelID:         s.record.Model,
 		ModelName:       modelName,

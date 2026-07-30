@@ -3,7 +3,6 @@ package conversation
 import (
 	"context"
 	"errors"
-	"os"
 	"slices"
 	"strings"
 	"time"
@@ -68,10 +67,10 @@ func (m *Manager) reservePrompt(
 		m.mu.Unlock()
 		return nil, ErrManagerClosed
 	}
-	runtime, ok := m.sessions[id]
-	if !ok {
+	runtime, err := m.loadRuntimeLocked(id)
+	if err != nil {
 		m.mu.Unlock()
-		return nil, os.ErrNotExist
+		return nil, err
 	}
 	if len(images) > 0 {
 		model, found := llm.LookupModel(runtime.record.Provider, runtime.record.Model)
@@ -118,9 +117,9 @@ func (m *Manager) reserveCompact(id string) (*sessionRuntime, error) {
 	if m.closed {
 		return nil, ErrManagerClosed
 	}
-	runtime, ok := m.sessions[id]
-	if !ok {
-		return nil, os.ErrNotExist
+	runtime, err := m.loadRuntimeLocked(id)
+	if err != nil {
+		return nil, err
 	}
 	if runtime.awaitingUser() || !runtime.running.CompareAndSwap(false, true) {
 		return nil, ErrSessionActive

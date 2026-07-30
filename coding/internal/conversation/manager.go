@@ -3,6 +3,7 @@ package conversation
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -48,8 +49,10 @@ type Options struct {
 	TitleGenerator titlegen.Generator
 }
 
-// NewManager restores the session index. The ledger and registry are passed in
-// because the HTTP layer also serves them directly.
+// NewManager restores and validates the session index. Restored transcripts,
+// transports, and engine sessions stay unloaded until the conversation is
+// first opened. The ledger and registry are passed in because the HTTP layer
+// also serves them directly.
 func NewManager(ctx context.Context, opts Options) (*Manager, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	dir := filepath.Join(opts.DataDir, "sessions")
@@ -71,21 +74,14 @@ func NewManager(ctx context.Context, opts Options) (*Manager, error) {
 		return nil, err
 	}
 	for _, record := range records {
-		runtime, err := m.build(record)
+		record, err = m.normalizeRecord(record)
 		if err != nil {
-			m.closeSessions()
 			cancel()
 			return nil, fmt.Errorf("session: restore session %s: %w", record.ID, err)
 		}
-		m.sessions[record.ID] = runtime
-		if err := m.usage.BackfillEntries(record.ID, runtime.session.Entries()); err != nil {
-			m.closeSessions()
-			cancel()
-			return nil, fmt.Errorf("session: backfill usage for session %s: %w", record.ID, err)
-		}
+		m.sessions[record.ID] = newSessionRuntime(record)
 	}
 	if err := m.saveLocked(); err != nil {
-		m.closeSessions()
 		cancel()
 		return nil, err
 	}
@@ -115,42 +111,89 @@ func (m *Manager) Close() {
 	})
 }
 
-func (m *Manager) closeSessions() {
-	for _, runtime := range m.sessions {
-		runtime.close()
+// EnsureLoaded opens one restored conversation on first use. Loading is
+// serialized by the manager lock so concurrent history and SSE requests share
+// one engine session and transport.
+func (m *Manager) EnsureLoaded(id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return ErrManagerClosed
+	}
+	_, err := m.loadRuntimeLocked(id)
+	return err
+}
+
+func (m *Manager) loadRuntimeLocked(id string) (*sessionRuntime, error) {
+	runtime, ok := m.sessions[id]
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+	if runtime.session != nil {
+		return runtime, nil
+	}
+	if m.closed {
+		return nil, ErrManagerClosed
+	}
+
+	loaded, err := m.build(runtime.record)
+	if err != nil {
+		return nil, fmt.Errorf("session: load session %s: %w", id, err)
+	}
+	if err := m.usage.BackfillEntries(id, loaded.session.Entries()); err != nil {
+		loaded.close()
+		return nil, fmt.Errorf("session: backfill usage for session %s: %w", id, err)
+	}
+
+	m.sessions[id] = loaded
+	if loaded.record != runtime.record {
+		if err := m.saveLocked(); err != nil {
+			m.sessions[id] = runtime
+			loaded.close()
+			return nil, err
+		}
+	}
+	return loaded, nil
+}
+
+func newSessionRuntime(record record) *sessionRuntime {
+	titleGeneration := TitleGeneration{Status: TitleGenerationIdle}
+	if record.AITitle != "" {
+		titleGeneration.Status = TitleGenerationSucceeded
+	}
+	return &sessionRuntime{
+		record:          record,
+		titleGeneration: titleGeneration,
 	}
 }
 
-func (m *Manager) build(record record) (*sessionRuntime, error) {
+func (m *Manager) normalizeRecord(record record) (record, error) {
 	if record.Scope != ScopeChat && record.Scope != ScopeProject {
-		return nil, fmt.Errorf("session: invalid session scope %q", record.Scope)
+		return record, fmt.Errorf("session: invalid session scope %q", record.Scope)
 	}
 	if record.WorkspaceKind != KindScratch && record.WorkspaceKind != KindFolder {
-		return nil, fmt.Errorf("session: invalid workspace kind %q", record.WorkspaceKind)
+		return record, fmt.Errorf("session: invalid workspace kind %q", record.WorkspaceKind)
 	}
 	if record.Scope == ScopeChat && record.WorkspaceKind != KindScratch {
-		return nil, fmt.Errorf("session: chat session requires a scratch workspace")
+		return record, fmt.Errorf("session: chat session requires a scratch workspace")
 	}
 	if record.Scope == ScopeProject && record.WorkspaceKind != KindFolder {
-		return nil, fmt.Errorf("session: project session requires a folder workspace")
+		return record, fmt.Errorf("session: project session requires a folder workspace")
 	}
 	workspacePath, err := workspace.Clean(record.WorkspacePath)
 	if err != nil {
-		return nil, err
+		return record, err
 	}
 	if record.WorkspaceKind == KindScratch {
 		workspacePath, err = m.scratch.Validate(workspacePath)
 		if err != nil {
-			return nil, err
-		}
-		if err := workspace.EnsureDirectories(workspacePath); err != nil {
-			return nil, err
+			return record, err
 		}
 	}
 	record.WorkspacePath = workspacePath
 	model, ok := llm.LookupModel(record.Provider, record.Model)
 	if !ok {
-		return nil, fmt.Errorf("unknown model %q for provider %q", record.Model, record.Provider)
+		return record, fmt.Errorf("unknown model %q for provider %q", record.Model, record.Provider)
 	}
 	thinking := llm.ClampThinkingLevel(model, llm.ModelThinkingLevel(record.Thinking))
 	record.Provider = model.Provider
@@ -158,9 +201,25 @@ func (m *Manager) build(record record) (*sessionRuntime, error) {
 	record.Thinking = string(thinking)
 	permissionMode := permission.NormalizeMode(permission.Mode(record.PermissionMode))
 	record.PermissionMode = string(permissionMode)
+	return record, nil
+}
+
+func (m *Manager) build(record record) (*sessionRuntime, error) {
+	record, err := m.normalizeRecord(record)
+	if err != nil {
+		return nil, err
+	}
+	if record.WorkspaceKind == KindScratch {
+		if err := workspace.EnsureDirectories(record.WorkspacePath); err != nil {
+			return nil, err
+		}
+	}
+	model, _ := llm.LookupModel(record.Provider, record.Model)
+	thinking := llm.ModelThinkingLevel(record.Thinking)
+	permissionMode := permission.Mode(record.PermissionMode)
 	transport := m.newTransport(record.ID)
 	session, err := newEngineSession(m.ctx, engineSessionConfig{
-		WorkspacePath:  workspacePath,
+		WorkspacePath:  record.WorkspacePath,
 		TranscriptPath: record.Transcript,
 		Model:          model,
 		ThinkingLevel:  thinking,
@@ -170,16 +229,9 @@ func (m *Manager) build(record record) (*sessionRuntime, error) {
 		transport.Close()
 		return nil, err
 	}
-	titleGeneration := TitleGeneration{Status: TitleGenerationIdle}
-	if record.AITitle != "" {
-		titleGeneration.Status = TitleGenerationSucceeded
-	}
-	runtime := &sessionRuntime{
-		record:          record,
-		session:         session,
-		transport:       transport,
-		titleGeneration: titleGeneration,
-	}
+	runtime := newSessionRuntime(record)
+	runtime.session = session
+	runtime.transport = transport
 	session.Subscribe(func(ev engine.Event) {
 		m.handleSessionEvent(record.ID, runtime, ev)
 	})
@@ -198,6 +250,9 @@ func (m *Manager) build(record record) (*sessionRuntime, error) {
 func (s *sessionRuntime) stop() {
 	s.running.Store(false)
 	s.live.Store(false)
+	if s.session == nil {
+		return
+	}
 	s.session.Abort()
 	s.cancelPending()
 	s.session.ClearQueuedMessages()
@@ -205,8 +260,12 @@ func (s *sessionRuntime) stop() {
 
 func (s *sessionRuntime) close() {
 	s.stop()
-	s.session.Close()
-	s.transport.Close()
+	if s.session != nil {
+		s.session.Close()
+	}
+	if s.transport != nil {
+		s.transport.Close()
+	}
 }
 
 func (m *Manager) handleSessionEvent(sessionID string, runtime *sessionRuntime, ev engine.Event) {

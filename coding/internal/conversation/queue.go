@@ -37,6 +37,10 @@ func (m *Manager) QueueMessage(id string, message QueuedMessage) error {
 		m.mu.RUnlock()
 		return os.ErrNotExist
 	}
+	if !runtime.running.Load() {
+		m.mu.RUnlock()
+		return ErrSessionNotRunning
+	}
 	// Distinguished here, unlike the manager's other guards, because the client
 	// shows this error to the user and telling them to resolve an approval when
 	// a question is on screen sends them looking for the wrong dialog.

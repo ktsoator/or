@@ -103,7 +103,9 @@ type record struct {
 }
 
 type sessionRuntime struct {
-	record    record
+	record record
+	// Restored conversations keep these nil until their first engine-backed
+	// operation. The manager lock protects the transition to a loaded runtime.
 	session   *engine.Session
 	transport Transport
 	running   atomic.Bool // serializes manager-owned work for this session
@@ -145,6 +147,9 @@ type TitleGeneration struct {
 // and session settings must not change under the turn that is waiting — so they
 // are asked together rather than checked separately at each call site.
 func (s *sessionRuntime) awaitingUser() bool {
+	if s.transport == nil {
+		return false
+	}
 	return s.transport.HasPendingApproval() || s.transport.HasPendingQuestion()
 }
 

@@ -174,16 +174,20 @@ func (m *Manager) UpdateSettings(
 	previousModel, _ := llm.LookupModel(previousRecord.Provider, previousRecord.Model)
 	previousThinking := llm.ModelThinkingLevel(previousRecord.Thinking)
 
-	runtime.session.SetModel(model)
-	runtime.session.SetThinkingLevel(thinking)
+	if runtime.session != nil {
+		runtime.session.SetModel(model)
+		runtime.session.SetThinkingLevel(thinking)
+	}
 	runtime.record.Provider = model.Provider
 	runtime.record.Model = model.ID
 	runtime.record.Thinking = string(thinking)
 	runtime.record.UpdatedAt = time.Now().UTC()
 	if err := m.saveLocked(); err != nil {
 		runtime.record = previousRecord
-		runtime.session.SetModel(previousModel)
-		runtime.session.SetThinkingLevel(previousThinking)
+		if runtime.session != nil {
+			runtime.session.SetModel(previousModel)
+			runtime.session.SetThinkingLevel(previousThinking)
+		}
 		return Summary{}, err
 	}
 	return runtime.summary(), nil
@@ -207,12 +211,16 @@ func (m *Manager) UpdatePermissionMode(id string, mode permission.Mode) (Summary
 
 	previousRecord := runtime.record
 	previousMode := permission.NormalizeMode(permission.Mode(previousRecord.PermissionMode))
-	runtime.session.SetPermissionPolicy(permission.PolicyForMode(mode))
+	if runtime.session != nil {
+		runtime.session.SetPermissionPolicy(permission.PolicyForMode(mode))
+	}
 	runtime.record.PermissionMode = string(mode)
 	runtime.record.UpdatedAt = time.Now().UTC()
 	if err := m.saveLocked(); err != nil {
 		runtime.record = previousRecord
-		runtime.session.SetPermissionPolicy(permission.PolicyForMode(previousMode))
+		if runtime.session != nil {
+			runtime.session.SetPermissionPolicy(permission.PolicyForMode(previousMode))
+		}
 		return Summary{}, err
 	}
 	return runtime.summary(), nil

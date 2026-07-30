@@ -102,6 +102,154 @@ func TestManagerCreatesAndRestoresProjectConversation(t *testing.T) {
 	}
 }
 
+func TestManagerRestoresConversationsLazily(t *testing.T) {
+	dataDir := t.TempDir()
+	projectDir := t.TempDir()
+	model, thinking := testCatalogModel(t)
+
+	manager := newTestManager(t, dataDir)
+	created, err := manager.Create(
+		"Lazy session",
+		projectDir,
+		ScopeProject,
+		model,
+		thinking,
+		permission.ModeAsk,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deleted, err := manager.Create(
+		"Delete without loading",
+		projectDir,
+		ScopeProject,
+		model,
+		thinking,
+		permission.ModeAsk,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager.Close()
+
+	var transports atomic.Int64
+	restored := newTestManagerWithTransport(t, dataDir, func(string) Transport {
+		transports.Add(1)
+		return &testTransport{}
+	})
+	runtime, ok := restored.runtime(created.ID)
+	if !ok {
+		t.Fatal("restored conversation not found")
+	}
+	if runtime.session != nil || runtime.transport != nil {
+		t.Fatal("restored conversation loaded before first use")
+	}
+	if got := restored.List(); len(got) != 2 {
+		t.Fatalf("restored conversations = %+v", got)
+	}
+	if !restored.UsesProvider(model.Provider) {
+		t.Fatalf("restored manager does not report provider %q in use", model.Provider)
+	}
+	renamed, err := restored.Rename(created.ID, "Renamed before loading")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if renamed.Title != "Renamed before loading" {
+		t.Fatalf("renamed conversation = %+v", renamed)
+	}
+	updated, err := restored.UpdatePermissionMode(created.ID, permission.ModeReadOnly)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.PermissionMode != permission.ModeReadOnly {
+		t.Fatalf("updated conversation = %+v", updated)
+	}
+	if path, err := restored.WorkspacePath(created.ID); err != nil || path != created.WorkspacePath {
+		t.Fatalf("WorkspacePath() = %q, %v; want %q", path, err, created.WorkspacePath)
+	}
+	if err := restored.Abort(created.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := restored.Delete(deleted.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := transports.Load(); got != 0 {
+		t.Fatalf("transports created by metadata queries = %d, want 0", got)
+	}
+	if got := restored.List(); len(got) != 1 || got[0].ID != created.ID {
+		t.Fatalf("conversations after metadata-only delete = %+v", got)
+	}
+
+	snapshot, err := restored.Snapshot(created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Title != "Renamed before loading" {
+		t.Fatalf("snapshot title = %q, want %q", snapshot.Title, "Renamed before loading")
+	}
+	if _, err := restored.Snapshot(created.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := transports.Load(); got != 1 {
+		t.Fatalf("transports after two snapshots = %d, want 1", got)
+	}
+	runtime, ok = restored.runtime(created.ID)
+	if !ok || runtime.session == nil || runtime.transport == nil {
+		t.Fatal("restored conversation was not loaded on first snapshot")
+	}
+}
+
+func TestManagerDefersTranscriptErrorsUntilFirstUse(t *testing.T) {
+	dataDir := t.TempDir()
+	model, thinking := testCatalogModel(t)
+
+	manager := newTestManager(t, dataDir)
+	created, err := manager.Create(
+		"Broken transcript",
+		t.TempDir(),
+		ScopeProject,
+		model,
+		thinking,
+		permission.ModeAsk,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime, ok := manager.runtime(created.ID)
+	if !ok {
+		t.Fatal("created conversation not found")
+	}
+	transcriptPath := runtime.record.Transcript
+	manager.Close()
+	if err := os.WriteFile(transcriptPath, []byte("not-json\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var transports []*testTransport
+	restored := newTestManagerWithTransport(t, dataDir, func(string) Transport {
+		transport := &testTransport{}
+		transports = append(transports, transport)
+		return transport
+	})
+	if got := restored.List(); len(got) != 1 || got[0].ID != created.ID {
+		t.Fatalf("restored conversations = %+v", got)
+	}
+	if _, err := restored.Snapshot(created.ID); err == nil {
+		t.Fatal("Snapshot succeeded with a malformed transcript")
+	}
+	if len(transports) != 1 || !transports[0].closed.Load() {
+		t.Fatalf(
+			"failed lazy-load transports = %d, closed = %v",
+			len(transports),
+			len(transports) == 1 && transports[0].closed.Load(),
+		)
+	}
+	runtime, ok = restored.runtime(created.ID)
+	if !ok || runtime.session != nil || runtime.transport != nil {
+		t.Fatal("failed lazy load replaced the metadata-only conversation")
+	}
+}
+
 func TestManagerRunReservationProtectsConversation(t *testing.T) {
 	dataDir := t.TempDir()
 	model, thinking := testCatalogModel(t)
