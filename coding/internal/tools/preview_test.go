@@ -143,9 +143,13 @@ func TestOpenPreviewAcceptsWorkspaceFileURL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fileURL := (&url.URL{Scheme: "file", Path: filepath.ToSlash(path)}).String()
+	fileURLPath := filepath.ToSlash(path)
+	if !strings.HasPrefix(fileURLPath, "/") {
+		fileURLPath = "/" + fileURLPath
+	}
+	fileURL := (&url.URL{Scheme: "file", Path: fileURLPath}).String()
 
-	result, err := executePreviewIn(t, root, `{"url":"`+fileURL+`"}`)
+	result, err := executePreviewIn(t, root, previewArgsJSON(t, fileURL))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +166,7 @@ func TestOpenPreviewRejectsFileOutsideWorkspace(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := executePreviewIn(t, root, `{"url":"`+outside+`"}`)
+	result, err := executePreviewIn(t, root, previewArgsJSON(t, outside))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -316,4 +320,13 @@ func executePreviewIn(t *testing.T, root, input string) (agent.ToolResult, error
 		json.RawMessage(input),
 		func(agent.ToolProgress) {},
 	)
+}
+
+func previewArgsJSON(t *testing.T, address string) string {
+	t.Helper()
+	raw, err := json.Marshal(openPreviewArgs{URL: address})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
 }

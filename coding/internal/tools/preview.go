@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -211,7 +212,14 @@ func previewInputPath(input string) (string, error) {
 	if err != nil || path == "" {
 		return "", fmt.Errorf("invalid file URL")
 	}
-	return filepath.FromSlash(path), nil
+	path = filepath.FromSlash(path)
+	if runtime.GOOS == "windows" &&
+		len(path) >= 3 &&
+		os.IsPathSeparator(path[0]) &&
+		path[2] == ':' {
+		path = path[1:]
+	}
+	return path, nil
 }
 
 func previewAccess(args map[string]any) []permission.Access {
