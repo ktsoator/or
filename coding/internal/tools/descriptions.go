@@ -88,7 +88,6 @@ var bashText = toolText{
 
 Usage:
 - Use bash for building, testing, running programs, version control, and listing directory contents.
-- On Windows, commands run in Git for Windows Bash. Prefer workspace-relative paths; POSIX absolute paths use /c/... form, and $CODING_WORKSPACE contains the converted workspace root.
 - Use glob to find files by pattern; use bash with ls only for a quick look at one directory.
 - Do not use bash as a substitute for read, grep, glob, edit, or write.
 - Create or replace files with write, not echo or printf redirection, tee, or heredocs. Modify existing files with edit, not sed -i, awk, or perl.

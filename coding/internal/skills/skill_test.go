@@ -230,17 +230,6 @@ func TestToolLoadsSkillBody(t *testing.T) {
 	}
 }
 
-func TestLoadedSkillPreservesWindowsPathSeparators(t *testing.T) {
-	text := formatLoadedSkill(Skill{
-		Name:    "commit",
-		Dir:     `C:\Users\dev\skills\commit`,
-		Content: "body",
-	}, "")
-	if !strings.Contains(text, `root="C:\Users\dev\skills\commit"`) {
-		t.Fatalf("Windows skill path was escaped as a Go string: %q", text)
-	}
-}
-
 func TestToolUnknownSkillReturnsError(t *testing.T) {
 	root := t.TempDir()
 	writeSkill(t, root, "commit", commitSkill)

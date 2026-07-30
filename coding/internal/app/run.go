@@ -15,7 +15,6 @@ import (
 	"github.com/ktsoator/or/coding/internal/httpapi"
 	"github.com/ktsoator/or/coding/internal/provider"
 	"github.com/ktsoator/or/coding/internal/titlegen"
-	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/usage"
 	"github.com/ktsoator/or/coding/internal/workspace"
 	"github.com/ktsoator/or/llm"
@@ -32,9 +31,6 @@ type Runtime struct {
 // New assembles one product runtime without choosing how its HTTP handler is
 // hosted. The CLI and authenticated Electron sidecar provide separate hosts.
 func New(ctx context.Context, cfg config.Config) (*Runtime, error) {
-	if err := tools.ValidateLocalShell(); err != nil {
-		return nil, fmt.Errorf("shell unavailable: %w", err)
-	}
 	ctx, cancel := context.WithCancel(ctx)
 	sessionDir := filepath.Join(cfg.DataDir, "sessions")
 	ledger, err := usage.NewStore(filepath.Join(cfg.DataDir, "usage", "events.jsonl"))

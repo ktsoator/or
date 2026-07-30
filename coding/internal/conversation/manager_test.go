@@ -493,7 +493,6 @@ func newTestManagerWithTransport(
 		t.Fatal(err)
 	}
 	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
 	ledger, err := usage.NewStore(filepath.Join(dataDir, "usage", "events.jsonl"))
 	if err != nil {
 		t.Fatal(err)

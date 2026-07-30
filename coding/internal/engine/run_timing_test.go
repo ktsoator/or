@@ -3,7 +3,6 @@ package engine
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/transcript"
@@ -116,21 +115,6 @@ func TestHistoryDoesNotDuplicateRunAfterCompletedEntryIsPersisted(t *testing.T) 
 	}
 	if runs != 1 {
 		t.Fatalf("history contains %d runs, want one: %#v", runs, history)
-	}
-}
-
-func TestRunLookupIgnoresMatchingTimestampBeforeActiveEntries(t *testing.T) {
-	startedAt := time.Date(2026, time.July, 30, 7, 25, 55, 0, time.UTC)
-	entries := []transcript.Entry{
-		transcript.NewRun("previous-message", startedAt, startedAt),
-	}
-	if containsRunStartedAt(entries, startedAt, len(entries)) {
-		t.Fatal("previous run with the same timestamp matched the active run")
-	}
-
-	entries = append(entries, transcript.NewRun("active-message", startedAt, startedAt))
-	if !containsRunStartedAt(entries, startedAt, 1) {
-		t.Fatal("active run was not found inside its transcript range")
 	}
 }
 

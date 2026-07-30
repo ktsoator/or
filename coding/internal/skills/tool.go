@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"html"
 	"strings"
 
 	"github.com/ktsoator/or/agent"
@@ -68,9 +67,9 @@ func newTool(
 func formatLoadedSkill(s Skill, arguments string) string {
 	body := Expand(s.Content, s.Dir, arguments)
 	return fmt.Sprintf(
-		"<loaded_skill name=\"%s\" root=\"%s\">\n%s\n\n%s\n</loaded_skill>\n\nFollow the loaded skill instructions for the current task.",
-		html.EscapeString(s.Name),
-		html.EscapeString(s.Dir),
+		"<loaded_skill name=%q root=%q>\n%s\n\n%s\n</loaded_skill>\n\nFollow the loaded skill instructions for the current task.",
+		s.Name,
+		s.Dir,
 		relativePathProtocol,
 		body,
 	)
@@ -92,13 +91,13 @@ func (r *Registry) ExpandExplicitInvocation(text string) (expanded string, match
 	}
 	body := Expand(s.Content, s.Dir, arguments)
 	return fmt.Sprintf(
-		"%sname=\"%s\" root=\"%s\">\n"+
+		"%sname=%q root=%q>\n"+
 			"The user explicitly invoked this skill. It is already loaded; do not call the skill tool again.\n"+
 			"%s\n\n%s\n"+
 			"</or-explicit-skill-invocation>",
 		explicitInvocationPrefix,
-		html.EscapeString(s.Name),
-		html.EscapeString(s.Dir),
+		s.Name,
+		s.Dir,
 		relativePathProtocol,
 		body,
 	), true, nil

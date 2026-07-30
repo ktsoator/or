@@ -118,12 +118,9 @@ func (m *TaskManager) Start(command, description, dir string) (TaskInfo, error) 
 		return TaskInfo{}, fmt.Errorf("create task output: %w", err)
 	}
 
-	cmd, err := newBashCommand(command, dir)
-	if err != nil {
-		_ = output.Close()
-		_ = os.Remove(info.OutputPath)
-		return TaskInfo{}, err
-	}
+	cmd := exec.Command("bash", "-c", command)
+	cmd.Dir = dir
+	configureProcessGroup(cmd)
 	cmd.Stdout = output
 	cmd.Stderr = output
 	if err := cmd.Start(); err != nil {

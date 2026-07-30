@@ -18,8 +18,6 @@ func TestGeneratedWireContractIsCurrent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	generated = bytes.ReplaceAll(generated, []byte("\r\n"), []byte("\n"))
-	checkedIn = bytes.ReplaceAll(checkedIn, []byte("\r\n"), []byte("\n"))
 	if !bytes.Equal(generated, checkedIn) {
 		t.Fatal("generated wire contract is stale; run go generate ./coding/internal/httpapi")
 	}

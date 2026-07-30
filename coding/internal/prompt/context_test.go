@@ -8,7 +8,7 @@ import (
 
 func TestLoadContextFilesOrdersEveryScopeBroadestFirst(t *testing.T) {
 	home := t.TempDir()
-	setUserHome(t, home)
+	t.Setenv("HOME", home)
 	writeFile(t, filepath.Join(home, ".or", "AGENTS.md"), "user rule")
 
 	parent := t.TempDir()
@@ -57,7 +57,7 @@ func TestLoadContextFilesOrdersEveryScopeBroadestFirst(t *testing.T) {
 }
 
 func TestLoadContextFilesTakesOneFilePerDirectory(t *testing.T) {
-	setUserHome(t, t.TempDir())
+	t.Setenv("HOME", t.TempDir())
 	workspace := t.TempDir()
 	writeFile(t, filepath.Join(workspace, "AGENTS.md"), "preferred")
 	writeFile(t, filepath.Join(workspace, "CLAUDE.md"), "fallback")
@@ -79,12 +79,6 @@ func TestLoadContextFilesTakesOneFilePerDirectory(t *testing.T) {
 	if !found {
 		t.Fatal("CLAUDE.md was not used as the fallback name")
 	}
-}
-
-func setUserHome(t *testing.T, home string) {
-	t.Helper()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
 }
 
 func writeFile(t *testing.T, path, content string) {

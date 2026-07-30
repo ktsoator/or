@@ -35,14 +35,10 @@ type Environment struct {
 // avoids a subprocess on a hot path, and it cannot report a working tree as
 // clean when it is not, because it never claims to know.
 func DetectEnvironment(root string) Environment {
-	shell := strings.TrimSpace(os.Getenv("SHELL"))
-	if runtime.GOOS == "windows" {
-		shell = "Git Bash"
-	}
 	env := Environment{
 		OS:    runtime.GOOS,
 		Arch:  runtime.GOARCH,
-		Shell: shell,
+		Shell: strings.TrimSpace(os.Getenv("SHELL")),
 		Date:  time.Now().Format(time.DateOnly),
 	}
 	if gitDir, ok := findGitDir(root); ok {

@@ -20,12 +20,6 @@ type skillsResp struct {
 	Diagnostics []skillDiagnosticDTO `json:"diagnostics"`
 }
 
-func setUserHome(t *testing.T, home string) {
-	t.Helper()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-}
-
 // writeSkillFixture creates <root>/<name>/SKILL.md with the given frontmatter body.
 func writeSkillFixture(t *testing.T, root, name, frontmatterName, description string) {
 	t.Helper()
@@ -63,7 +57,7 @@ func getSkills(t *testing.T, query string) skillsResp {
 
 func TestHandleSkillsUserOnly(t *testing.T) {
 	home := t.TempDir()
-	setUserHome(t, home)
+	t.Setenv("HOME", home)
 	writeSkillFixture(t, filepath.Join(home, ".or", "skills"), "frontend-design", "frontend-design", "distinctive UI design")
 
 	resp := getSkills(t, "")
@@ -84,7 +78,7 @@ func TestHandleSkillsUserOnly(t *testing.T) {
 
 func TestHandleSkillsIncludesInvocationControl(t *testing.T) {
 	home := t.TempDir()
-	setUserHome(t, home)
+	t.Setenv("HOME", home)
 	root := filepath.Join(home, ".or", "skills", "deploy")
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		t.Fatal(err)
@@ -103,7 +97,7 @@ func TestHandleSkillsIncludesInvocationControl(t *testing.T) {
 func TestHandleSkillsProjectOverridesUser(t *testing.T) {
 	home := t.TempDir()
 	workspace := t.TempDir()
-	setUserHome(t, home)
+	t.Setenv("HOME", home)
 
 	userDir := filepath.Join(home, ".or", "skills")
 	writeSkillFixture(t, userDir, "commit", "commit", "system commit skill")
@@ -128,7 +122,7 @@ func TestHandleSkillsProjectOverridesUser(t *testing.T) {
 
 func TestHandleSkillsReportsDiagnostics(t *testing.T) {
 	home := t.TempDir()
-	setUserHome(t, home)
+	t.Setenv("HOME", home)
 	// Directory name does not match frontmatter name: skipped, reported.
 	writeSkillFixture(t, filepath.Join(home, ".or", "skills"), "commit", "not-commit", "mismatched")
 
@@ -144,7 +138,7 @@ func TestHandleSkillsReportsDiagnostics(t *testing.T) {
 
 func TestHandleSkillContent(t *testing.T) {
 	home := t.TempDir()
-	setUserHome(t, home)
+	t.Setenv("HOME", home)
 	dir := filepath.Join(home, ".or", "skills")
 	if err := os.MkdirAll(filepath.Join(dir, "commit"), 0o755); err != nil {
 		t.Fatal(err)
@@ -181,7 +175,7 @@ func TestHandleSkillContent(t *testing.T) {
 
 func TestHandleSkillContentNotFound(t *testing.T) {
 	home := t.TempDir()
-	setUserHome(t, home)
+	t.Setenv("HOME", home)
 
 	r := gin.New()
 	r.GET("/api/skills/:name", (&Server{}).handleSkillContent)
@@ -202,7 +196,7 @@ func TestHandlerRegistersSkillRoutesWithoutConflict(t *testing.T) {
 
 func TestHandleSkillsEmptyReturnsArrays(t *testing.T) {
 	home := t.TempDir()
-	setUserHome(t, home)
+	t.Setenv("HOME", home)
 
 	resp := getSkills(t, "")
 

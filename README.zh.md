@@ -126,7 +126,7 @@ API 参考:[`or/llm`](https://pkg.go.dev/github.com/ktsoator/or/llm) ·
 ## 发布
 
 Go SDK 和 Coding 共用版本。推送 `vX.Y.Z` tag 后会创建 GitHub Release,并附加
-macOS 和 Windows 安装包。具体流程参见 [RELEASING.md](RELEASING.md)。
+macOS 安装包。具体流程参见 [RELEASING.md](RELEASING.md)。
 
 ## 支持的协议
 
