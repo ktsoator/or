@@ -117,7 +117,7 @@ func TestUnknownExplicitSkillDoesNotReachProvider(t *testing.T) {
 
 func TestUserAuthoredInvocationWrapperPrefixRemainsVisible(t *testing.T) {
 	const authored = `<or-explicit-skill-invocation name="example">user text`
-	text, _ := userMessageContent(&llm.UserMessage{
+	text, _, _ := userMessageContent(&llm.UserMessage{
 		Content: []llm.UserContent{&llm.TextContent{Text: authored}},
 	})
 	if text != authored {

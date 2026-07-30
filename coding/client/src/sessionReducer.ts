@@ -11,6 +11,7 @@ import type {
   ContextUsage,
   DeliveryMode,
   Item,
+  MessageFile,
   MessageImage,
   PreviewRequest,
   PreviewState,
@@ -79,6 +80,7 @@ export type ThreadAction =
       id: string
       text: string
       images: MessageImage[]
+      files?: MessageFile[]
       startedAt: string
       delivery?: DeliveryMode
     }
@@ -225,6 +227,7 @@ export function threadsReducer(state: ThreadsState, action: ThreadAction): Threa
                 id: action.id,
                 text: action.text,
                 images: action.images,
+                ...(action.files?.length ? { files: action.files } : {}),
                 delivery: action.delivery,
                 status: 'queued',
               },
@@ -241,6 +244,7 @@ export function threadsReducer(state: ThreadsState, action: ThreadAction): Threa
                 id: action.id,
                 text: action.text,
                 images: action.images,
+                ...(action.files?.length ? { files: action.files } : {}),
                 sentAt: action.startedAt,
                 deliveryStatus: 'sending',
               },
@@ -454,17 +458,26 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
       {
         const text = ev.text ?? ''
         const images = ev.images ?? []
+        const files = ev.files ?? []
         if (ev.queued && ev.delivery) {
           let queueIndex = ev.id ? queue.findIndex((message) => message.id === ev.id) : -1
           if (queueIndex < 0) {
             queueIndex = queue.findIndex((message) =>
-              sameUserMessage(message.text, message.images, text, images),
+              sameUserMessage(
+                message.text,
+                message.images,
+                message.files,
+                text,
+                images,
+                files,
+              ),
             )
           }
           const message: QueuedMessage = {
             id: ev.id ?? `queued-${nextId()}`,
             text,
             images,
+            ...(files.length ? { files } : {}),
             delivery: ev.delivery,
             status: 'queued',
           }
@@ -478,7 +491,14 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
         let queueIndex = ev.id ? queue.findIndex((message) => message.id === ev.id) : -1
         if (queueIndex < 0) {
           queueIndex = queue.findIndex((message) =>
-            sameUserMessage(message.text, message.images, text, images),
+            sameUserMessage(
+              message.text,
+              message.images,
+              message.files,
+              text,
+              images,
+              files,
+            ),
           )
         }
         if (queueIndex >= 0) queue = queue.filter((_, index) => index !== queueIndex)
@@ -491,7 +511,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
             (item) =>
               item.kind === 'user' &&
               item.deliveryStatus === 'sending' &&
-              sameUserMessage(item.text, item.images, text, images),
+              sameUserMessage(item.text, item.images, item.files, text, images, files),
           )
         }
         if (idx < 0) {
@@ -499,7 +519,14 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
           const candidate = items[runIndex - 1]
           if (
             candidate?.kind === 'user' &&
-            sameUserMessage(candidate.text, candidate.images, text, images)
+              sameUserMessage(
+                candidate.text,
+                candidate.images,
+                candidate.files,
+                text,
+                images,
+                files,
+              )
           ) {
             idx = runIndex - 1
           }
@@ -516,6 +543,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
           id: ev.id ?? (idx >= 0 ? items[idx].id : nextId()),
           text,
           images,
+          ...(files.length ? { files } : {}),
           sentAt:
             existingUser?.sentAt ?? (openRun?.kind === 'run' ? openRun.startedAt : undefined),
         }
@@ -1068,13 +1096,30 @@ function replaceQueueAt(
 function sameUserMessage(
   leftText: string,
   leftImages: MessageImage[],
+  leftFiles: MessageFile[] | undefined,
   rightText: string,
   rightImages: MessageImage[],
+  rightFiles: MessageFile[] | undefined,
 ): boolean {
-  if (leftText !== rightText || leftImages.length !== rightImages.length) return false
-  return leftImages.every(
-    (image, index) =>
-      image.mimeType === rightImages[index]?.mimeType && image.data === rightImages[index]?.data,
+  const normalizedLeftFiles = leftFiles ?? []
+  const normalizedRightFiles = rightFiles ?? []
+  if (
+    leftText !== rightText ||
+    leftImages.length !== rightImages.length ||
+    normalizedLeftFiles.length !== normalizedRightFiles.length
+  ) {
+    return false
+  }
+  return (
+    leftImages.every(
+      (image, index) =>
+        image.mimeType === rightImages[index]?.mimeType && image.data === rightImages[index]?.data,
+    ) &&
+    normalizedLeftFiles.every(
+      (file, index) =>
+        file.name === normalizedRightFiles[index]?.name &&
+        file.size === normalizedRightFiles[index]?.size,
+    )
   )
 }
 

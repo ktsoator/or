@@ -35,10 +35,10 @@ function reduce(actions: SessionStoreAction[], initial = createSessionStoreState
 }
 
 describe('sessionStoreReducer', () => {
-  test('opens a draft for an empty catalog and keeps draft selection exclusive', () => {
+  test('opens a draft on startup and keeps draft selection exclusive', () => {
     const emptyDraft = createSessionDraft(undefined, false, undefined, [], undefined, 'draft-1')
     let state = reduce([
-      { t: 'sessionsLoaded', sessions: [], emptyDraft },
+      { t: 'sessionsLoaded', sessions: [session('session-1')], emptyDraft },
     ])
 
     expect(state.draft).toEqual(emptyDraft)
@@ -47,7 +47,6 @@ describe('sessionStoreReducer', () => {
     state = sessionStoreReducer(state, {
       t: 'sessionsLoaded',
       sessions: [session('session-1')],
-      storedSessionID: 'session-1',
       emptyDraft,
     })
     expect(state.activeSessionID).toBeUndefined()

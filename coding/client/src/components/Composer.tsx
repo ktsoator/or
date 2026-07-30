@@ -4,6 +4,7 @@ import {
   BookOpen,
   Check,
   ChevronDown,
+  FileCode2,
   Info,
   LoaderCircle,
   Square,
@@ -20,13 +21,21 @@ import type {
   DeliveryMode,
   MessageImage,
   ModelOption,
+  PendingFile,
   PendingImage,
   PermissionMode,
+  PromptFile,
   QueuedMessage,
   ThinkingLevel,
   WorkspaceSummary,
 } from '@/types'
 import { cn } from '@/lib/utils'
+import {
+  formatFileSize,
+  maxTextFiles,
+  readTextFile,
+  validateTextFiles,
+} from '@/attachments'
 import {
   buildSkillInvocation,
   fetchSkills,
@@ -100,7 +109,12 @@ export function Composer({
   permissionMode: PermissionMode
   updatingSettings: boolean
   compacting: boolean
-  onSend: (text: string, images: MessageImage[], delivery?: DeliveryMode) => Promise<boolean>
+  onSend: (
+    text: string,
+    images: MessageImage[],
+    files: PromptFile[],
+    delivery?: DeliveryMode,
+  ) => Promise<boolean>
   onRemoveQueued: (id: string) => Promise<void>
   onStop: () => void
   onResolve: (id: string, choice: ApprovalChoice) => Promise<void>
@@ -118,7 +132,8 @@ export function Composer({
 }) {
   const { t } = useI18n()
   const ref = useRef<HTMLTextAreaElement>(null)
-  const fileRef = useRef<HTMLInputElement>(null)
+  const imageFileRef = useRef<HTMLInputElement>(null)
+  const textFileRef = useRef<HTMLInputElement>(null)
   const surfaceRef = useRef<HTMLDivElement>(null)
   const composingRef = useRef(false)
   const submittingRef = useRef(false)
@@ -129,6 +144,7 @@ export function Composer({
   const [sendError, setSendError] = useState('')
   const [compactFeedback, setCompactFeedback] = useState<CompactFeedback>()
   const [images, setImages] = useState<PendingImage[]>([])
+  const [files, setFiles] = useState<PendingFile[]>([])
   const [delivery, setDelivery] = useState<DeliveryMode>('steer')
   const [draftValue, setDraftValue] = useState('')
   const [selectedSkill, setSelectedSkill] = useState<SkillEntry>()
@@ -305,7 +321,7 @@ export function Composer({
     const text = selectedSkill
       ? buildSkillInvocation(selectedSkill.name, argumentsText)
       : argumentsText
-    if ((!text && images.length === 0) || inputDisabled) return
+    if ((!text && images.length === 0 && files.length === 0) || inputDisabled) return
     if (images.length > 0 && !supportsImages) {
       setAttachmentError(t('composer.modelNoImages'))
       return
@@ -316,6 +332,12 @@ export function Composer({
       const accepted = await onSend(
         text,
         images.map(({ data, mimeType }) => ({ data, mimeType })),
+        files.map(({ name, mimeType, size, file }) => ({
+          name,
+          mimeType,
+          size,
+          file,
+        })),
         running ? delivery : undefined,
       )
       if (!accepted) return
@@ -323,6 +345,7 @@ export function Composer({
       setSelectedSkill(undefined)
       setSkillSuggestionsDismissed(false)
       setImages([])
+      setFiles([])
       setAttachmentError('')
       requestAnimationFrame(autosize)
     } catch (error) {
@@ -361,6 +384,36 @@ export function Composer({
       setImages((current) => [...current, ...added])
     } catch {
       setAttachmentError(t('composer.couldNotReadImage'))
+    }
+  }
+
+  const addTextFiles = async (selectedFiles: FileList | null) => {
+    if (!selectedFiles || selectedFiles.length === 0) return
+    setAttachmentError('')
+    const selected = Array.from(selectedFiles)
+    const validation = validateTextFiles(files, selected)
+    if (validation) {
+      switch (validation) {
+        case 'count':
+          setAttachmentError(t('composer.maxFiles', { count: maxTextFiles }))
+          break
+        case 'type':
+          setAttachmentError(t('composer.fileTypes'))
+          break
+        case 'file_size':
+          setAttachmentError(t('composer.fileTooLarge'))
+          break
+        case 'total_size':
+          setAttachmentError(t('composer.filesTooLarge'))
+          break
+      }
+      return
+    }
+    try {
+      const added = await Promise.all(selected.map(readTextFile))
+      setFiles((current) => [...current, ...added])
+    } catch {
+      setAttachmentError(t('composer.fileNotText'))
     }
   }
 
@@ -467,14 +520,16 @@ export function Composer({
               open={addPanelOpen}
               imageAttachmentAvailable={supportsImages}
               imageLimitReached={images.length >= maxImages}
+              fileLimitReached={files.length >= maxTextFiles}
               onOpenChange={(open) => {
                 setAddPanelOpen(open)
                 if (open) setSkillSuggestionsDismissed(true)
               }}
-              onAttachImages={() => fileRef.current?.click()}
+              onAttachImages={() => imageFileRef.current?.click()}
+              onAttachFiles={() => textFileRef.current?.click()}
             />
             <input
-              ref={fileRef}
+              ref={imageFileRef}
               className="sr-only"
               type="file"
               accept="image/png,image/jpeg,image/webp,image/gif"
@@ -485,7 +540,53 @@ export function Composer({
                 event.target.value = ''
               }}
             />
+            <input
+              ref={textFileRef}
+              className="sr-only"
+              type="file"
+              multiple
+              tabIndex={-1}
+              onChange={(event) => {
+                void addTextFiles(event.target.files)
+                event.target.value = ''
+              }}
+            />
             <div className="col-span-2 col-start-1 row-start-1 flex min-w-0 flex-col gap-2">
+              {files.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 px-1 pt-1">
+                  {files.map((file) => (
+                    <div
+                      key={file.id}
+                      className="group/file flex h-8 max-w-[15rem] items-center gap-1.5 rounded-lg border border-stone-200 bg-stone-50 pr-1 pl-2 text-[0.75rem] text-stone-600"
+                    >
+                      <FileCode2
+                        className="size-3.5 shrink-0 text-stone-500"
+                        aria-hidden="true"
+                      />
+                      <span className="min-w-0 truncate font-medium text-stone-700">
+                        {file.name}
+                      </span>
+                      <span className="shrink-0 text-[0.6875rem] text-stone-400">
+                        {formatFileSize(file.size)}
+                      </span>
+                      <button
+                        className="grid size-6 shrink-0 cursor-pointer place-items-center rounded-md text-stone-400 outline-none transition-colors hover:bg-stone-200/70 hover:text-stone-700 focus-visible:bg-stone-200/70 focus-visible:text-stone-700"
+                        type="button"
+                        aria-label={t('composer.removeFile', { name: file.name })}
+                        title={t('composer.removeFile', { name: file.name })}
+                        onClick={() => {
+                          setFiles((current) =>
+                            current.filter((item) => item.id !== file.id),
+                          )
+                          setAttachmentError('')
+                        }}
+                      >
+                        <X className="size-3.5" aria-hidden="true" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
               {images.length > 0 && (
                 <div className="flex flex-wrap gap-2 px-1 pt-1">
                   {images.map((image) => (
@@ -865,14 +966,24 @@ function PendingQueue({
             </span>
             <span className="min-w-0 flex-1 truncate text-stone-500">
               {message.text ||
-                `${message.images.length} ${
-                  message.images.length === 1 ? t('queue.image') : t('queue.images')
-                }`}
+                ((message.files?.length ?? 0) > 0
+                  ? `${message.files?.length ?? 0} ${
+                      message.files?.length === 1 ? t('queue.file') : t('queue.files')
+                    }`
+                  : `${message.images.length} ${
+                      message.images.length === 1 ? t('queue.image') : t('queue.images')
+                    }`)}
             </span>
             {message.text && message.images.length > 0 && (
               <span className="shrink-0 text-[0.71875rem] text-stone-400">
                 +{message.images.length}{' '}
                 {message.images.length === 1 ? t('queue.image') : t('queue.images')}
+              </span>
+            )}
+            {message.text && (message.files?.length ?? 0) > 0 && (
+              <span className="shrink-0 text-[0.71875rem] text-stone-400">
+                +{message.files?.length ?? 0}{' '}
+                {message.files?.length === 1 ? t('queue.file') : t('queue.files')}
               </span>
             )}
             <span

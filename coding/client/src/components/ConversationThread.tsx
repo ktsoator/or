@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react'
-import { CircleAlert, CircleCheck, CircleStop, CircleX, LoaderCircle } from 'lucide-react'
+import {
+  CircleAlert,
+  CircleCheck,
+  CircleStop,
+  CircleX,
+  FileCode2,
+  LoaderCircle,
+} from 'lucide-react'
+import { formatFileSize } from '@/attachments'
 import type { Item } from '@/types'
 import { useI18n } from '@/i18n'
 import { formatMessageTime } from '@/lib/time'
@@ -49,6 +57,28 @@ export function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
       return (
         <section className="my-3.5 flex animate-[fade-in_160ms_ease-out] justify-end">
           <div className="flex max-w-[78%] flex-col items-end gap-2 max-md:max-w-[88%]">
+            {(item.files?.length ?? 0) > 0 && (
+              <div className="flex max-w-full flex-wrap justify-end gap-1.5">
+                {item.files?.map((file, index) => (
+                  <div
+                    key={`${file.name}-${file.size}-${index}`}
+                    className="flex h-9 max-w-[15rem] items-center gap-1.5 rounded-lg border border-stone-200 bg-stone-50 px-2.5 text-[0.75rem] text-stone-600"
+                    title={file.name}
+                  >
+                    <FileCode2
+                      className="size-3.5 shrink-0 text-stone-500"
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0 truncate font-medium text-stone-700">
+                      {file.name}
+                    </span>
+                    <span className="shrink-0 text-[0.6875rem] text-stone-400">
+                      {formatFileSize(file.size)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
             {item.images.length > 0 && (
               <div className="flex max-w-full flex-wrap justify-end gap-2">
                 {item.images.map((image, index) => (

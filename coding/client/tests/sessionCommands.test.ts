@@ -27,9 +27,18 @@ function jsonBody(call: RequestCall | undefined): unknown {
 describe('sessionCommands', () => {
   test('sends prompts with the expected endpoint and body', async () => {
     const { calls, commands } = recordingRequest()
+    const file = new File(['package main\n'], 'main.go')
     const input = {
       text: 'hello',
       images: [{ mimeType: 'image/png', data: 'aGVsbG8=' }],
+      files: [
+        {
+          name: 'main.go',
+          mimeType: 'text/plain',
+          size: 13,
+          file,
+        },
+      ],
     }
 
     await commands.sendPrompt('session / one', input)
@@ -37,13 +46,21 @@ describe('sessionCommands', () => {
     expect(calls).toHaveLength(1)
     expect(calls[0]?.url).toBe('/api/sessions/session%20%2F%20one/prompt')
     expect(calls[0]?.init.method).toBe('POST')
-    expect(calls[0]?.init.headers).toEqual({ 'Content-Type': 'application/json' })
-    expect(jsonBody(calls[0])).toEqual(input)
+    expect(calls[0]?.init.headers).toBeUndefined()
+    const body = calls[0]?.init.body as FormData
+    expect(JSON.parse(String(body.get('payload')))).toEqual({
+      text: input.text,
+      images: input.images,
+    })
+    const uploaded = body.get('files') as File
+    expect(uploaded.name).toBe('main.go')
+    expect(uploaded.type.startsWith('text/plain')).toBe(true)
+    expect(await uploaded.text()).toBe('package main\n')
   })
 
   test('maps steer and follow-up delivery to their queue endpoints', async () => {
     const { calls, commands } = recordingRequest()
-    const input = { id: 'local-1', text: 'next', images: [] }
+    const input = { id: 'local-1', text: 'next', images: [], files: [] }
 
     await commands.enqueueMessage('session-1', 'steer', input)
     await commands.enqueueMessage('session-1', 'followup', input)
@@ -53,7 +70,10 @@ describe('sessionCommands', () => {
       '/api/sessions/session-1/follow-up',
     ])
     expect(calls.every((call) => call.init.method === 'POST')).toBe(true)
-    expect(calls.map(jsonBody)).toEqual([input, input])
+    expect(calls.map(jsonBody)).toEqual([
+      { id: input.id, text: input.text, images: input.images },
+      { id: input.id, text: input.text, images: input.images },
+    ])
   })
 
   test('encodes resource IDs for abort, queue removal, approval, and browser results', async () => {

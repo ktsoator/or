@@ -98,7 +98,7 @@ function Hunk({ hunk, language }: { hunk: HunkType; language: string }) {
           <div
             key={index}
             className={cn(
-              'grid min-h-[1.125rem] grid-cols-[1.375rem_2.25rem_minmax(max-content,1fr)] font-mono text-[var(--tool-detail-font-size)] leading-4.5 text-stone-900',
+              'grid min-h-[1.125rem] grid-cols-[1.375rem_2.25rem_minmax(max-content,1fr)] font-mono text-[0.8125rem] leading-4.5 text-stone-900',
               isAdd && 'bg-[#dcefe2]',
               isDelete && 'bg-[#f5dddd]',
             )}

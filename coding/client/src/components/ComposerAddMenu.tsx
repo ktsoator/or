@@ -21,64 +21,101 @@ export function ComposerAddMenu({
   open,
   imageAttachmentAvailable,
   imageLimitReached,
+  fileLimitReached,
   onOpenChange,
   onAttachImages,
+  onAttachFiles,
 }: {
   disabled: boolean
   open: boolean
   imageAttachmentAvailable: boolean
   imageLimitReached: boolean
+  fileLimitReached: boolean
   onOpenChange: (open: boolean) => void
   onAttachImages: () => void
+  onAttachFiles: () => void
 }) {
   const { t } = useI18n()
   const [activeIndex, setActiveIndex] = useState(0)
   const [keyboardNavigating, setKeyboardNavigating] = useState(false)
   const attachDisabled =
     disabled || !imageAttachmentAvailable || imageLimitReached
-  const previewItems: Array<{
+  const attachFilesDisabled = disabled || fileLimitReached
+  const items: Array<{
+    action: 'files' | 'images' | 'preview'
     icon: LucideIcon
     label: string
     description: string
+    disabled?: boolean
+    unavailable?: string
   }> = [
     {
+      action: 'files',
       icon: FolderOpen,
       label: t('composer.addFiles'),
       description: t('composer.addFilesDescription'),
+      disabled: attachFilesDisabled,
     },
     {
+      action: 'images',
+      icon: ImagePlus,
+      label: t('composer.attachImages'),
+      description: t('composer.attachImagesDescription'),
+      disabled: attachDisabled,
+      unavailable: !imageAttachmentAvailable
+        ? t('composer.modelNoImagesShort')
+        : undefined,
+    },
+    {
+      action: 'preview',
       icon: ScanLine,
       label: t('composer.captureApp'),
       description: t('composer.captureAppDescription'),
     },
     {
+      action: 'preview',
       icon: Target,
       label: t('composer.addGoal'),
       description: t('composer.addGoalDescription'),
     },
     {
+      action: 'preview',
       icon: ListChecks,
       label: t('composer.planMode'),
       description: t('composer.planModeDescription'),
     },
     {
+      action: 'preview',
       icon: BookPlus,
       label: t('composer.createSkill'),
       description: t('composer.createSkillDescription'),
     },
   ]
-  const optionCount = previewItems.length + 1
+  const optionCount = items.length
 
   useEffect(() => {
     if (!open) return
-    setActiveIndex(0)
+    setActiveIndex(!attachFilesDisabled ? 0 : !attachDisabled ? 1 : 2)
     setKeyboardNavigating(false)
-  }, [open])
+  }, [attachDisabled, attachFilesDisabled, open])
 
-  const attachImages = () => {
-    if (attachDisabled) return
+  const moveActive = (offset: -1 | 1) => {
+    let next = activeIndex
+    for (let visited = 0; visited < optionCount; visited++) {
+      next = (next + offset + optionCount) % optionCount
+      if (!items[next]?.disabled) {
+        setActiveIndex(next)
+        return
+      }
+    }
+  }
+
+  const selectItem = (index: number) => {
+    const item = items[index]
+    if (!item || item.disabled || item.action === 'preview') return
     onOpenChange(false)
-    onAttachImages()
+    if (item.action === 'files') onAttachFiles()
+    if (item.action === 'images') onAttachImages()
   }
 
   return (
@@ -107,18 +144,18 @@ export function ComposerAddMenu({
           if (event.key === 'ArrowDown') {
             event.preventDefault()
             setKeyboardNavigating(true)
-            setActiveIndex((activeIndex + 1) % optionCount)
+            moveActive(1)
             return
           }
           if (event.key === 'ArrowUp') {
             event.preventDefault()
             setKeyboardNavigating(true)
-            setActiveIndex((activeIndex - 1 + optionCount) % optionCount)
+            moveActive(-1)
             return
           }
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault()
-            if (activeIndex === 0) attachImages()
+            selectItem(activeIndex)
           }
         }}
       >
@@ -142,59 +179,34 @@ export function ComposerAddMenu({
           onMouseMove={() => setKeyboardNavigating(false)}
         >
           <div className="flex max-h-[19rem] flex-col gap-0.5 overflow-y-auto">
-            <button
-              type="button"
-              id={composerAddOptionID(0)}
-              role="option"
-              aria-selected={activeIndex === 0}
-              className={cn(
-                addPanelRowClass,
-                'cursor-pointer outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-40',
-                activeIndex === 0 ? 'bg-[rgb(241,241,241)]' : 'bg-transparent',
-              )}
-              disabled={attachDisabled}
-              onMouseEnter={() => setActiveIndex(0)}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={attachImages}
-            >
-              <ImagePlus className="size-4 shrink-0 text-stone-500" aria-hidden="true" />
-              <span className="max-w-40 truncate font-medium text-stone-800">
-                {t('composer.attachImages')}
-              </span>
-              <span className="truncate text-stone-400">
-                {t('composer.attachImagesDescription')}
-              </span>
-              {!imageAttachmentAvailable && (
-                <span className="text-[0.6875rem] text-stone-400">
-                  {t('composer.modelNoImagesShort')}
-                </span>
-              )}
-            </button>
-            {previewItems.map((item, index) => {
+            {items.map((item, index) => {
               const Icon = item.icon
-              const optionIndex = index + 1
               return (
                 <button
                   key={item.label}
-                  id={composerAddOptionID(optionIndex)}
+                  id={composerAddOptionID(index)}
                   type="button"
                   role="option"
-                  aria-selected={activeIndex === optionIndex}
+                  aria-selected={activeIndex === index}
                   className={cn(
                     addPanelRowClass,
-                    'cursor-pointer outline-none transition-colors',
-                    activeIndex === optionIndex
+                    'cursor-pointer outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+                    activeIndex === index
                       ? 'bg-[rgb(241,241,241)]'
                       : 'bg-transparent',
                   )}
-                  onMouseEnter={() => setActiveIndex(optionIndex)}
+                  disabled={item.disabled}
+                  onMouseEnter={() => setActiveIndex(index)}
                   onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => setActiveIndex(optionIndex)}
+                  onClick={() => {
+                    setActiveIndex(index)
+                    selectItem(index)
+                  }}
                 >
                   <Icon
                     className={cn(
                       'size-4 shrink-0',
-                      activeIndex === optionIndex ? 'text-stone-600' : 'text-stone-400',
+                      activeIndex === index ? 'text-stone-600' : 'text-stone-400',
                     )}
                     aria-hidden="true"
                   />
@@ -202,9 +214,15 @@ export function ComposerAddMenu({
                     {item.label}
                   </span>
                   <span className="truncate text-stone-400">{item.description}</span>
-                  <span className="text-[0.6875rem] text-stone-400">
-                    {t('composer.comingSoon')}
-                  </span>
+                  {item.unavailable ? (
+                    <span className="text-[0.6875rem] text-stone-400">
+                      {item.unavailable}
+                    </span>
+                  ) : item.action === 'preview' ? (
+                    <span className="text-[0.6875rem] text-stone-400">
+                      {t('composer.comingSoon')}
+                    </span>
+                  ) : null}
                 </button>
               )
             })}

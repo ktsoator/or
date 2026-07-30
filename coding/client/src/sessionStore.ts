@@ -2,6 +2,7 @@ import type {
   MessageImage,
   ModelOption,
   PermissionMode,
+  PromptFile,
   SessionSummary,
   TitleGeneration,
   TitleGenerationStatus,
@@ -25,6 +26,7 @@ export type DraftSubmission = {
   sessionID: string
   text: string
   images: MessageImage[]
+  files: PromptFile[]
 }
 
 export type ModelDefaults = {
@@ -46,7 +48,6 @@ export type SessionStoreAction =
   | {
       t: 'sessionsLoaded'
       sessions: SessionSummary[]
-      storedSessionID?: string
       emptyDraft: SessionDraft
     }
   | { t: 'workspacesLoaded'; workspaces: WorkspaceSummary[] }
@@ -146,16 +147,18 @@ export function sessionStoreReducer(
           ? local
           : remote
       })
-      const draft = sessions.length === 0 && !state.draft ? action.emptyDraft : state.draft
-      const activeSessionID = draft
-        ? undefined
-        : state.activeSessionID && sessions.some((session) => session.id === state.activeSessionID)
+      const selectedSessionID =
+        state.activeSessionID &&
+        sessions.some((session) => session.id === state.activeSessionID)
           ? state.activeSessionID
-          : action.storedSessionID &&
-              sessions.some((session) => session.id === action.storedSessionID)
-            ? action.storedSessionID
-            : sessions[0]?.id
-      return { ...state, sessions, draft, activeSessionID }
+          : undefined
+      const draft = state.draft ?? (selectedSessionID ? undefined : action.emptyDraft)
+      return {
+        ...state,
+        sessions,
+        draft,
+        activeSessionID: draft ? undefined : selectedSessionID,
+      }
     }
 
     case 'workspacesLoaded':

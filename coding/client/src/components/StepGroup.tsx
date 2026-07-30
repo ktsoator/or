@@ -64,7 +64,7 @@ export function StepGroup({ items, cwd }: { items: Item[]; cwd?: string }) {
     >
       <CollapsibleTrigger
         className={cn(
-          'group inline-flex max-w-full cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-left text-[var(--chat-font-size)] leading-6 text-stone-500 outline-none transition-colors hover:text-stone-900 focus-visible:rounded-sm focus-visible:bg-stone-100 focus-visible:text-stone-900',
+          'group inline-flex max-w-full cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-left text-[1.03125rem] leading-6 text-stone-500 outline-none transition-colors hover:text-stone-900 focus-visible:rounded-sm focus-visible:bg-stone-100 focus-visible:text-stone-900',
           active && 'streaming-sheen',
         )}
       >

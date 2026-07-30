@@ -5,6 +5,7 @@ import type {
   BrowserResult,
   BrowserTabsResult,
   DeliveryMode,
+  PromptFile,
   MessageImage,
   QuestionAnswer,
   TaskOutputResponse,
@@ -13,6 +14,7 @@ import type {
 export type PromptInput = {
   text: string
   images: MessageImage[]
+  files: PromptFile[]
 }
 
 export type QueuedPromptInput = PromptInput & {
@@ -90,6 +92,29 @@ const jsonRequest = (method: string, body: unknown): RequestInit => ({
   body: JSON.stringify(body),
 })
 
+function messageRequest(
+  method: string,
+  input: PromptInput | QueuedPromptInput,
+): RequestInit {
+  const files = input.files ?? []
+  const payload = {
+    ...('id' in input ? { id: input.id } : {}),
+    text: input.text,
+    images: input.images,
+  }
+  if (files.length === 0) return jsonRequest(method, payload)
+  const body = new FormData()
+  body.set('payload', JSON.stringify(payload))
+  for (const attached of files) {
+    const upload =
+      attached.file.type === attached.mimeType
+        ? attached.file
+        : new File([attached.file], attached.name, { type: attached.mimeType })
+    body.append('files', upload, attached.name)
+  }
+  return { method, body }
+}
+
 export function createSessionCommands(
   request: SessionRequest = browserRequest,
 ): SessionCommands {
@@ -98,7 +123,7 @@ export function createSessionCommands(
       requestOK(
         request,
         sessionURL(sessionID, '/prompt'),
-        jsonRequest('POST', input),
+        messageRequest('POST', input),
         (status) => `prompt request failed (${status})`,
       ),
 
@@ -107,7 +132,7 @@ export function createSessionCommands(
       return requestOK(
         request,
         sessionURL(sessionID, endpoint),
-        jsonRequest('POST', input),
+        messageRequest('POST', input),
         (status) => `queue request failed (${status})`,
       )
     },

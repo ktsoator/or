@@ -214,6 +214,54 @@ describe('threadsReducer event sequences', () => {
     expect(thread(state).queue).toHaveLength(0)
   })
 
+  test('keeps attached file metadata through optimistic send and acknowledgement', () => {
+    const optimisticFiles = [
+      {
+        name: 'main.go',
+        mimeType: 'text/plain',
+        size: 13,
+      },
+    ]
+    const acknowledgedFiles = [
+      {
+        name: 'main.go',
+        mimeType: 'application/octet-stream',
+        size: 13,
+      },
+    ]
+    const state = reduce([
+      {
+        t: 'sendUser',
+        sessionID,
+        id: 'file-message',
+        text: 'review this',
+        images: [],
+        files: optimisticFiles,
+        startedAt,
+      },
+      {
+        t: 'wire',
+        sessionID,
+        ev: {
+          type: 'user_message',
+          text: 'review this',
+          images: [],
+          files: acknowledgedFiles,
+        },
+      },
+    ])
+
+    expect(thread(state).items.filter((item) => item.kind === 'user')).toHaveLength(1)
+    expect(thread(state).items).toContainEqual(
+      expect.objectContaining({
+        kind: 'user',
+        id: 'file-message',
+        text: 'review this',
+        files: acknowledgedFiles,
+      }),
+    )
+  })
+
   test('discards a partial attempt and retains the retry response', () => {
     let state = reduce([
       {

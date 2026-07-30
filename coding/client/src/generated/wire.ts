@@ -138,6 +138,12 @@ export type MessageImage = {
   mimeType: string
 }
 
+export type MessageFile = {
+  name: string
+  mimeType: string
+  size: number
+}
+
 export type PreviewRequest = {
   url?: string
   path?: string
@@ -271,6 +277,7 @@ export type WireEvent = {
   isError?: boolean
   text?: string
   images?: MessageImage[]
+  files?: MessageFile[]
   usage?: Usage
   finalResponse?: boolean
   provider?: string

@@ -256,6 +256,7 @@ type wireEvent struct {
 	// message_end fallback text (used when nothing streamed)
 	Text   string      `json:"text,omitempty"`
 	Images []wireImage `json:"images,omitempty"`
+	Files  []wireFile  `json:"files,omitempty"`
 	Usage  *wireUsage  `json:"usage,omitempty"`
 	Final  bool        `json:"finalResponse,omitempty"`
 	// Completed-response metadata. ModelName is the stable catalog display name;
@@ -298,6 +299,12 @@ type wireEvent struct {
 type wireImage struct {
 	Data     string `json:"data"`
 	MIMEType string `json:"mimeType"`
+}
+
+type wireFile struct {
+	Name     string `json:"name"`
+	MIMEType string `json:"mimeType"`
+	Size     int    `json:"size"`
 }
 
 type wirePreview struct {

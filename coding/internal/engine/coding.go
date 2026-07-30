@@ -378,8 +378,19 @@ func (s *Session) snapshotOutcomes() map[string]agent.ToolOutcome {
 // completes. Newly appended messages are persisted. It returns ErrBusy if a run
 // is already in progress.
 func (s *Session) Prompt(ctx context.Context, text string, images ...llm.ImageContent) error {
+	return s.PromptWithFiles(ctx, text, nil, images...)
+}
+
+// PromptWithFiles starts a run with text files that remain product-owned
+// context rather than becoming a new LLM SDK content type.
+func (s *Session) PromptWithFiles(
+	ctx context.Context,
+	text string,
+	files []AttachedFile,
+	images ...llm.ImageContent,
+) error {
 	return s.run(ctx, func(ctx context.Context) error {
-		message, err := s.promptMessage(text, images...)
+		message, err := s.promptMessage(text, files, images...)
 		if err != nil {
 			return err
 		}
@@ -387,7 +398,11 @@ func (s *Session) Prompt(ctx context.Context, text string, images ...llm.ImageCo
 	})
 }
 
-func (s *Session) promptMessage(text string, images ...llm.ImageContent) (agent.AgentMessage, error) {
+func (s *Session) promptMessage(
+	text string,
+	files []AttachedFile,
+	images ...llm.ImageContent,
+) (agent.AgentMessage, error) {
 	registry := s.skillRegistry.Snapshot()
 	if s.pendingSkills != nil {
 		registry = s.pendingSkills
@@ -397,19 +412,9 @@ func (s *Session) promptMessage(text string, images ...llm.ImageContent) (agent.
 		return nil, err
 	}
 	if !matched {
-		return agent.UserMessage(text, images...), nil
+		return userMessage(text, files, images), nil
 	}
-
-	content := make([]llm.UserContent, 0, 2+len(images))
-	content = append(content,
-		&llm.TextContent{Text: text},
-		&llm.TextContent{Text: expanded},
-	)
-	for index := range images {
-		image := images[index]
-		content = append(content, &image)
-	}
-	return agent.FromLLM(&llm.UserMessage{Content: content}), nil
+	return userMessage(text, files, images, expanded), nil
 }
 
 // Continue resumes a run from the current transcript without adding a message.
@@ -697,9 +702,27 @@ func (s *Session) Steer(text string, images ...llm.ImageContent) QueueHandle {
 	return QueueHandle{agent: s.agent.Steer(agent.UserMessage(text, images...))}
 }
 
+// SteerWithFiles queues guidance with product-owned attached file context.
+func (s *Session) SteerWithFiles(
+	text string,
+	files []AttachedFile,
+	images ...llm.ImageContent,
+) QueueHandle {
+	return QueueHandle{agent: s.agent.Steer(userMessage(text, files, images))}
+}
+
 // FollowUp queues a message to process once the run would otherwise stop.
 func (s *Session) FollowUp(text string, images ...llm.ImageContent) QueueHandle {
 	return QueueHandle{agent: s.agent.FollowUp(agent.UserMessage(text, images...))}
+}
+
+// FollowUpWithFiles queues a follow-up with product-owned attached file context.
+func (s *Session) FollowUpWithFiles(
+	text string,
+	files []AttachedFile,
+	images ...llm.ImageContent,
+) QueueHandle {
+	return QueueHandle{agent: s.agent.FollowUp(userMessage(text, files, images))}
 }
 
 // CancelQueuedMessage removes one message that has not entered the transcript.

@@ -10,9 +10,7 @@ import {
   Archive,
   BookOpenText,
   CircleAlert,
-  Clock3,
   Ellipsis,
-  Files,
   Folder,
   FolderOpen,
   GitFork,
@@ -27,7 +25,6 @@ import {
   ShieldAlert,
   SquarePen,
   Trash2,
-  Wrench,
   X,
 } from 'lucide-react'
 import { DropdownMenu } from 'radix-ui'
@@ -635,30 +632,10 @@ export default function App() {
 
             <div className="mt-1 space-y-1" aria-label={t('app.workspaceShortcuts')}>
               <SidebarNavItem
-                icon={Files}
-                label={t('app.files')}
-                collapsed={sidebarCollapsed}
-              />
-              <SidebarNavItem
                 icon={BookOpenText}
                 label={t('app.skills')}
                 collapsed={sidebarCollapsed}
                 onClick={() => setSkillsOpen(true)}
-              />
-              <SidebarNavItem
-                icon={Clock3}
-                label={t('app.scheduled')}
-                collapsed={sidebarCollapsed}
-              />
-              <SidebarNavItem
-                icon={Wrench}
-                label={t('app.tools')}
-                collapsed={sidebarCollapsed}
-              />
-              <SidebarNavItem
-                icon={Ellipsis}
-                label={t('app.more')}
-                collapsed={sidebarCollapsed}
               />
             </div>
           </div>

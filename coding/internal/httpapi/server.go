@@ -102,5 +102,8 @@ const (
 	maxPromptImages       = 4
 	maxPromptImageBytes   = 10 << 20
 	maxPromptImagesBytes  = 20 << 20
+	maxPromptFiles        = 10
+	maxPromptFileBytes    = 256 << 10
+	maxPromptFilesBytes   = 512 << 10
 	maxPromptRequestBytes = 28 << 20
 )

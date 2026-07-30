@@ -308,10 +308,10 @@ function ReadPreview({ output, path, failed }: { output: string; path: string; f
             aria-label={t('tool.contentsOf', { path })}
             tabIndex={0}
           >
-            <pre className="sticky left-0 z-10 m-0 border-r border-stone-200 bg-white px-2.5 py-1 text-right font-mono text-[var(--tool-detail-font-size)] leading-4.5 whitespace-pre text-stone-400 select-none">
+            <pre className="sticky left-0 z-10 m-0 border-r border-stone-200 bg-white px-2.5 py-1 text-right font-mono text-[0.8125rem] leading-4.5 whitespace-pre text-stone-400 select-none">
               {content.lineNumbers}
             </pre>
-            <pre className="m-0 min-w-full bg-transparent px-2.5 py-1 font-mono text-[var(--tool-detail-font-size)] leading-4.5 whitespace-pre text-stone-900">
+            <pre className="m-0 min-w-full bg-transparent px-2.5 py-1 font-mono text-[0.8125rem] leading-4.5 whitespace-pre text-stone-900">
               <code
                 className="or-code-theme hljs block min-w-full bg-transparent! p-0!"
                 dangerouslySetInnerHTML={{ __html: html }}
@@ -327,7 +327,7 @@ function ReadPreview({ output, path, failed }: { output: string; path: string; f
       ) : (
         <pre
           className={cn(
-            'code-scroll-area m-0 max-h-[min(52vh,32.5rem)] overflow-auto bg-transparent px-2.5 py-1 font-mono text-[var(--tool-detail-font-size)] leading-4.5 whitespace-pre-wrap text-stone-800',
+            'code-scroll-area m-0 max-h-[min(52vh,32.5rem)] overflow-auto bg-transparent px-2.5 py-1 font-mono text-[0.8125rem] leading-4.5 whitespace-pre-wrap text-stone-800',
             failed && 'text-red-700',
           )}
         >
@@ -377,7 +377,7 @@ function BrowserInspectionPreview({
   const { t } = useI18n()
   if (failed) {
     return (
-      <div className="mt-1 ml-5 rounded-md border-l-2 border-red-300 bg-red-50/50 px-3 py-1 text-[var(--tool-detail-font-size)] leading-5 text-red-700 max-md:ml-0">
+      <div className="mt-1 ml-5 rounded-md border-l-2 border-red-300 bg-red-50/50 px-3 py-1 text-[0.8125rem] leading-5 text-red-700 max-md:ml-0">
         {output || t('tool.browserInspectionFailed')}
       </div>
     )
@@ -386,7 +386,7 @@ function BrowserInspectionPreview({
   const content = parseBrowserInspection(output)
   if (!content) {
     return (
-      <pre className="code-scroll-area mt-1 ml-5 max-h-72 overflow-auto rounded-md border border-stone-200 bg-white px-3 py-2 font-mono text-[var(--tool-detail-font-size)] leading-5 whitespace-pre-wrap text-stone-700 max-md:ml-0">
+      <pre className="code-scroll-area mt-1 ml-5 max-h-72 overflow-auto rounded-md border border-stone-200 bg-white px-3 py-2 font-mono text-[0.8125rem] leading-5 whitespace-pre-wrap text-stone-700 max-md:ml-0">
         {output}
       </pre>
     )
@@ -432,7 +432,7 @@ function InspectPreview({ output, failed }: { output: string; failed: boolean })
   const { t } = useI18n()
   if (failed) {
     return (
-      <div className="mt-1 ml-5 rounded-md border-l-2 border-red-300 bg-red-50/50 px-3 py-1 font-mono text-[var(--tool-detail-font-size)] leading-5 text-red-700 max-md:ml-0">
+      <div className="mt-1 ml-5 rounded-md border-l-2 border-red-300 bg-red-50/50 px-3 py-1 font-mono text-[0.8125rem] leading-5 text-red-700 max-md:ml-0">
         {output || t('tool.inspectionFailed')}
       </div>
     )
@@ -470,7 +470,7 @@ function InspectPreview({ output, failed }: { output: string; failed: boolean })
                   className="size-3.25 shrink-0 text-stone-400 transition-colors group-hover:text-stone-500"
                   aria-hidden="true"
                 />
-                <code className="pr-4 font-mono text-[var(--tool-detail-font-size)] leading-4.5">{path}</code>
+                <code className="pr-4 font-mono text-[0.8125rem] leading-4.5">{path}</code>
               </div>
             )
           })}
@@ -503,7 +503,7 @@ function ShellPreview({
         failed && 'border-red-200 bg-red-50/60',
       )}
     >
-      <div className="flex min-h-7 items-start gap-2 px-2.5 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-4.5 font-normal">
+      <div className="flex min-h-7 items-start gap-2 px-2.5 py-1.5 font-mono text-[0.8125rem] leading-4.5 font-normal">
         <span className="shrink-0 text-stone-400 select-none">$</span>
         <code className="min-w-0 flex-1 overflow-auto whitespace-pre-wrap text-stone-700">
           {command}
@@ -513,7 +513,7 @@ function ShellPreview({
       {log && (
         <pre
           className={cn(
-            'code-scroll-area m-0 max-h-[min(46vh,26.25rem)] overflow-auto border-t border-stone-200 bg-white px-2.5 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-4.5 font-normal tracking-[0.005em] whitespace-pre text-stone-600',
+            'code-scroll-area m-0 max-h-[min(46vh,26.25rem)] overflow-auto border-t border-stone-200 bg-white px-2.5 py-1.5 font-mono text-[0.8125rem] leading-4.5 font-normal tracking-[0.005em] whitespace-pre text-stone-600',
             failed && 'border-red-200 bg-red-50/40 text-red-700',
           )}
           role="region"
@@ -600,7 +600,7 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
     item.result || (item.status === 'error' ? t('tool.fileCouldNotRead') : t('tool.fileEmpty'))
 
   const summary = (
-    <span className="flex min-h-6 min-w-0 flex-1 items-center gap-2 text-[var(--chat-font-size)] leading-6 text-stone-500 transition-colors group-hover:text-stone-900">
+    <span className="flex min-h-6 min-w-0 flex-1 items-center gap-2 text-[1.03125rem] leading-6 text-stone-500 transition-colors group-hover:text-stone-900">
       <Icon
         className={cn(
           'size-4 shrink-0 transition-colors',
@@ -648,7 +648,7 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
         </span>
       ) : (
         <code
-          className="min-w-0 overflow-hidden font-mono text-[var(--chat-font-size)] leading-6 font-normal text-stone-500 text-ellipsis whitespace-nowrap transition-colors group-hover:text-stone-950"
+          className="min-w-0 overflow-hidden font-mono text-[1.03125rem] leading-6 font-normal text-stone-500 text-ellipsis whitespace-nowrap transition-colors group-hover:text-stone-950"
           title={targetTitle}
         >
           {target}
@@ -683,14 +683,14 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
           <div className="mt-1 ml-5 overflow-hidden rounded-lg border border-stone-200 bg-white max-md:ml-0">
             {skillArgs && (
               <DetailBlock title={t('tool.skillArguments')}>
-                <pre className="m-0 max-h-80 overflow-auto bg-white px-2.5 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-4.5 whitespace-pre-wrap text-stone-700">
+                <pre className="m-0 max-h-80 overflow-auto bg-white px-2.5 py-1.5 font-mono text-[0.8125rem] leading-4.5 whitespace-pre-wrap text-stone-700">
                   {skillArgs}
                 </pre>
               </DetailBlock>
             )}
             {item.status === 'error' && (
               <DetailBlock title={t('tool.errorOutput')}>
-                <pre className="m-0 max-h-80 overflow-auto bg-red-50/50 px-2.5 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-4.5 whitespace-pre-wrap text-red-700">
+                <pre className="m-0 max-h-80 overflow-auto bg-red-50/50 px-2.5 py-1.5 font-mono text-[0.8125rem] leading-4.5 whitespace-pre-wrap text-red-700">
                   {item.result || t('tool.failedNoMessage')}
                 </pre>
               </DetailBlock>
@@ -712,7 +712,7 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
           <div className="mt-1 ml-5 overflow-hidden rounded-lg border border-stone-200 bg-white max-md:ml-0">
             {args && (
               <DetailBlock title={t('tool.input')}>
-                <pre className="m-0 max-h-80 overflow-auto bg-white px-2.5 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-4.5 whitespace-pre-wrap text-stone-700">
+                <pre className="m-0 max-h-80 overflow-auto bg-white px-2.5 py-1.5 font-mono text-[0.8125rem] leading-4.5 whitespace-pre-wrap text-stone-700">
                   {args}
                 </pre>
               </DetailBlock>
@@ -723,7 +723,7 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
               >
                 <pre
                   className={cn(
-                    'm-0 max-h-80 overflow-auto bg-white px-2.5 py-1.5 font-mono text-[var(--tool-detail-font-size)] leading-4.5 whitespace-pre-wrap text-stone-700',
+                    'm-0 max-h-80 overflow-auto bg-white px-2.5 py-1.5 font-mono text-[0.8125rem] leading-4.5 whitespace-pre-wrap text-stone-700',
                     item.status === 'error' && 'bg-red-50/50 text-red-700',
                   )}
                 >

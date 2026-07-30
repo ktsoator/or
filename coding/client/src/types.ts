@@ -4,6 +4,7 @@ import type {
   Change,
   DeliveryMode,
   HistoryResponse,
+  MessageFile,
   MessageImage,
   PreviewRequest,
   Question,
@@ -71,10 +72,23 @@ export type PendingImage = MessageImage & {
   size: number
 }
 
+export type PromptFile = {
+  name: string
+  mimeType: string
+  size: number
+  file: File
+}
+
+export type PendingFile = MessageFile &
+  PromptFile & {
+    id: string
+  }
+
 export type QueuedMessage = {
   id: string
   text: string
   images: MessageImage[]
+  files?: MessageFile[]
   delivery: DeliveryMode
   status: 'queued' | 'removing' | 'failed'
 }
@@ -120,6 +134,7 @@ export type UserItem = {
   id: string
   text: string
   images: MessageImage[]
+  files?: MessageFile[]
   sentAt?: string
   deliveryStatus?: 'sending' | 'failed'
 }

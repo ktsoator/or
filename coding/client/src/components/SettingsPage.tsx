@@ -1,43 +1,24 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
-  Archive,
   ArrowLeft,
   Bot,
-  Cable,
   Check,
   ChevronDown,
   Gauge,
-  Keyboard,
   Search,
   Settings2,
-  Sun,
-  UserRound,
-  Wrench,
 } from 'lucide-react'
 import { DropdownMenu } from 'radix-ui'
 import { cn } from '@/lib/utils'
 import { useI18n, type Locale } from '@/i18n'
 import { UsageSettings } from '@/components/UsageSettings'
 import { ProvidersSettings } from '@/components/ProvidersSettings'
-import {
-  readAppearancePreferences,
-  saveAppearancePreferences,
-  type AppearancePreferences,
-  type InterfaceDensity,
-  type TextSize,
-} from '@/lib/appearance'
 
 export type SettingsSection =
   | 'general'
   | 'usage'
-  | 'profile'
-  | 'appearance'
   | 'models'
-  | 'keyboard'
-  | 'tools'
-  | 'connections'
-  | 'archived'
 
 type NavItem = {
   id: SettingsSection
@@ -62,11 +43,6 @@ export function SettingsPage({
   const { t } = useI18n()
   const [active, setActive] = useState<SettingsSection>(initialSection)
   const [query, setQuery] = useState('')
-  const [responseUsage, setResponseUsage] = useState(true)
-  const [backgroundRuns, setBackgroundRuns] = useState(true)
-  const [fileOpener, setFileOpener] = useState('vscode')
-  const [toolResults, setToolResults] = useState('collapsed')
-  const [appearance, setAppearance] = useState(readAppearancePreferences)
 
   const groups = useMemo<NavGroup[]>(
     () => [
@@ -74,24 +50,8 @@ export function SettingsPage({
         label: t('settings.personal'),
         items: [
           { id: 'general', label: t('settings.general'), icon: Settings2 },
-          { id: 'profile', label: t('settings.profile'), icon: UserRound },
           { id: 'usage', label: t('settings.usage'), icon: Gauge },
-          { id: 'appearance', label: t('settings.appearance'), icon: Sun },
           { id: 'models', label: t('settings.models'), icon: Bot },
-          { id: 'keyboard', label: t('settings.keyboard'), icon: Keyboard },
-        ],
-      },
-      {
-        label: t('settings.workspaceSection'),
-        items: [
-          { id: 'tools', label: t('settings.tools'), icon: Wrench },
-          { id: 'connections', label: t('settings.connections'), icon: Cable },
-        ],
-      },
-      {
-        label: t('settings.archived'),
-        items: [
-          { id: 'archived', label: t('settings.archivedSessions'), icon: Archive },
         ],
       },
     ],
@@ -109,10 +69,6 @@ export function SettingsPage({
         .filter((group) => group.items.length > 0)
     : groups
   const activeItem = groups.flatMap((group) => group.items).find((item) => item.id === active)
-  const updateAppearance = (next: AppearancePreferences) => {
-    setAppearance(next)
-    saveAppearancePreferences(next)
-  }
 
   return (
     <div className="settings-page relative grid h-full min-h-0 grid-cols-[16rem_minmax(0,1fr)] overflow-hidden bg-white max-md:grid-cols-1 max-md:grid-rows-[auto_minmax(0,1fr)]">
@@ -177,24 +133,11 @@ export function SettingsPage({
 
           <div className={active === 'usage' ? 'mt-8 max-md:mt-6' : 'mt-11 max-md:mt-7'}>
             {active === 'general' ? (
-              <GeneralSettings
-                fileOpener={fileOpener}
-                toolResults={toolResults}
-                responseUsage={responseUsage}
-                backgroundRuns={backgroundRuns}
-                onFileOpenerChange={setFileOpener}
-                onToolResultsChange={setToolResults}
-                onResponseUsageChange={setResponseUsage}
-                onBackgroundRunsChange={setBackgroundRuns}
-              />
+              <GeneralSettings />
             ) : active === 'usage' ? (
               <UsageSettings />
-            ) : active === 'models' ? (
-              <ProvidersSettings onChanged={onProvidersChanged} />
-            ) : active === 'appearance' ? (
-              <AppearanceSettings preferences={appearance} onChange={updateAppearance} />
             ) : (
-              <SettingsPlaceholder section={activeItem?.label ?? ''} icon={activeItem?.icon} />
+              <ProvidersSettings onChanged={onProvidersChanged} />
             )}
           </div>
         </div>
@@ -229,94 +172,7 @@ function SettingsNavItem({
   )
 }
 
-function AppearanceSettings({
-  preferences,
-  onChange,
-}: {
-  preferences: AppearancePreferences
-  onChange: (preferences: AppearancePreferences) => void
-}) {
-  const { t } = useI18n()
-  const densityOptions: Array<{ value: InterfaceDensity; label: string }> = [
-    { value: 'compact', label: t('settings.compact') },
-    { value: 'default', label: t('settings.defaultSize') },
-    { value: 'comfortable', label: t('settings.comfortable') },
-  ]
-  const textOptions: Array<{ value: TextSize; label: string }> = [
-    { value: 'small', label: t('settings.small') },
-    { value: 'default', label: t('settings.defaultSize') },
-    { value: 'large', label: t('settings.large') },
-  ]
-
-  return (
-    <SettingsSection title={t('settings.display')}>
-      <SettingsCard>
-        <SettingsRow
-          label={t('settings.interfaceDensity')}
-          description={t('settings.interfaceDensityDescription')}
-          control={
-            <SelectControl
-              value={preferences.density}
-              ariaLabel={t('settings.interfaceDensity')}
-              options={densityOptions}
-              onChange={(density) =>
-                onChange({ ...preferences, density: density as InterfaceDensity })
-              }
-            />
-          }
-        />
-        <SettingsRow
-          label={t('settings.chatText')}
-          description={t('settings.chatTextDescription')}
-          control={
-            <SelectControl
-              value={preferences.chatText}
-              ariaLabel={t('settings.chatText')}
-              options={textOptions}
-              onChange={(chatText) =>
-                onChange({ ...preferences, chatText: chatText as TextSize })
-              }
-            />
-          }
-        />
-        <SettingsRow
-          label={t('settings.codeText')}
-          description={t('settings.codeTextDescription')}
-          control={
-            <SelectControl
-              value={preferences.codeText}
-              ariaLabel={t('settings.codeText')}
-              options={textOptions}
-              onChange={(codeText) =>
-                onChange({ ...preferences, codeText: codeText as TextSize })
-              }
-            />
-          }
-        />
-      </SettingsCard>
-    </SettingsSection>
-  )
-}
-
-function GeneralSettings({
-  fileOpener,
-  toolResults,
-  responseUsage,
-  backgroundRuns,
-  onFileOpenerChange,
-  onToolResultsChange,
-  onResponseUsageChange,
-  onBackgroundRunsChange,
-}: {
-  fileOpener: string
-  toolResults: string
-  responseUsage: boolean
-  backgroundRuns: boolean
-  onFileOpenerChange: (value: string) => void
-  onToolResultsChange: (value: string) => void
-  onResponseUsageChange: (value: boolean) => void
-  onBackgroundRunsChange: (value: boolean) => void
-}) {
+function GeneralSettings() {
   const { locale, setLocale, t } = useI18n()
   return (
     <div>
@@ -335,58 +191,6 @@ function GeneralSettings({
                   { value: 'en', label: t('profile.english') },
                   { value: 'zh-CN', label: t('profile.chinese') },
                 ]}
-              />
-            }
-          />
-          <SettingsRow
-            label={t('settings.fileOpener')}
-            description={t('settings.fileOpenerDescription')}
-            control={
-              <SelectControl
-                value={fileOpener}
-                ariaLabel={t('settings.fileOpener')}
-                onChange={onFileOpenerChange}
-                options={[
-                  { value: 'vscode', label: 'VS Code' },
-                  { value: 'system', label: t('settings.systemDefault') },
-                ]}
-              />
-            }
-          />
-          <SettingsRow
-            label={t('settings.toolResults')}
-            description={t('settings.toolResultsDescription')}
-            control={
-              <SelectControl
-                value={toolResults}
-                ariaLabel={t('settings.toolResults')}
-                onChange={onToolResultsChange}
-                options={[
-                  { value: 'collapsed', label: t('settings.collapsed') },
-                  { value: 'expanded', label: t('settings.expanded') },
-                ]}
-              />
-            }
-          />
-          <SettingsRow
-            label={t('settings.responseUsage')}
-            description={t('settings.responseUsageDescription')}
-            control={
-              <Toggle
-                checked={responseUsage}
-                label={t('settings.responseUsage')}
-                onCheckedChange={onResponseUsageChange}
-              />
-            }
-          />
-          <SettingsRow
-            label={t('settings.backgroundRuns')}
-            description={t('settings.backgroundRunsDescription')}
-            control={
-              <Toggle
-                checked={backgroundRuns}
-                label={t('settings.backgroundRuns')}
-                onCheckedChange={onBackgroundRunsChange}
               />
             }
           />
@@ -432,38 +236,6 @@ function SettingsRow({
       </div>
       <div className="shrink-0 max-sm:pt-0.5">{control}</div>
     </div>
-  )
-}
-
-function Toggle({
-  checked,
-  label,
-  onCheckedChange,
-}: {
-  checked: boolean
-  label: string
-  onCheckedChange: (checked: boolean) => void
-}) {
-  return (
-    <button
-      className={cn(
-        'relative h-[1.375rem] w-9 cursor-pointer rounded-full outline-none transition-[background-color,filter] focus-visible:brightness-90',
-        checked ? 'bg-stone-900' : 'bg-stone-300',
-      )}
-      type="button"
-      role="switch"
-      aria-label={label}
-      aria-checked={checked}
-      onClick={() => onCheckedChange(!checked)}
-    >
-      <span
-        className={cn(
-          'absolute top-[0.1875rem] left-[0.1875rem] size-4 rounded-full bg-white shadow-sm transition-transform duration-150 ease-out',
-          checked && 'translate-x-[0.875rem]',
-        )}
-        aria-hidden="true"
-      />
-    </button>
   )
 }
 
@@ -569,24 +341,5 @@ function SelectControl({
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
-  )
-}
-
-function SettingsPlaceholder({ section, icon: Icon }: { section: string; icon?: LucideIcon }) {
-  const { t } = useI18n()
-  return (
-    <div className="flex min-h-[16.25rem] flex-col items-center justify-center rounded-[20px] border border-stone-200/90 bg-[#fdfdfc] px-8 text-center">
-      {Icon && (
-        <div className="grid size-10 place-items-center rounded-xl bg-stone-100 text-stone-500">
-          <Icon className="size-5" strokeWidth={1.7} aria-hidden="true" />
-        </div>
-      )}
-      <h2 className="mt-4 text-[1rem] font-medium text-stone-900">
-        {t('settings.previewTitle', { section })}
-      </h2>
-      <p className="mt-1.5 text-[0.8125rem] leading-5 text-stone-500">
-        {t('settings.previewDescription')}
-      </p>
-    </div>
   )
 }

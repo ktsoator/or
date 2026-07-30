@@ -179,6 +179,7 @@ func projectSessionWireEvent(event conversation.Event) (wireEvent, bool) {
 			ID:       e.ID,
 			Text:     e.Text,
 			Images:   projectImages(e.Images),
+			Files:    projectFiles(e.Files),
 			Delivery: projectDeliveryMode(e.Delivery),
 			Queued:   e.Queued,
 		}
@@ -221,6 +222,7 @@ func projectQueue(events []conversation.Event) []wireEvent {
 				ID:       accepted.ID,
 				Text:     accepted.Text,
 				Images:   projectImages(accepted.Images),
+				Files:    projectFiles(accepted.Files),
 				Delivery: projectDeliveryMode(accepted.Delivery),
 				Queued:   accepted.Queued,
 			})

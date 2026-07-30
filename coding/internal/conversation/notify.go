@@ -53,6 +53,7 @@ type MessageAccepted struct {
 	ID       string
 	Text     string
 	Images   []llm.ImageContent
+	Files    []engine.File
 	Delivery Delivery
 	Queued   bool
 }

@@ -16,14 +16,25 @@ import (
 // manager owns the complete lifecycle so callers cannot forget to release the
 // reservation or clean up queued messages.
 func (m *Manager) StartPrompt(id, prompt string, images ...llm.ImageContent) error {
-	runtime, err := m.reservePrompt(id, prompt, images)
+	return m.StartPromptWithFiles(id, prompt, nil, images...)
+}
+
+// StartPromptWithFiles starts a prompt with validated text-file attachments.
+func (m *Manager) StartPromptWithFiles(
+	id string,
+	prompt string,
+	files []engine.AttachedFile,
+	images ...llm.ImageContent,
+) error {
+	runtime, err := m.reservePrompt(id, prompt, files, images)
 	if err != nil {
 		return err
 	}
+	files = slices.Clone(files)
 	images = slices.Clone(images)
 	go func() {
 		defer m.finishRun(id, runtime)
-		if err := runtime.session.Prompt(m.ctx, prompt, images...); err != nil &&
+		if err := runtime.session.PromptWithFiles(m.ctx, prompt, files, images...); err != nil &&
 			!errors.Is(err, context.Canceled) {
 			runtime.emit(RunFailed{Text: err.Error()})
 		}
@@ -49,6 +60,7 @@ func (m *Manager) Compact(
 func (m *Manager) reservePrompt(
 	id string,
 	prompt string,
+	files []engine.AttachedFile,
 	images []llm.ImageContent,
 ) (*sessionRuntime, error) {
 	m.mu.Lock()
@@ -79,6 +91,8 @@ func (m *Manager) reservePrompt(
 		title := prompt
 		if strings.TrimSpace(title) == "" && len(images) > 0 {
 			title = "Image"
+		} else if strings.TrimSpace(title) == "" && len(files) > 0 {
+			title = files[0].Name
 		}
 		runtime.record.Title = titleFromPrompt(title)
 		runtime.record.AutoTitle = false

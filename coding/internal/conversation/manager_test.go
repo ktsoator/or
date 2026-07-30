@@ -111,14 +111,14 @@ func TestManagerRunReservationProtectsConversation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	runtime, err := manager.reservePrompt(created.ID, "Inspect the parser", nil)
+	runtime, err := manager.reservePrompt(created.ID, "Inspect the parser", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !runtime.live.Load() {
 		t.Fatal("runtime is not exposed as running")
 	}
-	if _, err := manager.reservePrompt(created.ID, "second", nil); !errors.Is(err, engine.ErrBusy) {
+	if _, err := manager.reservePrompt(created.ID, "second", nil, nil); !errors.Is(err, engine.ErrBusy) {
 		t.Fatalf("second reservation error = %v, want ErrBusy", err)
 	}
 	if err := manager.Delete(created.ID); !errors.Is(err, ErrSessionActive) {

@@ -3117,6 +3117,25 @@ test('failed first send keeps the draft and shows the server error', async ({ pa
   await expect(page.getByText(message, { exact: true })).toHaveCount(0)
 })
 
+test('Composer adds and removes a text attachment from the add menu', async ({ page }) => {
+  await openDesktopClient(page, { existingSession: true })
+
+  await page.getByRole('button', { name: 'Add content' }).click()
+  const fileChooser = page.waitForEvent('filechooser')
+  await page.getByRole('option', { name: /Add files/ }).click()
+  await (await fileChooser).setFiles({
+    name: 'main.go',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('package main\n'),
+  })
+
+  const composer = page.getByTestId('composer')
+  await expect(composer.getByText('main.go')).toBeVisible()
+  await expect(composer.getByText('13 B')).toBeVisible()
+  await composer.getByRole('button', { name: 'Remove main.go' }).click()
+  await expect(composer.getByText('main.go')).toBeHidden()
+})
+
 test('desktop project browsing uses the native directory picker', async ({ page }) => {
   const requests = await openDesktopClient(page, { nativeDirectory: '/tmp/native-project' })
 

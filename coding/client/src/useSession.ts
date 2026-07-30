@@ -35,7 +35,9 @@ import type {
   ModelOption,
   PermissionMode,
   PreviewState,
+  MessageFile,
   MessageImage,
+  PromptFile,
   QueuedMessage,
   QuestionAnswer,
   QuestionItem,
@@ -86,7 +88,12 @@ export type Session = {
   updateSettings: (provider: string, model: string, thinkingLevel: ThinkingLevel) => Promise<void>
   updatePermissionMode: (mode: PermissionMode) => Promise<void>
   compactContext: () => Promise<CompactionResult>
-  send: (text: string, images: MessageImage[], delivery?: DeliveryMode) => Promise<boolean>
+  send: (
+    text: string,
+    images: MessageImage[],
+    files: PromptFile[],
+    delivery?: DeliveryMode,
+  ) => Promise<boolean>
   removeQueuedMessage: (id: string) => Promise<void>
   stop: () => void
   stopTask: (id: string) => Promise<void>
@@ -118,7 +125,12 @@ export type SessionThread = {
   updatingSettings: boolean
   compacting: boolean
   status: ConnectionStatus
-  send: (text: string, images: MessageImage[], delivery?: DeliveryMode) => Promise<boolean>
+  send: (
+    text: string,
+    images: MessageImage[],
+    files: PromptFile[],
+    delivery?: DeliveryMode,
+  ) => Promise<boolean>
   removeQueuedMessage: (id: string) => Promise<void>
   stop: () => void
   stopTask: (id: string) => Promise<void>
@@ -129,8 +141,6 @@ export type SessionThread = {
   updatePermissionMode: (mode: PermissionMode) => Promise<void>
   compactContext: () => Promise<CompactionResult>
 }
-
-const selectedSessionKey = 'or-coding-active-session'
 
 export function useSession(secondarySessionID?: string): Session {
   const [threads, dispatch] = useReducer(threadsReducer, {})
@@ -203,7 +213,6 @@ export function useSession(secondarySessionID?: string): Session {
     dispatchSessionStore({
       t: 'sessionsLoaded',
       sessions: received,
-      storedSessionID: localStorage.getItem(selectedSessionKey) ?? undefined,
       emptyDraft: createSessionDraft(),
     })
     return received
@@ -228,10 +237,6 @@ export function useSession(secondarySessionID?: string): Session {
     [loadModels, refreshSessions, refreshWorkspaces],
   )
   const { status: serviceStatus, initializing } = useServiceConnection(refreshServiceState)
-
-  useEffect(() => {
-    if (activeSessionID) localStorage.setItem(selectedSessionKey, activeSessionID)
-  }, [activeSessionID])
 
   const thread = activeSessionID ? threads[activeSessionID] : undefined
   const activeCheckpoint = thread?.loaded ? { eventSeq: thread.serverEventSeq } : undefined
@@ -593,13 +598,20 @@ export function useSession(secondarySessionID?: string): Session {
   const activeSessionRunning = activeSession?.running
 
   const startSessionPrompt = useCallback(
-    (sessionID: string, id: string, text: string, images: MessageImage[]) => {
+    (
+      sessionID: string,
+      id: string,
+      text: string,
+      images: MessageImage[],
+      files: PromptFile[],
+    ) => {
       dispatch({
         t: 'sendUser',
         sessionID,
         id,
         text,
         images,
+        files: promptFileMetadata(files),
         startedAt: new Date().toISOString(),
       })
       dispatchSessionStore({
@@ -608,7 +620,7 @@ export function useSession(secondarySessionID?: string): Session {
         text,
         updatedAt: new Date().toISOString(),
       })
-      void sessionCommands.sendPrompt(sessionID, { text, images }).catch((error: unknown) => {
+      void sessionCommands.sendPrompt(sessionID, { text, images, files }).catch((error: unknown) => {
         dispatch({ t: 'queueFailed', sessionID, id })
         dispatch({
           t: 'wire',
@@ -645,18 +657,30 @@ export function useSession(secondarySessionID?: string): Session {
     const submission = pendingDraftSend
     dispatchSessionStore({ t: 'draftSendConsumed', sessionID: submission.sessionID })
     const id = `local-${submission.sessionID}-${crypto.randomUUID()}`
-    startSessionPrompt(submission.sessionID, id, submission.text, submission.images)
+    startSessionPrompt(
+      submission.sessionID,
+      id,
+      submission.text,
+      submission.images,
+      submission.files,
+    )
   }, [activeSessionID, pendingDraftSend, startSessionPrompt, thread?.loaded, thread?.status])
 
   const sendToSession = async (
     sessionID: string,
     text: string,
     images: MessageImage[],
+    files: PromptFile[],
     delivery?: DeliveryMode,
   ): Promise<boolean> => {
     const trimmed = text.trim()
     const targetThread = threads[sessionID]
-    if ((!trimmed && images.length === 0) || targetThread?.status !== 'ready') return false
+    if (
+      (!trimmed && images.length === 0 && files.length === 0) ||
+      targetThread?.status !== 'ready'
+    ) {
+      return false
+    }
     const queued = targetThread.running
     if (queued && !delivery) return false
     if (!queued && delivery) return false
@@ -670,11 +694,12 @@ export function useSession(secondarySessionID?: string): Session {
         id,
         text: trimmed,
         images,
+        files: promptFileMetadata(files),
         startedAt: new Date().toISOString(),
         delivery,
       })
       void sessionCommands
-        .enqueueMessage(sessionID, delivery, { id, text: trimmed, images })
+        .enqueueMessage(sessionID, delivery, { id, text: trimmed, images, files })
         .catch(() => {
           dispatch({ t: 'queueFailed', sessionID, id })
           void refreshSessions().catch(() => undefined)
@@ -682,17 +707,18 @@ export function useSession(secondarySessionID?: string): Session {
       return true
     }
 
-    startSessionPrompt(sessionID, id, trimmed, images)
+    startSessionPrompt(sessionID, id, trimmed, images, files)
     return true
   }
 
   const send = async (
     text: string,
     images: MessageImage[],
+    files: PromptFile[],
     delivery?: DeliveryMode,
   ): Promise<boolean> => {
     const trimmed = text.trim()
-    if ((!trimmed && images.length === 0)) return false
+    if (!trimmed && images.length === 0 && files.length === 0) return false
     if (effectiveDraft) {
       if (delivery || creating || serviceStatus !== 'ready') return false
       const requestedDraft = effectiveDraft
@@ -717,7 +743,7 @@ export function useSession(secondarySessionID?: string): Session {
         )
         dispatchSessionStore({
           t: 'draftSendQueued',
-          submission: { sessionID: created.id, text: trimmed, images },
+          submission: { sessionID: created.id, text: trimmed, images, files },
         })
         return true
       } finally {
@@ -725,7 +751,7 @@ export function useSession(secondarySessionID?: string): Session {
       }
     }
     if (!activeSessionID) return false
-    return sendToSession(activeSessionID, trimmed, images, delivery)
+    return sendToSession(activeSessionID, trimmed, images, files, delivery)
   }
 
   const stopSession = (sessionID: string) => {
@@ -836,8 +862,12 @@ export function useSession(secondarySessionID?: string): Session {
         updatingSettings,
         compacting: compactingSessionID === secondarySession.id,
         status: secondaryState?.status ?? serviceStatus,
-        send: (text: string, images: MessageImage[], delivery?: DeliveryMode) =>
-          sendToSession(secondarySession.id, text, images, delivery),
+        send: (
+          text: string,
+          images: MessageImage[],
+          files: PromptFile[],
+          delivery?: DeliveryMode,
+        ) => sendToSession(secondarySession.id, text, images, files, delivery),
         removeQueuedMessage: (id: string) =>
           removeSessionQueuedMessage(secondarySession.id, id),
         stop: () => stopSession(secondarySession.id),
@@ -912,4 +942,8 @@ export function useSession(secondarySessionID?: string): Session {
       dispatch({ t: 'browserInspectionHandled', sessionID, id }),
     secondaryThread,
   }
+}
+
+function promptFileMetadata(files: PromptFile[]): MessageFile[] {
+  return files.map(({ name, mimeType, size }) => ({ name, mimeType, size }))
 }

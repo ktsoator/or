@@ -3,14 +3,11 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import './i18n.tsx'
 import App from './App.tsx'
-import { applyAppearancePreferences, readAppearancePreferences } from './lib/appearance.ts'
 import {
   desktopPlatform,
   hasDesktopRuntime,
   openExternalURL,
 } from './lib/desktop.ts'
-
-applyAppearancePreferences(readAppearancePreferences())
 
 if (hasDesktopRuntime()) {
   document.addEventListener('click', (event) => {

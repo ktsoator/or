@@ -12,13 +12,8 @@
   *, *::before, *::after { box-sizing: border-box; }
   html, body, #root { height: 100%; }
   html {
-    --ui-root-font-size: 15px;
-    --chat-font-size: 1rem;
-    --code-font-size: 0.875rem;
-    --tool-font-size: 0.75rem;
-    --tool-detail-font-size: 0.8125rem;
     font-family: var(--font-sans);
-    font-size: var(--ui-root-font-size);
+    font-size: 15px;
   }
   body {
     margin: 0;

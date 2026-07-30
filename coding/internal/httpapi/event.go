@@ -47,7 +47,12 @@ func projectEvent(ev engine.Event) (wireEvent, bool) {
 		out = wireEvent{Type: wireEventRunStart, StartedAt: formatEventTime(ev.StartedAt)}
 
 	case engine.UserMessageCompleted:
-		out = wireEvent{Type: wireEventUserMessage, Text: ev.Text, Images: projectImages(ev.Images)}
+		out = wireEvent{
+			Type:   wireEventUserMessage,
+			Text:   ev.Text,
+			Images: projectImages(ev.Images),
+			Files:  projectFiles(ev.Files),
+		}
 
 	case engine.TextDelta:
 		out = wireEvent{Type: wireEventDelta, Kind: wireDeltaText, Delta: ev.Delta}
@@ -166,7 +171,12 @@ func ProjectHistory(items []engine.HistoryItem) []wireEvent {
 			})
 
 		case engine.HistoryUser:
-			out = append(out, wireEvent{Type: wireEventUserMessage, Text: item.Text, Images: projectImages(item.Images)})
+			out = append(out, wireEvent{
+				Type:   wireEventUserMessage,
+				Text:   item.Text,
+				Images: projectImages(item.Images),
+				Files:  projectFiles(item.Files),
+			})
 
 		case engine.HistoryAssistant:
 			out = append(out, wireEvent{
@@ -240,6 +250,18 @@ func projectImages(images []llm.ImageContent) []wireImage {
 	out := make([]wireImage, 0, len(images))
 	for _, image := range images {
 		out = append(out, wireImage{Data: image.Data, MIMEType: image.MIMEType})
+	}
+	return out
+}
+
+func projectFiles(files []engine.File) []wireFile {
+	out := make([]wireFile, 0, len(files))
+	for _, file := range files {
+		out = append(out, wireFile{
+			Name:     file.Name,
+			MIMEType: file.MIMEType,
+			Size:     file.Size,
+		})
 	}
 	return out
 }

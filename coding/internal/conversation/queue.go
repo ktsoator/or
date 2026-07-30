@@ -17,6 +17,7 @@ type QueuedMessage struct {
 	Delivery Delivery
 	Text     string
 	Images   []llm.ImageContent
+	Files    []engine.AttachedFile
 }
 
 type pendingMessage struct {
@@ -69,9 +70,9 @@ func (s *sessionRuntime) enqueue(message QueuedMessage) bool {
 	}
 	pending := pendingMessage{QueuedMessage: message}
 	if message.Delivery == DeliverySteer {
-		pending.Handle = s.session.Steer(message.Text, message.Images...)
+		pending.Handle = s.session.SteerWithFiles(message.Text, message.Files, message.Images...)
 	} else {
-		pending.Handle = s.session.FollowUp(message.Text, message.Images...)
+		pending.Handle = s.session.FollowUpWithFiles(message.Text, message.Files, message.Images...)
 	}
 	s.pending = append(s.pending, pending)
 	s.pendingMu.Unlock()
@@ -79,6 +80,7 @@ func (s *sessionRuntime) enqueue(message QueuedMessage) bool {
 		ID:       message.ID,
 		Text:     message.Text,
 		Images:   message.Images,
+		Files:    fileMetadata(message.Files),
 		Delivery: message.Delivery,
 		Queued:   true,
 	})
@@ -149,11 +151,20 @@ func (s *sessionRuntime) pendingEvents() []Event {
 			ID:       message.ID,
 			Text:     message.Text,
 			Images:   message.Images,
+			Files:    fileMetadata(message.Files),
 			Delivery: message.Delivery,
 			Queued:   true,
 		})
 	}
 	return events
+}
+
+func fileMetadata(files []engine.AttachedFile) []engine.File {
+	out := make([]engine.File, 0, len(files))
+	for _, file := range files {
+		out = append(out, file.File)
+	}
+	return out
 }
 
 func (s *sessionRuntime) cancelPending() []pendingMessage {

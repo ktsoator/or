@@ -353,11 +353,11 @@ func (s *Server) handleEvents(c *gin.Context) {
 // handlePrompt starts a run for the posted text. The manager owns the
 // background lifecycle; output and asynchronous failures arrive over SSE.
 func (s *Server) handlePrompt(c *gin.Context) {
-	body, images, ok := bindMessageRequest(c)
+	body, images, files, ok := bindMessageRequest(c)
 	if !ok {
 		return
 	}
-	err := s.conversations.StartPrompt(c.Param("sessionID"), body.Text, images...)
+	err := s.conversations.StartPromptWithFiles(c.Param("sessionID"), body.Text, files, images...)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
 		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
@@ -381,7 +381,7 @@ func (s *Server) handleFollowUp(c *gin.Context) {
 }
 
 func (s *Server) handleQueuedMessage(c *gin.Context, delivery conversation.Delivery) {
-	body, images, ok := bindMessageRequest(c)
+	body, images, files, ok := bindMessageRequest(c)
 	if !ok {
 		return
 	}
@@ -398,6 +398,7 @@ func (s *Server) handleQueuedMessage(c *gin.Context, delivery conversation.Deliv
 		Delivery: delivery,
 		Text:     body.Text,
 		Images:   images,
+		Files:    files,
 	}
 	err := s.conversations.QueueMessage(c.Param("sessionID"), message)
 	switch {

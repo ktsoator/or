@@ -32,6 +32,7 @@ type HistoryItem struct {
 
 	Text   string
 	Images []llm.ImageContent
+	Files  []File
 	// FinalResponse is true for the assistant item that completes one visible
 	// reply. Tool-use pauses remain false even when they contain explanatory text.
 	FinalResponse bool
@@ -207,9 +208,14 @@ func projectHistory(messages []agent.AgentMessage, outcomes map[string]agent.Too
 			// complete, so pending tool-turn usage stays with the eventual response.
 			// A normal/follow-up user message follows a final assistant, which has
 			// already flushed its response usage below.
-			text, images := userMessageContent(message)
-			if text != "" || len(images) > 0 {
-				items = append(items, HistoryItem{Type: HistoryUser, Text: text, Images: images})
+			text, images, files := userMessageContent(message)
+			if text != "" || len(images) > 0 || len(files) > 0 {
+				items = append(items, HistoryItem{
+					Type:   HistoryUser,
+					Text:   text,
+					Images: images,
+					Files:  files,
+				})
 			}
 
 		case *llm.AssistantMessage:
@@ -241,18 +247,26 @@ func projectHistory(messages []agent.AgentMessage, outcomes map[string]agent.Too
 	return items
 }
 
-func userMessageContent(message *llm.UserMessage) (string, []llm.ImageContent) {
+func userMessageContent(message *llm.UserMessage) (string, []llm.ImageContent, []File) {
 	if message == nil {
-		return "", nil
+		return "", nil, nil
 	}
 	var text strings.Builder
 	var images []llm.ImageContent
+	var files []File
 	textBlocks := 0
 	for _, content := range message.Content {
 		switch block := content.(type) {
 		case *llm.TextContent:
 			if block == nil {
 				continue
+			}
+			if textBlocks > 0 {
+				if attached, matched := parseAttachedFilesContext(block.Text); matched {
+					files = append(files, attached...)
+					textBlocks++
+					continue
+				}
 			}
 			if textBlocks > 0 && skills.IsExplicitInvocationText(block.Text) {
 				textBlocks++
@@ -266,7 +280,7 @@ func userMessageContent(message *llm.UserMessage) (string, []llm.ImageContent) {
 			}
 		}
 	}
-	return text.String(), images
+	return text.String(), images, files
 }
 
 func assistantHistory(message *llm.AssistantMessage) []HistoryItem {
