@@ -111,6 +111,30 @@ const models = {
   defaultThinkingLevel: 'medium',
 }
 
+function longThreadHistory(prefix: string) {
+  return Array.from({ length: 18 }, (_, index) => [
+    {
+      type: 'user_message',
+      id: `${prefix}-user-${index}`,
+      text: `Question ${index + 1} with enough content to exercise the conversation layout`,
+      images: [],
+    },
+    {
+      type: 'run_start',
+      id: `${prefix}-run-${index}`,
+      startedAt: `2026-07-22T00:00:${String(index).padStart(2, '0')}Z`,
+      durationMs: 2000,
+    },
+    {
+      type: 'message_end',
+      text: `Response ${index + 1}. This completed answer makes the restored transcript tall enough to require its own scroll container.`,
+      finalResponse: true,
+      modelName: 'Test model',
+      completedAt: `2026-07-22T00:01:${String(index).padStart(2, '0')}Z`,
+    },
+  ]).flat()
+}
+
 async function openDesktopClient(
   page: Page,
   options: {
@@ -672,6 +696,80 @@ test('Coding API startup retries recover the Composer automatically', async ({ p
   await expect.poll(
     () => requests.filter((request) => request.path === '/api/health').length,
   ).toBeGreaterThanOrEqual(3)
+})
+
+test('approval keeps command review compact and actions balanced', async ({ page }) => {
+  const command = [
+    "python3 - <<'EOF'",
+    'def ratio(a, b):',
+    '    hi, lo = max(a, b), min(a, b)',
+    '    return (hi + 0.05) / (lo + 0.05)',
+    '',
+    'colors = ["#1a1a18", "#6f6c66", "#a3a098", "#3159a8"]',
+    'for color in colors:',
+    '    print(color)',
+    'EOF',
+  ].join('\n')
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    historyRunning: true,
+    historyEvents: [
+      {
+        type: 'user_message',
+        id: 'approval-user',
+        text: 'Check the interface contrast',
+        images: [],
+      },
+      {
+        type: 'run_start',
+        id: 'approval-run',
+        startedAt: '2026-07-30T12:00:00Z',
+      },
+      {
+        type: 'approval_request',
+        id: 'approval-layout',
+        summary: "bash: python3 - <<'EOF' …",
+        reason: 'shell commands require approval',
+        command,
+        commandSegments: 17,
+      },
+    ],
+  })
+
+  const approval = page.getByTestId('approval')
+  const deny = approval.getByRole('button', { name: 'Deny' })
+  const allow = approval.getByRole('button', { name: 'Allow once' })
+  await expect(approval).toBeVisible()
+  await expect(approval).toHaveCSS('border-radius', '8px')
+  await expect
+    .poll(() =>
+      approval.locator('pre').evaluate((element) => parseFloat(getComputedStyle(element).maxHeight)),
+    )
+    .toBeLessThanOrEqual(176)
+  await expect.poll(() => deny.evaluate((element) => element.getBoundingClientRect().height)).toBe(30)
+  await expect.poll(() => allow.evaluate((element) => element.getBoundingClientRect().height)).toBe(30)
+
+  await page.setViewportSize({ width: 500, height: 800 })
+  const denyBox = await deny.boundingBox()
+  const allowBox = await allow.boundingBox()
+  const approvalBox = await approval.boundingBox()
+  expect(denyBox).not.toBeNull()
+  expect(allowBox).not.toBeNull()
+  expect(approvalBox).not.toBeNull()
+  expect(denyBox!.y).toBeCloseTo(allowBox!.y, 1)
+  expect(allowBox!.x + allowBox!.width).toBeLessThan(approvalBox!.x + approvalBox!.width)
+  expect(denyBox!.width + allowBox!.width).toBeLessThan(approvalBox!.width * 0.6)
+
+  await allow.click()
+  await expect(approval).toHaveCount(0)
+  await expect.poll(
+    () =>
+      requests.find(
+        (request) =>
+          request.method === 'POST' &&
+          request.path === '/api/sessions/test-session/approvals/approval-layout',
+      )?.body,
+  ).toEqual({ choice: 'allow_once' })
 })
 
 test('workbench opens before a preview and launches Browser without hiding Chat', async ({
@@ -2823,29 +2921,10 @@ test('Browser replaces a failed local preview probe with a retry state', async (
 test('long threads keep the titlebar and Composer fixed while the transcript scrolls', async ({
   page,
 }) => {
-  const historyEvents = Array.from({ length: 18 }, (_, index) => [
-    {
-      type: 'user_message',
-      id: `user-${index}`,
-      text: `Question ${index + 1} with enough content to exercise the conversation layout`,
-      images: [],
-    },
-    {
-      type: 'run_start',
-      id: `run-${index}`,
-      startedAt: `2026-07-22T00:00:${String(index).padStart(2, '0')}Z`,
-      durationMs: 2000,
-    },
-    {
-      type: 'message_end',
-      text: `Response ${index + 1}. This completed answer makes the restored transcript tall enough to require its own scroll container.`,
-      finalResponse: true,
-      modelName: 'Test model',
-      completedAt: `2026-07-22T00:01:${String(index).padStart(2, '0')}Z`,
-    },
-  ]).flat()
-
-  await openDesktopClient(page, { existingSession: true, historyEvents })
+  await openDesktopClient(page, {
+    existingSession: true,
+    historyEvents: longThreadHistory('main'),
+  })
 
   const header = page.getByTestId('conversation-header')
   const transcript = page.getByTestId('conversation-transcript')
@@ -2873,6 +2952,130 @@ test('long threads keep the titlebar and Composer fixed while the transcript scr
   await transcript.hover()
   await page.mouse.wheel(0, 480)
   await expect.poll(() => transcript.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+  await page.mouse.wheel(0, -10_000)
+  await expect.poll(() => transcript.evaluate((element) => element.scrollTop)).toBe(0)
+
+  await expect(
+    page.getByRole('button', { name: 'Jump to latest', exact: true }),
+  ).toBeVisible()
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'run_start',
+      id: 'new-main-run',
+      startedAt: '2026-07-30T12:00:00Z',
+    })
+    emit?.({ type: 'delta', kind: 'text', delta: 'A newly streamed response' })
+  })
+
+  const jumpToLatest = page.getByRole('button', {
+    name: 'New content available. Jump to latest',
+    exact: true,
+  })
+  await expect(jumpToLatest).toBeVisible()
+  await jumpToLatest.click()
+  await expect
+    .poll(() =>
+      transcript.evaluate(
+        (element) => element.scrollHeight - element.scrollTop - element.clientHeight,
+      ),
+    )
+    .toBeLessThan(2)
+  await expect(jumpToLatest).toHaveCount(0)
+})
+
+test('streaming output does not reclaim a transcript after a small upward scroll', async ({
+  page,
+}) => {
+  await openDesktopClient(page, {
+    existingSession: true,
+    historyEvents: longThreadHistory('streaming'),
+    historyRunning: true,
+  })
+
+  const transcript = page.getByTestId('conversation-transcript')
+  await transcript.hover()
+  await page.mouse.wheel(0, -24)
+  await expect
+    .poll(() =>
+      transcript.evaluate(
+        (element) => element.scrollHeight - element.scrollTop - element.clientHeight,
+      ),
+    )
+    .toBeGreaterThan(2)
+
+  const pausedScrollTop = await transcript.evaluate((element) => element.scrollTop)
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({ type: 'delta', kind: 'text', delta: 'Streaming without taking the scroll position' })
+  })
+
+  await expect(
+    page.getByRole('button', {
+      name: 'New content available. Jump to latest',
+      exact: true,
+    }),
+  ).toBeVisible()
+  await expect
+    .poll(() => transcript.evaluate((element) => element.scrollTop))
+    .toBeLessThanOrEqual(pausedScrollTop + 1)
+})
+
+test('right-panel conversations can return to new content in long threads', async ({ page }) => {
+  await openDesktopClient(page, {
+    existingSession: true,
+    secondarySession: true,
+    secondaryHistoryEvents: longThreadHistory('secondary'),
+  })
+
+  await page.getByRole('button', { name: 'Actions for Secondary task' }).click()
+  await page.getByRole('menuitem', { name: 'Open in right panel' }).click()
+
+  const conversation = page
+    .getByTestId('workbench-panel')
+    .getByTestId('workbench-conversation')
+  const transcript = conversation.getByTestId('workbench-conversation-transcript')
+  await expect(conversation.getByText('Response 18.')).toBeVisible()
+  await transcript.evaluate((element) => {
+    element.scrollTop = 0
+    element.dispatchEvent(new Event('scroll'))
+  })
+
+  await expect(
+    conversation.getByRole('button', { name: 'Jump to latest', exact: true }),
+  ).toBeVisible()
+  await page.evaluate(() => {
+    const emit = (
+      window as Window & {
+        __emitSessionSSE?: (sessionID: string, payload: unknown) => void
+      }
+    ).__emitSessionSSE
+    emit?.('secondary-session', {
+      type: 'run_start',
+      id: 'new-secondary-run',
+      startedAt: '2026-07-30T12:00:00Z',
+    })
+    emit?.('secondary-session', {
+      type: 'delta',
+      kind: 'text',
+      delta: 'New workbench output',
+    })
+  })
+
+  const jumpToLatest = conversation.getByRole('button', {
+    name: 'New content available. Jump to latest',
+    exact: true,
+  })
+  await expect(jumpToLatest).toBeVisible()
+  await jumpToLatest.click()
+  await expect
+    .poll(() =>
+      transcript.evaluate(
+        (element) => element.scrollHeight - element.scrollTop - element.clientHeight,
+      ),
+    )
+    .toBeLessThan(2)
+  await expect(jumpToLatest).toHaveCount(0)
 })
 
 test('response usage stays on one line and truncates when Chat is narrow', async ({ page }) => {

@@ -1,4 +1,3 @@
-import { useLayoutEffect, useRef } from 'react'
 import { LoaderCircle } from 'lucide-react'
 import type { ModelOption, WorkspaceSummary } from '@/types'
 import type { SessionThread } from '@/useSession'
@@ -8,6 +7,8 @@ import { cn } from '@/lib/utils'
 import { Composer } from './Composer'
 import { StepGroup } from './StepGroup'
 import { AutoCompactionStatus, AwaitingResponse, ThreadItem } from './ConversationThread'
+import { ScrollToLatestButton } from './ConversationScrollControl'
+import { useConversationScroll } from '@/useConversationScroll'
 
 export function ConversationView({
   thread,
@@ -21,15 +22,16 @@ export function ConversationView({
   onConfigureModel: () => void
 }) {
   const { t } = useI18n()
-  const logRef = useRef<HTMLDivElement>(null)
-  const followLatestRef = useRef(true)
+  const {
+    scrollRef: logRef,
+    onScroll,
+    onWheelCapture,
+    scrollToLatest,
+    awayFromLatest,
+    hasNewContent,
+  } = useConversationScroll(thread.session.id, thread.items)
   const empty = !thread.loading && thread.items.length === 0 && !thread.approval
   const awaitingFirstOutput = thread.running && thread.items.at(-1)?.kind === 'user'
-
-  useLayoutEffect(() => {
-    const log = logRef.current
-    if (log && followLatestRef.current) log.scrollTop = log.scrollHeight
-  }, [thread.items])
 
   const composer = (centered = false) => (
     <Composer
@@ -71,64 +73,69 @@ export function ConversationView({
       data-testid="workbench-conversation"
       aria-label={thread.session.title}
     >
-      <div
-        ref={logRef}
-        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 [scrollbar-gutter:stable_both-edges]"
-        data-testid="workbench-conversation-transcript"
-        onScroll={(event) => {
-          const element = event.currentTarget
-          followLatestRef.current =
-            element.scrollHeight - element.scrollTop - element.clientHeight < 72
-        }}
-      >
+      <div className="relative min-h-0 flex-1">
         <div
-          className={cn(
-            'mx-auto min-h-full w-full max-w-[680px] pt-4 pb-7',
-            (thread.loading || empty) && 'grid place-items-center',
-          )}
+          ref={logRef}
+          className="h-full overflow-x-hidden overflow-y-auto px-3 [scrollbar-gutter:stable_both-edges]"
+          data-testid="workbench-conversation-transcript"
+          onScroll={onScroll}
+          onWheelCapture={onWheelCapture}
         >
-          {thread.loading ? (
-            <div className="flex items-center gap-2 pb-[8vh] text-xs text-ink-faint">
-              <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
-              {t('app.loadingSession')}
-            </div>
-          ) : empty ? (
-            <div className="flex w-full -translate-y-[2vh] flex-col items-center gap-7">
-              <div className="max-w-sm text-center">
-                <h2 className="m-0 text-[1.25rem] leading-tight font-medium text-ink">
-                  {t('app.emptyTitle')}
-                </h2>
-                <p className="mt-2 text-[0.875rem] leading-5 text-ink-muted">
-                  {t('app.emptyDescription')}
-                </p>
+          <div
+            className={cn(
+              'mx-auto min-h-full w-full max-w-[680px] pt-4 pb-7',
+              (thread.loading || empty) && 'grid place-items-center',
+            )}
+          >
+            {thread.loading ? (
+              <div className="flex items-center gap-2 pb-[8vh] text-xs text-ink-faint">
+                <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
+                {t('app.loadingSession')}
               </div>
-              {composer(true)}
-            </div>
-          ) : (
-            <>
-              {groupItems(thread.items).map((unit) =>
-                unit.kind === 'steps' ? (
-                  <StepGroup
-                    key={unit.id}
-                    items={unit.items}
-                    cwd={thread.session.workspacePath}
-                  />
+            ) : empty ? (
+              <div className="flex w-full -translate-y-[2vh] flex-col items-center gap-7">
+                <div className="max-w-sm text-center">
+                  <h2 className="m-0 text-[1.25rem] leading-tight font-medium text-ink">
+                    {t('app.emptyTitle')}
+                  </h2>
+                  <p className="mt-2 text-[0.875rem] leading-5 text-ink-muted">
+                    {t('app.emptyDescription')}
+                  </p>
+                </div>
+                {composer(true)}
+              </div>
+            ) : (
+              <>
+                {groupItems(thread.items).map((unit) =>
+                  unit.kind === 'steps' ? (
+                    <StepGroup
+                      key={unit.id}
+                      items={unit.items}
+                      cwd={thread.session.workspacePath}
+                    />
+                  ) : (
+                    <ThreadItem
+                      key={unit.item.id}
+                      item={unit.item}
+                      cwd={thread.session.workspacePath}
+                    />
+                  ),
+                )}
+                {thread.autoCompacting ? (
+                  <AutoCompactionStatus />
                 ) : (
-                  <ThreadItem
-                    key={unit.item.id}
-                    item={unit.item}
-                    cwd={thread.session.workspacePath}
-                  />
-                ),
-              )}
-              {thread.autoCompacting ? (
-                <AutoCompactionStatus />
-              ) : (
-                awaitingFirstOutput && <AwaitingResponse />
-              )}
-            </>
-          )}
+                  awaitingFirstOutput && <AwaitingResponse />
+                )}
+              </>
+            )}
+          </div>
         </div>
+        {awayFromLatest && (
+          <ScrollToLatestButton
+            hasNewContent={hasNewContent}
+            onClick={scrollToLatest}
+          />
+        )}
       </div>
       {!thread.loading && !empty && composer()}
     </section>
