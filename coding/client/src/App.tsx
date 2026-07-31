@@ -1,6 +1,5 @@
 import {
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -48,16 +47,12 @@ import { WorkspacePickerDialog } from './components/WorkspacePickerDialog'
 import { WorkbenchPanel } from './components/WorkbenchPanel'
 import type { WorkbenchTaskSource } from './components/BackgroundTasksView'
 import { SidebarToggleButton } from './components/SidebarToggleButton'
+import { ScrollToLatestButton } from './components/ConversationScrollControl'
 import { useI18n } from './i18n'
+import { useConversationScroll } from './useConversationScroll'
 import { useSidebarLayout } from './useSidebarLayout'
 import { useWorkbenchLayout } from './useWorkbenchLayout'
 import type { WorkbenchTaskRequest } from './useBrowserWorkspace'
-
-function wheelDeltaInPixels(event: WheelEvent, pageHeight: number) {
-  if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) return event.deltaY * 16
-  if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) return event.deltaY * pageHeight
-  return event.deltaY
-}
 
 export default function App() {
   const { t } = useI18n()
@@ -113,9 +108,14 @@ export default function App() {
     handleBrowserInspection,
     secondaryThread,
   } = useSession(secondarySessionID)
-  const logRef = useRef<HTMLDivElement>(null)
-  const followLatestRef = useRef(true)
-  const previousSessionIDRef = useRef<string | undefined>(undefined)
+  const {
+    scrollRef: logRef,
+    onScroll: trackScrollPosition,
+    onWheelCapture: pauseFollowOnWheel,
+    scrollToLatest,
+    awayFromLatest,
+    hasNewContent,
+  } = useConversationScroll(activeSessionID, items)
   const [workbenchCreateError, setWorkbenchCreateError] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<SessionSummary>()
   const [deleting, setDeleting] = useState(false)
@@ -265,56 +265,6 @@ export default function App() {
     window.addEventListener('keydown', handleSettingsShortcut)
     return () => window.removeEventListener('keydown', handleSettingsShortcut)
   }, [settingsOpen])
-
-  useLayoutEffect(() => {
-    const el = logRef.current
-    if (!el) return
-
-    const sessionChanged = previousSessionIDRef.current !== activeSessionID
-    previousSessionIDRef.current = activeSessionID
-    if (sessionChanged) followLatestRef.current = true
-
-    if (followLatestRef.current) {
-      el.scrollTop = el.scrollHeight
-    }
-  }, [activeSessionID, items])
-
-  useEffect(() => {
-    const transcript = logRef.current
-    if (!transcript) return
-
-    const routeWheelToCode = (event: WheelEvent) => {
-      if (event.ctrlKey || event.defaultPrevented) return
-      if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return
-
-      const hitTarget = document.elementFromPoint(event.clientX, event.clientY)
-      const codeArea = hitTarget?.closest<HTMLElement>('.code-scroll-area')
-      if (!codeArea || !transcript.contains(codeArea)) return
-
-      const maxScrollTop = codeArea.scrollHeight - codeArea.clientHeight
-      if (maxScrollTop <= 1) return
-
-      const deltaY = wheelDeltaInPixels(event, codeArea.clientHeight)
-      const canScrollUp = deltaY < 0 && codeArea.scrollTop > 0
-      const canScrollDown = deltaY > 0 && codeArea.scrollTop < maxScrollTop
-      if (!canScrollUp && !canScrollDown) return
-
-      event.preventDefault()
-      event.stopPropagation()
-      codeArea.scrollTop = Math.min(maxScrollTop, Math.max(0, codeArea.scrollTop + deltaY))
-    }
-
-    // A native non-passive capture listener bypasses the browser's wheel target
-    // latching and gives the code under the pointer the first scroll gesture.
-    transcript.addEventListener('wheel', routeWheelToCode, { capture: true, passive: false })
-    return () => transcript.removeEventListener('wheel', routeWheelToCode, { capture: true })
-  }, [])
-
-  const trackScrollPosition = () => {
-    const el = logRef.current
-    if (!el) return
-    followLatestRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 72
-  }
 
   const chooseSession = (id: string) => {
     const session = sessions.find((candidate) => candidate.id === id)
@@ -852,53 +802,62 @@ export default function App() {
           {!workbenchOwnsToggle && workbenchToggleControl}
         </header>
 
-        <main
-          ref={logRef}
-          data-testid="conversation-transcript"
-          className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 md:px-6 md:[scrollbar-gutter:stable_both-edges]"
-          onScroll={trackScrollPosition}
-        >
-          <div
-            className={cn(
-              'mx-auto min-h-full w-full max-w-[750px] pt-5 pb-9 max-md:pt-4 max-md:pb-7',
-              (loading || emptySession) && 'grid place-items-center',
-            )}
+        <div className="relative min-h-0 flex-1">
+          <main
+            ref={logRef}
+            data-testid="conversation-transcript"
+            className="h-full overflow-x-hidden overflow-y-auto px-3 md:px-6 md:[scrollbar-gutter:stable_both-edges]"
+            onScroll={trackScrollPosition}
+            onWheelCapture={pauseFollowOnWheel}
           >
-            {loading ? (
-              <div className="flex items-center gap-2 pb-[8vh] text-xs text-ink-faint">
-                <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
-                {t('app.loadingSession')}
-              </div>
-            ) : emptySession ? (
-              <div className="flex w-full -translate-y-[3vh] flex-col items-center gap-9">
-                <div className="max-w-lg text-center">
-                  <h1 className="m-0 text-[1.75rem] leading-tight font-medium tracking-[-0.03em] text-ink max-sm:text-2xl">
-                    {t('app.emptyTitle')}
-                  </h1>
-                  <p className="mt-2.5 text-[0.9375rem] leading-6 text-ink-muted">
-                    {t('app.emptyDescription')}
-                  </p>
+            <div
+              className={cn(
+                'mx-auto min-h-full w-full max-w-[750px] pt-5 pb-9 max-md:pt-4 max-md:pb-7',
+                (loading || emptySession) && 'grid place-items-center',
+              )}
+            >
+              {loading ? (
+                <div className="flex items-center gap-2 pb-[8vh] text-xs text-ink-faint">
+                  <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
+                  {t('app.loadingSession')}
                 </div>
-                {composer(true)}
-              </div>
-            ) : (
-              <>
-                {groupItems(items).map((unit) =>
-                  unit.kind === 'steps' ? (
-                    <StepGroup key={unit.id} items={unit.items} cwd={activeSession?.workspacePath} />
-                  ) : (
-                    <ThreadItem
-                      key={unit.item.id}
-                      item={unit.item}
-                      cwd={activeSession?.workspacePath}
-                    />
-                  ),
-                )}
-                {autoCompacting ? <AutoCompactionStatus /> : awaitingFirstOutput && <AwaitingResponse />}
-              </>
-            )}
-          </div>
-        </main>
+              ) : emptySession ? (
+                <div className="flex w-full -translate-y-[3vh] flex-col items-center gap-9">
+                  <div className="max-w-lg text-center">
+                    <h1 className="m-0 text-[1.75rem] leading-tight font-medium tracking-[-0.03em] text-ink max-sm:text-2xl">
+                      {t('app.emptyTitle')}
+                    </h1>
+                    <p className="mt-2.5 text-[0.9375rem] leading-6 text-ink-muted">
+                      {t('app.emptyDescription')}
+                    </p>
+                  </div>
+                  {composer(true)}
+                </div>
+              ) : (
+                <>
+                  {groupItems(items).map((unit) =>
+                    unit.kind === 'steps' ? (
+                      <StepGroup key={unit.id} items={unit.items} cwd={activeSession?.workspacePath} />
+                    ) : (
+                      <ThreadItem
+                        key={unit.item.id}
+                        item={unit.item}
+                        cwd={activeSession?.workspacePath}
+                      />
+                    ),
+                  )}
+                  {autoCompacting ? <AutoCompactionStatus /> : awaitingFirstOutput && <AwaitingResponse />}
+                </>
+              )}
+            </div>
+          </main>
+          {awayFromLatest && (
+            <ScrollToLatestButton
+              hasNewContent={hasNewContent}
+              onClick={scrollToLatest}
+            />
+          )}
+        </div>
 
         {!loading && !emptySession && composer()}
       </div>
