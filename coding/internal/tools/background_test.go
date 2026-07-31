@@ -14,7 +14,7 @@ import (
 )
 
 func TestTaskManagerWritesOutputAndNotifiesOnce(t *testing.T) {
-	manager := NewTaskManager()
+	manager := NewTaskManager(LocalOps{})
 	defer manager.Shutdown()
 
 	notifications := make(chan TaskState, 3)
@@ -50,7 +50,7 @@ func TestTaskManagerWritesOutputAndNotifiesOnce(t *testing.T) {
 }
 
 func TestTaskManagerStopTerminatesTask(t *testing.T) {
-	manager := NewTaskManager()
+	manager := NewTaskManager(LocalOps{})
 	defer manager.Shutdown()
 
 	notifications := make(chan TaskState, 2)
@@ -76,7 +76,7 @@ func TestTaskManagerStopTerminatesTask(t *testing.T) {
 }
 
 func TestTaskManagerReadsBoundedOutputTail(t *testing.T) {
-	manager := NewTaskManager()
+	manager := NewTaskManager(LocalOps{})
 	defer manager.Shutdown()
 
 	states := make(chan TaskState, 2)
@@ -108,7 +108,7 @@ func TestTaskManagerReadsBoundedOutputTail(t *testing.T) {
 }
 
 func TestTaskManagerTrustsOnlyRegisteredOutputFilesAndCleansUp(t *testing.T) {
-	manager := NewTaskManager()
+	manager := NewTaskManager(LocalOps{})
 	info, err := manager.Start("true", "Run true", t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -127,7 +127,7 @@ func TestTaskManagerTrustsOnlyRegisteredOutputFilesAndCleansUp(t *testing.T) {
 }
 
 func TestBackgroundBashReturnsTaskAndOutputPath(t *testing.T) {
-	manager := NewTaskManager()
+	manager := NewTaskManager(LocalOps{})
 	defer manager.Shutdown()
 	tool := Bash(t.TempDir(), LocalOps{}, manager)
 	raw := json.RawMessage(`{"command":"printf ready","description":"Start test task","run_in_background":true}`)
