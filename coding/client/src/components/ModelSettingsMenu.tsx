@@ -117,13 +117,13 @@ export function ModelSettingsMenu({
           <ProviderIcon provider={modelProvider ?? ''} />
           <span
             data-testid="model-settings-name"
-            className="min-w-0 max-w-[9.375rem] flex-1 truncate text-stone-500 max-sm:max-w-[5.5rem]"
+            className="min-w-0 max-w-[9.375rem] flex-1 truncate text-ink-muted max-sm:max-w-[5.5rem]"
           >
             {modelName}
           </span>
           {fixedThinking ? (
             <FixedThinkingStatus
-              className="shrink-0 text-stone-400"
+              className="shrink-0 text-ink-faint"
               focusable={false}
               hidden={currentModel?.thinkingVisibility === 'hidden'}
               iconOnly
@@ -131,13 +131,13 @@ export function ModelSettingsMenu({
           ) : (
             <span
               data-testid="model-settings-effort"
-              className="shrink-0 text-stone-400 @max-[430px]:hidden max-sm:hidden"
+              className="shrink-0 text-ink-faint @max-[430px]:hidden max-sm:hidden"
             >
               {thinkingName}
             </span>
           )}
           <ChevronDown
-            className="size-3.5 shrink-0 text-stone-400 transition-transform duration-150 group-data-[state=open]:rotate-180"
+            className="size-3.5 shrink-0 text-ink-faint transition-transform duration-150 group-data-[state=open]:rotate-180"
             aria-hidden="true"
           />
         </button>
@@ -149,12 +149,12 @@ export function ModelSettingsMenu({
           align="end"
           sideOffset={7}
           collisionPadding={10}
-          className="z-[100] min-w-[15.5rem] animate-[fade-in_110ms_ease-out] rounded-2xl border border-stone-200 bg-white p-1 text-[0.875rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+          className="z-[100] min-w-[15.5rem] animate-[fade-in_110ms_ease-out] rounded-2xl border border-edge bg-canvas p-1 text-[0.875rem] text-ink shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
         >
           <DropdownMenu.Sub>
             <DropdownMenu.SubTrigger className={subTriggerClass}>
               <span>{t('model.provider')}</span>
-              <span className="ml-auto flex min-w-0 items-center gap-1.5 text-stone-500">
+              <span className="ml-auto flex min-w-0 items-center gap-1.5 text-ink-muted">
                 <ProviderIcon provider={selectedProvider || modelProvider || ''} />
                 <span className="max-w-[8rem] truncate">{selectedProviderName}</span>
                 <ChevronRight className="size-3.5 shrink-0" aria-hidden="true" />
@@ -165,7 +165,7 @@ export function ModelSettingsMenu({
                 sideOffset={6}
                 alignOffset={-4}
                 collisionPadding={10}
-                className="z-[110] min-w-[13rem] animate-[fade-in_110ms_ease-out] rounded-2xl border border-stone-200 bg-white p-1 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+                className="z-[110] min-w-[13rem] animate-[fade-in_110ms_ease-out] rounded-2xl border border-edge bg-canvas p-1 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
               >
                 <DropdownMenu.Label className={menuLabelClass}>
                   {t('model.provider')}
@@ -185,7 +185,7 @@ export function ModelSettingsMenu({
                     >
                       <ProviderIcon provider={provider} />
                       <span className="min-w-0 flex-1 truncate">{providerName(provider)}</span>
-                      <DropdownMenu.ItemIndicator className="absolute right-2.5 grid size-4 place-items-center text-stone-700">
+                      <DropdownMenu.ItemIndicator className="absolute right-2.5 grid size-4 place-items-center text-ink-soft">
                         <Check className="size-3.5" aria-hidden="true" />
                       </DropdownMenu.ItemIndicator>
                     </DropdownMenu.RadioItem>
@@ -198,7 +198,7 @@ export function ModelSettingsMenu({
           <DropdownMenu.Sub>
             <DropdownMenu.SubTrigger className={subTriggerClass}>
               <span>{t('model.model')}</span>
-              <span className="ml-auto flex min-w-0 items-center gap-1.5 text-stone-500">
+              <span className="ml-auto flex min-w-0 items-center gap-1.5 text-ink-muted">
                 <span className="max-w-[8rem] truncate">{selectedModelName}</span>
                 <ChevronRight className="size-3.5 shrink-0" aria-hidden="true" />
               </span>
@@ -208,7 +208,7 @@ export function ModelSettingsMenu({
                 sideOffset={6}
                 alignOffset={-4}
                 collisionPadding={10}
-                className="z-[110] max-h-[min(26.25rem,var(--radix-dropdown-menu-content-available-height))] min-w-[16.25rem] animate-[fade-in_110ms_ease-out] overflow-y-auto rounded-2xl border border-stone-200 bg-white p-1 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+                className="z-[110] max-h-[min(26.25rem,var(--radix-dropdown-menu-content-available-height))] min-w-[16.25rem] animate-[fade-in_110ms_ease-out] overflow-y-auto rounded-2xl border border-edge bg-canvas p-1 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
               >
                 <DropdownMenu.Label className={menuLabelClass}>
                   {t('model.models', { provider: selectedProviderName })}
@@ -226,7 +226,7 @@ export function ModelSettingsMenu({
                       className={radioItemClass}
                     >
                       <span className="min-w-0 flex-1 truncate">{model.name}</span>
-                      <DropdownMenu.ItemIndicator className="absolute right-2.5 grid size-4 place-items-center text-stone-700">
+                      <DropdownMenu.ItemIndicator className="absolute right-2.5 grid size-4 place-items-center text-ink-soft">
                         <Check className="size-3.5" aria-hidden="true" />
                       </DropdownMenu.ItemIndicator>
                     </DropdownMenu.RadioItem>
@@ -240,7 +240,7 @@ export function ModelSettingsMenu({
             <div className="mb-0.5 flex h-[30px] select-none items-center rounded-[10px] px-2.5">
               <span>{t('model.effort')}</span>
               <FixedThinkingStatus
-                className="ml-auto rounded-md text-stone-500 outline-none focus-visible:bg-stone-100"
+                className="ml-auto rounded-md text-ink-muted outline-none focus-visible:bg-canvas-sunken"
                 hidden={currentModel?.thinkingVisibility === 'hidden'}
               />
             </div>
@@ -252,11 +252,11 @@ export function ModelSettingsMenu({
               onCheckedChange={(checked) => selectEffort(toggleThinkingLevel(checked === true))}
               className={cn(
                 'mb-0.5 flex h-[30px] cursor-default select-none items-center rounded-[10px] px-2.5 outline-none',
-                'data-[highlighted]:bg-[rgb(241,241,241)] data-[disabled]:opacity-40',
+                'data-[highlighted]:bg-surface-active data-[disabled]:opacity-40',
               )}
             >
               <span>{t('model.thinking')}</span>
-              <span className="ml-auto flex items-center gap-2 text-stone-500">
+              <span className="ml-auto flex items-center gap-2 text-ink-muted">
                 <span>{thinkingName}</span>
                 <ThinkingSwitchIndicator checked={thinkingLevel === 'high'} />
               </span>
@@ -268,7 +268,7 @@ export function ModelSettingsMenu({
                 disabled={selectedProvider !== modelProvider}
               >
                 <span>{t('model.effort')}</span>
-                <span className="ml-auto flex items-center gap-1.5 text-stone-500">
+                <span className="ml-auto flex items-center gap-1.5 text-ink-muted">
                   <span>{thinkingName}</span>
                   <ChevronRight className="size-3.5" aria-hidden="true" />
                 </span>
@@ -278,7 +278,7 @@ export function ModelSettingsMenu({
                   sideOffset={6}
                   alignOffset={-4}
                   collisionPadding={10}
-                  className="z-[110] min-w-[13rem] animate-[fade-in_110ms_ease-out] rounded-2xl border border-stone-200 bg-white p-1 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+                  className="z-[110] min-w-[13rem] animate-[fade-in_110ms_ease-out] rounded-2xl border border-edge bg-canvas p-1 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
                 >
                   <DropdownMenu.Label className={menuLabelClass}>
                     {t('model.effort')}
@@ -292,7 +292,7 @@ export function ModelSettingsMenu({
                     {thinkingLevels.map((level) => (
                       <DropdownMenu.RadioItem key={level} value={level} className={radioItemClass}>
                         <span>{t(`effort.${level}`)}</span>
-                        <DropdownMenu.ItemIndicator className="absolute right-2.5 grid size-4 place-items-center text-stone-700">
+                        <DropdownMenu.ItemIndicator className="absolute right-2.5 grid size-4 place-items-center text-ink-soft">
                           <Check className="size-3.5" aria-hidden="true" />
                         </DropdownMenu.ItemIndicator>
                       </DropdownMenu.RadioItem>
@@ -303,20 +303,20 @@ export function ModelSettingsMenu({
             </DropdownMenu.Sub>
           )}
 
-          <DropdownMenu.Separator className="mx-2 my-1 h-px bg-stone-100" />
+          <DropdownMenu.Separator className="mx-2 my-1 h-px bg-canvas-sunken" />
           <ContextMeter usage={currentContextUsage} contextWindow={contextWindow} />
           {onCompact && (
             <>
-              <DropdownMenu.Separator className="mx-2 my-1 h-px bg-stone-100" />
+              <DropdownMenu.Separator className="mx-2 my-1 h-px bg-canvas-sunken" />
               <DropdownMenu.Item
-                className="flex h-[30px] cursor-default select-none items-center gap-2.5 rounded-[10px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)] data-[disabled]:opacity-40"
+                className="flex h-[30px] cursor-default select-none items-center gap-2.5 rounded-[10px] px-2.5 outline-none data-[highlighted]:bg-surface-active data-[disabled]:opacity-40"
                 disabled={compacting}
                 onSelect={onCompact}
               >
                 {compacting ? (
-                  <LoaderCircle className="size-4 animate-spin text-stone-500" aria-hidden="true" />
+                  <LoaderCircle className="size-4 animate-spin text-ink-muted" aria-hidden="true" />
                 ) : (
-                  <Minimize2 className="size-4 text-stone-600" aria-hidden="true" />
+                  <Minimize2 className="size-4 text-ink-muted" aria-hidden="true" />
                 )}
                 <span>{compacting ? t('model.compacting') : t('model.compact')}</span>
               </DropdownMenu.Item>
@@ -343,29 +343,29 @@ function ContextMeter({
   return (
     <div className="px-2.5 pt-1.5 pb-2" aria-label={t('model.contextUsage')}>
       <div className="flex items-baseline justify-between gap-4 text-[0.75rem] leading-5 tabular-nums">
-        <span className="font-medium text-stone-600">{t('model.context')}</span>
-        <span className="text-stone-400">
+        <span className="font-medium text-ink-muted">{t('model.context')}</span>
+        <span className="text-ink-faint">
           {measured ? formatTokens(usedTokens, formatNumber) : '—'} /{' '}
           {formatTokens(contextWindow, formatNumber)}
           {measured && <span> · {formatNumber(Math.round(percentage))}%</span>}
         </span>
       </div>
-      <div className="mt-1 h-1 overflow-hidden rounded-full bg-stone-100">
+      <div className="mt-1 h-1 overflow-hidden rounded-full bg-canvas-sunken">
         <div
           className={cn(
             'h-full rounded-full transition-[width,background-color] duration-300 ease-out',
             percentage >= 90
-              ? 'bg-red-500'
+              ? 'bg-danger-soft'
               : percentage >= 75
-                ? 'bg-amber-500'
-                : 'bg-stone-500',
+                ? 'bg-warning'
+                : 'bg-ink-muted',
             !measured && 'bg-transparent',
           )}
           style={{ width: `${percentage}%` }}
         />
       </div>
       {!measured && contextWindow > 0 && (
-        <p className="mt-1 text-[0.6875rem] leading-4 text-stone-400">
+        <p className="mt-1 text-[0.6875rem] leading-4 text-ink-faint">
           {t('model.measureAfterResponse')}
         </p>
       )}
@@ -388,14 +388,14 @@ function formatTokenDecimal(value: number, formatNumber: NumberFormatter): strin
 
 const subTriggerClass = cn(
   'mb-0.5 flex h-[30px] cursor-default select-none items-center rounded-[10px] px-2.5 outline-none last:mb-0',
-  'data-[highlighted]:bg-[rgb(241,241,241)] data-[state=open]:bg-[rgb(237,237,237)]',
+  'data-[highlighted]:bg-surface-active data-[state=open]:bg-surface-selected',
   'data-[disabled]:opacity-40',
 )
 
 const radioItemClass = cn(
   'relative flex h-[30px] cursor-default select-none items-center gap-2 rounded-[10px] px-2.5 pr-9 text-[0.875rem] outline-none',
-  'data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(237,237,237)] data-[state=checked]:font-medium',
+  'data-[highlighted]:bg-surface-active data-[state=checked]:bg-surface-selected data-[state=checked]:font-medium',
 )
 
-const menuLabelClass = 'px-2.5 py-1.5 text-[0.75rem] font-medium text-stone-400'
-const separatorClass = 'mx-1.5 my-0.5 h-px bg-stone-100'
+const menuLabelClass = 'px-2.5 py-1.5 text-[0.75rem] font-medium text-ink-faint'
+const separatorClass = 'mx-1.5 my-0.5 h-px bg-canvas-sunken'

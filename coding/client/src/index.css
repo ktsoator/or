@@ -3,9 +3,242 @@
 @import "@fontsource-variable/geist-mono";
 @plugin "@tailwindcss/typography";
 
+/* Theme tokens.
+
+   Every surface, text, and border colour in the product resolves through the
+   variables below rather than through a palette step, so a component states the
+   role a colour plays and both themes stay correct without per-component
+   branching. Light values are the exact stone steps the product shipped with,
+   so light mode is unchanged. Dark is a neutral grey ramp rather than a warm
+   one: a warm dark reads as muddy at these levels, and code tools sit on flat
+   grey. The foreground stops short of pure white, which halates against a dark
+   canvas over a long reading session.
+
+   A theme is selected by the OS unless the user overrode it, in which case
+   data-theme on the root element wins in both directions. */
+:root {
+  --canvas: #ffffff;          /* stone: white  */
+  --canvas-raised: #fafaf9;   /* stone-50      */
+  --canvas-sunken: #f5f5f4;   /* stone-100     */
+  --canvas-strong: #e7e5e4;   /* stone-200     */
+  --canvas-inverse: #1c1917;  /* stone-900     */
+
+  --ink: #1c1917;             /* stone-900/950 */
+  --ink-soft: #44403c;        /* stone-700/800 */
+  --ink-muted: #78716c;       /* stone-500/600 */
+  --ink-faint: #a8a29e;       /* stone-400     */
+  --ink-ghost: #d6d3d1;       /* stone-300     */
+  --ink-inverse: #ffffff;     /* stone: white  */
+
+  --edge: #e7e5e4;            /* stone-200     */
+  --edge-soft: #f5f5f4;       /* stone-100     */
+  --edge-strong: #d6d3d1;     /* stone-300     */
+  --edge-stronger: #a8a29e;   /* stone-400     */
+
+  --danger: #b91c1c;
+  --danger-soft: #dc2626;
+  --danger-surface: #fef2f2;
+  --danger-edge: #fecaca;
+  --warning: #b45309;
+  --warning-surface: #fffbeb;
+  --warning-edge: #fde68a;
+  --success: #059669;
+  --info: #2563eb;
+  --info-surface: #eff6ff;
+
+  --accent-solid: #dc2626;
+  --selection: #dfe9ff;
+  /* Dialog backdrops and on-image controls darken whatever is beneath them,
+     so they stay dark in both themes rather than inverting. */
+  --scrim: 12, 10, 9;
+  /* Interaction fills, one step apart, for hover / active / selected rows. */
+  --surface-hover: rgb(246, 246, 246);
+  --surface-active: rgb(241, 241, 241);
+  --surface-selected: rgb(237, 237, 237);
+  /* Destructive confirmation buttons carry white text in both themes. */
+  --danger-solid: #b42318;
+  --danger-solid-hover: #991b1b;
+  /* Diff line fills. */
+  --diff-add: #dcefe2;
+  --diff-delete: #f5dddd;
+
+  --scrollbar-thumb: #c8c9c3;
+  --scrollbar-code-thumb: #a6a69f;
+  --scrollbar-code-track: #f4f4f1;
+
+  --sheen: 255, 255, 255;
+
+  /* Editor colours shared by read previews, diffs, and Markdown blocks. */
+  --code-comment: #999995;
+  --code-keyword: #c75b12;
+  --code-string: #178b36;
+  --code-title: #086bd6;
+  --code-type: #8250df;
+  --code-number: #a33a78;
+  --code-deletion: #cf222e;
+}
+
+/* Dark values. Applied when the OS asks for dark and the user has not pinned
+   light, and whenever the user pinned dark. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --canvas: #1e1e1e;
+    --canvas-raised: #252525;
+    --canvas-sunken: #2c2c2c;
+    --canvas-strong: #383838;
+    --canvas-inverse: #f5f5f5;
+
+    --ink: #f5f5f5;
+    --ink-soft: #d4d4d4;
+    --ink-muted: #a3a3a3;
+    --ink-faint: #858585;
+    --ink-ghost: #575757;
+    --ink-inverse: #1e1e1e;
+
+    --edge: #333333;
+    --edge-soft: #282828;
+    --edge-strong: #424242;
+    --edge-stronger: #575757;
+
+    --danger: #f87171;
+    --danger-soft: #ef4444;
+    --danger-surface: #2a1616;
+    --danger-edge: #7f1d1d;
+    --warning: #fbbf24;
+    --warning-surface: #2a1f0d;
+    --warning-edge: #78350f;
+    --success: #34d399;
+    --info: #60a5fa;
+    --info-surface: #14203a;
+
+    --accent-solid: #ef4444;
+    --selection: #2b3a5c;
+
+    --scrollbar-thumb: #4a4a4a;
+    --scrollbar-code-thumb: #575757;
+    --scrollbar-code-track: #252525;
+
+    --sheen: 245, 245, 245;
+
+    --code-comment: #808080;
+    --code-keyword: #f0935b;
+    --code-string: #6cc78a;
+    --code-title: #6cabf5;
+    --code-type: #c3a0f0;
+    --code-number: #e089b8;
+    --code-deletion: #f2707c;
+
+    --surface-hover: #272727;
+    --surface-active: #2e2e2e;
+    --surface-selected: #363636;
+    --danger-solid: #b42318;
+    --danger-solid-hover: #dc2626;
+    --diff-add: #1a3524;
+    --diff-delete: #401f1f;
+  }
+}
+
+/* The explicit override has to restate the dark values rather than reuse the
+   block above: a media query cannot be re-entered from a selector. */
+:root[data-theme="dark"] {
+  --canvas: #1e1e1e;
+  --canvas-raised: #252525;
+  --canvas-sunken: #2c2c2c;
+  --canvas-strong: #383838;
+  --canvas-inverse: #f5f5f5;
+
+  --ink: #f5f5f5;
+  --ink-soft: #d4d4d4;
+  --ink-muted: #a3a3a3;
+  --ink-faint: #858585;
+  --ink-ghost: #575757;
+  --ink-inverse: #1e1e1e;
+
+  --edge: #333333;
+  --edge-soft: #282828;
+  --edge-strong: #424242;
+  --edge-stronger: #575757;
+
+  --danger: #f87171;
+  --danger-soft: #ef4444;
+  --danger-surface: #2a1616;
+  --danger-edge: #7f1d1d;
+  --warning: #fbbf24;
+  --warning-surface: #2a1f0d;
+  --warning-edge: #78350f;
+  --success: #34d399;
+  --info: #60a5fa;
+  --info-surface: #14203a;
+
+  --accent-solid: #ef4444;
+  --selection: #2b3a5c;
+
+  --scrollbar-thumb: #4a4a4a;
+  --scrollbar-code-thumb: #575757;
+  --scrollbar-code-track: #252525;
+
+  --sheen: 245, 245, 245;
+
+  --code-comment: #808080;
+  --code-keyword: #f0935b;
+  --code-string: #6cc78a;
+  --code-title: #6cabf5;
+  --code-type: #c3a0f0;
+  --code-number: #e089b8;
+  --code-deletion: #f2707c;
+
+  --surface-hover: #272727;
+  --surface-active: #2e2e2e;
+  --surface-selected: #363636;
+  --danger-solid: #b42318;
+  --danger-solid-hover: #dc2626;
+  --diff-add: #1a3524;
+  --diff-delete: #401f1f;
+}
+
 @theme inline {
   --font-sans: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "Geist Mono Variable", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+
+  /* Declared inline so the utilities emit var() and follow a theme change at
+     runtime instead of baking the value in at build time. */
+  --color-canvas: var(--canvas);
+  --color-canvas-raised: var(--canvas-raised);
+  --color-canvas-sunken: var(--canvas-sunken);
+  --color-canvas-strong: var(--canvas-strong);
+  --color-canvas-inverse: var(--canvas-inverse);
+
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-ink-ghost: var(--ink-ghost);
+  --color-ink-inverse: var(--ink-inverse);
+
+  --color-edge: var(--edge);
+  --color-edge-soft: var(--edge-soft);
+  --color-edge-strong: var(--edge-strong);
+  --color-edge-stronger: var(--edge-stronger);
+
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-surface: var(--danger-surface);
+  --color-danger-edge: var(--danger-edge);
+  --color-warning: var(--warning);
+  --color-warning-surface: var(--warning-surface);
+  --color-warning-edge: var(--warning-edge);
+  --color-success: var(--success);
+  --color-info: var(--info);
+  --color-info-surface: var(--info-surface);
+  --color-accent-solid: var(--accent-solid);
+  --color-scrim: rgb(var(--scrim));
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-active: var(--surface-active);
+  --color-surface-selected: var(--surface-selected);
+  --color-danger-solid: var(--danger-solid);
+  --color-danger-solid-hover: var(--danger-solid-hover);
+  --color-diff-add: var(--diff-add);
+  --color-diff-delete: var(--diff-delete);
 }
 
 @layer base {
@@ -18,8 +251,8 @@
   body {
     margin: 0;
     overflow: hidden;
-    background: #fff;
-    color: #292927;
+    background: var(--canvas);
+    color: var(--ink);
     font-size: 1rem;
     /* Grayscale antialiasing renders text — especially small monospace in code
        and diff views — lighter and crisper than the default subpixel rendering. */
@@ -28,7 +261,62 @@
   }
   button, textarea { font: inherit; }
   .lucide { stroke-width: 1.7; }
-  ::selection { background: #dfe9ff; }
+  ::selection { background: var(--selection); }
+}
+
+/* Assets that ship as a light and a dark cut. Both are rendered and CSS hides
+   one, so the choice follows exactly the same rules as the colour tokens and no
+   component has to subscribe to the theme to draw an icon. */
+.theme-dark-only {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-light-only {
+    display: none;
+  }
+  :root:not([data-theme="light"]) .theme-dark-only {
+    display: revert;
+  }
+}
+
+:root[data-theme="light"] .theme-light-only {
+  display: revert;
+}
+
+:root[data-theme="light"] .theme-dark-only {
+  display: none;
+}
+
+:root[data-theme="dark"] .theme-light-only {
+  display: none;
+}
+
+:root[data-theme="dark"] .theme-dark-only {
+  display: revert;
+}
+
+/* Tailwind Typography ships its own palette variables, which prose-stone pins
+   to fixed stone steps. Point them at the theme tokens instead, or Markdown
+   keeps rendering dark body text and invisible bold on a dark canvas. */
+.prose {
+  --tw-prose-body: var(--ink-soft);
+  --tw-prose-headings: var(--ink);
+  --tw-prose-lead: var(--ink-muted);
+  --tw-prose-links: var(--info);
+  --tw-prose-bold: var(--ink);
+  --tw-prose-counters: var(--ink-muted);
+  --tw-prose-bullets: var(--ink-ghost);
+  --tw-prose-hr: var(--edge);
+  --tw-prose-quotes: var(--ink);
+  --tw-prose-quote-borders: var(--edge);
+  --tw-prose-captions: var(--ink-muted);
+  --tw-prose-kbd: var(--ink);
+  --tw-prose-code: var(--ink);
+  --tw-prose-pre-code: var(--ink-soft);
+  --tw-prose-pre-bg: var(--canvas-sunken);
+  --tw-prose-th-borders: var(--edge-strong);
+  --tw-prose-td-borders: var(--edge);
 }
 
 /* The desktop shell extends web content into the macOS title bar. Keep the
@@ -115,7 +403,7 @@
 ::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
-  background: #c8c9c3;
+  background: var(--scrollbar-thumb);
   background-clip: padding-box;
 }
 
@@ -124,22 +412,22 @@
      into the conversation when the code reaches either edge. */
   overscroll-behavior-x: contain;
   overscroll-behavior-y: auto;
-  scrollbar-color: #a6a69f #f4f4f1;
+  scrollbar-color: var(--scrollbar-code-thumb) var(--scrollbar-code-track);
   scrollbar-gutter: stable;
   scrollbar-width: thin;
 }
 
 .code-scroll-area:focus-visible {
   outline: none;
-  box-shadow: inset 0 0 0 1px #a8a29e;
+  box-shadow: inset 0 0 0 1px var(--edge-stronger);
 }
 
 .code-scroll-area::-webkit-scrollbar-track {
-  background: #f4f4f1;
+  background: var(--scrollbar-code-track);
 }
 
 .code-scroll-area::-webkit-scrollbar-thumb {
-  background: #a6a69f;
+  background: var(--scrollbar-code-thumb);
   background-clip: padding-box;
 }
 
@@ -171,9 +459,9 @@
   background: linear-gradient(
     105deg,
     transparent 36%,
-    rgba(255, 255, 255, 0.58) 45%,
-    rgba(255, 255, 255, 1) 50%,
-    rgba(255, 255, 255, 0.58) 55%,
+    rgba(var(--sheen), 0.58) 45%,
+    rgba(var(--sheen), 1) 50%,
+    rgba(var(--sheen), 0.58) 55%,
     transparent 64%
   );
   mix-blend-mode: screen;
@@ -189,9 +477,9 @@
 .or-codeblock {
   margin: 0.5rem 0;
   overflow: hidden;
-  border: 1px solid #e7e5e4;
+  border: 1px solid var(--edge);
   border-radius: 0.5rem;
-  background: #fff;
+  background: var(--canvas);
 }
 
 .or-codeblock-head {
@@ -200,8 +488,8 @@
   justify-content: space-between;
   height: 1.75rem;
   padding: 0 0.375rem 0 0.75rem;
-  border-bottom: 1px solid #e7e5e4;
-  background: rgba(250, 250, 249, 0.6);
+  border-bottom: 1px solid var(--edge);
+  background: var(--canvas-raised);
 }
 
 .or-codeblock-lang {
@@ -210,7 +498,7 @@
   font-weight: 500;
   letter-spacing: 0.03em;
   text-transform: uppercase;
-  color: #78716c;
+  color: var(--ink-muted);
 }
 
 .or-codeblock .or-md-copy {
@@ -221,17 +509,17 @@
   border: 0;
   border-radius: 0.25rem;
   background: transparent;
-  color: #a8a29e;
+  color: var(--ink-faint);
   cursor: pointer;
   transition: color 120ms;
 }
 
-.or-codeblock .or-md-copy:hover { color: #1c1917; }
+.or-codeblock .or-md-copy:hover { color: var(--ink); }
 
 .or-codeblock .or-md-copy:focus-visible {
   outline: none;
-  background: #f5f5f4;
-  color: #1c1917;
+  background: var(--canvas-sunken);
+  color: var(--ink);
 }
 
 .or-codeblock pre {
@@ -246,7 +534,7 @@
 /* Muted editor colors shared by read previews, diffs, and Markdown blocks. */
 .or-code-theme .hljs-comment,
 .or-code-theme .hljs-quote {
-  color: #999995;
+  color: var(--code-comment);
 }
 
 .or-code-theme .hljs-keyword,
@@ -254,7 +542,7 @@
 .or-code-theme .hljs-literal,
 .or-code-theme .hljs-section,
 .or-code-theme .hljs-link {
-  color: #c75b12;
+  color: var(--code-keyword);
 }
 
 .or-code-theme .hljs-string,
@@ -262,29 +550,29 @@
 .or-code-theme .hljs-symbol,
 .or-code-theme .hljs-bullet,
 .or-code-theme .hljs-addition {
-  color: #178b36;
+  color: var(--code-string);
 }
 
 .or-code-theme .hljs-title,
 .or-code-theme .hljs-title.function_,
 .or-code-theme .hljs-title.class_ {
-  color: #086bd6;
+  color: var(--code-title);
 }
 
 .or-code-theme .hljs-type,
 .or-code-theme .hljs-built_in,
 .or-code-theme .hljs-variable.language_,
 .or-code-theme .hljs-template-variable {
-  color: #8250df;
+  color: var(--code-type);
 }
 
 .or-code-theme .hljs-number,
 .or-code-theme .hljs-regexp {
-  color: #a33a78;
+  color: var(--code-number);
 }
 
 .or-code-theme .hljs-deletion {
-  color: #cf222e;
+  color: var(--code-deletion);
 }
 
 .background-tasks-view {

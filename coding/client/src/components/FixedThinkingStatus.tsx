@@ -38,7 +38,7 @@ export function FixedThinkingStatus({
             side="top"
             sideOffset={6}
             collisionPadding={8}
-            className="z-[210] max-w-[17rem] animate-[fade-in_100ms_ease-out] rounded-md bg-stone-900 px-2.5 py-1.5 text-[0.6875rem] leading-4 text-white shadow-lg"
+            className="z-[210] max-w-[17rem] animate-[fade-in_100ms_ease-out] rounded-md bg-canvas-inverse px-2.5 py-1.5 text-[0.6875rem] leading-4 text-ink-inverse shadow-lg"
           >
             {description}
           </Tooltip.Content>

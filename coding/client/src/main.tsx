@@ -8,6 +8,11 @@ import {
   hasDesktopRuntime,
   openExternalURL,
 } from './lib/desktop.ts'
+import { applyTheme, readThemePreference } from './theme.ts'
+
+// Applied before the first render so a dark session never flashes the light
+// canvas while React mounts.
+applyTheme(readThemePreference())
 
 if (hasDesktopRuntime()) {
   document.addEventListener('click', (event) => {

@@ -9,6 +9,7 @@ import {
   BrowserWindow,
   dialog,
   ipcMain,
+  nativeTheme,
   session,
   shell,
   type WebContents,
@@ -55,6 +56,7 @@ process.once('SIGINT', () => app.quit())
 process.once('SIGTERM', () => app.quit())
 
 async function start(): Promise<void> {
+  applyDevelopmentDockIcon()
   registerIPC()
   const desktop = await startSidecar()
   await session.defaultSession.cookies.set({
@@ -74,6 +76,22 @@ async function start(): Promise<void> {
   createWindow(rendererURL)
 }
 
+/**
+ * A packaged build takes its Dock icon from the bundle that electron-builder
+ * assembles out of build/appicon.png. An unpackaged `electron .` has no bundle,
+ * so it shows Electron's own icon unless the same art is set at runtime.
+ */
+function applyDevelopmentDockIcon(): void {
+  if (app.isPackaged || process.platform !== 'darwin' || !app.dock) return
+  const icon = path.resolve(__dirname, '../build/appicon.png')
+  try {
+    app.dock.setIcon(icon)
+  } catch (error) {
+    // Cosmetic only: a missing or unreadable icon must not stop startup.
+    console.warn(`[desktop] could not set the development dock icon`, error)
+  }
+}
+
 function createWindow(url: string): void {
   const window = new BrowserWindow({
     title: 'Coding',
@@ -82,7 +100,11 @@ function createWindow(url: string): void {
     minWidth: 960,
     minHeight: 640,
     show: false,
-    backgroundColor: '#fbfbfa',
+    // Painted before the renderer has loaded, so it has to match the theme the
+    // renderer is about to apply or the window opens on a flash of the wrong
+    // canvas. The renderer owns the final answer, including a user override the
+    // main process cannot see; this is only the opening frame.
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#1e1e1e' : '#fbfbfa',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     trafficLightPosition: process.platform === 'darwin' ? { x: 16, y: 18 } : undefined,
     webPreferences: {

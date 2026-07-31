@@ -501,7 +501,7 @@ export default function App() {
     workbenchOpen || workbenchClosing || workbenchAutoLayoutChanging
   const workbenchToggleControl = (
     <button
-      className="window-titlebar-control relative grid size-7 shrink-0 cursor-pointer place-items-center rounded-md text-stone-500 outline-none transition-colors duration-100 hover:bg-stone-200/75 hover:text-stone-950 focus-visible:bg-stone-200/75 focus-visible:text-stone-950"
+      className="window-titlebar-control relative grid size-7 shrink-0 cursor-pointer place-items-center rounded-md text-ink-muted outline-none transition-colors duration-100 hover:bg-canvas-strong/75 hover:text-ink focus-visible:bg-canvas-strong/75 focus-visible:text-ink"
       data-testid="workbench-panel-toggle"
       type="button"
       title={workbenchOpen ? t('workbench.hide') : t('workbench.show')}
@@ -512,7 +512,7 @@ export default function App() {
       <PanelRight className="size-4" aria-hidden="true" />
       {preview && !workbenchOpen && (
         <span
-          className="absolute top-0.5 right-0.5 size-1.5 rounded-full border border-white bg-blue-500"
+          className="absolute top-0.5 right-0.5 size-1.5 rounded-full border border-canvas bg-info"
           aria-hidden="true"
         />
       )}
@@ -532,7 +532,7 @@ export default function App() {
   return (
     <div
       className={cn(
-        'relative grid h-full grid-cols-[var(--sidebar-width)_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] overflow-hidden bg-white motion-reduce:transition-none max-md:grid-cols-1',
+        'relative grid h-full grid-cols-[var(--sidebar-width)_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] overflow-hidden bg-canvas motion-reduce:transition-none max-md:grid-cols-1',
         !sidebarResizing &&
           'transition-[grid-template-columns] duration-[180ms] ease-[cubic-bezier(0.2,0,0,1)]',
       )}
@@ -547,7 +547,7 @@ export default function App() {
     >
       {mobileSessionsOpen && (
         <button
-          className="fixed inset-0 z-40 bg-stone-950/15 backdrop-blur-[1px] md:hidden"
+          className="fixed inset-0 z-40 bg-scrim/15 backdrop-blur-[1px] md:hidden"
           type="button"
           aria-label={t('app.closeSessions')}
           onClick={closeMobileSessions}
@@ -559,7 +559,7 @@ export default function App() {
       >
         <aside
           className={cn(
-            'app-sidebar relative flex h-full w-[var(--sidebar-expanded-width)] min-h-0 min-w-0 flex-col overflow-hidden border-r border-stone-200/75 bg-white text-stone-700 transition-transform duration-200 ease-out',
+            'app-sidebar relative flex h-full w-[var(--sidebar-expanded-width)] min-h-0 min-w-0 flex-col overflow-hidden border-r border-edge/75 bg-canvas text-ink-soft transition-transform duration-200 ease-out',
             'max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:w-[17.5rem] max-md:shadow-2xl',
             mobileSessionsOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full',
           )}
@@ -571,7 +571,7 @@ export default function App() {
             <div className="window-titlebar-controls">
               <button
                 className={cn(
-                  'sidebar-header-action sidebar-search-action absolute top-4 right-14 grid size-8 cursor-pointer place-items-center rounded-lg text-stone-500 outline-none transition-[opacity,color,background-color,transform] duration-100 ease-out motion-reduce:transition-none hover:bg-stone-200/75 hover:text-stone-950 active:scale-95 focus-visible:bg-stone-200/75 focus-visible:text-stone-950',
+                  'sidebar-header-action sidebar-search-action absolute top-4 right-14 grid size-8 cursor-pointer place-items-center rounded-lg text-ink-muted outline-none transition-[opacity,color,background-color,transform] duration-100 ease-out motion-reduce:transition-none hover:bg-canvas-strong/75 hover:text-ink active:scale-95 focus-visible:bg-canvas-strong/75 focus-visible:text-ink',
                   sidebarCollapsed ? 'pointer-events-none opacity-0' : 'opacity-100',
                 )}
                 type="button"
@@ -594,9 +594,9 @@ export default function App() {
           <div className="w-full px-3 pb-3 max-md:w-[17.5rem]">
             <button
               className={cn(
-                'group flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[0.875rem] font-normal text-stone-900 transition-colors duration-100 motion-reduce:transition-none disabled:cursor-wait disabled:opacity-50',
+                'group flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[0.875rem] font-normal text-ink transition-colors duration-100 motion-reduce:transition-none disabled:cursor-wait disabled:opacity-50',
                 !sidebarCollapsed &&
-                  'hover:bg-[rgb(246,246,246)] hover:text-stone-950',
+                  'hover:bg-surface-hover hover:text-ink',
               )}
               type="button"
               title={t('app.newSession')}
@@ -607,7 +607,7 @@ export default function App() {
                 <span
                   className={cn(
                     'pointer-events-none absolute -inset-1.5 rounded-[9px] transition-colors duration-100',
-                    sidebarCollapsed && 'group-hover:bg-[rgb(246,246,246)]',
+                    sidebarCollapsed && 'group-hover:bg-surface-hover',
                   )}
                   aria-hidden="true"
                 />
@@ -642,7 +642,7 @@ export default function App() {
 
           <div
             className={cn(
-              'w-full px-5 pt-2 pb-2 text-[0.8125rem] font-medium tracking-[-0.01em] whitespace-nowrap text-stone-400 transition-opacity duration-100 ease-out motion-reduce:transition-none max-md:w-[17.5rem]',
+              'w-full px-5 pt-2 pb-2 text-[0.8125rem] font-medium tracking-[-0.01em] whitespace-nowrap text-ink-faint transition-opacity duration-100 ease-out motion-reduce:transition-none max-md:w-[17.5rem]',
               sidebarCollapsed ? 'pointer-events-none opacity-0' : 'opacity-100',
             )}
           >
@@ -658,7 +658,7 @@ export default function App() {
           >
             <div className="space-y-1">
               {chatSessions.length === 0 ? (
-                <div className="ml-7 flex h-8 items-center px-2.5 text-[0.84375rem] text-stone-400">
+                <div className="ml-7 flex h-8 items-center px-2.5 text-[0.84375rem] text-ink-faint">
                   {t('workspace.noChats')}
                 </div>
               ) : (
@@ -681,7 +681,7 @@ export default function App() {
 
           <div
             className={cn(
-              'w-full px-5 pt-2 pb-2 text-[0.8125rem] font-medium tracking-[-0.01em] whitespace-nowrap text-stone-400 transition-opacity duration-100 ease-out motion-reduce:transition-none max-md:w-[17.5rem]',
+              'w-full px-5 pt-2 pb-2 text-[0.8125rem] font-medium tracking-[-0.01em] whitespace-nowrap text-ink-faint transition-opacity duration-100 ease-out motion-reduce:transition-none max-md:w-[17.5rem]',
               sidebarCollapsed ? 'pointer-events-none opacity-0' : 'opacity-100',
             )}
           >
@@ -748,8 +748,8 @@ export default function App() {
           >
             <span
               className={cn(
-                'absolute inset-y-0 right-0 w-px transition-colors group-hover:bg-stone-400/60 group-focus-visible:bg-stone-500/70',
-                sidebarResizing && 'bg-stone-500/70',
+                'absolute inset-y-0 right-0 w-px transition-colors group-hover:bg-ink-faint/60 group-focus-visible:bg-ink-muted/70',
+                sidebarResizing && 'bg-ink-muted/70',
               )}
               aria-hidden="true"
             />
@@ -793,7 +793,7 @@ export default function App() {
       >
         <header
           className={cn(
-            'conversation-header window-titlebar z-20 flex h-[45px] shrink-0 items-center gap-3 border-b border-stone-200/80 bg-white py-0 pr-2 pl-6 max-md:h-12 max-md:px-2 max-md:pl-4',
+            'conversation-header window-titlebar z-20 flex h-[45px] shrink-0 items-center gap-3 border-b border-edge/80 bg-canvas py-0 pr-2 pl-6 max-md:h-12 max-md:px-2 max-md:pl-4',
             sidebarCollapsed && 'sidebar-is-collapsed',
           )}
           data-testid="conversation-header"
@@ -810,7 +810,7 @@ export default function App() {
             data-testid="conversation-title"
           >
             <button
-              className="window-titlebar-control -ml-1 grid size-7 shrink-0 place-items-center rounded-md text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-900 md:hidden"
+              className="window-titlebar-control -ml-1 grid size-7 shrink-0 place-items-center rounded-md text-ink-muted transition-colors hover:bg-canvas-sunken hover:text-ink md:hidden"
               type="button"
               title={t('app.sessions')}
               onClick={openMobileSessions}
@@ -822,18 +822,18 @@ export default function App() {
               {!draft && activeSession?.scope === 'project' && activeSession.workspaceName && (
                 <>
                   <span
-                    className="shrink-0 text-[0.9375rem] text-stone-400 max-sm:hidden"
+                    className="shrink-0 text-[0.9375rem] text-ink-faint max-sm:hidden"
                     title={activeSession.workspacePath}
                   >
                     {activeSession.workspaceName}
                   </span>
-                  <span className="shrink-0 text-stone-300 max-sm:hidden" aria-hidden="true">
+                  <span className="shrink-0 text-ink-ghost max-sm:hidden" aria-hidden="true">
                     /
                   </span>
                 </>
               )}
               <span
-                className="truncate text-[0.9375rem] font-medium tracking-[-0.015em] text-stone-900"
+                className="truncate text-[0.9375rem] font-medium tracking-[-0.015em] text-ink"
                 title={activeSession?.title}
               >
                 {draft || activeSession?.title === 'New session'
@@ -865,17 +865,17 @@ export default function App() {
             )}
           >
             {loading ? (
-              <div className="flex items-center gap-2 pb-[8vh] text-xs text-stone-400">
+              <div className="flex items-center gap-2 pb-[8vh] text-xs text-ink-faint">
                 <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
                 {t('app.loadingSession')}
               </div>
             ) : emptySession ? (
               <div className="flex w-full -translate-y-[3vh] flex-col items-center gap-9">
                 <div className="max-w-lg text-center">
-                  <h1 className="m-0 text-[1.75rem] leading-tight font-medium tracking-[-0.03em] text-stone-900 max-sm:text-2xl">
+                  <h1 className="m-0 text-[1.75rem] leading-tight font-medium tracking-[-0.03em] text-ink max-sm:text-2xl">
                     {t('app.emptyTitle')}
                   </h1>
-                  <p className="mt-2.5 text-[0.9375rem] leading-6 text-stone-500">
+                  <p className="mt-2.5 text-[0.9375rem] leading-6 text-ink-muted">
                     {t('app.emptyDescription')}
                   </p>
                 </div>
@@ -905,7 +905,7 @@ export default function App() {
       <aside
         ref={workbenchViewportRef}
         className={cn(
-          'relative min-h-0 min-w-0 overflow-visible bg-white transition-[visibility] duration-0 motion-reduce:delay-0',
+          'relative min-h-0 min-w-0 overflow-visible bg-canvas transition-[visibility] duration-0 motion-reduce:delay-0',
           workbenchOpen
             ? workbenchMaximized
               ? 'visible absolute inset-0 z-40 delay-0'
@@ -937,8 +937,8 @@ export default function App() {
           >
             <span
               className={cn(
-                'absolute inset-y-0 right-0 w-px bg-stone-300/80 transition-colors group-hover:bg-stone-500/70 group-focus-visible:bg-stone-500/80',
-                workbenchResizing && 'bg-stone-500/80',
+                'absolute inset-y-0 right-0 w-px bg-ink-ghost/80 transition-colors group-hover:bg-ink-muted/70 group-focus-visible:bg-ink-muted/80',
+                workbenchResizing && 'bg-ink-muted/80',
               )}
               data-testid="workbench-divider-line"
               aria-hidden="true"
@@ -1067,7 +1067,7 @@ function WorkspaceSessions({
     <section aria-label={name}>
       <div className="group/workspace relative flex h-8 items-center">
         <button
-          className="flex h-8 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-[10px] py-0 pr-[4.125rem] pl-2.5 text-left text-[0.875rem] font-normal text-stone-800 transition-colors hover:bg-[rgb(246,246,246)] hover:text-stone-950"
+          className="flex h-8 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-[10px] py-0 pr-[4.125rem] pl-2.5 text-left text-[0.875rem] font-normal text-ink-soft transition-colors hover:bg-surface-hover hover:text-ink"
           type="button"
           title={path}
           aria-expanded={expanded}
@@ -1078,13 +1078,13 @@ function WorkspaceSessions({
         >
           {expanded ? (
             <FolderOpen
-              className="size-4 shrink-0 text-stone-600"
+              className="size-4 shrink-0 text-ink-muted"
               strokeWidth={1.8}
               aria-hidden="true"
             />
           ) : (
             <Folder
-              className="size-4 shrink-0 text-stone-600"
+              className="size-4 shrink-0 text-ink-muted"
               strokeWidth={1.8}
               aria-hidden="true"
             />
@@ -1098,7 +1098,7 @@ function WorkspaceSessions({
           )}
         >
           <button
-            className="grid size-7 cursor-pointer place-items-center rounded-[9px] text-stone-400 outline-none transition-colors hover:bg-stone-100 hover:text-stone-950 focus-visible:bg-stone-100 focus-visible:text-stone-950"
+            className="grid size-7 cursor-pointer place-items-center rounded-[9px] text-ink-faint outline-none transition-colors hover:bg-canvas-sunken hover:text-ink focus-visible:bg-canvas-sunken focus-visible:text-ink"
             type="button"
             title={t('workspace.newSession', { name })}
             aria-label={t('workspace.newSession', { name })}
@@ -1109,7 +1109,7 @@ function WorkspaceSessions({
           <DropdownMenu.Root open={menuOpen} onOpenChange={setMenuOpen}>
             <DropdownMenu.Trigger asChild>
               <button
-                className="grid size-7 cursor-pointer place-items-center rounded-[9px] text-stone-400 outline-none transition-colors hover:bg-stone-100 hover:text-stone-950 focus-visible:bg-stone-100 focus-visible:text-stone-950 data-[state=open]:text-stone-950"
+                className="grid size-7 cursor-pointer place-items-center rounded-[9px] text-ink-faint outline-none transition-colors hover:bg-canvas-sunken hover:text-ink focus-visible:bg-canvas-sunken focus-visible:text-ink data-[state=open]:text-ink"
                 type="button"
                 title={t('workspace.projectActions')}
                 aria-label={t('workspace.projectActionsNamed', { name })}
@@ -1123,34 +1123,34 @@ function WorkspaceSessions({
                 align="start"
                 sideOffset={6}
                 collisionPadding={10}
-                className="z-[120] min-w-[13.75rem] animate-[fade-in_100ms_ease-out] rounded-[14px] border border-stone-200 bg-white p-1 text-[0.84375rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+                className="z-[120] min-w-[13.75rem] animate-[fade-in_100ms_ease-out] rounded-[14px] border border-edge bg-canvas p-1 text-[0.84375rem] text-ink shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
               >
-                <DropdownMenu.Item className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)]">
-                  <Pin className="size-4 text-stone-600" aria-hidden="true" />
+                <DropdownMenu.Item className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-surface-active">
+                  <Pin className="size-4 text-ink-muted" aria-hidden="true" />
                   <span>{t('workspace.pinProject')}</span>
                 </DropdownMenu.Item>
-                <DropdownMenu.Item className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)]">
-                  <FolderOpen className="size-4 text-stone-600" aria-hidden="true" />
+                <DropdownMenu.Item className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-surface-active">
+                  <FolderOpen className="size-4 text-ink-muted" aria-hidden="true" />
                   <span>{t('workspace.revealInFinder')}</span>
                 </DropdownMenu.Item>
-                <DropdownMenu.Item className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)]">
-                  <GitFork className="size-4 text-stone-600" aria-hidden="true" />
+                <DropdownMenu.Item className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-surface-active">
+                  <GitFork className="size-4 text-ink-muted" aria-hidden="true" />
                   <span>{t('workspace.createWorktree')}</span>
                 </DropdownMenu.Item>
-                <DropdownMenu.Item className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)]">
-                  <PencilLine className="size-4 text-stone-600" aria-hidden="true" />
+                <DropdownMenu.Item className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-surface-active">
+                  <PencilLine className="size-4 text-ink-muted" aria-hidden="true" />
                   <span>{t('workspace.renameProject')}</span>
                 </DropdownMenu.Item>
                 <DropdownMenu.Item
                   disabled
-                  className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 text-stone-400 outline-none"
+                  className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 text-ink-faint outline-none"
                 >
                   <Archive className="size-4" aria-hidden="true" />
                   <span>{t('workspace.archiveChats')}</span>
                 </DropdownMenu.Item>
-                <DropdownMenu.Separator className="mx-1 my-1 h-px bg-stone-100" />
+                <DropdownMenu.Separator className="mx-1 my-1 h-px bg-canvas-sunken" />
                 <DropdownMenu.Item
-                  className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 text-red-700 outline-none data-[highlighted]:bg-red-50"
+                  className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 text-danger outline-none data-[highlighted]:bg-danger-surface"
                   onSelect={() => onRemoveWorkspace(path, name)}
                 >
                   <X className="size-4" aria-hidden="true" />
@@ -1164,7 +1164,7 @@ function WorkspaceSessions({
       {expanded && (
         <div className="mt-1 space-y-1">
           {sessions.length === 0 ? (
-            <div className="flex h-8 items-center pr-2.5 pl-[2.375rem] text-[0.84375rem] text-stone-400">
+            <div className="flex h-8 items-center pr-2.5 pl-[2.375rem] text-[0.84375rem] text-ink-faint">
               {t('workspace.noChats')}
             </div>
           ) : (
@@ -1241,7 +1241,7 @@ function SessionRow({
       <div className="group/session relative">
         <input
           className={cn(
-            'h-8 w-full rounded-[10px] bg-white pr-2.5 text-[0.875rem] font-normal leading-5 text-stone-950 outline-2 outline-stone-400',
+            'h-8 w-full rounded-[10px] bg-canvas pr-2.5 text-[0.875rem] font-normal leading-5 text-ink outline-2 outline-edge-stronger',
             indented ? 'pl-[2.375rem]' : 'pl-2.5',
           )}
           ref={(node) => node?.select()}
@@ -1272,8 +1272,8 @@ function SessionRow({
           'flex h-8 w-full cursor-pointer items-center rounded-[10px] pr-[4.125rem] text-left transition-colors',
           indented ? 'pl-[2.375rem]' : 'pl-2.5',
           active
-            ? 'bg-[rgb(237,237,237)] text-stone-950'
-            : 'text-stone-700 hover:bg-[rgb(246,246,246)] hover:text-stone-950',
+            ? 'bg-surface-selected text-ink'
+            : 'text-ink-soft hover:bg-surface-hover hover:text-ink',
         )}
         type="button"
         aria-current={active ? 'page' : undefined}
@@ -1292,9 +1292,9 @@ function SessionRow({
           title={session.hasApproval ? t('app.approvalNeeded') : t('app.working')}
         >
           {session.hasApproval ? (
-            <CircleAlert className="size-3.5 text-amber-700" aria-hidden="true" />
+            <CircleAlert className="size-3.5 text-warning" aria-hidden="true" />
           ) : (
-            <LoaderCircle className="size-3.5 animate-spin text-stone-500" aria-hidden="true" />
+            <LoaderCircle className="size-3.5 animate-spin text-ink-muted" aria-hidden="true" />
           )}
           <span className="sr-only">
             {session.hasApproval ? t('app.approvalNeeded') : t('app.working')}
@@ -1309,8 +1309,8 @@ function SessionRow({
       >
         <button
           className={cn(
-            'grid size-7 cursor-pointer place-items-center rounded-[9px] text-stone-400 outline-none transition-colors hover:bg-stone-100 hover:text-stone-950 focus-visible:bg-stone-100 focus-visible:text-stone-950',
-            pinned && 'text-stone-500',
+            'grid size-7 cursor-pointer place-items-center rounded-[9px] text-ink-faint outline-none transition-colors hover:bg-canvas-sunken hover:text-ink focus-visible:bg-canvas-sunken focus-visible:text-ink',
+            pinned && 'text-ink-muted',
           )}
           type="button"
           title={pinned ? t('app.unpinSession') : t('app.pinSession')}
@@ -1323,7 +1323,7 @@ function SessionRow({
         <DropdownMenu.Root open={menuOpen} onOpenChange={setMenuOpen}>
           <DropdownMenu.Trigger asChild>
             <button
-              className="grid size-7 cursor-pointer place-items-center rounded-[9px] text-stone-400 outline-none transition-colors hover:bg-stone-100 hover:text-stone-950 focus-visible:bg-stone-100 focus-visible:text-stone-950 data-[state=open]:text-stone-950"
+              className="grid size-7 cursor-pointer place-items-center rounded-[9px] text-ink-faint outline-none transition-colors hover:bg-canvas-sunken hover:text-ink focus-visible:bg-canvas-sunken focus-visible:text-ink data-[state=open]:text-ink"
               type="button"
               title={t('app.sessionActions')}
               aria-label={t('app.sessionActionsNamed', { title })}
@@ -1337,48 +1337,48 @@ function SessionRow({
               align="start"
               sideOffset={6}
               collisionPadding={10}
-              className="z-[120] min-w-[11.75rem] animate-[fade-in_100ms_ease-out] rounded-[14px] border border-stone-200 bg-white p-1 text-[0.84375rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+              className="z-[120] min-w-[11.75rem] animate-[fade-in_100ms_ease-out] rounded-[14px] border border-edge bg-canvas p-1 text-[0.84375rem] text-ink shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
               onCloseAutoFocus={(event) => {
                 if (!openingEditor.current) return
                 openingEditor.current = false
                 event.preventDefault()
               }}
             >
-              <DropdownMenu.Item className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)]">
-                <Share2 className="size-4 text-stone-600" aria-hidden="true" />
+              <DropdownMenu.Item className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-surface-active">
+                <Share2 className="size-4 text-ink-muted" aria-hidden="true" />
                 <span>{t('app.shareSession')}</span>
               </DropdownMenu.Item>
               <DropdownMenu.Item
-                className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)]"
+                className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-surface-active"
                 onSelect={() => {
                   openingEditor.current = true
                   setDraftTitle(title)
                 }}
               >
-                <PencilLine className="size-4 text-stone-600" aria-hidden="true" />
+                <PencilLine className="size-4 text-ink-muted" aria-hidden="true" />
                 <span>{t('app.renameSession')}</span>
               </DropdownMenu.Item>
               <DropdownMenu.Item
-                className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)]"
+                className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-surface-active"
                 onSelect={onOpenInWorkbench}
               >
-                <PanelRightOpen className="size-4 text-stone-600" aria-hidden="true" />
+                <PanelRightOpen className="size-4 text-ink-muted" aria-hidden="true" />
                 <span>{t('app.openInWorkbench')}</span>
               </DropdownMenu.Item>
               <DropdownMenu.Item
-                className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)]"
+                className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-surface-active"
                 onSelect={onTogglePin}
               >
-                <Pin className="size-4 text-stone-600" aria-hidden="true" />
+                <Pin className="size-4 text-ink-muted" aria-hidden="true" />
                 <span>{pinned ? t('app.unpinSession') : t('app.pinSession')}</span>
               </DropdownMenu.Item>
-              <DropdownMenu.Item className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-[rgb(241,241,241)]">
-                <Archive className="size-4 text-stone-600" aria-hidden="true" />
+              <DropdownMenu.Item className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-surface-active">
+                <Archive className="size-4 text-ink-muted" aria-hidden="true" />
                 <span>{t('app.archiveSession')}</span>
               </DropdownMenu.Item>
-              <DropdownMenu.Separator className="mx-1 my-1 h-px bg-stone-100" />
+              <DropdownMenu.Separator className="mx-1 my-1 h-px bg-canvas-sunken" />
               <DropdownMenu.Item
-                className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 text-red-700 outline-none data-[highlighted]:bg-red-50"
+                className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 text-danger outline-none data-[highlighted]:bg-danger-surface"
                 onSelect={onDelete}
               >
                 <Trash2 className="size-4" aria-hidden="true" />
@@ -1406,8 +1406,8 @@ function SidebarNavItem({
   return (
     <button
       className={cn(
-        'group flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[0.875rem] font-normal text-stone-800 outline-none transition-[background-color,color,transform] duration-100 active:scale-[0.985] focus-visible:bg-stone-200/60 focus-visible:text-stone-950',
-        !collapsed && 'hover:bg-[rgb(246,246,246)] hover:text-stone-950',
+        'group flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[0.875rem] font-normal text-ink-soft outline-none transition-[background-color,color,transform] duration-100 active:scale-[0.985] focus-visible:bg-canvas-strong/60 focus-visible:text-ink',
+        !collapsed && 'hover:bg-surface-hover hover:text-ink',
       )}
       type="button"
       title={label}
@@ -1417,12 +1417,12 @@ function SidebarNavItem({
         <span
           className={cn(
             'pointer-events-none absolute -inset-1.5 rounded-[9px] transition-colors duration-100',
-            collapsed && 'group-hover:bg-[rgb(246,246,246)]',
+            collapsed && 'group-hover:bg-surface-hover',
           )}
           aria-hidden="true"
         />
         <Icon
-          className="relative size-4 text-stone-700"
+          className="relative size-4 text-ink-soft"
           strokeWidth={1.85}
           aria-hidden="true"
         />
@@ -1466,21 +1466,21 @@ function DeleteSessionDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[100] grid place-items-center bg-stone-950/30 px-4 py-8 backdrop-blur-[3px]"
+      className="fixed inset-0 z-[100] grid place-items-center bg-scrim/30 px-4 py-8 backdrop-blur-[3px]"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !deleting) onCancel()
       }}
     >
       <section
-        className="relative w-full max-w-[29.25rem] animate-[fade-in_140ms_ease-out] rounded-[22px] border border-white/80 bg-white p-6 shadow-[0_30px_90px_-32px_rgba(28,25,23,0.62)] max-sm:rounded-[18px] max-sm:p-5"
+        className="relative w-full max-w-[29.25rem] animate-[fade-in_140ms_ease-out] rounded-[22px] border border-canvas/80 bg-canvas p-6 shadow-[0_30px_90px_-32px_rgba(28,25,23,0.62)] max-sm:rounded-[18px] max-sm:p-5"
         role="dialog"
         aria-modal="true"
         aria-labelledby="delete-session-title"
         aria-describedby="delete-session-description"
       >
         <button
-          className="absolute top-4 right-4 grid size-8 cursor-pointer place-items-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700 disabled:cursor-wait disabled:opacity-40"
+          className="absolute top-4 right-4 grid size-8 cursor-pointer place-items-center rounded-full text-ink-faint transition-colors hover:bg-canvas-sunken hover:text-ink-soft disabled:cursor-wait disabled:opacity-40"
           type="button"
           aria-label={t('delete.close')}
           disabled={deleting}
@@ -1492,35 +1492,35 @@ function DeleteSessionDialog({
         <div className="pr-9">
           <h2
             id="delete-session-title"
-            className="text-[1.1875rem] leading-6 font-semibold tracking-[-0.02em] text-stone-950"
+            className="text-[1.1875rem] leading-6 font-semibold tracking-[-0.02em] text-ink"
           >
             {t('delete.title')}
           </h2>
           <p
             id="delete-session-description"
-            className="mt-1.5 text-[0.875rem] leading-[1.55] text-stone-500"
+            className="mt-1.5 text-[0.875rem] leading-[1.55] text-ink-muted"
           >
             {t('delete.description')}
           </p>
         </div>
 
-        <div className="mt-5 border-y border-stone-200/80 py-3.5">
-          <div className="text-[0.6875rem] leading-4 font-medium tracking-[0.08em] text-stone-400 uppercase">
+        <div className="mt-5 border-y border-edge/80 py-3.5">
+          <div className="text-[0.6875rem] leading-4 font-medium tracking-[0.08em] text-ink-faint uppercase">
             {t('delete.session')}
           </div>
-          <div className="mt-1 truncate text-[0.90625rem] leading-5 font-medium text-stone-800">
+          <div className="mt-1 truncate text-[0.90625rem] leading-5 font-medium text-ink-soft">
             {title}
           </div>
         </div>
 
         {blocked && (
-          <div className="mt-4 flex gap-2.5 rounded-xl border border-amber-200/70 bg-amber-50/70 px-3.5 py-3 text-[0.8125rem] leading-5 text-amber-900">
+          <div className="mt-4 flex gap-2.5 rounded-xl border border-warning-edge/70 bg-warning-surface/70 px-3.5 py-3 text-[0.8125rem] leading-5 text-warning">
             <ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
             <span>{t('delete.blocked')}</span>
           </div>
         )}
         {error && (
-          <div className="mt-4 flex gap-2.5 rounded-xl border border-red-200/70 bg-red-50/70 px-3.5 py-3 text-[0.8125rem] leading-5 text-red-800">
+          <div className="mt-4 flex gap-2.5 rounded-xl border border-danger-edge/70 bg-danger-surface/70 px-3.5 py-3 text-[0.8125rem] leading-5 text-danger">
             <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
             <span>{error}</span>
           </div>
@@ -1528,7 +1528,7 @@ function DeleteSessionDialog({
 
         <div className="mt-6 flex justify-end gap-2.5">
           <button
-            className="h-10 cursor-pointer rounded-xl border border-stone-300 bg-white px-4 text-[0.875rem] font-medium text-stone-700 transition-[border-color,background-color,color] hover:border-stone-400 hover:bg-stone-50 hover:text-stone-950 disabled:cursor-wait disabled:opacity-50"
+            className="h-10 cursor-pointer rounded-xl border border-edge-strong bg-canvas px-4 text-[0.875rem] font-medium text-ink-soft transition-[border-color,background-color,color] hover:border-edge-stronger hover:bg-canvas-raised hover:text-ink disabled:cursor-wait disabled:opacity-50"
             type="button"
             disabled={deleting}
             onClick={onCancel}
@@ -1536,7 +1536,7 @@ function DeleteSessionDialog({
             {t('delete.cancel')}
           </button>
           <button
-            className="flex h-10 min-w-[7.875rem] cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#b42318] px-4 text-[0.875rem] font-medium text-white shadow-[0_5px_14px_-8px_rgba(180,35,24,0.85)] transition-[background-color,transform] hover:bg-[#991b1b] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-35"
+            className="flex h-10 min-w-[7.875rem] cursor-pointer items-center justify-center gap-2 rounded-xl bg-danger-solid px-4 text-[0.875rem] font-medium text-ink-inverse shadow-[0_5px_14px_-8px_rgba(180,35,24,0.85)] transition-[background-color,transform] hover:bg-danger-solid-hover active:translate-y-px disabled:cursor-not-allowed disabled:opacity-35"
             type="button"
             disabled={deleting || blocked}
             onClick={onConfirm}
@@ -1575,21 +1575,21 @@ function RemoveWorkspaceDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[100] grid place-items-center bg-stone-950/25 px-4 py-8 backdrop-blur-[2px]"
+      className="fixed inset-0 z-[100] grid place-items-center bg-scrim/25 px-4 py-8 backdrop-blur-[2px]"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !removing) onCancel()
       }}
     >
       <section
-        className="relative w-full max-w-[28rem] animate-[fade-in_140ms_ease-out] rounded-[20px] border border-white/80 bg-white p-6 shadow-[0_28px_80px_-34px_rgba(28,25,23,0.58)] max-sm:rounded-[18px] max-sm:p-5"
+        className="relative w-full max-w-[28rem] animate-[fade-in_140ms_ease-out] rounded-[20px] border border-canvas/80 bg-canvas p-6 shadow-[0_28px_80px_-34px_rgba(28,25,23,0.58)] max-sm:rounded-[18px] max-sm:p-5"
         role="dialog"
         aria-modal="true"
         aria-labelledby="remove-workspace-title"
         aria-describedby="remove-workspace-description"
       >
         <button
-          className="absolute top-4 right-4 grid size-8 cursor-pointer place-items-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700 disabled:cursor-wait disabled:opacity-40"
+          className="absolute top-4 right-4 grid size-8 cursor-pointer place-items-center rounded-full text-ink-faint transition-colors hover:bg-canvas-sunken hover:text-ink-soft disabled:cursor-wait disabled:opacity-40"
           type="button"
           aria-label={t('workspace.closeRemove')}
           disabled={removing}
@@ -1601,29 +1601,29 @@ function RemoveWorkspaceDialog({
         <div className="pr-9">
           <h2
             id="remove-workspace-title"
-            className="text-[1.125rem] leading-6 font-semibold tracking-[-0.02em] text-stone-950"
+            className="text-[1.125rem] leading-6 font-semibold tracking-[-0.02em] text-ink"
           >
             {t('workspace.removeTitle')}
           </h2>
           <p
             id="remove-workspace-description"
-            className="mt-1.5 text-[0.875rem] leading-[1.55] text-stone-500"
+            className="mt-1.5 text-[0.875rem] leading-[1.55] text-ink-muted"
           >
             {t('workspace.removeDescription')}
           </p>
         </div>
 
-        <div className="mt-5 rounded-xl border border-stone-200/80 px-3.5 py-3">
-          <div className="truncate text-[0.90625rem] leading-5 font-medium text-stone-800">
+        <div className="mt-5 rounded-xl border border-edge/80 px-3.5 py-3">
+          <div className="truncate text-[0.90625rem] leading-5 font-medium text-ink-soft">
             {workspace.name}
           </div>
-          <div className="mt-0.5 truncate font-mono text-[0.71875rem] leading-4 text-stone-400" title={workspace.path}>
+          <div className="mt-0.5 truncate font-mono text-[0.71875rem] leading-4 text-ink-faint" title={workspace.path}>
             {workspace.path}
           </div>
         </div>
 
         {error && (
-          <div className="mt-4 flex gap-2.5 rounded-xl border border-red-200/70 bg-red-50/70 px-3.5 py-3 text-[0.8125rem] leading-5 text-red-800">
+          <div className="mt-4 flex gap-2.5 rounded-xl border border-danger-edge/70 bg-danger-surface/70 px-3.5 py-3 text-[0.8125rem] leading-5 text-danger">
             <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
             <span>{error}</span>
           </div>
@@ -1631,7 +1631,7 @@ function RemoveWorkspaceDialog({
 
         <div className="mt-6 flex justify-end gap-2.5">
           <button
-            className="h-9 cursor-pointer rounded-[10px] border border-stone-300 bg-white px-4 text-[0.84375rem] font-medium text-stone-700 transition-colors hover:bg-stone-50 hover:text-stone-950 disabled:cursor-wait disabled:opacity-50"
+            className="h-9 cursor-pointer rounded-[10px] border border-edge-strong bg-canvas px-4 text-[0.84375rem] font-medium text-ink-soft transition-colors hover:bg-canvas-raised hover:text-ink disabled:cursor-wait disabled:opacity-50"
             type="button"
             disabled={removing}
             onClick={onCancel}
@@ -1639,7 +1639,7 @@ function RemoveWorkspaceDialog({
             {t('workspace.cancel')}
           </button>
           <button
-            className="flex h-9 min-w-[7.5rem] cursor-pointer items-center justify-center gap-2 rounded-[10px] bg-[#b42318] px-4 text-[0.84375rem] font-medium text-white transition-colors hover:bg-[#991b1b] disabled:cursor-wait disabled:opacity-40"
+            className="flex h-9 min-w-[7.5rem] cursor-pointer items-center justify-center gap-2 rounded-[10px] bg-danger-solid px-4 text-[0.84375rem] font-medium text-ink-inverse transition-colors hover:bg-danger-solid-hover disabled:cursor-wait disabled:opacity-40"
             type="button"
             disabled={removing}
             onClick={onConfirm}

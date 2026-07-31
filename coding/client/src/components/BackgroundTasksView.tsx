@@ -43,20 +43,20 @@ export function BackgroundTasksView({
 
   return (
     <section
-      className="background-tasks-view min-h-0 flex-1 bg-white"
+      className="background-tasks-view min-h-0 flex-1 bg-canvas"
       aria-label={t('tasks.title')}
       data-testid="background-tasks-view"
     >
       {orderedTasks.length === 0 ? (
         <div className="flex h-full min-h-0 flex-col">
           <TaskListHeader count={0} />
-          <div className="grid min-h-0 flex-1 place-items-center px-6 text-center text-[0.8125rem] text-stone-400">
+          <div className="grid min-h-0 flex-1 place-items-center px-6 text-center text-[0.8125rem] text-ink-faint">
             {t('tasks.none')}
           </div>
         </div>
       ) : (
         <div className="background-tasks-layout grid h-full min-h-0">
-          <aside className="background-tasks-list flex min-h-0 flex-col border-stone-200 bg-stone-50/40">
+          <aside className="background-tasks-list flex min-h-0 flex-col border-edge bg-canvas-raised/40">
             <TaskListHeader count={tasks.length} />
             <div className="code-scroll-area min-h-0 flex-1 overflow-y-auto p-1.5">
               {orderedTasks.map((task) => (
@@ -86,10 +86,10 @@ export function BackgroundTasksView({
 function TaskListHeader({ count }: { count: number }) {
   const { t } = useI18n()
   return (
-    <div className="flex h-10 shrink-0 items-center gap-2 border-b border-stone-200 px-3">
-      <ListChecks className="size-3.5 shrink-0 text-stone-400" aria-hidden="true" />
-      <span className="text-[0.75rem] font-medium text-stone-600">{t('tasks.recent')}</span>
-      <span className="ml-auto text-[0.6875rem] tabular-nums text-stone-400">{count}</span>
+    <div className="flex h-10 shrink-0 items-center gap-2 border-b border-edge px-3">
+      <ListChecks className="size-3.5 shrink-0 text-ink-faint" aria-hidden="true" />
+      <span className="text-[0.75rem] font-medium text-ink-muted">{t('tasks.recent')}</span>
+      <span className="ml-auto text-[0.6875rem] tabular-nums text-ink-faint">{count}</span>
     </div>
   )
 }
@@ -114,10 +114,10 @@ function TaskListItem({
   return (
     <button
       className={cn(
-        'mb-0.5 grid w-full cursor-pointer grid-cols-[1rem_minmax(0,1fr)] gap-x-2 rounded-md px-2 py-2 text-left outline-none transition-colors last:mb-0 focus-visible:bg-stone-100',
+        'mb-0.5 grid w-full cursor-pointer grid-cols-[1rem_minmax(0,1fr)] gap-x-2 rounded-md px-2 py-2 text-left outline-none transition-colors last:mb-0 focus-visible:bg-canvas-sunken',
         active
-          ? 'bg-white text-stone-900 shadow-[0_1px_2px_rgba(28,25,23,0.08)] ring-1 ring-stone-200'
-          : 'text-stone-600 hover:bg-stone-100',
+          ? 'bg-canvas text-ink shadow-[0_1px_2px_rgba(28,25,23,0.08)] ring-1 ring-edge'
+          : 'text-ink-muted hover:bg-canvas-sunken',
       )}
       type="button"
       aria-current={active ? 'page' : undefined}
@@ -128,7 +128,7 @@ function TaskListItem({
         <span className="block truncate text-[0.75rem] font-medium">
           {task.description || task.command}
         </span>
-        <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[0.65625rem] text-stone-400">
+        <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[0.65625rem] text-ink-faint">
           <span className="shrink-0">{statusLabels[task.status]}</span>
           <span aria-hidden="true">·</span>
           <code className="min-w-0 truncate font-mono">{task.command}</code>
@@ -226,21 +226,21 @@ function TaskOutputView({
   }
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-col bg-white">
-      <header className="flex min-h-14 shrink-0 items-center gap-2.5 border-b border-stone-200 px-3">
+    <div className="flex min-h-0 min-w-0 flex-col bg-canvas">
+      <header className="flex min-h-14 shrink-0 items-center gap-2.5 border-b border-edge px-3">
         <TaskStatusIcon status={task.status} />
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-[0.8125rem] font-semibold text-stone-900">
+          <h2 className="truncate text-[0.8125rem] font-semibold text-ink">
             {task.description || task.command}
           </h2>
-          <div className="mt-0.5 flex items-center gap-1.5 text-[0.6875rem] tabular-nums text-stone-400">
+          <div className="mt-0.5 flex items-center gap-1.5 text-[0.6875rem] tabular-nums text-ink-faint">
             <span>{statusLabels[task.status]}</span>
             <span aria-hidden="true">·</span>
             <span>{formatRuntime(task, now)}</span>
           </div>
         </div>
         <button
-          className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-md text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-800 disabled:cursor-wait disabled:opacity-40"
+          className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-md text-ink-faint transition-colors hover:bg-canvas-sunken hover:text-ink-soft disabled:cursor-wait disabled:opacity-40"
           type="button"
           aria-label={t('tasks.refreshLog')}
           title={t('tasks.refreshLog')}
@@ -251,7 +251,7 @@ function TaskOutputView({
         </button>
         {task.status === 'running' && (
           <button
-            className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-md text-stone-400 transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-wait disabled:opacity-40"
+            className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-md text-ink-faint transition-colors hover:bg-danger-surface hover:text-danger disabled:cursor-wait disabled:opacity-40"
             type="button"
             aria-label={t('tasks.stop')}
             title={t('tasks.stop')}
@@ -267,9 +267,9 @@ function TaskOutputView({
         )}
       </header>
 
-      <div className="flex min-h-9 shrink-0 items-center gap-2 border-b border-stone-100 px-3">
-        <Terminal className="size-3.5 shrink-0 text-stone-400" aria-hidden="true" />
-        <code className="min-w-0 flex-1 truncate font-mono text-[0.6875rem] text-stone-500">
+      <div className="flex min-h-9 shrink-0 items-center gap-2 border-b border-edge-soft px-3">
+        <Terminal className="size-3.5 shrink-0 text-ink-faint" aria-hidden="true" />
+        <code className="min-w-0 flex-1 truncate font-mono text-[0.6875rem] text-ink-muted">
           {task.command}
         </code>
       </div>
@@ -277,8 +277,8 @@ function TaskOutputView({
       {(output.truncated || stopError) && (
         <div
           className={cn(
-            'shrink-0 border-b border-stone-100 px-3 py-1.5 text-[0.6875rem]',
-            stopError ? 'text-red-700' : 'text-stone-400',
+            'shrink-0 border-b border-edge-soft px-3 py-1.5 text-[0.6875rem]',
+            stopError ? 'text-danger' : 'text-ink-faint',
           )}
           role={stopError ? 'alert' : undefined}
         >
@@ -288,8 +288,8 @@ function TaskOutputView({
 
       <pre
         className={cn(
-          'code-scroll-area min-h-0 flex-1 select-text overflow-auto bg-stone-50/70 p-3 font-mono text-[0.6875rem] leading-[1.125rem] whitespace-pre-wrap text-stone-700',
-          outputError && 'text-red-700',
+          'code-scroll-area min-h-0 flex-1 select-text overflow-auto bg-canvas-raised/70 p-3 font-mono text-[0.6875rem] leading-[1.125rem] whitespace-pre-wrap text-ink-soft',
+          outputError && 'text-danger',
         )}
       >
         {outputError
@@ -312,18 +312,18 @@ function TaskStatusIcon({
   if (status === 'running') {
     return (
       <LoaderCircle
-        className={cn('size-3.5 shrink-0 animate-spin text-emerald-600', className)}
+        className={cn('size-3.5 shrink-0 animate-spin text-success', className)}
         aria-hidden="true"
       />
     )
   }
   if (status === 'succeeded') {
-    return <Check className={cn('size-3.5 shrink-0 text-stone-400', className)} aria-hidden="true" />
+    return <Check className={cn('size-3.5 shrink-0 text-ink-faint', className)} aria-hidden="true" />
   }
   if (status === 'stopped') {
-    return <CircleStop className={cn('size-3.5 shrink-0 text-stone-400', className)} aria-hidden="true" />
+    return <CircleStop className={cn('size-3.5 shrink-0 text-ink-faint', className)} aria-hidden="true" />
   }
-  return <CircleX className={cn('size-3.5 shrink-0 text-red-500', className)} aria-hidden="true" />
+  return <CircleX className={cn('size-3.5 shrink-0 text-danger-soft', className)} aria-hidden="true" />
 }
 
 function orderTasks(tasks: BackgroundTask[]): BackgroundTask[] {

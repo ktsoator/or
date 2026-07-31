@@ -92,10 +92,10 @@ export function ProvidersSettings({ onChanged }: { onChanged?: () => void }) {
     <div>
       {providerData?.repairs && providerData.repairs.length > 0 && (
         <div
-          className="mb-6 flex gap-2.5 border-l-2 border-amber-400 bg-amber-50/45 px-3 py-2.5 text-[0.8125rem] leading-5 text-amber-900"
+          className="mb-6 flex gap-2.5 border-l-2 border-warning-edge bg-warning-surface/45 px-3 py-2.5 text-[0.8125rem] leading-5 text-warning"
           role="status"
         >
-          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />
+          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden="true" />
           <div className="min-w-0 space-y-1">
             {providerData.repairs.map((repair, index) => (
               <p key={`${repair.target}:${repair.previous.provider}:${repair.previous.model}:${index}`}>
@@ -117,12 +117,12 @@ export function ProvidersSettings({ onChanged }: { onChanged?: () => void }) {
       />
 
       {loading ? (
-        <div className="flex items-center gap-2 py-6 text-[0.8125rem] text-stone-400">
+        <div className="flex items-center gap-2 py-6 text-[0.8125rem] text-ink-faint">
           <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
           {t('providers.loading')}
         </div>
       ) : error ? (
-        <div className="rounded-lg border border-red-200 bg-red-50/60 px-4 py-3 text-[0.8125rem] text-red-700">
+        <div className="rounded-lg border border-danger-edge bg-danger-surface/60 px-4 py-3 text-[0.8125rem] text-danger">
           {error}
         </div>
       ) : selected ? (
@@ -136,7 +136,7 @@ export function ProvidersSettings({ onChanged }: { onChanged?: () => void }) {
             onChanged={afterChange}
           />
       ) : (
-        <div className="flex min-h-36 items-start justify-end border-t border-stone-100 pt-5">
+        <div className="flex min-h-36 items-start justify-end border-t border-edge-soft pt-5">
           <ProviderPicker
             providers={providers}
             value={selectedProviderId}
@@ -340,25 +340,25 @@ function DefaultModelSection({
   // cursor has to say why a trigger is dead: a wait cursor during a save, and
   // not-allowed when there is simply nothing to choose from yet.
   const triggerClass = cn(
-    'inline-flex h-9 min-w-0 items-center gap-1.5 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-left text-[0.8125rem] text-stone-800 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:bg-[rgb(241,241,241)] data-[state=open]:bg-[rgb(237,237,237)] disabled:opacity-60',
+    'inline-flex h-9 min-w-0 items-center gap-1.5 rounded-[10px] bg-surface-hover px-2.5 text-left text-[0.8125rem] text-ink-soft outline-none transition-colors hover:bg-surface-active focus-visible:bg-surface-active data-[state=open]:bg-surface-selected disabled:opacity-60',
     saving ? 'cursor-wait' : 'cursor-pointer disabled:cursor-not-allowed',
   )
 
   return (
     <section className="mb-8">
-      <div className="overflow-hidden rounded-[18px] border border-stone-200/90 bg-white px-4 shadow-[0_10px_32px_-30px_rgba(28,25,23,0.45)]">
+      <div className="overflow-hidden rounded-[18px] border border-edge/90 bg-canvas px-4 shadow-[0_10px_32px_-30px_rgba(28,25,23,0.45)]">
         {loading ? (
           <div className={cn(
-            'flex items-center gap-2 py-6 text-[0.8125rem] text-stone-400',
-            utilityModel && 'border-b border-stone-200/75',
+            'flex items-center gap-2 py-6 text-[0.8125rem] text-ink-faint',
+            utilityModel && 'border-b border-edge/75',
           )}>
             <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
             {t('providers.loading')}
           </div>
         ) : models.length === 0 ? (
           <div className={cn(
-            'py-6 text-[0.8125rem] text-stone-400',
-            utilityModel && 'border-b border-stone-200/75',
+            'py-6 text-[0.8125rem] text-ink-faint',
+            utilityModel && 'border-b border-edge/75',
           )}>
             {t('settings.defaultModelEmpty')}
           </div>
@@ -376,7 +376,7 @@ function DefaultModelSection({
                     >
                       {provider && <ProviderIcon provider={provider} />}
                       <span className="max-w-[7rem] truncate">{providerLabel}</span>
-                      <ChevronDown className="size-3.5 shrink-0 text-stone-400" aria-hidden="true" />
+                      <ChevronDown className="size-3.5 shrink-0 text-ink-faint" aria-hidden="true" />
                     </button>
                   </DropdownMenu.Trigger>
                   <DropdownMenu.Portal>
@@ -385,7 +385,7 @@ function DefaultModelSection({
                       align="end"
                       sideOffset={7}
                       collisionPadding={10}
-                      className="z-[100] max-h-[min(24rem,60vh)] min-w-[14rem] overflow-y-auto animate-[fade-in_110ms_ease-out] rounded-[14px] border border-stone-200 bg-white p-1 text-[0.8125rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+                      className="z-[100] max-h-[min(24rem,60vh)] min-w-[14rem] overflow-y-auto animate-[fade-in_110ms_ease-out] rounded-[14px] border border-edge bg-canvas p-1 text-[0.8125rem] text-ink shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
                     >
                       <DropdownMenu.RadioGroup value={provider} onValueChange={chooseProvider}>
                         <div className="flex flex-col gap-0.5">
@@ -393,11 +393,11 @@ function DefaultModelSection({
                             <DropdownMenu.RadioItem
                               key={p}
                               value={p}
-                              className="relative flex h-9 cursor-pointer items-center gap-2 rounded-[9px] px-2.5 pr-8 outline-none select-none data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(237,237,237)]"
+                              className="relative flex h-9 cursor-pointer items-center gap-2 rounded-[9px] px-2.5 pr-8 outline-none select-none data-[highlighted]:bg-surface-active data-[state=checked]:bg-surface-selected"
                             >
                               <ProviderIcon provider={p} />
                               <span className="min-w-0 flex-1 truncate">{providerName(p)}</span>
-                              <DropdownMenu.ItemIndicator className="absolute right-2 grid size-4 place-items-center text-stone-700">
+                              <DropdownMenu.ItemIndicator className="absolute right-2 grid size-4 place-items-center text-ink-soft">
                                 <Check className="size-3.5" aria-hidden="true" />
                               </DropdownMenu.ItemIndicator>
                             </DropdownMenu.RadioItem>
@@ -418,7 +418,7 @@ function DefaultModelSection({
                       disabled={saving || providerModels.length === 0}
                     >
                       <span className="max-w-[9rem] truncate">{modelLabel}</span>
-                      <ChevronDown className="size-3.5 shrink-0 text-stone-400" aria-hidden="true" />
+                      <ChevronDown className="size-3.5 shrink-0 text-ink-faint" aria-hidden="true" />
                     </button>
                   </DropdownMenu.Trigger>
                   <DropdownMenu.Portal>
@@ -427,7 +427,7 @@ function DefaultModelSection({
                       align="end"
                       sideOffset={7}
                       collisionPadding={10}
-                      className="z-[100] max-h-[min(24rem,60vh)] min-w-[16rem] overflow-y-auto animate-[fade-in_110ms_ease-out] rounded-[14px] border border-stone-200 bg-white p-1 text-[0.8125rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+                      className="z-[100] max-h-[min(24rem,60vh)] min-w-[16rem] overflow-y-auto animate-[fade-in_110ms_ease-out] rounded-[14px] border border-edge bg-canvas p-1 text-[0.8125rem] text-ink shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
                     >
                       <DropdownMenu.RadioGroup value={model} onValueChange={chooseModel}>
                         <div className="flex flex-col gap-0.5">
@@ -435,10 +435,10 @@ function DefaultModelSection({
                             <DropdownMenu.RadioItem
                               key={entry.id}
                               value={entry.id}
-                              className="relative flex h-9 cursor-pointer items-center rounded-[9px] px-2.5 pr-8 outline-none select-none data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(237,237,237)]"
+                              className="relative flex h-9 cursor-pointer items-center rounded-[9px] px-2.5 pr-8 outline-none select-none data-[highlighted]:bg-surface-active data-[state=checked]:bg-surface-selected"
                             >
                               <span className="min-w-0 flex-1 truncate">{entry.name}</span>
-                              <DropdownMenu.ItemIndicator className="absolute right-2 grid size-4 place-items-center text-stone-700">
+                              <DropdownMenu.ItemIndicator className="absolute right-2 grid size-4 place-items-center text-ink-soft">
                                 <Check className="size-3.5" aria-hidden="true" />
                               </DropdownMenu.ItemIndicator>
                             </DropdownMenu.RadioItem>
@@ -452,7 +452,7 @@ function DefaultModelSection({
                 {/* Model-specific thinking control */}
                 {fixedThinking ? (
                   <FixedThinkingStatus
-                    className="h-9 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-[0.8125rem] text-stone-500 outline-none hover:bg-[rgb(241,241,241)] focus-visible:bg-[rgb(241,241,241)]"
+                    className="h-9 rounded-[10px] bg-surface-hover px-2.5 text-[0.8125rem] text-ink-muted outline-none hover:bg-surface-active focus-visible:bg-surface-active"
                     hidden={current?.thinkingVisibility === 'hidden'}
                   />
                 ) : toggleThinking ? (
@@ -460,7 +460,7 @@ function DefaultModelSection({
                     checked={thinking === 'high'}
                     disabled={saving}
                     ariaLabel={t('model.thinking')}
-                    className="bg-[rgb(246,246,246)]"
+                    className="bg-surface-hover"
                     onCheckedChange={(checked) => {
                       const level = toggleThinkingLevel(checked)
                       if (provider && model && level !== thinking) {
@@ -478,7 +478,7 @@ function DefaultModelSection({
                         disabled={saving || thinkingLevels.length === 0}
                       >
                         <span className="truncate">{t(`effort.${thinking}` as Parameters<typeof t>[0])}</span>
-                        <ChevronDown className="size-3.5 shrink-0 text-stone-400" aria-hidden="true" />
+                        <ChevronDown className="size-3.5 shrink-0 text-ink-faint" aria-hidden="true" />
                       </button>
                     </DropdownMenu.Trigger>
                     <DropdownMenu.Portal>
@@ -487,7 +487,7 @@ function DefaultModelSection({
                         align="end"
                         sideOffset={7}
                         collisionPadding={10}
-                        className="z-[100] min-w-[10rem] animate-[fade-in_110ms_ease-out] rounded-[14px] border border-stone-200 bg-white p-1 text-[0.8125rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+                        className="z-[100] min-w-[10rem] animate-[fade-in_110ms_ease-out] rounded-[14px] border border-edge bg-canvas p-1 text-[0.8125rem] text-ink shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
                       >
                         <DropdownMenu.RadioGroup value={thinking} onValueChange={chooseThinking}>
                           <div className="flex flex-col gap-0.5">
@@ -495,10 +495,10 @@ function DefaultModelSection({
                               <DropdownMenu.RadioItem
                                 key={level}
                                 value={level}
-                                className="relative flex h-9 cursor-pointer items-center rounded-[9px] px-2.5 pr-8 outline-none select-none data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(237,237,237)]"
+                                className="relative flex h-9 cursor-pointer items-center rounded-[9px] px-2.5 pr-8 outline-none select-none data-[highlighted]:bg-surface-active data-[state=checked]:bg-surface-selected"
                               >
                                 <span>{t(`effort.${level}` as Parameters<typeof t>[0])}</span>
-                                <DropdownMenu.ItemIndicator className="absolute right-2 grid size-4 place-items-center text-stone-700">
+                                <DropdownMenu.ItemIndicator className="absolute right-2 grid size-4 place-items-center text-ink-soft">
                                   <Check className="size-3.5" aria-hidden="true" />
                                 </DropdownMenu.ItemIndicator>
                               </DropdownMenu.RadioItem>
@@ -514,7 +514,7 @@ function DefaultModelSection({
         )}
         {utilityModel}
       </div>
-      {error && <p className="mt-2 text-[0.8125rem] text-red-600">{error}</p>}
+      {error && <p className="mt-2 text-[0.8125rem] text-danger-soft">{error}</p>}
     </section>
   )
 }
@@ -529,10 +529,10 @@ function SettingsRowLike({
   children: ReactNode
 }) {
   return (
-    <div className="flex min-h-[4.375rem] items-center gap-6 border-b border-stone-200/75 py-3 last:border-b-0 max-sm:items-start max-sm:gap-3">
+    <div className="flex min-h-[4.375rem] items-center gap-6 border-b border-edge/75 py-3 last:border-b-0 max-sm:items-start max-sm:gap-3">
       <div className="min-w-0 flex-1">
-        <div className="text-[0.84375rem] leading-5 font-medium text-stone-900">{label}</div>
-        <p className="mt-0.5 max-w-[38.75rem] text-[0.78125rem] leading-[1.45] text-stone-500">{description}</p>
+        <div className="text-[0.84375rem] leading-5 font-medium text-ink">{label}</div>
+        <p className="mt-0.5 max-w-[38.75rem] text-[0.78125rem] leading-[1.45] text-ink-muted">{description}</p>
       </div>
       <div className="shrink-0 max-sm:pt-0.5">{children}</div>
     </div>
@@ -556,14 +556,14 @@ function ProviderPicker({
         <button
           type="button"
           aria-label={t('providers.provider')}
-          className="group flex h-9 min-w-[10.5rem] max-w-[15rem] shrink-0 cursor-pointer items-center gap-2 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-left text-[0.8125rem] outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:bg-[rgb(241,241,241)] data-[state=open]:bg-[rgb(237,237,237)] max-sm:min-w-0"
+          className="group flex h-9 min-w-[10.5rem] max-w-[15rem] shrink-0 cursor-pointer items-center gap-2 rounded-[10px] bg-surface-hover px-2.5 text-left text-[0.8125rem] outline-none transition-colors hover:bg-surface-active focus-visible:bg-surface-active data-[state=open]:bg-surface-selected max-sm:min-w-0"
         >
           {selected && <ProviderIcon provider={selected.id} />}
-          <span className={cn('min-w-0 flex-1 truncate', selected ? 'text-stone-800' : 'text-stone-500')}>
+          <span className={cn('min-w-0 flex-1 truncate', selected ? 'text-ink-soft' : 'text-ink-muted')}>
             {selected ? providerName(selected.id) : t('providers.selectProvider')}
           </span>
           <ChevronDown
-            className="size-3.5 shrink-0 text-stone-400 transition-transform duration-150 group-data-[state=open]:rotate-180"
+            className="size-3.5 shrink-0 text-ink-faint transition-transform duration-150 group-data-[state=open]:rotate-180"
             aria-hidden="true"
           />
         </button>
@@ -574,7 +574,7 @@ function ProviderPicker({
           align="end"
           sideOffset={7}
           collisionPadding={10}
-          className="z-[100] max-h-[min(24rem,60vh)] min-w-[15rem] overflow-y-auto animate-[fade-in_110ms_ease-out] rounded-[14px] border border-stone-200 bg-white p-1 text-[0.8125rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+          className="z-[100] max-h-[min(24rem,60vh)] min-w-[15rem] overflow-y-auto animate-[fade-in_110ms_ease-out] rounded-[14px] border border-edge bg-canvas p-1 text-[0.8125rem] text-ink shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
         >
           <DropdownMenu.RadioGroup value={value ?? ''} onValueChange={onChange}>
             <div className="flex flex-col gap-0.5">
@@ -582,11 +582,11 @@ function ProviderPicker({
                 <DropdownMenu.RadioItem
                   key={provider.id}
                   value={provider.id}
-                  className="relative flex h-9 cursor-default select-none items-center gap-2 rounded-[9px] px-2.5 pr-8 outline-none data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(237,237,237)]"
+                  className="relative flex h-9 cursor-default select-none items-center gap-2 rounded-[9px] px-2.5 pr-8 outline-none data-[highlighted]:bg-surface-active data-[state=checked]:bg-surface-selected"
                 >
                   <ProviderIcon provider={provider.id} />
                   <span className="min-w-0 flex-1 truncate">{providerName(provider.id)}</span>
-                  <DropdownMenu.ItemIndicator className="absolute right-2 grid size-4 place-items-center text-stone-700">
+                  <DropdownMenu.ItemIndicator className="absolute right-2 grid size-4 place-items-center text-ink-soft">
                     <Check className="size-3.5" aria-hidden="true" />
                   </DropdownMenu.ItemIndicator>
                 </DropdownMenu.RadioItem>
@@ -622,11 +622,11 @@ function ConnectionPicker({
         <button
           type="button"
           aria-label={t('providers.connection')}
-          className="group flex h-9 min-w-[10.5rem] max-w-[15rem] shrink-0 cursor-pointer items-center gap-2 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-left text-[0.8125rem] outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:bg-[rgb(241,241,241)] data-[state=open]:bg-[rgb(237,237,237)] max-sm:min-w-0"
+          className="group flex h-9 min-w-[10.5rem] max-w-[15rem] shrink-0 cursor-pointer items-center gap-2 rounded-[10px] bg-surface-hover px-2.5 text-left text-[0.8125rem] outline-none transition-colors hover:bg-surface-active focus-visible:bg-surface-active data-[state=open]:bg-surface-selected max-sm:min-w-0"
         >
-          <span className={cn('size-2 shrink-0 rounded-full', selected.id === activeValue ? 'bg-stone-800' : 'bg-stone-300')} />
-          <span className="min-w-0 flex-1 truncate text-stone-800">{selectedName}</span>
-          <ChevronDown className="size-3.5 shrink-0 text-stone-400 transition-transform duration-150 group-data-[state=open]:rotate-180" aria-hidden="true" />
+          <span className={cn('size-2 shrink-0 rounded-full', selected.id === activeValue ? 'bg-canvas-inverse' : 'bg-ink-ghost')} />
+          <span className="min-w-0 flex-1 truncate text-ink-soft">{selectedName}</span>
+          <ChevronDown className="size-3.5 shrink-0 text-ink-faint transition-transform duration-150 group-data-[state=open]:rotate-180" aria-hidden="true" />
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
@@ -635,7 +635,7 @@ function ConnectionPicker({
           align="end"
           sideOffset={7}
           collisionPadding={10}
-          className="z-[100] min-w-[17rem] animate-[fade-in_110ms_ease-out] rounded-[14px] border border-stone-200 bg-white p-1 text-[0.8125rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+          className="z-[100] min-w-[17rem] animate-[fade-in_110ms_ease-out] rounded-[14px] border border-edge bg-canvas p-1 text-[0.8125rem] text-ink shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
         >
           <DropdownMenu.RadioGroup className="flex flex-col gap-0.5" value={value} onValueChange={onChange}>
             {connections.map((connection) => {
@@ -645,14 +645,14 @@ function ConnectionPicker({
                 <DropdownMenu.RadioItem
                   key={connection.id}
                   value={connection.id}
-                  className="relative flex min-h-10 cursor-default select-none items-center gap-2 rounded-[9px] px-2.5 py-1.5 pr-8 outline-none data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(237,237,237)]"
+                  className="relative flex min-h-10 cursor-default select-none items-center gap-2 rounded-[9px] px-2.5 py-1.5 pr-8 outline-none data-[highlighted]:bg-surface-active data-[state=checked]:bg-surface-selected"
                 >
-                  <span className={cn('size-2 shrink-0 rounded-full', connection.id === activeValue ? 'bg-stone-800' : 'bg-stone-300')} />
+                  <span className={cn('size-2 shrink-0 rounded-full', connection.id === activeValue ? 'bg-canvas-inverse' : 'bg-ink-ghost')} />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-stone-800">{name}</span>
-                    <span className="block truncate font-mono text-[0.6875rem] text-stone-400">{baseURL || t('providers.notSet')}</span>
+                    <span className="block truncate text-ink-soft">{name}</span>
+                    <span className="block truncate font-mono text-[0.6875rem] text-ink-faint">{baseURL || t('providers.notSet')}</span>
                   </span>
-                  <DropdownMenu.ItemIndicator className="absolute right-2 grid size-4 place-items-center text-stone-700">
+                  <DropdownMenu.ItemIndicator className="absolute right-2 grid size-4 place-items-center text-ink-soft">
                     <Check className="size-3.5" aria-hidden="true" />
                   </DropdownMenu.ItemIndicator>
                 </DropdownMenu.RadioItem>
@@ -821,7 +821,7 @@ function ProviderConfigPanel({
   return (
     <>
       <div className="mb-5 flex items-center justify-between gap-3 max-sm:items-start">
-        <div className="text-[0.875rem] font-medium text-stone-800">{t('providers.routing')}</div>
+        <div className="text-[0.875rem] font-medium text-ink-soft">{t('providers.routing')}</div>
         <div className="flex shrink-0 items-center gap-1.5 max-sm:grid max-sm:w-full max-sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2.25rem]">
           <ProviderPicker providers={providers} value={selectedProviderId} onChange={onSelectProvider} />
           <ConnectionPicker
@@ -836,14 +836,14 @@ function ProviderConfigPanel({
             onClick={addConnection}
             aria-label={t('providers.addConnection')}
             title={t('providers.addConnection')}
-            className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-[10px] bg-[rgb(246,246,246)] text-stone-500 outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-950 focus-visible:bg-[rgb(241,241,241)] focus-visible:text-stone-950"
+            className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-[10px] bg-surface-hover text-ink-muted outline-none transition-colors hover:bg-surface-active hover:text-ink focus-visible:bg-surface-active focus-visible:text-ink"
           >
             <Plus className="size-4" aria-hidden="true" />
           </button>
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-stone-200 bg-white shadow-[0_12px_32px_-32px_rgba(28,25,23,0.45)]">
+      <div className="overflow-hidden rounded-lg border border-edge bg-canvas shadow-[0_12px_32px_-32px_rgba(28,25,23,0.45)]">
         {selectedConnection && (
           <ConnectionEditor
             key={selectedConnection.id}
@@ -865,7 +865,7 @@ function ProviderConfigPanel({
         )}
 
         {rowError && (
-          <p className="border-t border-red-100 bg-red-50/60 px-4 py-2 text-[0.75rem] text-red-600">
+          <p className="border-t border-danger-edge bg-danger-surface/60 px-4 py-2 text-[0.75rem] text-danger-soft">
             {rowError}
           </p>
         )}
@@ -946,7 +946,7 @@ function ConnectionEditor({
     <section className="px-5 py-4 max-sm:px-4">
       <div className="flex items-center gap-2.5">
         {connection.official ? (
-          <span className="min-w-0 flex-1 text-[0.84375rem] font-medium text-stone-900">
+          <span className="min-w-0 flex-1 text-[0.84375rem] font-medium text-ink">
             {t('providers.officialConnection')}
           </span>
         ) : (
@@ -954,7 +954,7 @@ function ConnectionEditor({
             value={connection.name}
             onChange={(event) => onChange((current) => ({ ...current, name: event.target.value }))}
             placeholder={t('providers.connectionNamePlaceholder')}
-            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[0.9375rem] font-medium text-stone-900 outline-none placeholder:text-stone-400"
+            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[0.9375rem] font-medium text-ink outline-none placeholder:text-ink-faint"
           />
         )}
         <div className="flex shrink-0 items-center gap-1">
@@ -976,8 +976,8 @@ function ConnectionEditor({
             className={cn(
               'inline-flex h-7 min-w-[5.5rem] items-center justify-center gap-1.5 rounded-md px-2.5 text-[0.71875rem] font-medium transition-colors',
               active
-                ? 'cursor-default text-stone-600'
-                : 'cursor-pointer text-stone-500 hover:bg-[rgb(241,241,241)] hover:text-stone-950 disabled:cursor-not-allowed disabled:text-stone-300 disabled:hover:bg-transparent',
+                ? 'cursor-default text-ink-muted'
+                : 'cursor-pointer text-ink-muted hover:bg-surface-active hover:text-ink disabled:cursor-not-allowed disabled:text-ink-ghost disabled:hover:bg-transparent',
             )}
           >
             {connectionBusy ? (
@@ -992,7 +992,7 @@ function ConnectionEditor({
             onClick={onSave}
             disabled={saving || saveDisabled}
             className={cn(
-              'inline-flex h-7 items-center gap-1.5 rounded-md bg-stone-950 px-2.5 text-[0.71875rem] font-medium text-white transition-colors hover:bg-stone-800 disabled:bg-stone-100 disabled:text-stone-400',
+              'inline-flex h-7 items-center gap-1.5 rounded-md bg-canvas-inverse px-2.5 text-[0.71875rem] font-medium text-ink-inverse transition-colors hover:bg-canvas-inverse disabled:bg-canvas-sunken disabled:text-ink-faint',
               saving ? 'cursor-wait' : 'cursor-pointer disabled:cursor-default',
             )}
           >
@@ -1008,7 +1008,7 @@ function ConnectionEditor({
           <button
             type="button"
             onClick={onRemove}
-            className="grid size-7 cursor-pointer place-items-center rounded-md text-stone-400 transition-colors hover:bg-stone-100 hover:text-red-600"
+            className="grid size-7 cursor-pointer place-items-center rounded-md text-ink-faint transition-colors hover:bg-canvas-sunken hover:text-danger-soft"
             aria-label={t('providers.removeConnection')}
             title={t('providers.removeConnection')}
           >
@@ -1019,9 +1019,9 @@ function ConnectionEditor({
 
       <div className="mt-3">
         <label className="block">
-          <span className="mb-1 block text-[0.71875rem] text-stone-500">{t('providers.baseUrl')}</span>
+          <span className="mb-1 block text-[0.71875rem] text-ink-muted">{t('providers.baseUrl')}</span>
           {connection.official ? (
-            <div className="truncate rounded-md bg-stone-50 px-3 py-2 font-mono text-[0.78125rem] text-stone-600 ring-1 ring-stone-200" title={officialBaseURL}>
+            <div className="truncate rounded-md bg-canvas-raised px-3 py-2 font-mono text-[0.78125rem] text-ink-muted ring-1 ring-edge" title={officialBaseURL}>
               {officialBaseURL || t('providers.notSet')}
             </div>
           ) : (
@@ -1030,17 +1030,17 @@ function ConnectionEditor({
               onChange={(event) => onChange((current) => ({ ...current, baseURL: event.target.value }))}
               placeholder="https://gateway.example.com/v1"
               spellCheck={false}
-              className="w-full rounded-md border border-stone-200 bg-white px-3 py-2 font-mono text-[0.78125rem] text-stone-900 outline-none placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-100"
+              className="w-full rounded-md border border-edge bg-canvas px-3 py-2 font-mono text-[0.78125rem] text-ink outline-none placeholder:text-ink-faint focus:border-edge-stronger focus:ring-2 focus:ring-edge-soft"
             />
           )}
         </label>
 
         <div className="mt-3 flex items-center justify-between">
-          <span className="text-[0.71875rem] text-stone-500">{t('providers.keys')}</span>
+          <span className="text-[0.71875rem] text-ink-muted">{t('providers.keys')}</span>
           <button
             type="button"
             onClick={onAddKey}
-            className="inline-flex h-6 cursor-pointer items-center gap-1 rounded-md px-1.5 text-[0.71875rem] text-stone-500 transition-colors hover:bg-white hover:text-stone-950"
+            className="inline-flex h-6 cursor-pointer items-center gap-1 rounded-md px-1.5 text-[0.71875rem] text-ink-muted transition-colors hover:bg-canvas hover:text-ink"
           >
             <Plus className="size-3" aria-hidden="true" />
             {t('providers.addKey')}
@@ -1048,7 +1048,7 @@ function ConnectionEditor({
         </div>
 
         {connection.keys.length > 0 && (
-          <div className="mt-1 divide-y divide-stone-100 border-y border-stone-100">
+          <div className="mt-1 divide-y divide-edge-soft border-y border-edge-soft">
             {connection.keys.map((key) => {
               const effective = active && connection.activeKeyId === key.id
               return (
@@ -1056,14 +1056,14 @@ function ConnectionEditor({
                   key={key.id}
                   className={cn(
                     'grid grid-cols-[minmax(6rem,0.75fr)_minmax(8rem,1fr)_auto] items-center gap-2 px-2 py-2.5 transition-colors max-sm:grid-cols-[minmax(0,1fr)_auto]',
-                    effective && 'bg-stone-50/80',
+                    effective && 'bg-canvas-raised/80',
                   )}
                 >
                   <input
                     value={key.name}
                     onChange={(event) => updateKey(key.id, { name: event.target.value })}
                     placeholder={t('providers.keyNamePlaceholder')}
-                    className="min-w-0 border-0 bg-transparent p-0 text-[0.78125rem] text-stone-800 outline-none placeholder:text-stone-400"
+                    className="min-w-0 border-0 bg-transparent p-0 text-[0.78125rem] text-ink-soft outline-none placeholder:text-ink-faint"
                   />
                   <input
                     type="password"
@@ -1071,7 +1071,7 @@ function ConnectionEditor({
                     onChange={(event) => updateKey(key.id, { apiKey: event.target.value })}
                     placeholder={key.preview || t('providers.apiKeyPlaceholder')}
                     autoComplete="off"
-                    className="min-w-0 border-0 bg-transparent p-0 font-mono text-[0.75rem] text-stone-700 outline-none placeholder:text-stone-400 max-sm:col-span-2 max-sm:row-start-2"
+                    className="min-w-0 border-0 bg-transparent p-0 font-mono text-[0.75rem] text-ink-soft outline-none placeholder:text-ink-faint max-sm:col-span-2 max-sm:row-start-2"
                   />
                   <div className="flex shrink-0 items-center gap-1 max-sm:col-start-2 max-sm:row-start-1">
                     <button
@@ -1081,7 +1081,7 @@ function ConnectionEditor({
                         (!key.persisted && !key.apiKey.trim()) ||
                         (!connection.official && !connection.baseURL.trim())
                       }
-                      className="inline-flex h-6 cursor-pointer items-center gap-1 rounded-md px-2 text-[0.6875rem] font-medium text-stone-500 transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-950 disabled:cursor-not-allowed disabled:text-stone-300 disabled:hover:bg-transparent"
+                      className="inline-flex h-6 cursor-pointer items-center gap-1 rounded-md px-2 text-[0.6875rem] font-medium text-ink-muted transition-colors hover:bg-surface-active hover:text-ink disabled:cursor-not-allowed disabled:text-ink-ghost disabled:hover:bg-transparent"
                     >
                       <Activity className="size-3" aria-hidden="true" />
                       {t('providers.test')}
@@ -1096,7 +1096,7 @@ function ConnectionEditor({
                     <button
                       type="button"
                       onClick={() => removeKey(key.id)}
-                      className="grid size-7 cursor-pointer place-items-center rounded-md text-stone-300 transition-colors hover:bg-stone-100 hover:text-red-600"
+                      className="grid size-7 cursor-pointer place-items-center rounded-md text-ink-ghost transition-colors hover:bg-canvas-sunken hover:text-danger-soft"
                       aria-label={t('providers.removeKey')}
                     >
                       <Trash2 className="size-3.5" aria-hidden="true" />
@@ -1137,11 +1137,11 @@ function ActivationButton({
       className={cn(
         'inline-flex h-6 w-[4.5rem] items-center justify-center gap-1 rounded-md px-2 text-[0.6875rem] font-medium transition-colors',
         effective
-          ? 'cursor-default bg-stone-100 text-stone-800'
+          ? 'cursor-default bg-canvas-sunken text-ink-soft'
           : configured
-            ? 'cursor-default bg-[rgb(237,237,237)] text-stone-600'
-            : 'cursor-pointer text-stone-500 hover:bg-[rgb(241,241,241)] hover:text-stone-950',
-        disabled && !selected && 'cursor-not-allowed text-stone-300 hover:bg-transparent hover:text-stone-300',
+            ? 'cursor-default bg-surface-selected text-ink-muted'
+            : 'cursor-pointer text-ink-muted hover:bg-surface-active hover:text-ink',
+        disabled && !selected && 'cursor-not-allowed text-ink-ghost hover:bg-transparent hover:text-ink-ghost',
       )}
     >
       {busy ? (

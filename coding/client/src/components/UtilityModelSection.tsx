@@ -166,7 +166,7 @@ export function UtilityModelSection({
             />
           )}
         </div>
-        {error && <p className="max-w-[25rem] text-right text-[0.75rem] text-red-600 max-sm:text-left">{error}</p>}
+        {error && <p className="max-w-[25rem] text-right text-[0.75rem] text-danger-soft max-sm:text-left">{error}</p>}
       </div>
     </UtilityRow>
   )
@@ -182,10 +182,10 @@ function UtilityRow({
   children: ReactNode
 }) {
   return (
-    <div className="flex min-h-[4.375rem] items-center gap-6 border-b border-stone-200/75 py-3 last:border-b-0 max-sm:items-start max-sm:flex-col max-sm:gap-2">
+    <div className="flex min-h-[4.375rem] items-center gap-6 border-b border-edge/75 py-3 last:border-b-0 max-sm:items-start max-sm:flex-col max-sm:gap-2">
       <div className="min-w-0 flex-1">
-        <div className="text-[0.84375rem] leading-5 font-medium text-stone-900">{label}</div>
-        <p className="mt-0.5 max-w-[38.75rem] text-[0.78125rem] leading-[1.45] text-stone-500">{description}</p>
+        <div className="text-[0.84375rem] leading-5 font-medium text-ink">{label}</div>
+        <p className="mt-0.5 max-w-[38.75rem] text-[0.78125rem] leading-[1.45] text-ink-muted">{description}</p>
       </div>
       <div className="min-w-0 shrink-0 max-sm:w-full">{children}</div>
     </div>
@@ -221,7 +221,7 @@ function UtilitySelect({
           aria-busy={busy}
           disabled={busy || disabled || options.length === 0}
           className={cn(
-            'inline-flex h-9 w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-[10px] bg-[rgb(246,246,246)] px-2.5 text-left text-[0.8125rem] text-stone-800 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:bg-[rgb(241,241,241)] data-[state=open]:bg-[rgb(237,237,237)]',
+            'inline-flex h-9 w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-[10px] bg-surface-hover px-2.5 text-left text-[0.8125rem] text-ink-soft outline-none transition-colors hover:bg-surface-active focus-visible:bg-surface-active data-[state=open]:bg-surface-selected',
             busy
               ? 'disabled:cursor-wait disabled:opacity-100'
               : 'disabled:cursor-not-allowed disabled:opacity-60',
@@ -230,7 +230,7 @@ function UtilitySelect({
         >
           {selected?.icon}
           <span className="min-w-0 flex-1 truncate">{selected?.label ?? fallback}</span>
-          <ChevronDown className="size-3.5 shrink-0 text-stone-400" aria-hidden="true" />
+          <ChevronDown className="size-3.5 shrink-0 text-ink-faint" aria-hidden="true" />
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
@@ -239,7 +239,7 @@ function UtilitySelect({
           align="end"
           sideOffset={7}
           collisionPadding={10}
-          className="z-[100] max-h-[min(24rem,60vh)] min-w-[15rem] overflow-y-auto animate-[fade-in_110ms_ease-out] rounded-[14px] border border-stone-200 bg-white p-1 text-[0.8125rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+          className="z-[100] max-h-[min(24rem,60vh)] min-w-[15rem] overflow-y-auto animate-[fade-in_110ms_ease-out] rounded-[14px] border border-edge bg-canvas p-1 text-[0.8125rem] text-ink shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
         >
           <DropdownMenu.RadioGroup value={value} onValueChange={onChange}>
             <div className="flex flex-col gap-0.5">
@@ -247,18 +247,18 @@ function UtilitySelect({
                 <DropdownMenu.RadioItem
                   key={option.value}
                   value={option.value}
-                  className="relative flex min-h-9 cursor-pointer items-center gap-2 rounded-[9px] px-2.5 py-1.5 pr-8 outline-none select-none data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(237,237,237)]"
+                  className="relative flex min-h-9 cursor-pointer items-center gap-2 rounded-[9px] px-2.5 py-1.5 pr-8 outline-none select-none data-[highlighted]:bg-surface-active data-[state=checked]:bg-surface-selected"
                 >
                   {option.icon}
                   <span className="min-w-0 flex-1">
                     <span className="block truncate">{option.label}</span>
                     {option.detail && (
-                      <span className="block truncate font-mono text-[0.6875rem] text-stone-400">
+                      <span className="block truncate font-mono text-[0.6875rem] text-ink-faint">
                         {option.detail}
                       </span>
                     )}
                   </span>
-                  <DropdownMenu.ItemIndicator className="absolute right-2 grid size-4 place-items-center text-stone-700">
+                  <DropdownMenu.ItemIndicator className="absolute right-2 grid size-4 place-items-center text-ink-soft">
                     <Check className="size-3.5" aria-hidden="true" />
                   </DropdownMenu.ItemIndicator>
                 </DropdownMenu.RadioItem>
@@ -301,7 +301,7 @@ function AdvancedRouteMenu({
           title={t('settings.utilityModelAdvanced')}
           aria-busy={busy}
           disabled={busy}
-          className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-[10px] bg-[rgb(246,246,246)] text-stone-500 outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-800 focus-visible:bg-[rgb(241,241,241)] focus-visible:text-stone-800 data-[state=open]:bg-[rgb(237,237,237)] disabled:cursor-wait disabled:opacity-100"
+          className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-[10px] bg-surface-hover text-ink-muted outline-none transition-colors hover:bg-surface-active hover:text-ink-soft focus-visible:bg-surface-active focus-visible:text-ink-soft data-[state=open]:bg-surface-selected disabled:cursor-wait disabled:opacity-100"
         >
           <Ellipsis className="size-4" aria-hidden="true" />
         </button>
@@ -312,7 +312,7 @@ function AdvancedRouteMenu({
           align="end"
           sideOffset={7}
           collisionPadding={10}
-          className="z-[100] max-h-[min(26rem,65vh)] min-w-[17rem] overflow-y-auto animate-[fade-in_110ms_ease-out] rounded-[14px] border border-stone-200 bg-white p-1 text-[0.8125rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+          className="z-[100] max-h-[min(26rem,65vh)] min-w-[17rem] overflow-y-auto animate-[fade-in_110ms_ease-out] rounded-[14px] border border-edge bg-canvas p-1 text-[0.8125rem] text-ink shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
         >
           {showConnections && (
             <RouteOptionGroup
@@ -322,7 +322,7 @@ function AdvancedRouteMenu({
               onChange={onConnectionChange}
             />
           )}
-          {showConnections && showKeys && <DropdownMenu.Separator className="my-1 h-px bg-stone-200/80" />}
+          {showConnections && showKeys && <DropdownMenu.Separator className="my-1 h-px bg-canvas-strong/80" />}
           {showKeys && (
             <RouteOptionGroup
               label={t('settings.utilityModelKey')}
@@ -353,7 +353,7 @@ function RouteOptionGroup({
 }) {
   return (
     <>
-      <DropdownMenu.Label className="px-2.5 pt-1.5 pb-1 text-[0.6875rem] font-medium text-stone-400">
+      <DropdownMenu.Label className="px-2.5 pt-1.5 pb-1 text-[0.6875rem] font-medium text-ink-faint">
         {label}
       </DropdownMenu.Label>
       <DropdownMenu.RadioGroup
@@ -365,7 +365,7 @@ function RouteOptionGroup({
           <DropdownMenu.RadioItem
             key={option.value}
             value={option.value}
-            className="relative flex min-h-9 cursor-pointer items-center gap-2 rounded-[9px] px-2.5 py-1.5 pr-8 outline-none select-none data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(237,237,237)]"
+            className="relative flex min-h-9 cursor-pointer items-center gap-2 rounded-[9px] px-2.5 py-1.5 pr-8 outline-none select-none data-[highlighted]:bg-surface-active data-[state=checked]:bg-surface-selected"
           >
             <span className={cn('min-w-0 flex-1', inlineDetail && 'flex items-center gap-3')}>
               <span className={cn('block truncate', inlineDetail && 'min-w-0 flex-1')}>
@@ -373,14 +373,14 @@ function RouteOptionGroup({
               </span>
               {option.detail && (
                 <span className={cn(
-                  'block truncate font-mono text-[0.6875rem] text-stone-400',
+                  'block truncate font-mono text-[0.6875rem] text-ink-faint',
                   inlineDetail && 'shrink-0',
                 )}>
                   {option.detail}
                 </span>
               )}
             </span>
-            <DropdownMenu.ItemIndicator className="absolute right-2 grid size-4 place-items-center text-stone-700">
+            <DropdownMenu.ItemIndicator className="absolute right-2 grid size-4 place-items-center text-ink-soft">
               <Check className="size-3.5" aria-hidden="true" />
             </DropdownMenu.ItemIndicator>
           </DropdownMenu.RadioItem>

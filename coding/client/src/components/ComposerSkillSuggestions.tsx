@@ -111,7 +111,7 @@ export function ComposerSkillSuggestions({
                 suggestionRowClass,
                 'cursor-pointer outline-none transition-colors',
                 index === activeIndex
-                  ? 'bg-[rgb(241,241,241)]'
+                  ? 'bg-surface-active'
                   : 'bg-transparent',
               )}
               onMouseEnter={() => onActiveIndexChange(index)}
@@ -124,16 +124,16 @@ export function ComposerSkillSuggestions({
               <Icon
                 className={cn(
                   'size-4 shrink-0',
-                  index === activeIndex ? 'text-stone-600' : 'text-stone-400',
+                  index === activeIndex ? 'text-ink-muted' : 'text-ink-faint',
                 )}
                 aria-hidden="true"
               />
-              <span className="max-w-40 truncate font-medium text-stone-700">
+              <span className="max-w-40 truncate font-medium text-ink-soft">
                 {item.label}
               </span>
-              <span className="truncate text-stone-400">{item.description}</span>
+              <span className="truncate text-ink-faint">{item.description}</span>
               {item.command !== 'compact' && (
-                <span className="text-[0.6875rem] text-stone-400">
+                <span className="text-[0.6875rem] text-ink-faint">
                   {t('composer.comingSoon')}
                 </span>
               )}
@@ -142,21 +142,21 @@ export function ComposerSkillSuggestions({
         })}
         <div
           role="presentation"
-          className="flex h-7 shrink-0 items-center px-2.5 text-[0.71875rem] font-medium text-stone-400"
+          className="flex h-7 shrink-0 items-center px-2.5 text-[0.71875rem] font-medium text-ink-faint"
         >
           {t('skills.title')}
         </div>
         {loading ? (
-          <div className="flex h-20 items-center justify-center gap-2 text-[0.75rem] text-stone-400">
+          <div className="flex h-20 items-center justify-center gap-2 text-[0.75rem] text-ink-faint">
             <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
             {t('composer.loadingSkills')}
           </div>
         ) : failed ? (
-          <p className="px-3 py-6 text-center text-[0.75rem] text-stone-400">
+          <p className="px-3 py-6 text-center text-[0.75rem] text-ink-faint">
             {t('composer.skillsLoadError')}
           </p>
         ) : skills.length === 0 ? (
-          <p className="px-3 py-6 text-center text-[0.75rem] text-stone-400">
+          <p className="px-3 py-6 text-center text-[0.75rem] text-ink-faint">
             {query ? t('composer.noMatchingSkills') : t('composer.noSkills')}
           </p>
         ) : (
@@ -173,7 +173,7 @@ export function ComposerSkillSuggestions({
                   suggestionRowClass,
                   'cursor-pointer outline-none transition-colors',
                   optionIndex === activeIndex
-                    ? 'bg-[rgb(241,241,241)]'
+                    ? 'bg-surface-active'
                     : 'bg-transparent',
                 )}
                 onMouseEnter={() => onActiveIndexChange(optionIndex)}
@@ -183,7 +183,7 @@ export function ComposerSkillSuggestions({
                 <BookOpen
                   className={cn(
                     'size-4',
-                    optionIndex === activeIndex ? 'text-blue-600' : 'text-stone-500',
+                    optionIndex === activeIndex ? 'text-info' : 'text-ink-muted',
                   )}
                   strokeWidth={1.8}
                   aria-hidden="true"
@@ -191,19 +191,19 @@ export function ComposerSkillSuggestions({
                 <span
                   className={cn(
                     'max-w-40 truncate font-medium',
-                    optionIndex === activeIndex ? 'text-stone-950' : 'text-stone-800',
+                    optionIndex === activeIndex ? 'text-ink' : 'text-ink-soft',
                   )}
                 >
                   {skill.name}
                 </span>
-                <span className="truncate text-stone-400">{skill.description}</span>
+                <span className="truncate text-ink-faint">{skill.description}</span>
                 <span className="flex items-center gap-1.5 pl-1">
                   {skill.disableModelInvocation && (
-                    <span className="rounded-md bg-white/80 px-1.5 py-0.5 text-[0.625rem] font-medium text-stone-500">
+                    <span className="rounded-md bg-canvas/80 px-1.5 py-0.5 text-[0.625rem] font-medium text-ink-muted">
                       {t('skills.manual')}
                     </span>
                   )}
-                  <span className="text-[0.6875rem] text-stone-400">
+                  <span className="text-[0.6875rem] text-ink-faint">
                     {skill.source === 'project'
                       ? t('skills.systemSourceProject')
                       : t('skills.systemSourceUser')}

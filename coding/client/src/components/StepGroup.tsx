@@ -64,7 +64,7 @@ export function StepGroup({ items, cwd }: { items: Item[]; cwd?: string }) {
     >
       <CollapsibleTrigger
         className={cn(
-          'group inline-flex max-w-full cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-left text-[1.03125rem] leading-6 text-stone-500 outline-none transition-colors hover:text-stone-900 focus-visible:rounded-sm focus-visible:bg-stone-100 focus-visible:text-stone-900',
+          'group inline-flex max-w-full cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-left text-[1.03125rem] leading-6 text-ink-muted outline-none transition-colors hover:text-ink focus-visible:rounded-sm focus-visible:bg-canvas-sunken focus-visible:text-ink',
           active && 'streaming-sheen',
         )}
       >
@@ -73,12 +73,12 @@ export function StepGroup({ items, cwd }: { items: Item[]; cwd?: string }) {
           {summarizeSteps(items, t)}
         </span>
         <ChevronRight
-          className="size-3.5 shrink-0 text-stone-400 transition-transform group-data-[state=open]:rotate-90"
+          className="size-3.5 shrink-0 text-ink-faint transition-transform group-data-[state=open]:rotate-90"
           aria-hidden="true"
         />
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="mt-0.5 ml-2 border-l border-stone-200 pl-3 max-md:ml-0">
+        <div className="mt-0.5 ml-2 border-l border-edge pl-3 max-md:ml-0">
           {items.map((it) =>
             it.kind === 'tool' ? (
               <ToolCard key={it.id} item={it} cwd={cwd} />

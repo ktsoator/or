@@ -3015,8 +3015,8 @@ test('Composer controls stay separate and compact when Chat is narrow', async ({
   )
   expect(modelBox!.width).toBeGreaterThan(40)
 
-  await expect(permission).toHaveClass(/text-stone-500/)
-  await expect(page.getByTestId('model-settings-name')).toHaveClass(/text-stone-500/)
+  await expect(permission).toHaveClass(/text-ink-muted/)
+  await expect(page.getByTestId('model-settings-name')).toHaveClass(/text-ink-muted/)
   await expect(page.getByTestId('model-settings-effort')).toBeHidden()
   await expect(page.getByTestId('permission-mode-label')).toBeHidden()
   await expect(page.getByTestId('model-settings-name')).toHaveCSS('text-overflow', 'ellipsis')
@@ -3165,7 +3165,7 @@ test('desktop project browsing uses the native directory picker', async ({ page 
   const requests = await openDesktopClient(page, { nativeDirectory: '/tmp/native-project' })
 
   const projectPicker = page.getByRole('button', { name: 'Choose project' })
-  await expect(projectPicker).toHaveClass(/text-stone-500/)
+  await expect(projectPicker).toHaveClass(/text-ink-muted/)
   await projectPicker.click()
   await page.getByText('New project', { exact: true }).hover()
   await page.getByText('Use an existing folder', { exact: true }).click()
