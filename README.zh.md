@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/assets/logo.svg" alt="or 像素风 logo" width="120">
+  <img src="docs/assets/coding-logo-flat-transparent.png" alt="Coding 旋转标志" width="120">
   <p><strong>从意图到行动，自由选择路径。</strong></p>
   <p><a href="README.md">English</a> | 简体中文</p>
   <p>

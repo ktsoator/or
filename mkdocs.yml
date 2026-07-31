@@ -84,8 +84,8 @@ plugins:
 
 theme:
   name: material
-  logo: assets/logo.svg
-  favicon: assets/favicon.svg
+  logo: assets/coding-logo-flat-transparent.png
+  favicon: assets/coding-logo-flat-transparent.png
   icon:
     repo: fontawesome/brands/github
   features:
