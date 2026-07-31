@@ -24,6 +24,7 @@ import (
 type Runtime struct {
 	handler       http.Handler
 	conversations *conversation.Manager
+	ledger        *usage.Store
 	cancel        context.CancelFunc
 	closeOnce     sync.Once
 }
@@ -40,6 +41,7 @@ func New(ctx context.Context, cfg config.Config) (*Runtime, error) {
 	}
 	workspaces, err := workspace.NewRegistry(filepath.Join(sessionDir, "workspaces.json"))
 	if err != nil {
+		_ = ledger.Close()
 		cancel()
 		return nil, err
 	}
@@ -47,6 +49,7 @@ func New(ctx context.Context, cfg config.Config) (*Runtime, error) {
 	registry := llm.DefaultProviderRegistry()
 	providers, err := provider.NewStore(cfg.DataDir, registry)
 	if err != nil {
+		_ = ledger.Close()
 		cancel()
 		return nil, err
 	}
@@ -61,6 +64,7 @@ func New(ctx context.Context, cfg config.Config) (*Runtime, error) {
 		TitleGenerator: titlegen.New(providers),
 	})
 	if err != nil {
+		_ = ledger.Close()
 		cancel()
 		return nil, err
 	}
@@ -79,6 +83,7 @@ func New(ctx context.Context, cfg config.Config) (*Runtime, error) {
 	return &Runtime{
 		handler:       server.Handler(),
 		conversations: manager,
+		ledger:        ledger,
 		cancel:        cancel,
 	}, nil
 }
@@ -91,6 +96,7 @@ func (r *Runtime) Close() {
 	r.closeOnce.Do(func() {
 		r.cancel()
 		r.conversations.Close()
+		_ = r.ledger.Close()
 	})
 }
 

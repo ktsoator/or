@@ -645,6 +645,9 @@ func newTestManagerWithTransport(
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		_ = ledger.Close()
+	})
 	workspaces, err := workspace.NewRegistry(filepath.Join(dataDir, "sessions", "workspaces.json"))
 	if err != nil {
 		t.Fatal(err)

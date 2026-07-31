@@ -5,17 +5,9 @@
 package usage
 
 import (
-	"bufio"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
-	"sort"
-	"strings"
-	"sync"
 	"time"
 
 	"github.com/ktsoator/or/agent"
@@ -72,45 +64,6 @@ type EventPage struct {
 	Total  int     `json:"total"`
 	Limit  int     `json:"limit"`
 	Offset int     `json:"offset"`
-}
-
-// Store is an append-only, deduplicated usage ledger.
-type Store struct {
-	path string
-
-	mu     sync.Mutex
-	events map[string]Event
-}
-
-func NewStore(path string) (*Store, error) {
-	store := &Store{path: path, events: make(map[string]Event)}
-	file, err := os.Open(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return store, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("usage: open ledger: %w", err)
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 64*1024), 2*1024*1024)
-	for scanner.Scan() {
-		if strings.TrimSpace(scanner.Text()) == "" {
-			continue
-		}
-		var event Event
-		if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
-			return nil, fmt.Errorf("usage: decode ledger: %w", err)
-		}
-		if event.ID != "" {
-			store.events[event.ID] = event
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("usage: read ledger: %w", err)
-	}
-	return store, nil
 }
 
 // RecordEvent persists one live MessageCompleted event. Empty usage records
@@ -201,131 +154,6 @@ func (s *Store) appendAssistant(sessionID string, assistant *llm.AssistantMessag
 		Timestamp:     normalizedTime(timestamp),
 		Usage:         assistant.Usage,
 	})
-}
-
-func (s *Store) append(event Event) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, exists := s.events[event.ID]; exists {
-		return nil
-	}
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
-		return fmt.Errorf("usage: create ledger directory: %w", err)
-	}
-	file, err := os.OpenFile(s.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-	if err != nil {
-		return fmt.Errorf("usage: open ledger for append: %w", err)
-	}
-	data, err := json.Marshal(event)
-	if err == nil {
-		data = append(data, '\n')
-		_, err = file.Write(data)
-	}
-	closeErr := file.Close()
-	if err != nil {
-		return fmt.Errorf("usage: append ledger: %w", err)
-	}
-	if closeErr != nil {
-		return fmt.Errorf("usage: close ledger: %w", closeErr)
-	}
-	s.events[event.ID] = event
-	return nil
-}
-
-// Report aggregates a stable snapshot without holding the lock while sorting.
-// A zero since value includes the complete ledger.
-func (s *Store) Report(since time.Time) Report {
-	s.mu.Lock()
-	events := make([]Event, 0, len(s.events))
-	for _, event := range s.events {
-		events = append(events, event)
-	}
-	s.mu.Unlock()
-
-	groups := make(map[string]*ModelSummary)
-	report := Report{GeneratedAt: time.Now().UTC()}
-	for _, event := range events {
-		if !since.IsZero() && event.Timestamp.Before(since) {
-			continue
-		}
-		addTotals(&report.Total, event.Usage)
-		key := event.Provider + "\x00" + event.Model
-		group := groups[key]
-		if group == nil {
-			name := event.Model
-			if model, ok := llm.LookupModel(event.Provider, event.Model); ok && model.Name != "" {
-				name = model.Name
-			}
-			group = &ModelSummary{
-				Provider: event.Provider,
-				Model:    event.Model,
-				Name:     name,
-			}
-			groups[key] = group
-		}
-		addTotals(&group.Totals, event.Usage)
-		if event.Timestamp.After(group.LastUsedAt) {
-			group.LastUsedAt = event.Timestamp
-			group.ResponseModel = event.ResponseModel
-		}
-	}
-	for _, group := range groups {
-		report.Models = append(report.Models, *group)
-	}
-	sort.Slice(report.Models, func(i, j int) bool {
-		if report.Models[i].TotalTokens == report.Models[j].TotalTokens {
-			return report.Models[i].LastUsedAt.After(report.Models[j].LastUsedAt)
-		}
-		return report.Models[i].TotalTokens > report.Models[j].TotalTokens
-	})
-	return report
-}
-
-// Events returns individual requests filtered by provider and model. Results
-// are newest first and paginated so the usage page stays fast as the ledger
-// grows.
-func (s *Store) Events(provider, model string, since time.Time, offset, limit int) EventPage {
-	if offset < 0 {
-		offset = 0
-	}
-	if limit <= 0 {
-		limit = 50
-	}
-	if limit > 500 {
-		limit = 500
-	}
-	s.mu.Lock()
-	events := make([]Event, 0, len(s.events))
-	for _, event := range s.events {
-		if !since.IsZero() && event.Timestamp.Before(since) {
-			continue
-		}
-		if provider != "" && event.Provider != provider {
-			continue
-		}
-		if model != "" && event.Model != model {
-			continue
-		}
-		events = append(events, event)
-	}
-	s.mu.Unlock()
-	sort.Slice(events, func(i, j int) bool {
-		if events[i].Timestamp.Equal(events[j].Timestamp) {
-			return events[i].ID > events[j].ID
-		}
-		return events[i].Timestamp.After(events[j].Timestamp)
-	})
-	total := len(events)
-	if offset >= total {
-		return EventPage{Events: []Event{}, Total: total, Limit: limit, Offset: offset}
-	}
-	end := min(offset+limit, total)
-	return EventPage{
-		Events: events[offset:end],
-		Total:  total,
-		Limit:  limit,
-		Offset: offset,
-	}
 }
 
 func addTotals(total *Totals, usage llm.Usage) {

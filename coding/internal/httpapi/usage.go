@@ -15,8 +15,13 @@ func (s *Server) handleUsage(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid usage start time"})
 		return
 	}
+	report, err := s.ledger.Report(since)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	c.Header("Cache-Control", "no-store")
-	c.JSON(http.StatusOK, s.ledger.Report(since))
+	c.JSON(http.StatusOK, report)
 }
 
 func (s *Server) handleUsageEvents(c *gin.Context) {
@@ -35,14 +40,19 @@ func (s *Server) handleUsageEvents(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid usage limit"})
 		return
 	}
-	c.Header("Cache-Control", "no-store")
-	c.JSON(http.StatusOK, s.ledger.Events(
+	page, err := s.ledger.Events(
 		strings.TrimSpace(c.Query("provider")),
 		strings.TrimSpace(c.Query("model")),
 		since,
 		offset,
 		limit,
-	))
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, page)
 }
 
 func usageQueryTime(value string) (time.Time, error) {
