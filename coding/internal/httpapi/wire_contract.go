@@ -267,10 +267,15 @@ type wireEvent struct {
 	// queued-message metadata
 	Delivery wireDeliveryMode `json:"delivery,omitempty"`
 	Queued   bool             `json:"queued,omitempty"`
-	// approval_request
-	ID      string `json:"id,omitempty"`
-	Summary string `json:"summary,omitempty"`
-	Reason  string `json:"reason,omitempty"`
+	// approval_request. Summary is the one-line label; Command carries the
+	// complete shell command so the decision is never made against a truncated
+	// view of what will run. CommandSegments is a conservative count of the
+	// separate commands the shell would run.
+	ID              string `json:"id,omitempty"`
+	Summary         string `json:"summary,omitempty"`
+	Reason          string `json:"reason,omitempty"`
+	Command         string `json:"command,omitempty"`
+	CommandSegments int    `json:"commandSegments,omitempty"`
 	// browser_request
 	Disposition wireBrowserDisposition `json:"disposition,omitempty"`
 	// browser inspection request

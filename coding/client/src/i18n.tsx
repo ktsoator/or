@@ -223,6 +223,7 @@ const en = {
   'approval.couldNotSend': 'Could not send decision',
   'approval.required': 'Approval required',
   'approval.noDetails': 'No details provided',
+  'approval.compoundCommand': 'Runs {count} commands — read every line',
   'approval.deny': 'Deny',
   'approval.allowOnce': 'Allow once',
 
@@ -775,6 +776,7 @@ const zh: Record<TranslationKey, string> = {
   'approval.couldNotSend': '无法提交审批决定',
   'approval.required': '需要审批',
   'approval.noDetails': '未提供详细信息',
+  'approval.compoundCommand': '将执行 {count} 条命令，请逐行确认',
   'approval.deny': '拒绝',
   'approval.allowOnce': '允许一次',
 

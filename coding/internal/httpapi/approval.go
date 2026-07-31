@@ -25,6 +25,8 @@ type pendingApproval struct {
 	response chan permission.ApprovalResponse
 	summary  string
 	reason   string
+	command  string
+	segments int
 }
 
 func NewApprovalBroker(hub *Hub) *ApprovalBroker {
@@ -39,12 +41,27 @@ func (b *ApprovalBroker) Decide(ctx context.Context, req permission.ApprovalRequ
 	id := strconv.FormatUint(b.nextID.Add(1), 10)
 	ch := make(chan permission.ApprovalResponse, 1)
 	summary := describeApproval(req)
+	command := approvalCommand(req)
+	segments := commandSegments(command)
 
 	b.mu.Lock()
-	b.pending[id] = pendingApproval{response: ch, summary: summary, reason: req.Reason}
+	b.pending[id] = pendingApproval{
+		response: ch,
+		summary:  summary,
+		reason:   req.Reason,
+		command:  command,
+		segments: segments,
+	}
 	b.mu.Unlock()
 
-	b.broadcast(wireEvent{Type: wireEventApprovalRequest, ID: id, Summary: summary, Reason: req.Reason})
+	b.broadcast(wireEvent{
+		Type:            wireEventApprovalRequest,
+		ID:              id,
+		Summary:         summary,
+		Reason:          req.Reason,
+		Command:         command,
+		CommandSegments: segments,
+	})
 
 	select {
 	case response := <-ch:
@@ -66,10 +83,12 @@ func (b *ApprovalBroker) PendingEvents() []wireEvent {
 	events := make([]wireEvent, 0, len(b.pending))
 	for id, pending := range b.pending {
 		events = append(events, wireEvent{
-			Type:    wireEventApprovalRequest,
-			ID:      id,
-			Summary: pending.summary,
-			Reason:  pending.reason,
+			Type:            wireEventApprovalRequest,
+			ID:              id,
+			Summary:         pending.summary,
+			Reason:          pending.reason,
+			Command:         pending.command,
+			CommandSegments: pending.segments,
 		})
 	}
 	return events
@@ -112,6 +131,88 @@ func (b *ApprovalBroker) cancel(id string) bool {
 func (b *ApprovalBroker) broadcast(event wireEvent) {
 	payload, _ := json.Marshal(event)
 	b.hub.Broadcast(payload)
+}
+
+// approvalCommand returns the complete shell command a bash approval covers, so
+// the product surface can show every line. describeApproval only ever produces a
+// one-line label, and a decision must not rest on the first line of a command
+// whose later lines do something else.
+func approvalCommand(req permission.ApprovalRequest) string {
+	if req.Request.Tool != "bash" {
+		return ""
+	}
+	command, _ := req.Request.Args["command"].(string)
+	return command
+}
+
+// commandSegments counts the separate commands a shell would run, splitting on
+// newlines and the control operators ; | & and their doubled forms. Quoted and
+// backslash-escaped regions are skipped, so `echo "a && b"` counts as one.
+//
+// This is a hint that tells the reader a command is compound, not a parse any
+// policy may rely on: constructs like $(...) and eval are not interpreted, so
+// the count errs high rather than low. A zero result means there is nothing to
+// run at all.
+func commandSegments(command string) int {
+	const (
+		plain = iota
+		single
+		double
+	)
+	state := plain
+	segments := 0
+	inSegment := false
+	escaped := false
+
+	for _, r := range command {
+		if escaped {
+			escaped = false
+			inSegment = true
+			continue
+		}
+		switch state {
+		case single:
+			if r == '\'' {
+				state = plain
+			}
+			continue
+		case double:
+			switch r {
+			case '\\':
+				escaped = true
+			case '"':
+				state = plain
+			}
+			continue
+		}
+
+		switch r {
+		case '\\':
+			escaped = true
+			inSegment = true
+		case '\'':
+			state = single
+			inSegment = true
+		case '"':
+			state = double
+			inSegment = true
+		case '\n', ';', '|', '&':
+			// Doubled operators (&&, ||, ;;) and blank lines separate nothing
+			// extra, so only a segment with content counts.
+			if inSegment {
+				segments++
+				inSegment = false
+			}
+		case ' ', '\t', '\r':
+			// Leading and trailing space never starts a segment on its own.
+		default:
+			inSegment = true
+		}
+	}
+	if inSegment {
+		segments++
+	}
+	return segments
 }
 
 func describeApproval(req permission.ApprovalRequest) string {

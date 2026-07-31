@@ -962,6 +962,8 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
         id,
         summary: ev.summary ?? '',
         reason: ev.reason ?? '',
+        command: ev.command ?? '',
+        commandSegments: ev.commandSegments ?? 0,
       }
       items = idx >= 0 ? replaceAt(items, idx, approval) : [...items, approval]
       break
