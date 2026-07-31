@@ -204,36 +204,36 @@ export function ProviderConnectionTestDialog({
     resultTone === 'success' ? CircleCheck : resultTone === 'warning' ? TriangleAlert : CircleX
   const resultColor =
     resultTone === 'success'
-      ? 'text-emerald-700'
+      ? 'text-success'
       : resultTone === 'warning'
-        ? 'text-amber-700'
-        : 'text-red-700'
+        ? 'text-warning'
+        : 'text-danger'
   const requestText = result?.requestText || 'hi'
 
   return (
     <Dialog.Root open onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-[160] animate-[fade-in_120ms_ease-out] bg-black/25 backdrop-blur-[1px]" />
-        <Dialog.Content className="fixed top-1/2 left-1/2 z-[170] flex max-h-[min(42rem,calc(100vh-2rem))] w-[min(30rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-[14px] border border-stone-200 bg-white shadow-[0_28px_80px_-32px_rgba(28,25,23,0.55)] outline-none">
-          <div className="flex items-start gap-3 border-b border-stone-100 px-5 py-4">
-            <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-stone-100">
+        <Dialog.Overlay className="fixed inset-0 z-[160] animate-[fade-in_120ms_ease-out] bg-scrim/25 backdrop-blur-[1px]" />
+        <Dialog.Content className="fixed top-1/2 left-1/2 z-[170] flex max-h-[min(42rem,calc(100vh-2rem))] w-[min(30rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-[14px] border border-edge bg-canvas shadow-[0_28px_80px_-32px_rgba(28,25,23,0.55)] outline-none">
+          <div className="flex items-start gap-3 border-b border-edge-soft px-5 py-4">
+            <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-canvas-sunken">
               <ProviderIcon provider={providerId} />
             </div>
             <div className="min-w-0 flex-1">
-              <Dialog.Title className="text-[0.9375rem] font-medium text-stone-950">
+              <Dialog.Title className="text-[0.9375rem] font-medium text-ink">
                 {t('providers.testConnection')}
               </Dialog.Title>
               <Dialog.Description className="sr-only">
                 {t('providers.testDescription')}
               </Dialog.Description>
-              <p className="mt-0.5 truncate text-[0.75rem] text-stone-500">
+              <p className="mt-0.5 truncate text-[0.75rem] text-ink-muted">
                 {providerLabel} · {connectionName} · {credentialName}
               </p>
             </div>
             <Dialog.Close asChild>
               <button
                 type="button"
-                className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-md text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-800"
+                className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-md text-ink-faint transition-colors hover:bg-canvas-sunken hover:text-ink-soft"
                 aria-label={t('common.close')}
               >
                 <X className="size-4" aria-hidden="true" />
@@ -244,7 +244,7 @@ export function ProviderConnectionTestDialog({
           <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
             <div className="grid grid-cols-[minmax(0,1.65fr)_minmax(8.5rem,1fr)] gap-3 max-sm:grid-cols-1">
               <div className="min-w-0">
-                <span className="mb-1.5 block text-[0.6875rem] font-medium text-stone-500">
+                <span className="mb-1.5 block text-[0.6875rem] font-medium text-ink-muted">
                   {t('providers.testModel')}
                 </span>
                 <DropdownMenu.Root>
@@ -255,7 +255,7 @@ export function ProviderConnectionTestDialog({
                       disabled={loadingModels || testing || models.length === 0}
                       className={cn(
                         composerMenuTriggerClass,
-                        'w-full max-w-none justify-between bg-[rgb(246,246,246)]',
+                        'w-full max-w-none justify-between bg-surface-hover',
                       )}
                     >
                       {loadingModels ? (
@@ -272,7 +272,7 @@ export function ProviderConnectionTestDialog({
                           : selectedModel?.name || t('model.select')}
                       </span>
                       <ChevronDown
-                        className="size-3.5 shrink-0 text-stone-400 transition-transform duration-150 group-data-[state=open]:rotate-180"
+                        className="size-3.5 shrink-0 text-ink-faint transition-transform duration-150 group-data-[state=open]:rotate-180"
                         aria-hidden="true"
                       />
                     </button>
@@ -283,12 +283,12 @@ export function ProviderConnectionTestDialog({
                       align="end"
                       sideOffset={7}
                       collisionPadding={10}
-                      className="z-[190] max-h-[min(26.25rem,var(--radix-dropdown-menu-content-available-height))] min-w-[16.25rem] animate-[fade-in_110ms_ease-out] overflow-y-auto rounded-2xl border border-stone-200 bg-white p-1 text-[0.875rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+                      className="z-[190] max-h-[min(26.25rem,var(--radix-dropdown-menu-content-available-height))] min-w-[16.25rem] animate-[fade-in_110ms_ease-out] overflow-y-auto rounded-2xl border border-edge bg-canvas p-1 text-[0.875rem] text-ink shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
                     >
-                      <DropdownMenu.Label className="px-2.5 py-1.5 text-[0.75rem] font-medium text-stone-400">
+                      <DropdownMenu.Label className="px-2.5 py-1.5 text-[0.75rem] font-medium text-ink-faint">
                         {t('model.models', { provider: providerLabel })}
                       </DropdownMenu.Label>
-                      <DropdownMenu.Separator className="mx-1.5 my-0.5 h-px bg-stone-100" />
+                      <DropdownMenu.Separator className="mx-1.5 my-0.5 h-px bg-canvas-sunken" />
                       <DropdownMenu.RadioGroup
                         className="flex flex-col gap-0.5"
                         value={selectedModelId}
@@ -298,10 +298,10 @@ export function ProviderConnectionTestDialog({
                           <DropdownMenu.RadioItem
                             key={model.id}
                             value={model.id}
-                            className="relative flex h-[30px] cursor-default items-center gap-2 rounded-[10px] px-2.5 pr-9 outline-none select-none data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(237,237,237)] data-[state=checked]:font-medium"
+                            className="relative flex h-[30px] cursor-default items-center gap-2 rounded-[10px] px-2.5 pr-9 outline-none select-none data-[highlighted]:bg-surface-active data-[state=checked]:bg-surface-selected data-[state=checked]:font-medium"
                           >
                             <span className="min-w-0 flex-1 truncate">{model.name}</span>
-                            <DropdownMenu.ItemIndicator className="absolute right-2.5 grid size-4 place-items-center text-stone-700">
+                            <DropdownMenu.ItemIndicator className="absolute right-2.5 grid size-4 place-items-center text-ink-soft">
                               <Check className="size-3.5" aria-hidden="true" />
                             </DropdownMenu.ItemIndicator>
                           </DropdownMenu.RadioItem>
@@ -313,12 +313,12 @@ export function ProviderConnectionTestDialog({
               </div>
 
               <div className="min-w-0">
-                <span className="mb-1.5 block text-[0.6875rem] font-medium text-stone-500">
+                <span className="mb-1.5 block text-[0.6875rem] font-medium text-ink-muted">
                   {t('providers.testThinking')}
                 </span>
                 {fixedThinking ? (
                   <FixedThinkingStatus
-                    className="h-9 w-full justify-center rounded-xl bg-[rgb(246,246,246)] px-2.5 text-[0.8125rem] text-stone-500 outline-none hover:bg-[rgb(241,241,241)] focus-visible:bg-[rgb(241,241,241)]"
+                    className="h-9 w-full justify-center rounded-xl bg-surface-hover px-2.5 text-[0.8125rem] text-ink-muted outline-none hover:bg-surface-active focus-visible:bg-surface-active"
                     hidden={selectedModel?.thinkingVisibility === 'hidden'}
                   />
                 ) : toggleThinking ? (
@@ -326,7 +326,7 @@ export function ProviderConnectionTestDialog({
                     checked={selectedThinkingLevel === 'high'}
                     disabled={testing}
                     ariaLabel={t('providers.testThinking')}
-                    className="w-full justify-between bg-[rgb(246,246,246)]"
+                    className="w-full justify-between bg-surface-hover"
                     onCheckedChange={(checked) => {
                       chooseThinkingLevel(toggleThinkingLevel(checked))
                     }}
@@ -344,14 +344,14 @@ export function ProviderConnectionTestDialog({
                         }
                         className={cn(
                           composerMenuTriggerClass,
-                          'w-full justify-between bg-[rgb(246,246,246)]',
+                          'w-full justify-between bg-surface-hover',
                         )}
                       >
                         <span className="truncate">
                           {t(`effort.${selectedThinkingLevel}`)}
                         </span>
                         <ChevronDown
-                          className="size-3.5 shrink-0 text-stone-400 transition-transform duration-150 group-data-[state=open]:rotate-180"
+                          className="size-3.5 shrink-0 text-ink-faint transition-transform duration-150 group-data-[state=open]:rotate-180"
                           aria-hidden="true"
                         />
                       </button>
@@ -362,12 +362,12 @@ export function ProviderConnectionTestDialog({
                         align="end"
                         sideOffset={7}
                         collisionPadding={10}
-                        className="z-[190] min-w-[11rem] animate-[fade-in_110ms_ease-out] rounded-2xl border border-stone-200 bg-white p-1 text-[0.875rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+                        className="z-[190] min-w-[11rem] animate-[fade-in_110ms_ease-out] rounded-2xl border border-edge bg-canvas p-1 text-[0.875rem] text-ink shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
                       >
-                        <DropdownMenu.Label className="px-2.5 py-1.5 text-[0.75rem] font-medium text-stone-400">
+                        <DropdownMenu.Label className="px-2.5 py-1.5 text-[0.75rem] font-medium text-ink-faint">
                           {t('providers.testThinking')}
                         </DropdownMenu.Label>
-                        <DropdownMenu.Separator className="mx-1.5 my-0.5 h-px bg-stone-100" />
+                        <DropdownMenu.Separator className="mx-1.5 my-0.5 h-px bg-canvas-sunken" />
                         <DropdownMenu.RadioGroup
                           className="flex flex-col gap-0.5"
                           value={selectedThinkingLevel}
@@ -377,10 +377,10 @@ export function ProviderConnectionTestDialog({
                             <DropdownMenu.RadioItem
                               key={level}
                               value={level}
-                              className="relative flex h-[30px] cursor-default items-center rounded-[10px] px-2.5 pr-9 outline-none select-none data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(237,237,237)] data-[state=checked]:font-medium"
+                              className="relative flex h-[30px] cursor-default items-center rounded-[10px] px-2.5 pr-9 outline-none select-none data-[highlighted]:bg-surface-active data-[state=checked]:bg-surface-selected data-[state=checked]:font-medium"
                             >
                               <span>{t(`effort.${level}`)}</span>
-                              <DropdownMenu.ItemIndicator className="absolute right-2.5 grid size-4 place-items-center text-stone-700">
+                              <DropdownMenu.ItemIndicator className="absolute right-2.5 grid size-4 place-items-center text-ink-soft">
                                 <Check className="size-3.5" aria-hidden="true" />
                               </DropdownMenu.ItemIndicator>
                             </DropdownMenu.RadioItem>
@@ -394,17 +394,17 @@ export function ProviderConnectionTestDialog({
             </div>
 
             <div className="mt-4">
-              <div className="text-[0.6875rem] font-medium text-stone-400">
+              <div className="text-[0.6875rem] font-medium text-ink-faint">
                 {t('providers.testRequest')}
               </div>
-              <div className="mt-1.5 min-h-9 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 font-mono text-[0.75rem] leading-[1.125rem] text-stone-700">
+              <div className="mt-1.5 min-h-9 rounded-md border border-edge bg-canvas-raised px-3 py-2 font-mono text-[0.75rem] leading-[1.125rem] text-ink-soft">
                 {requestText}
               </div>
             </div>
 
             {testing && (
               <div
-                className="mt-4 flex items-center gap-2 text-[0.75rem] text-stone-500"
+                className="mt-4 flex items-center gap-2 text-[0.75rem] text-ink-muted"
                 aria-live="polite"
               >
                 <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
@@ -415,7 +415,7 @@ export function ProviderConnectionTestDialog({
             {error && !result && (
               <div
                 aria-live="polite"
-                className="mt-4 flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50/65 px-3 py-2.5 text-red-700"
+                className="mt-4 flex items-start gap-2.5 rounded-lg border border-danger-edge bg-danger-surface/65 px-3 py-2.5 text-danger"
               >
                 <CircleX className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
                 <p className="min-w-0 flex-1 text-[0.78125rem] font-medium">{error}</p>
@@ -424,7 +424,7 @@ export function ProviderConnectionTestDialog({
 
             {result && (
               <div
-                className="mt-4 overflow-hidden rounded-lg border border-stone-200 bg-white"
+                className="mt-4 overflow-hidden rounded-lg border border-edge bg-canvas"
                 aria-live="polite"
               >
                 <div className="flex items-start gap-2.5 px-3.5 py-3">
@@ -436,7 +436,7 @@ export function ProviderConnectionTestDialog({
                     <p className={cn('text-[0.78125rem] font-medium', resultColor)}>
                       {resultLabel}
                     </p>
-                    <p className="mt-0.5 truncate text-[0.71875rem] text-stone-400">
+                    <p className="mt-0.5 truncate text-[0.71875rem] text-ink-faint">
                       {result.modelName || selectedModel?.name || result.model}
                       {' · '}
                       {t(thinkingLevelLabelKey(selectedModel, result.thinkingLevel))}
@@ -454,27 +454,27 @@ export function ProviderConnectionTestDialog({
                     </p>
                   </div>
                 </div>
-                <div className="border-t border-stone-100 bg-stone-50/55 px-3.5 py-3">
-                  <div className="text-[0.6875rem] font-medium text-stone-400">
+                <div className="border-t border-edge-soft bg-canvas-raised/55 px-3.5 py-3">
+                  <div className="text-[0.6875rem] font-medium text-ink-faint">
                     {t('providers.testThinkingOutput')}
                   </div>
                   <p
                     className={cn(
                       'mt-1 max-h-44 overflow-y-auto whitespace-pre-wrap break-words font-mono text-[0.75rem] leading-5',
-                      result.thinkingText ? 'text-stone-600' : 'text-stone-400',
+                      result.thinkingText ? 'text-ink-muted' : 'text-ink-faint',
                     )}
                   >
                     {result.thinkingText || t('providers.testNoThinking')}
                   </p>
                 </div>
-                <div className="border-t border-stone-100 bg-stone-50/55 px-3.5 py-3">
-                  <div className="text-[0.6875rem] font-medium text-stone-400">
+                <div className="border-t border-edge-soft bg-canvas-raised/55 px-3.5 py-3">
+                  <div className="text-[0.6875rem] font-medium text-ink-faint">
                     {t('providers.testResponse')}
                   </div>
                   <p
                     className={cn(
                       'mt-1 whitespace-pre-wrap break-words font-mono text-[0.75rem] leading-5',
-                      result.responseText ? 'text-stone-700' : 'text-stone-400',
+                      result.responseText ? 'text-ink-soft' : 'text-ink-faint',
                     )}
                   >
                     {result.responseText || t('providers.testNoResponse')}
@@ -484,11 +484,11 @@ export function ProviderConnectionTestDialog({
             )}
           </div>
 
-          <div className="flex items-center justify-end gap-2 border-t border-stone-100 px-5 py-3.5">
+          <div className="flex items-center justify-end gap-2 border-t border-edge-soft px-5 py-3.5">
             <Dialog.Close asChild>
               <button
                 type="button"
-                className="h-8 cursor-pointer rounded-md px-3 text-[0.75rem] font-medium text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-900"
+                className="h-8 cursor-pointer rounded-md px-3 text-[0.75rem] font-medium text-ink-muted transition-colors hover:bg-canvas-sunken hover:text-ink"
               >
                 {t('common.close')}
               </button>
@@ -497,7 +497,7 @@ export function ProviderConnectionTestDialog({
               type="button"
               onClick={() => void runTest()}
               disabled={!selectedModelId || loadingModels || testing}
-              className="inline-flex h-8 min-w-[6.5rem] cursor-pointer items-center justify-center gap-1.5 rounded-md bg-stone-950 px-3 text-[0.75rem] font-medium text-white transition-colors hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-400"
+              className="inline-flex h-8 min-w-[6.5rem] cursor-pointer items-center justify-center gap-1.5 rounded-md bg-canvas-inverse px-3 text-[0.75rem] font-medium text-ink-inverse transition-colors hover:bg-canvas-inverse disabled:cursor-not-allowed disabled:bg-canvas-sunken disabled:text-ink-faint"
             >
               {testing ? (
                 <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />

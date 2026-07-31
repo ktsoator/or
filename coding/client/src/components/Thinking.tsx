@@ -14,22 +14,22 @@ export function Thinking({ item }: { item: ThinkingItem }) {
   const [open, setOpen] = useState(false)
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="my-0.5 animate-[fade-in_160ms_ease-out] text-stone-400">
+    <Collapsible open={open} onOpenChange={setOpen} className="my-0.5 animate-[fade-in_160ms_ease-out] text-ink-faint">
       <CollapsibleTrigger
         className={cn(
-          'group flex cursor-pointer items-center gap-1.5 border-0 bg-transparent py-0.5 text-[0.8125rem] font-normal text-inherit outline-none hover:text-stone-700 focus-visible:rounded-sm focus-visible:bg-stone-100 focus-visible:text-stone-700',
+          'group flex cursor-pointer items-center gap-1.5 border-0 bg-transparent py-0.5 text-[0.8125rem] font-normal text-inherit outline-none hover:text-ink-soft focus-visible:rounded-sm focus-visible:bg-canvas-sunken focus-visible:text-ink-soft',
           item.streaming && 'streaming-sheen',
         )}
       >
-        <span className={cn('size-1 rounded-full bg-stone-300', item.streaming && 'animate-pulse bg-indigo-500')} />
+        <span className={cn('size-1 rounded-full bg-ink-ghost', item.streaming && 'animate-pulse bg-info')} />
         <span>{item.streaming ? t('thinking.working') : t('thinking.process')}</span>
         <ChevronRight
-          className="size-3 text-stone-300 transition-transform group-hover:text-stone-500 group-data-[state=open]:rotate-90"
+          className="size-3 text-ink-ghost transition-transform group-hover:text-ink-muted group-data-[state=open]:rotate-90"
           aria-hidden="true"
         />
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="mt-1 max-h-56 overflow-auto border-l border-stone-200 pl-3 text-[0.84375rem] leading-[1.5] whitespace-pre-wrap text-stone-500">
+        <div className="mt-1 max-h-56 overflow-auto border-l border-edge pl-3 text-[0.84375rem] leading-[1.5] whitespace-pre-wrap text-ink-muted">
           {item.text}
         </div>
       </CollapsibleContent>

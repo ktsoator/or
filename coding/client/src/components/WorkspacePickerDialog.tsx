@@ -72,32 +72,32 @@ export function WorkspacePickerDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[140] grid place-items-center bg-stone-950/20 px-4"
+      className="fixed inset-0 z-[140] grid place-items-center bg-scrim/20 px-4"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !selecting) onClose()
       }}
     >
       <section
-        className="w-full max-w-[37.5rem] overflow-hidden rounded-[16px] border border-stone-300/80 bg-white shadow-[0_24px_64px_-28px_rgba(28,25,23,0.42)] animate-[fade-in_100ms_ease-out]"
+        className="w-full max-w-[37.5rem] overflow-hidden rounded-[16px] border border-edge-strong/80 bg-canvas shadow-[0_24px_64px_-28px_rgba(28,25,23,0.42)] animate-[fade-in_100ms_ease-out]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="workspace-picker-title"
       >
-        <header className="flex items-start gap-3 border-b border-stone-200/70 px-4 py-3.5">
+        <header className="flex items-start gap-3 border-b border-edge/70 px-4 py-3.5">
           <div className="min-w-0 flex-1">
             <h2
               id="workspace-picker-title"
-              className="text-[0.9375rem] leading-5 font-semibold tracking-[-0.01em] text-stone-950"
+              className="text-[0.9375rem] leading-5 font-semibold tracking-[-0.01em] text-ink"
             >
               {t('workspace.chooseFolder')}
             </h2>
-            <p className="mt-0.5 text-[0.75rem] leading-4.5 text-stone-500">
+            <p className="mt-0.5 text-[0.75rem] leading-4.5 text-ink-muted">
               {t('workspace.chooseDescription')}
             </p>
           </div>
           <button
-            className="-mt-0.5 grid size-7 shrink-0 cursor-pointer place-items-center rounded-[8px] text-stone-400 transition-colors hover:bg-[rgb(246,246,246)] hover:text-stone-800 disabled:cursor-not-allowed disabled:opacity-40"
+            className="-mt-0.5 grid size-7 shrink-0 cursor-pointer place-items-center rounded-[8px] text-ink-faint transition-colors hover:bg-surface-hover hover:text-ink-soft disabled:cursor-not-allowed disabled:opacity-40"
             type="button"
             aria-label={t('workspace.closePicker')}
             disabled={selecting}
@@ -109,14 +109,14 @@ export function WorkspacePickerDialog({
 
         <div className="px-4 pt-3">
           <form
-            className="flex h-9 items-center overflow-hidden rounded-[10px] border border-stone-200 bg-white transition-[border-color,box-shadow] focus-within:border-stone-400 focus-within:ring-2 focus-within:ring-stone-200/70"
+            className="flex h-9 items-center overflow-hidden rounded-[10px] border border-edge bg-canvas transition-[border-color,box-shadow] focus-within:border-edge-stronger focus-within:ring-2 focus-within:ring-edge/70"
             onSubmit={(event) => {
               event.preventDefault()
               void loadDirectory(draftPath)
             }}
           >
             <button
-              className="grid h-full w-9 shrink-0 cursor-pointer place-items-center border-r border-stone-200 text-stone-500 transition-colors hover:bg-[rgb(246,246,246)] hover:text-stone-900 disabled:cursor-not-allowed disabled:opacity-35"
+              className="grid h-full w-9 shrink-0 cursor-pointer place-items-center border-r border-edge text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink disabled:cursor-not-allowed disabled:opacity-35"
               type="button"
               title={t('workspace.parentFolder')}
               aria-label={t('workspace.parentFolder')}
@@ -128,7 +128,7 @@ export function WorkspacePickerDialog({
             <label className="min-w-0 flex-1">
               <span className="sr-only">{t('workspace.path')}</span>
               <input
-                className="h-8 w-full border-0 bg-transparent px-2.5 font-mono text-[0.75rem] text-stone-800 outline-none"
+                className="h-8 w-full border-0 bg-transparent px-2.5 font-mono text-[0.75rem] text-ink-soft outline-none"
                 value={draftPath}
                 aria-label={t('workspace.path')}
                 spellCheck={false}
@@ -136,7 +136,7 @@ export function WorkspacePickerDialog({
               />
             </label>
             <button
-              className="mr-1 h-7 shrink-0 cursor-pointer rounded-[8px] px-2.5 text-[0.75rem] font-medium text-stone-600 transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-950 disabled:cursor-wait disabled:opacity-40"
+              className="mr-1 h-7 shrink-0 cursor-pointer rounded-[8px] px-2.5 text-[0.75rem] font-medium text-ink-muted transition-colors hover:bg-surface-active hover:text-ink disabled:cursor-wait disabled:opacity-40"
               type="submit"
               disabled={loading || !draftPath.trim()}
             >
@@ -144,19 +144,19 @@ export function WorkspacePickerDialog({
             </button>
           </form>
           {error && (
-            <p className="mt-2 text-[0.75rem] leading-4.5 text-red-700" role="alert">
+            <p className="mt-2 text-[0.75rem] leading-4.5 text-danger" role="alert">
               {error}
             </p>
           )}
         </div>
 
-        <div className="mx-4 mt-3 min-h-[16.25rem] overflow-hidden rounded-[11px] border border-stone-200 bg-white">
-          <div className="flex h-8 items-center border-b border-stone-200/80 bg-stone-50/60 px-2.5 font-mono text-[0.71875rem] text-stone-500">
+        <div className="mx-4 mt-3 min-h-[16.25rem] overflow-hidden rounded-[11px] border border-edge bg-canvas">
+          <div className="flex h-8 items-center border-b border-edge/80 bg-canvas-raised/60 px-2.5 font-mono text-[0.71875rem] text-ink-muted">
             {listing?.path ?? (draftPath || t('workspace.folders'))}
           </div>
           <div className="code-scroll-area max-h-[18.75rem] overflow-y-auto p-1">
             {loading ? (
-              <div className="flex h-[13.75rem] items-center justify-center gap-2 text-[0.75rem] text-stone-400">
+              <div className="flex h-[13.75rem] items-center justify-center gap-2 text-[0.75rem] text-ink-faint">
                 <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
                 {t('workspace.loadingFolders')}
               </div>
@@ -165,13 +165,13 @@ export function WorkspacePickerDialog({
                 {listing.directories.map((directory) => (
                   <button
                     key={directory.path}
-                    className="group flex h-8 w-full cursor-pointer items-center gap-2 rounded-[8px] px-2 text-left text-[0.8125rem] text-stone-700 outline-none transition-colors hover:bg-[rgb(246,246,246)] hover:text-stone-950 focus-visible:bg-[rgb(237,237,237)] focus-visible:text-stone-950"
+                    className="group flex h-8 w-full cursor-pointer items-center gap-2 rounded-[8px] px-2 text-left text-[0.8125rem] text-ink-soft outline-none transition-colors hover:bg-surface-hover hover:text-ink focus-visible:bg-surface-selected focus-visible:text-ink"
                     type="button"
                     title={directory.path}
                     onClick={() => void loadDirectory(directory.path)}
                   >
                     <Folder
-                      className="size-[0.9375rem] shrink-0 text-stone-400 transition-colors group-hover:text-stone-600"
+                      className="size-[0.9375rem] shrink-0 text-ink-faint transition-colors group-hover:text-ink-muted"
                       strokeWidth={1.8}
                       aria-hidden="true"
                     />
@@ -180,16 +180,16 @@ export function WorkspacePickerDialog({
                 ))}
               </div>
             ) : (
-              <div className="flex h-[13.75rem] items-center justify-center text-[0.75rem] text-stone-400">
+              <div className="flex h-[13.75rem] items-center justify-center text-[0.75rem] text-ink-faint">
                 {t('workspace.noFolders')}
               </div>
             )}
           </div>
         </div>
 
-        <footer className="mt-3 flex items-center justify-end gap-1.5 border-t border-stone-200/70 px-4 py-3">
+        <footer className="mt-3 flex items-center justify-end gap-1.5 border-t border-edge/70 px-4 py-3">
           <button
-            className="h-8 cursor-pointer rounded-[8px] px-3 text-[0.78125rem] font-normal text-stone-600 transition-colors hover:bg-[rgb(246,246,246)] hover:text-stone-900 disabled:cursor-not-allowed disabled:opacity-40"
+            className="h-8 cursor-pointer rounded-[8px] px-3 text-[0.78125rem] font-normal text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
             type="button"
             disabled={selecting}
             onClick={onClose}
@@ -197,7 +197,7 @@ export function WorkspacePickerDialog({
             {t('workspace.cancel')}
           </button>
           <button
-            className="inline-flex h-8 min-w-[6.5rem] cursor-pointer items-center justify-center gap-1.5 rounded-[8px] bg-stone-900 px-3.5 text-[0.78125rem] font-medium text-white transition-colors hover:bg-stone-700 disabled:cursor-wait disabled:opacity-45"
+            className="inline-flex h-8 min-w-[6.5rem] cursor-pointer items-center justify-center gap-1.5 rounded-[8px] bg-canvas-inverse px-3.5 text-[0.78125rem] font-medium text-ink-inverse transition-colors hover:bg-canvas-inverse disabled:cursor-wait disabled:opacity-45"
             type="button"
             disabled={!listing || loading || selecting}
             onClick={() => void chooseCurrent()}

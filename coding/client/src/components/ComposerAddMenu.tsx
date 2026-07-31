@@ -122,8 +122,8 @@ export function ComposerAddMenu({
     <>
       <button
         className={cn(
-          'group relative col-start-1 row-start-2 grid size-[30px] cursor-pointer place-items-center rounded-full text-stone-700 outline-none transition-colors hover:bg-stone-100 focus-visible:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-30',
-          open && 'bg-stone-100',
+          'group relative col-start-1 row-start-2 grid size-[30px] cursor-pointer place-items-center rounded-full text-ink-soft outline-none transition-colors hover:bg-canvas-sunken focus-visible:bg-canvas-sunken disabled:cursor-not-allowed disabled:opacity-30',
+          open && 'bg-canvas-sunken',
         )}
         type="button"
         aria-label={t('composer.addContent')}
@@ -192,7 +192,7 @@ export function ComposerAddMenu({
                     addPanelRowClass,
                     'cursor-pointer outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-40',
                     activeIndex === index
-                      ? 'bg-[rgb(241,241,241)]'
+                      ? 'bg-surface-active'
                       : 'bg-transparent',
                   )}
                   disabled={item.disabled}
@@ -206,20 +206,20 @@ export function ComposerAddMenu({
                   <Icon
                     className={cn(
                       'size-4 shrink-0',
-                      activeIndex === index ? 'text-stone-600' : 'text-stone-400',
+                      activeIndex === index ? 'text-ink-muted' : 'text-ink-faint',
                     )}
                     aria-hidden="true"
                   />
-                  <span className="max-w-40 truncate font-medium text-stone-700">
+                  <span className="max-w-40 truncate font-medium text-ink-soft">
                     {item.label}
                   </span>
-                  <span className="truncate text-stone-400">{item.description}</span>
+                  <span className="truncate text-ink-faint">{item.description}</span>
                   {item.unavailable ? (
-                    <span className="text-[0.6875rem] text-stone-400">
+                    <span className="text-[0.6875rem] text-ink-faint">
                       {item.unavailable}
                     </span>
                   ) : item.action === 'preview' ? (
-                    <span className="text-[0.6875rem] text-stone-400">
+                    <span className="text-[0.6875rem] text-ink-faint">
                       {t('composer.comingSoon')}
                     </span>
                   ) : null}

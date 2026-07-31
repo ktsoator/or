@@ -9,6 +9,7 @@ import {
   BrowserWindow,
   dialog,
   ipcMain,
+  nativeTheme,
   session,
   shell,
   type WebContents,
@@ -82,7 +83,11 @@ function createWindow(url: string): void {
     minWidth: 960,
     minHeight: 640,
     show: false,
-    backgroundColor: '#fbfbfa',
+    // Painted before the renderer has loaded, so it has to match the theme the
+    // renderer is about to apply or the window opens on a flash of the wrong
+    // canvas. The renderer owns the final answer, including a user override the
+    // main process cannot see; this is only the opening frame.
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#1e1e1e' : '#fbfbfa',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     trafficLightPosition: process.platform === 'darwin' ? { x: 16, y: 18 } : undefined,
     webPreferences: {

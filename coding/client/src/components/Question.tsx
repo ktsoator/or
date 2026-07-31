@@ -110,7 +110,7 @@ export function Question({
       className={cn(
         'grid size-4 shrink-0 place-items-center border transition-colors',
         question.multiSelect ? 'rounded-[4px]' : 'rounded-full',
-        checked ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-300 bg-white',
+        checked ? 'border-canvas-inverse bg-canvas-inverse text-ink-inverse' : 'border-edge-strong bg-canvas',
       )}
       aria-hidden="true"
     >
@@ -124,7 +124,7 @@ export function Question({
       disabled={(last ? !allAnswered : !answered) || busy}
       onClick={advance}
       aria-label={last ? t('question.submit') : t('question.next')}
-      className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-full bg-black text-white outline-none transition-colors hover:bg-stone-800 focus-visible:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-25"
+      className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-full bg-canvas-inverse text-ink-inverse outline-none transition-colors hover:bg-canvas-inverse focus-visible:bg-canvas-inverse disabled:cursor-not-allowed disabled:opacity-25"
     >
       {busy ? (
         <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
@@ -138,16 +138,16 @@ export function Question({
 
   return (
     <section
-      className="animate-[fade-in_160ms_ease-out] overflow-hidden rounded-[28px] border border-stone-200 bg-white [container-type:inline-size]"
+      className="animate-[fade-in_160ms_ease-out] overflow-hidden rounded-[28px] border border-edge bg-canvas [container-type:inline-size]"
       aria-live="polite"
       aria-busy={busy}
     >
       <fieldset key={question.question} className="min-w-0">
         <legend className="flex w-full flex-wrap items-baseline gap-2 px-3.5 pt-3 pb-2">
-          <span className="rounded bg-stone-100 px-1.5 py-0.5 font-mono text-[0.6875rem] leading-4 text-stone-500">
+          <span className="rounded bg-canvas-sunken px-1.5 py-0.5 font-mono text-[0.6875rem] leading-4 text-ink-muted">
             {question.header}
           </span>
-          <span className="text-[0.875rem] leading-5 font-medium text-stone-900">
+          <span className="text-[0.875rem] leading-5 font-medium text-ink">
             {question.question}
           </span>
         </legend>
@@ -161,20 +161,20 @@ export function Question({
               disabled={busy}
               aria-pressed={selected}
               onClick={() => select(option.label)}
-              className="flex w-full cursor-pointer items-start gap-2.5 border-t border-stone-200/70 px-3.5 py-2.5 text-left transition-colors hover:bg-stone-50 focus-visible:bg-stone-50 focus-visible:outline-none disabled:cursor-wait disabled:opacity-60"
+              className="flex w-full cursor-pointer items-start gap-2.5 border-t border-edge/70 px-3.5 py-2.5 text-left transition-colors hover:bg-canvas-raised focus-visible:bg-canvas-raised focus-visible:outline-none disabled:cursor-wait disabled:opacity-60"
             >
               <span className="mt-[0.1875rem]">{indicator(selected)}</span>
               <span className="min-w-0">
                 <span
                   className={cn(
                     'block text-[0.8125rem] leading-5',
-                    selected ? 'font-medium text-stone-900' : 'text-stone-800',
+                    selected ? 'font-medium text-ink' : 'text-ink-soft',
                   )}
                 >
                   {option.label}
                 </span>
                 {option.description && (
-                  <span className="block text-[0.78125rem] leading-5 text-stone-500">
+                  <span className="block text-[0.78125rem] leading-5 text-ink-muted">
                     {option.description}
                   </span>
                 )}
@@ -183,7 +183,7 @@ export function Question({
           )
         })}
 
-        <div className="flex items-center gap-2.5 border-t border-stone-200/70 px-3.5">
+        <div className="flex items-center gap-2.5 border-t border-edge/70 px-3.5">
           {indicator(selection.labels.includes(OTHER) && Boolean(selection.other.trim()))}
           <input
             type="text"
@@ -198,29 +198,29 @@ export function Question({
                 advance()
               }
             }}
-            className="w-full min-w-0 border-0 bg-transparent py-2.5 text-[0.8125rem] leading-5 text-stone-900 outline-none placeholder:text-stone-400 disabled:cursor-wait disabled:opacity-60"
+            className="w-full min-w-0 border-0 bg-transparent py-2.5 text-[0.8125rem] leading-5 text-ink outline-none placeholder:text-ink-faint disabled:cursor-wait disabled:opacity-60"
           />
           {total === 1 && <span className="my-1.5">{primary}</span>}
         </div>
       </fieldset>
 
       {total > 1 && (
-        <div className="flex items-center gap-2 border-t border-stone-200/80 px-3.5 py-2">
+        <div className="flex items-center gap-2 border-t border-edge/80 px-3.5 py-2">
           <button
             type="button"
             disabled={step === 0 || busy}
             onClick={() => setStep((current) => Math.max(0, current - 1))}
             aria-label={t('question.back')}
-            className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-full text-stone-500 outline-none transition-colors hover:bg-stone-100 hover:text-stone-900 focus-visible:bg-stone-100 focus-visible:text-stone-900 disabled:cursor-not-allowed disabled:opacity-25"
+            className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-full text-ink-muted outline-none transition-colors hover:bg-canvas-sunken hover:text-ink focus-visible:bg-canvas-sunken focus-visible:text-ink disabled:cursor-not-allowed disabled:opacity-25"
           >
             <ArrowLeft className="size-3.5" aria-hidden="true" />
           </button>
-          <span className="font-mono text-[0.6875rem] leading-4 text-stone-400 tabular-nums">
+          <span className="font-mono text-[0.6875rem] leading-4 text-ink-faint tabular-nums">
             {step + 1}/{total}
           </span>
           {error && (
             <span
-              className="min-w-0 flex-1 truncate text-[0.75rem] leading-4 text-red-600"
+              className="min-w-0 flex-1 truncate text-[0.75rem] leading-4 text-danger-soft"
               role="alert"
             >
               {error}
@@ -232,7 +232,7 @@ export function Question({
 
       {total === 1 && error && (
         <div
-          className="border-t border-stone-200/80 px-3.5 py-2 text-[0.75rem] leading-4 text-red-600"
+          className="border-t border-edge/80 px-3.5 py-2 text-[0.75rem] leading-4 text-danger-soft"
           role="alert"
         >
           {error}

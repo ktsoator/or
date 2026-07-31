@@ -20,10 +20,10 @@ export function AwaitingResponse() {
   const { t } = useI18n()
   return (
     <div
-      className="my-1 flex animate-[fade-in_160ms_ease-out] items-center gap-1.5 py-0.5 text-[0.8125rem] text-stone-400"
+      className="my-1 flex animate-[fade-in_160ms_ease-out] items-center gap-1.5 py-0.5 text-[0.8125rem] text-ink-faint"
       role="status"
     >
-      <span className="size-1 animate-pulse rounded-full bg-indigo-500" />
+      <span className="size-1 animate-pulse rounded-full bg-info" />
       <span className="streaming-sheen">{t('thinking.working')}</span>
     </div>
   )
@@ -41,7 +41,7 @@ export function AutoCompactionStatus() {
   if (!visible) return null
   return (
     <div
-      className="my-1 flex animate-[fade-in_160ms_ease-out] items-center gap-1.5 py-0.5 text-[0.8125rem] text-stone-400"
+      className="my-1 flex animate-[fade-in_160ms_ease-out] items-center gap-1.5 py-0.5 text-[0.8125rem] text-ink-faint"
       role="status"
     >
       <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
@@ -62,17 +62,17 @@ export function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
                 {item.files?.map((file, index) => (
                   <div
                     key={`${file.name}-${file.size}-${index}`}
-                    className="flex h-9 max-w-[15rem] items-center gap-1.5 rounded-lg border border-stone-200 bg-stone-50 px-2.5 text-[0.75rem] text-stone-600"
+                    className="flex h-9 max-w-[15rem] items-center gap-1.5 rounded-lg border border-edge bg-canvas-raised px-2.5 text-[0.75rem] text-ink-muted"
                     title={file.name}
                   >
                     <FileCode2
-                      className="size-3.5 shrink-0 text-stone-500"
+                      className="size-3.5 shrink-0 text-ink-muted"
                       aria-hidden="true"
                     />
-                    <span className="min-w-0 truncate font-medium text-stone-700">
+                    <span className="min-w-0 truncate font-medium text-ink-soft">
                       {file.name}
                     </span>
-                    <span className="shrink-0 text-[0.6875rem] text-stone-400">
+                    <span className="shrink-0 text-[0.6875rem] text-ink-faint">
                       {formatFileSize(file.size)}
                     </span>
                   </div>
@@ -84,7 +84,7 @@ export function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
                 {item.images.map((image, index) => (
                   <img
                     key={`${image.mimeType}-${index}`}
-                    className="size-[8.5rem] shrink-0 rounded-2xl border border-stone-200 bg-white object-cover shadow-[0_7px_18px_-15px_rgba(28,25,23,0.55)] max-sm:size-28"
+                    className="size-[8.5rem] shrink-0 rounded-2xl border border-edge bg-canvas object-cover shadow-[0_7px_18px_-15px_rgba(28,25,23,0.55)] max-sm:size-28"
                     src={`data:${image.mimeType};base64,${image.data}`}
                     alt={t('app.uploadedImage', { index: index + 1 })}
                   />
@@ -92,17 +92,17 @@ export function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
               </div>
             )}
             {item.text && (
-              <div className="rounded-[10px] bg-stone-100 px-3 py-2 text-[14px] leading-[22px] whitespace-pre-wrap">
+              <div className="rounded-[10px] bg-canvas-sunken px-3 py-2 text-[14px] leading-[22px] whitespace-pre-wrap">
                 {item.text}
               </div>
             )}
             {(item.sentAt || item.deliveryStatus === 'failed') && (
               <div className="-mt-0.5 flex items-center justify-end gap-2 px-1 text-[0.75rem] leading-4 tabular-nums">
                 {item.deliveryStatus === 'failed' && (
-                  <span className="text-red-600">{t('app.notSent')}</span>
+                  <span className="text-danger-soft">{t('app.notSent')}</span>
                 )}
                 {item.sentAt && (
-                  <time className="text-stone-400" dateTime={item.sentAt}>
+                  <time className="text-ink-faint" dateTime={item.sentAt}>
                     {formatMessageTime(item.sentAt, locale)}
                   </time>
                 )}
@@ -136,7 +136,7 @@ export function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
     case 'error':
       return (
         <div
-          className="my-3 flex animate-[fade-in_160ms_ease-out] gap-2.5 border-l-2 border-red-300 py-1 pl-3 text-red-700"
+          className="my-3 flex animate-[fade-in_160ms_ease-out] gap-2.5 border-l-2 border-danger-edge py-1 pl-3 text-danger"
           role="alert"
         >
           <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
@@ -162,17 +162,17 @@ function TaskCompletion({ item }: { item: Extract<Item, { kind: 'task' }> }) {
 
   return (
     <div
-      className="my-1 flex min-w-0 animate-[fade-in_160ms_ease-out] items-center gap-2 py-0.5 text-[0.8125rem] leading-5 text-stone-500"
+      className="my-1 flex min-w-0 animate-[fade-in_160ms_ease-out] items-center gap-2 py-0.5 text-[0.8125rem] leading-5 text-ink-muted"
       title={item.outputPath}
     >
       <Icon
         className={
-          item.status === 'failed' ? 'size-3.5 shrink-0 text-rose-500' : 'size-3.5 shrink-0 text-stone-400'
+          item.status === 'failed' ? 'size-3.5 shrink-0 text-danger-soft' : 'size-3.5 shrink-0 text-ink-faint'
         }
         aria-hidden="true"
       />
       <span className="shrink-0">{label}</span>
-      <code className="min-w-0 overflow-hidden font-mono text-[0.75rem] text-stone-400 text-ellipsis whitespace-nowrap">
+      <code className="min-w-0 overflow-hidden font-mono text-[0.75rem] text-ink-faint text-ellipsis whitespace-nowrap">
     {item.description || item.command || item.taskID}
       </code>
     </div>
@@ -198,7 +198,7 @@ function RunDuration({ item }: { item: Extract<Item, { kind: 'run' }> }) {
 
   return (
     <div className="mt-3.5 mb-2.5 animate-[fade-in_160ms_ease-out]">
-      <div className="text-[0.8125rem] leading-5 text-stone-400 tabular-nums">
+      <div className="text-[0.8125rem] leading-5 text-ink-faint tabular-nums">
         {t(running ? 'run.working' : 'run.completed', { duration })}
       </div>
     </div>

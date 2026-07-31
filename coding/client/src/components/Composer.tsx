@@ -478,7 +478,7 @@ export function Composer({
         'z-30 w-full',
         centered
           ? 'bg-transparent p-0'
-          : 'shrink-0 bg-white px-3 pt-3 pb-4 md:px-8 max-md:pt-2',
+          : 'shrink-0 bg-canvas px-3 pt-3 pb-4 md:px-8 max-md:pt-2',
       )}
     >
       <div className="relative mx-auto flex w-full max-w-[750px] flex-col gap-2">
@@ -494,9 +494,9 @@ export function Composer({
           ref={surfaceRef}
           hidden={awaitingUser}
           className={cn(
-            'relative rounded-[28px] border border-stone-200 bg-white [container-type:inline-size]',
+            'relative rounded-[28px] border border-edge bg-canvas [container-type:inline-size]',
             !centered &&
-              'transition-colors focus-within:border-stone-300',
+              'transition-colors focus-within:border-edge-strong',
           )}
         >
           <ComposerSkillSuggestions
@@ -557,20 +557,20 @@ export function Composer({
                   {files.map((file) => (
                     <div
                       key={file.id}
-                      className="group/file flex h-8 max-w-[15rem] items-center gap-1.5 rounded-lg border border-stone-200 bg-stone-50 pr-1 pl-2 text-[0.75rem] text-stone-600"
+                      className="group/file flex h-8 max-w-[15rem] items-center gap-1.5 rounded-lg border border-edge bg-canvas-raised pr-1 pl-2 text-[0.75rem] text-ink-muted"
                     >
                       <FileCode2
-                        className="size-3.5 shrink-0 text-stone-500"
+                        className="size-3.5 shrink-0 text-ink-muted"
                         aria-hidden="true"
                       />
-                      <span className="min-w-0 truncate font-medium text-stone-700">
+                      <span className="min-w-0 truncate font-medium text-ink-soft">
                         {file.name}
                       </span>
-                      <span className="shrink-0 text-[0.6875rem] text-stone-400">
+                      <span className="shrink-0 text-[0.6875rem] text-ink-faint">
                         {formatFileSize(file.size)}
                       </span>
                       <button
-                        className="grid size-6 shrink-0 cursor-pointer place-items-center rounded-md text-stone-400 outline-none transition-colors hover:bg-stone-200/70 hover:text-stone-700 focus-visible:bg-stone-200/70 focus-visible:text-stone-700"
+                        className="grid size-6 shrink-0 cursor-pointer place-items-center rounded-md text-ink-faint outline-none transition-colors hover:bg-canvas-strong/70 hover:text-ink-soft focus-visible:bg-canvas-strong/70 focus-visible:text-ink-soft"
                         type="button"
                         aria-label={t('composer.removeFile', { name: file.name })}
                         title={t('composer.removeFile', { name: file.name })}
@@ -592,7 +592,7 @@ export function Composer({
                   {images.map((image) => (
                     <div
                       key={image.id}
-                      className="group/image relative size-16 overflow-hidden rounded-xl border border-stone-200 bg-stone-50 shadow-sm"
+                      className="group/image relative size-16 overflow-hidden rounded-xl border border-edge bg-canvas-raised shadow-sm"
                     >
                       <img
                         className="size-full object-cover"
@@ -600,7 +600,7 @@ export function Composer({
                         alt={image.name}
                       />
                       <button
-                        className="absolute top-1 right-1 grid size-5 cursor-pointer place-items-center rounded-full bg-stone-900/85 text-white opacity-100 shadow-sm transition-opacity focus-visible:opacity-100 md:opacity-0 md:group-hover/image:opacity-100"
+                        className="absolute top-1 right-1 grid size-5 cursor-pointer place-items-center rounded-full bg-scrim/85 text-ink-inverse opacity-100 shadow-sm transition-opacity focus-visible:opacity-100 md:opacity-0 md:group-hover/image:opacity-100"
                         type="button"
                         aria-label={t('composer.removeImage', { name: image.name })}
                         onClick={() => {
@@ -620,7 +620,7 @@ export function Composer({
                 {selectedSkill && (
                   <button
                     type="button"
-                    className="mt-1.5 flex h-6 max-w-[45%] shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-1.5 font-mono text-[14px] font-medium text-blue-600 outline-none transition-colors hover:bg-blue-50 focus-visible:bg-blue-50"
+                    className="mt-1.5 flex h-6 max-w-[45%] shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-1.5 font-mono text-[14px] font-medium text-info outline-none transition-colors hover:bg-info-surface focus-visible:bg-info-surface"
                     aria-label={t('composer.removeSelectedSkill', {
                       name: selectedSkill.name,
                     })}
@@ -652,7 +652,7 @@ export function Composer({
                         )
                       : undefined
                   }
-                  className="block max-h-[15rem] min-h-8 min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-1 py-1.5 text-[14px] leading-6 text-stone-900 outline-none placeholder:text-stone-400 disabled:cursor-not-allowed disabled:bg-transparent"
+                  className="block max-h-[15rem] min-h-8 min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-1 py-1.5 text-[14px] leading-6 text-ink outline-none placeholder:text-ink-faint disabled:cursor-not-allowed disabled:bg-transparent"
                   placeholder={
                     awaitingQuestion
                       ? t('composer.answerQuestionPlaceholder')
@@ -816,7 +816,7 @@ export function Composer({
                   <button
                     type="button"
                     onClick={onConfigureModel}
-                    className="inline-flex h-[30px] min-w-0 cursor-pointer items-center truncate rounded-[10px] px-3 text-[0.8125rem] font-medium text-stone-500 outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-950 focus-visible:bg-[rgb(241,241,241)]"
+                    className="inline-flex h-[30px] min-w-0 cursor-pointer items-center truncate rounded-[10px] px-3 text-[0.8125rem] font-medium text-ink-muted outline-none transition-colors hover:bg-surface-active hover:text-ink focus-visible:bg-surface-active"
                   >
                     {t('composer.configureModel')}
                   </button>
@@ -826,14 +826,14 @@ export function Composer({
                 )}
                 {running && !awaitingApproval && (
                   <button
-                    className="group relative grid size-[30px] shrink-0 cursor-pointer place-items-center rounded-full bg-stone-200 text-stone-700 outline-none transition-colors hover:bg-stone-300 focus-visible:bg-stone-300"
+                    className="group relative grid size-[30px] shrink-0 cursor-pointer place-items-center rounded-full bg-canvas-strong text-ink-soft outline-none transition-colors hover:bg-ink-ghost focus-visible:bg-ink-ghost"
                     type="button"
                     aria-label={t('composer.stopGenerating')}
                     onClick={onStop}
                   >
                     <Square className="size-3 fill-current" aria-hidden="true" />
                     <span
-                      className="pointer-events-none absolute right-0 bottom-[calc(100%+0.5625rem)] z-50 translate-y-1 whitespace-nowrap rounded-md bg-stone-900 px-2.5 py-1.5 text-[0.75rem] leading-4 font-medium text-white opacity-0 shadow-lg transition-[opacity,transform] duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
+                      className="pointer-events-none absolute right-0 bottom-[calc(100%+0.5625rem)] z-50 translate-y-1 whitespace-nowrap rounded-md bg-canvas-inverse px-2.5 py-1.5 text-[0.75rem] leading-4 font-medium text-ink-inverse opacity-0 shadow-lg transition-[opacity,transform] duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
                       aria-hidden="true"
                     >
                       {t('composer.stopGenerating')}
@@ -842,7 +842,7 @@ export function Composer({
                 )}
                 <button
                   data-testid="composer-send"
-                  className="group relative grid size-[30px] shrink-0 cursor-pointer place-items-center rounded-full bg-black text-white outline-none transition-colors hover:bg-stone-800 focus-visible:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-25"
+                  className="group relative grid size-[30px] shrink-0 cursor-pointer place-items-center rounded-full bg-canvas-inverse text-ink-inverse outline-none transition-colors hover:bg-canvas-inverse focus-visible:bg-canvas-inverse disabled:cursor-not-allowed disabled:opacity-25"
                   type="button"
                   aria-label={
                     awaitingApproval
@@ -860,7 +860,7 @@ export function Composer({
                 >
                   <ArrowUp className="size-4" aria-hidden="true" />
                   <span
-                    className="pointer-events-none absolute right-0 bottom-[calc(100%+0.5625rem)] z-50 flex translate-y-1 items-center gap-2 whitespace-nowrap rounded-md bg-stone-900 px-2.5 py-1.5 text-[0.75rem] leading-4 font-medium text-white opacity-0 shadow-lg transition-[opacity,transform] duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
+                    className="pointer-events-none absolute right-0 bottom-[calc(100%+0.5625rem)] z-50 flex translate-y-1 items-center gap-2 whitespace-nowrap rounded-md bg-canvas-inverse px-2.5 py-1.5 text-[0.75rem] leading-4 font-medium text-ink-inverse opacity-0 shadow-lg transition-[opacity,transform] duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
                     aria-hidden="true"
                   >
                     <span>
@@ -875,7 +875,7 @@ export function Composer({
                           : t('composer.waitingForAPIShort')}
                     </span>
                     {connected && !awaitingApproval && (
-                      <kbd className="font-mono text-[0.6875rem] font-normal text-stone-400">↵</kbd>
+                      <kbd className="font-mono text-[0.6875rem] font-normal text-ink-faint">↵</kbd>
                     )}
                   </span>
                 </button>
@@ -888,22 +888,22 @@ export function Composer({
             className={cn(
               'absolute right-2 bottom-[calc(100%+0.625rem)] z-50 flex max-w-[calc(100vw-2rem)] animate-[fade-in_140ms_ease-out] items-center gap-2 border px-2.5 py-2 text-[0.8125rem] leading-5 shadow-[0_12px_32px_-18px_rgba(28,25,23,0.45)]',
               compactFeedback.kind === 'notice'
-                ? 'rounded-lg border-stone-200 bg-white text-stone-700'
-                : 'rounded-lg border-red-200 bg-red-50 text-red-800',
+                ? 'rounded-lg border-edge bg-canvas text-ink-soft'
+                : 'rounded-lg border-danger-edge bg-danger-surface text-danger',
             )}
             role={compactFeedback.kind === 'error' ? 'alert' : 'status'}
           >
             <Info
               className={cn(
                 'size-4 shrink-0',
-                compactFeedback.kind === 'notice' ? 'text-stone-500' : 'text-red-600',
+                compactFeedback.kind === 'notice' ? 'text-ink-muted' : 'text-danger-soft',
               )}
               aria-hidden="true"
             />
             <span>{compactFeedback.message}</span>
             <button
               type="button"
-              className="grid size-6 shrink-0 cursor-pointer place-items-center rounded-md text-current opacity-55 outline-none transition-[background-color,opacity] hover:bg-black/5 hover:opacity-100 focus-visible:bg-black/5 focus-visible:opacity-100"
+              className="grid size-6 shrink-0 cursor-pointer place-items-center rounded-md text-current opacity-55 outline-none transition-[background-color,opacity] hover:bg-scrim/5 hover:opacity-100 focus-visible:bg-scrim/5 focus-visible:opacity-100"
               aria-label={t('model.dismissCompactFeedback')}
               title={t('model.dismissCompactFeedback')}
               onClick={dismissCompactFeedback}
@@ -913,7 +913,7 @@ export function Composer({
           </div>
         )}
         {(settingsError || attachmentError || queueError || sendError) && (
-          <p className="px-4 text-[0.75rem] leading-5 text-red-700" role="alert">
+          <p className="px-4 text-[0.75rem] leading-5 text-danger" role="alert">
             {settingsError || attachmentError || queueError || sendError}
           </p>
         )}
@@ -937,34 +937,34 @@ function PendingQueue({
   const { t } = useI18n()
   return (
     <section
-      className="overflow-hidden rounded-[18px] border border-stone-200/90 bg-[rgb(252,252,252)] text-stone-700 shadow-[0_8px_24px_-22px_rgba(28,25,23,0.5)]"
+      className="overflow-hidden rounded-[18px] border border-edge/90 bg-canvas-raised text-ink-soft shadow-[0_8px_24px_-22px_rgba(28,25,23,0.5)]"
       aria-label={t('queue.pendingMessages')}
       aria-live="polite"
     >
-      <div className="flex h-8 items-center justify-between px-3.5 text-[0.71875rem] leading-none text-stone-500">
-        <span className="font-medium text-stone-600">{t('queue.upNext')}</span>
+      <div className="flex h-8 items-center justify-between px-3.5 text-[0.71875rem] leading-none text-ink-muted">
+        <span className="font-medium text-ink-muted">{t('queue.upNext')}</span>
         <span>{messages.length}</span>
       </div>
-      <div className="max-h-[8.25rem] overflow-y-auto border-t border-stone-200/80">
+      <div className="max-h-[8.25rem] overflow-y-auto border-t border-edge/80">
         {messages.map((message, index) => (
           <div
             key={message.id}
             className={cn(
               'group/queue flex min-h-11 items-center gap-2.5 py-2 pr-2 pl-3.5 text-[0.8125rem]',
-              index > 0 && 'border-t border-stone-200/70',
+              index > 0 && 'border-t border-edge/70',
             )}
           >
             <span
               className={cn(
                 'size-1.5 shrink-0 rounded-full',
-                message.status === 'failed' ? 'bg-red-500' : 'bg-stone-400',
+                message.status === 'failed' ? 'bg-danger-soft' : 'bg-ink-faint',
               )}
               aria-hidden="true"
             />
-            <span className="shrink-0 font-medium text-stone-700">
+            <span className="shrink-0 font-medium text-ink-soft">
               {message.delivery === 'steer' ? t('queue.steer') : t('queue.followUp')}
             </span>
-            <span className="min-w-0 flex-1 truncate text-stone-500">
+            <span className="min-w-0 flex-1 truncate text-ink-muted">
               {message.text ||
                 ((message.files?.length ?? 0) > 0
                   ? `${message.files?.length ?? 0} ${
@@ -975,13 +975,13 @@ function PendingQueue({
                     }`)}
             </span>
             {message.text && message.images.length > 0 && (
-              <span className="shrink-0 text-[0.71875rem] text-stone-400">
+              <span className="shrink-0 text-[0.71875rem] text-ink-faint">
                 +{message.images.length}{' '}
                 {message.images.length === 1 ? t('queue.image') : t('queue.images')}
               </span>
             )}
             {message.text && (message.files?.length ?? 0) > 0 && (
-              <span className="shrink-0 text-[0.71875rem] text-stone-400">
+              <span className="shrink-0 text-[0.71875rem] text-ink-faint">
                 +{message.files?.length ?? 0}{' '}
                 {message.files?.length === 1 ? t('queue.file') : t('queue.files')}
               </span>
@@ -989,7 +989,7 @@ function PendingQueue({
             <span
               className={cn(
                 'shrink-0 text-[0.71875rem]',
-                message.status === 'failed' ? 'text-red-600' : 'text-stone-400',
+                message.status === 'failed' ? 'text-danger-soft' : 'text-ink-faint',
               )}
             >
               {message.status === 'failed'
@@ -999,7 +999,7 @@ function PendingQueue({
                   : t('queue.waiting')}
             </span>
             <button
-              className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-lg text-stone-400 outline-none transition-colors hover:bg-stone-200/80 hover:text-stone-700 focus-visible:bg-stone-200/80 focus-visible:text-stone-700 disabled:cursor-wait disabled:opacity-55"
+              className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-lg text-ink-faint outline-none transition-colors hover:bg-canvas-strong/80 hover:text-ink-soft focus-visible:bg-canvas-strong/80 focus-visible:text-ink-soft disabled:cursor-wait disabled:opacity-55"
               type="button"
               aria-label={
                 message.delivery === 'steer'
@@ -1035,13 +1035,13 @@ function RunDeliveryMenu({
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <button
-          className="group inline-flex h-[30px] cursor-pointer items-center gap-1 rounded-[10px] px-2.5 text-[0.8125rem] font-medium text-stone-600 outline-none transition-colors hover:bg-[rgb(241,241,241)] focus-visible:bg-[rgb(241,241,241)] data-[state=open]:bg-[rgb(237,237,237)]"
+          className="group inline-flex h-[30px] cursor-pointer items-center gap-1 rounded-[10px] px-2.5 text-[0.8125rem] font-medium text-ink-muted outline-none transition-colors hover:bg-surface-active focus-visible:bg-surface-active data-[state=open]:bg-surface-selected"
           type="button"
           aria-label={t('delivery.choose')}
         >
           <span>{value === 'steer' ? t('queue.steer') : t('queue.followUp')}</span>
           <ChevronDown
-            className="size-3.5 text-stone-400 transition-transform group-data-[state=open]:rotate-180"
+            className="size-3.5 text-ink-faint transition-transform group-data-[state=open]:rotate-180"
             aria-hidden="true"
           />
         </button>
@@ -1052,7 +1052,7 @@ function RunDeliveryMenu({
           align="end"
           sideOffset={7}
           collisionPadding={10}
-          className="z-[110] min-w-[14.75rem] animate-[fade-in_110ms_ease-out] rounded-2xl border border-stone-200 bg-white p-1 text-[0.8125rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+          className="z-[110] min-w-[14.75rem] animate-[fade-in_110ms_ease-out] rounded-2xl border border-edge bg-canvas p-1 text-[0.8125rem] text-ink shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
         >
           <DropdownMenu.RadioGroup
             className="flex flex-col gap-0.5"
@@ -1080,11 +1080,11 @@ function DeliveryOption({ value, label, hint }: { value: DeliveryMode; label: st
   return (
     <DropdownMenu.RadioItem
       value={value}
-      className="relative flex h-10 cursor-default select-none items-center gap-2 rounded-[10px] px-2.5 pr-8 outline-none data-[highlighted]:bg-[rgb(241,241,241)] data-[state=checked]:bg-[rgb(237,237,237)]"
+      className="relative flex h-10 cursor-default select-none items-center gap-2 rounded-[10px] px-2.5 pr-8 outline-none data-[highlighted]:bg-surface-active data-[state=checked]:bg-surface-selected"
     >
       <span className="font-medium">{label}</span>
-      <span className="ml-auto text-[0.71875rem] text-stone-400">{hint}</span>
-      <DropdownMenu.ItemIndicator className="absolute right-2 grid size-4 place-items-center text-stone-700">
+      <span className="ml-auto text-[0.71875rem] text-ink-faint">{hint}</span>
+      <DropdownMenu.ItemIndicator className="absolute right-2 grid size-4 place-items-center text-ink-soft">
         <Check className="size-3.5" aria-hidden="true" />
       </DropdownMenu.ItemIndicator>
     </DropdownMenu.RadioItem>

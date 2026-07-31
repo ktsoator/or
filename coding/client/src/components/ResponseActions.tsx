@@ -76,7 +76,7 @@ export function ResponseActions({
 
         {completedTime && (
           <time
-            className="ml-1.5 shrink-0 text-[0.75rem] leading-5 text-stone-400 tabular-nums"
+            className="ml-1.5 shrink-0 text-[0.75rem] leading-5 text-ink-faint tabular-nums"
             dateTime={completedAt}
           >
             {completedTime}
@@ -85,11 +85,11 @@ export function ResponseActions({
 
         {usage && hasUsage(usage) && (
           <>
-            <span className="mx-1 h-3 w-px shrink-0 bg-stone-200" aria-hidden="true" />
+            <span className="mx-1 h-3 w-px shrink-0 bg-canvas-strong" aria-hidden="true" />
             <Tooltip.Root>
               <Tooltip.Trigger asChild>
                 <button
-                  className="group inline-flex h-7 min-w-0 max-w-full shrink cursor-pointer items-center rounded-lg px-2 text-[0.75rem] leading-5 text-stone-400 tabular-nums outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-600 focus-visible:bg-[rgb(241,241,241)] focus-visible:text-stone-600 data-[state=delayed-open]:bg-[rgb(241,241,241)] data-[state=delayed-open]:text-stone-600"
+                  className="group inline-flex h-7 min-w-0 max-w-full shrink cursor-pointer items-center rounded-lg px-2 text-[0.75rem] leading-5 text-ink-faint tabular-nums outline-none transition-colors hover:bg-surface-active hover:text-ink-muted focus-visible:bg-surface-active focus-visible:text-ink-muted data-[state=delayed-open]:bg-surface-active data-[state=delayed-open]:text-ink-muted"
                   type="button"
                   aria-label={t('actions.showUsage')}
                   data-testid="response-usage-trigger"
@@ -98,20 +98,20 @@ export function ResponseActions({
                     className="block min-w-0 truncate text-left whitespace-nowrap"
                     data-testid="response-usage-summary"
                   >
-                    <span className="font-medium text-stone-500">{t('actions.usage')}</span>
-                    <span className="mx-1.5 text-stone-300">·</span>
+                    <span className="font-medium text-ink-muted">{t('actions.usage')}</span>
+                    <span className="mx-1.5 text-ink-ghost">·</span>
                     <span>
                       {formatCompactNumber(totalTokens, formatNumber)} {t('actions.tokens')}
                     </span>
                     {usage.cost.total > 0 && (
                       <>
-                        <span className="mx-1.5 text-stone-300">·</span>
+                        <span className="mx-1.5 text-ink-ghost">·</span>
                         <span>{formatSummaryCost(usage.cost.total)}</span>
                       </>
                     )}
                     {modelName && (
                       <>
-                        <span className="mx-1.5 text-stone-300">·</span>
+                        <span className="mx-1.5 text-ink-ghost">·</span>
                         <span>{modelName}</span>
                       </>
                     )}
@@ -125,7 +125,7 @@ export function ResponseActions({
                   align="start"
                   sideOffset={7}
                   collisionPadding={10}
-                  className="z-[150] animate-[fade-in_110ms_ease-out] rounded-lg border border-stone-200/80 bg-white px-2.5 py-1.5 text-[0.6875rem] leading-4 text-stone-700 tabular-nums shadow-[0_10px_28px_-20px_rgba(28,25,23,0.4)] outline-none"
+                  className="z-[150] animate-[fade-in_110ms_ease-out] rounded-lg border border-edge/80 bg-canvas px-2.5 py-1.5 text-[0.6875rem] leading-4 text-ink-soft tabular-nums shadow-[0_10px_28px_-20px_rgba(28,25,23,0.4)] outline-none"
                 >
                   <div className="flex items-center gap-2.5 whitespace-nowrap">
                     <Metric
@@ -180,8 +180,8 @@ function ActionButton({
       <Tooltip.Trigger asChild>
         <button
           className={cn(
-            'grid size-7 shrink-0 cursor-pointer place-items-center rounded-lg text-stone-400 outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-700 focus-visible:bg-[rgb(241,241,241)] focus-visible:text-stone-700 disabled:cursor-not-allowed disabled:opacity-30',
-            pressed && 'bg-[rgb(237,237,237)] text-stone-800',
+            'grid size-7 shrink-0 cursor-pointer place-items-center rounded-lg text-ink-faint outline-none transition-colors hover:bg-surface-active hover:text-ink-soft focus-visible:bg-surface-active focus-visible:text-ink-soft disabled:cursor-not-allowed disabled:opacity-30',
+            pressed && 'bg-surface-selected text-ink-soft',
           )}
           type="button"
           aria-label={label}
@@ -197,7 +197,7 @@ function ActionButton({
           side="bottom"
           sideOffset={6}
           collisionPadding={8}
-          className="z-[150] animate-[fade-in_100ms_ease-out] rounded-md bg-stone-900 px-2 py-1 text-[0.6875rem] leading-4 font-medium whitespace-nowrap text-white shadow-lg"
+          className="z-[150] animate-[fade-in_100ms_ease-out] rounded-md bg-canvas-inverse px-2 py-1 text-[0.6875rem] leading-4 font-medium whitespace-nowrap text-ink-inverse shadow-lg"
         >
           {label}
         </Tooltip.Content>
@@ -209,8 +209,8 @@ function ActionButton({
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <span className="flex items-baseline gap-1">
-      <span className="text-stone-400">{label}</span>
-      <span className="font-medium text-stone-700">{value}</span>
+      <span className="text-ink-faint">{label}</span>
+      <span className="font-medium text-ink-soft">{value}</span>
     </span>
   )
 }

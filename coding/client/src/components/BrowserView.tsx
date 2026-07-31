@@ -106,12 +106,12 @@ export function BrowserView({
 
   return (
     <section
-      className="flex h-full min-h-0 flex-col bg-white"
+      className="flex h-full min-h-0 flex-col bg-canvas"
       data-testid="browser-view"
       aria-label={t('view.browser')}
     >
       <div
-        className="window-titlebar flex h-[45px] shrink-0 select-none items-center bg-white px-2"
+        className="window-titlebar flex h-[45px] shrink-0 select-none items-center bg-canvas px-2"
         data-testid="browser-titlebar"
       >
         <div
@@ -134,14 +134,14 @@ export function BrowserView({
                 className={cn(
                   'group flex h-8 min-w-[7rem] max-w-[11rem] shrink-0 items-center rounded-md border transition-colors',
                   active
-                    ? 'border-stone-200/80 bg-white text-stone-800 shadow-sm'
-                    : 'border-transparent text-stone-500 hover:bg-stone-100/80 hover:text-stone-800',
+                    ? 'border-edge/80 bg-canvas text-ink-soft shadow-sm'
+                    : 'border-transparent text-ink-muted hover:bg-canvas-sunken/80 hover:text-ink-soft',
                 )}
                 data-testid="browser-tab"
                 data-active={active}
               >
                 <button
-                  className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 self-stretch px-2.5 text-left text-[0.8125rem] outline-none focus-visible:bg-stone-100"
+                  className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 self-stretch px-2.5 text-left text-[0.8125rem] outline-none focus-visible:bg-canvas-sunken"
                   type="button"
                   role="tab"
                   aria-selected={active}
@@ -149,15 +149,15 @@ export function BrowserView({
                   onClick={() => selectItem(tab.id)}
                 >
                   {desired?.kind === 'workspace-preview' ? (
-                    <FileCode2 className="size-3.5 shrink-0 text-stone-400" aria-hidden="true" />
+                    <FileCode2 className="size-3.5 shrink-0 text-ink-faint" aria-hidden="true" />
                   ) : (
-                    <Globe2 className="size-3.5 shrink-0 text-stone-400" aria-hidden="true" />
+                    <Globe2 className="size-3.5 shrink-0 text-ink-faint" aria-hidden="true" />
                   )}
                   <span className="min-w-0 flex-1 truncate">{title}</span>
                 </button>
                 <button
                   className={cn(
-                    'mr-1 grid size-5 shrink-0 cursor-pointer place-items-center rounded text-stone-400 outline-none transition-[opacity,color,background-color] hover:bg-stone-100 hover:text-stone-800 focus-visible:bg-stone-100 focus-visible:text-stone-800 focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100',
+                    'mr-1 grid size-5 shrink-0 cursor-pointer place-items-center rounded text-ink-faint outline-none transition-[opacity,color,background-color] hover:bg-canvas-sunken hover:text-ink-soft focus-visible:bg-canvas-sunken focus-visible:text-ink-soft focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100',
                     active ? 'opacity-100' : 'opacity-0',
                   )}
                   type="button"
@@ -177,21 +177,21 @@ export function BrowserView({
               className={cn(
                 'group flex h-8 min-w-[7rem] max-w-[11rem] shrink-0 items-center rounded-md border transition-colors',
                 conversationActive
-                  ? 'border-stone-200/80 bg-white text-stone-800 shadow-sm'
-                  : 'border-transparent text-stone-500 hover:bg-stone-100/80 hover:text-stone-800',
+                  ? 'border-edge/80 bg-canvas text-ink-soft shadow-sm'
+                  : 'border-transparent text-ink-muted hover:bg-canvas-sunken/80 hover:text-ink-soft',
               )}
               data-testid="conversation-tab"
               data-active={conversationActive}
             >
               <button
-                className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 self-stretch px-2.5 text-left text-[0.8125rem] outline-none focus-visible:bg-stone-100"
+                className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 self-stretch px-2.5 text-left text-[0.8125rem] outline-none focus-visible:bg-canvas-sunken"
                 type="button"
                 role="tab"
                 aria-selected={conversationActive}
                 title={conversation.session.title}
                 onClick={() => selectItem(conversationTabID)}
               >
-                <MessageSquare className="size-3.5 shrink-0 text-stone-400" aria-hidden="true" />
+                <MessageSquare className="size-3.5 shrink-0 text-ink-faint" aria-hidden="true" />
                 <span className="min-w-0 flex-1 truncate">
                   {conversation.session.title === 'New session'
                     ? t('app.newSession')
@@ -200,7 +200,7 @@ export function BrowserView({
               </button>
               <button
                 className={cn(
-                  'mr-1 grid size-5 shrink-0 cursor-pointer place-items-center rounded text-stone-400 outline-none transition-[opacity,color,background-color] hover:bg-stone-100 hover:text-stone-800 focus-visible:bg-stone-100 focus-visible:text-stone-800 focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100',
+                  'mr-1 grid size-5 shrink-0 cursor-pointer place-items-center rounded text-ink-faint outline-none transition-[opacity,color,background-color] hover:bg-canvas-sunken hover:text-ink-soft focus-visible:bg-canvas-sunken focus-visible:text-ink-soft focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100',
                   conversationActive ? 'opacity-100' : 'opacity-0',
                 )}
                 type="button"
@@ -217,14 +217,14 @@ export function BrowserView({
               className={cn(
                 'group flex h-8 min-w-[7rem] max-w-[11rem] shrink-0 items-center rounded-md border transition-colors',
                 tasksActive
-                  ? 'border-stone-200/80 bg-white text-stone-800 shadow-sm'
-                  : 'border-transparent text-stone-500 hover:bg-stone-100/80 hover:text-stone-800',
+                  ? 'border-edge/80 bg-canvas text-ink-soft shadow-sm'
+                  : 'border-transparent text-ink-muted hover:bg-canvas-sunken/80 hover:text-ink-soft',
               )}
               data-testid="background-tasks-tab"
               data-active={tasksActive}
             >
               <button
-                className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 self-stretch px-2.5 text-left text-[0.8125rem] outline-none focus-visible:bg-stone-100"
+                className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 self-stretch px-2.5 text-left text-[0.8125rem] outline-none focus-visible:bg-canvas-sunken"
                 type="button"
                 role="tab"
                 aria-selected={tasksActive}
@@ -233,21 +233,21 @@ export function BrowserView({
               >
                 <Activity
                   className={cn(
-                    'size-3.5 shrink-0 text-stone-400',
-                    runningTaskCount > 0 && 'text-emerald-600',
+                    'size-3.5 shrink-0 text-ink-faint',
+                    runningTaskCount > 0 && 'text-success',
                   )}
                   aria-hidden="true"
                 />
                 <span className="min-w-0 flex-1 truncate">{t('tasks.title')}</span>
                 {runningTaskCount > 0 && (
-                  <span className="text-[0.625rem] tabular-nums text-emerald-600">
+                  <span className="text-[0.625rem] tabular-nums text-success">
                     {runningTaskCount}
                   </span>
                 )}
               </button>
               <button
                 className={cn(
-                  'mr-1 grid size-5 shrink-0 cursor-pointer place-items-center rounded text-stone-400 outline-none transition-[opacity,color,background-color] hover:bg-stone-100 hover:text-stone-800 focus-visible:bg-stone-100 focus-visible:text-stone-800 focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100',
+                  'mr-1 grid size-5 shrink-0 cursor-pointer place-items-center rounded text-ink-faint outline-none transition-[opacity,color,background-color] hover:bg-canvas-sunken hover:text-ink-soft focus-visible:bg-canvas-sunken focus-visible:text-ink-soft focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100',
                   tasksActive ? 'opacity-100' : 'opacity-0',
                 )}
                 type="button"
@@ -304,9 +304,9 @@ export function BrowserView({
             conversationActive ? 'hidden' : 'flex',
           )}
         >
-          <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-stone-200 bg-white px-2.5">
+          <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-edge bg-canvas px-2.5">
             <button
-              className="grid size-7 cursor-pointer place-items-center rounded-md text-stone-500 outline-none transition-colors hover:bg-stone-100 hover:text-stone-900 focus-visible:bg-stone-100 focus-visible:text-stone-900 disabled:cursor-default disabled:text-stone-300 disabled:hover:bg-transparent"
+              className="grid size-7 cursor-pointer place-items-center rounded-md text-ink-muted outline-none transition-colors hover:bg-canvas-sunken hover:text-ink focus-visible:bg-canvas-sunken focus-visible:text-ink disabled:cursor-default disabled:text-ink-ghost disabled:hover:bg-transparent"
               type="button"
               title={t('preview.back')}
               aria-label={t('preview.back')}
@@ -316,7 +316,7 @@ export function BrowserView({
               <ArrowLeft className="size-4" aria-hidden="true" />
             </button>
             <button
-              className="grid size-7 cursor-pointer place-items-center rounded-md text-stone-500 outline-none transition-colors hover:bg-stone-100 hover:text-stone-900 focus-visible:bg-stone-100 focus-visible:text-stone-900 disabled:cursor-default disabled:text-stone-300 disabled:hover:bg-transparent"
+              className="grid size-7 cursor-pointer place-items-center rounded-md text-ink-muted outline-none transition-colors hover:bg-canvas-sunken hover:text-ink focus-visible:bg-canvas-sunken focus-visible:text-ink disabled:cursor-default disabled:text-ink-ghost disabled:hover:bg-transparent"
               type="button"
               title={t('preview.forward')}
               aria-label={t('preview.forward')}
@@ -326,7 +326,7 @@ export function BrowserView({
               <ArrowRight className="size-4" aria-hidden="true" />
             </button>
             <button
-              className="grid size-7 cursor-pointer place-items-center rounded-md text-stone-500 outline-none transition-colors hover:bg-stone-100 hover:text-stone-900 focus-visible:bg-stone-100 focus-visible:text-stone-900 disabled:cursor-default disabled:text-stone-300 disabled:hover:bg-transparent"
+              className="grid size-7 cursor-pointer place-items-center rounded-md text-ink-muted outline-none transition-colors hover:bg-canvas-sunken hover:text-ink focus-visible:bg-canvas-sunken focus-visible:text-ink disabled:cursor-default disabled:text-ink-ghost disabled:hover:bg-transparent"
               type="button"
               title={t('preview.refresh')}
               aria-label={t('preview.refresh')}
@@ -344,8 +344,8 @@ export function BrowserView({
             <form className="mx-1 min-w-0 flex-1" onSubmit={navigate}>
               <input
                 className={cn(
-                  'h-7 w-full rounded-lg border border-stone-200 bg-stone-50 px-2.5 font-mono text-[0.75rem] text-stone-700 outline-none placeholder:text-center placeholder:font-sans placeholder:text-stone-400 focus:border-stone-300 focus:bg-white focus:placeholder:text-left',
-                  activeTab.invalidAddress && 'border-red-300 bg-red-50/50',
+                  'h-7 w-full rounded-lg border border-edge bg-canvas-raised px-2.5 font-mono text-[0.75rem] text-ink-soft outline-none placeholder:text-center placeholder:font-sans placeholder:text-ink-faint focus:border-edge-strong focus:bg-canvas focus:placeholder:text-left',
+                  activeTab.invalidAddress && 'border-danger-edge bg-danger-surface/50',
                 )}
                 data-testid="browser-address"
                 value={activeTab.addressDraft}
@@ -358,7 +358,7 @@ export function BrowserView({
               />
             </form>
             <button
-              className="grid size-7 cursor-pointer place-items-center rounded-md text-stone-500 outline-none transition-colors hover:bg-stone-100 hover:text-stone-900 focus-visible:bg-stone-100 focus-visible:text-stone-900 disabled:cursor-default disabled:text-stone-300 disabled:hover:bg-transparent"
+              className="grid size-7 cursor-pointer place-items-center rounded-md text-ink-muted outline-none transition-colors hover:bg-canvas-sunken hover:text-ink focus-visible:bg-canvas-sunken focus-visible:text-ink disabled:cursor-default disabled:text-ink-ghost disabled:hover:bg-transparent"
               type="button"
               title={t('preview.openExternal')}
               aria-label={t('preview.openExternal')}
@@ -369,7 +369,7 @@ export function BrowserView({
             </button>
           </div>
 
-          <div className="relative min-h-0 flex-1 bg-white">
+          <div className="relative min-h-0 flex-1 bg-canvas">
             {tabs.map((tab) => {
               const desired = tab.desired
               const active = tab.id === activeTab.id
@@ -435,7 +435,7 @@ export function WorkbenchHeaderActions({
       <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild>
           <button
-            className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-md text-stone-500 outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-900 focus-visible:bg-[rgb(241,241,241)] focus-visible:text-stone-900 data-[state=open]:bg-[rgb(237,237,237)] data-[state=open]:text-stone-900"
+            className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-md text-ink-muted outline-none transition-colors hover:bg-surface-active hover:text-ink focus-visible:bg-surface-active focus-visible:text-ink data-[state=open]:bg-surface-selected data-[state=open]:text-ink"
             data-testid="workbench-add-view"
             type="button"
             title={t('workbench.addView')}
@@ -450,7 +450,7 @@ export function WorkbenchHeaderActions({
             align="end"
             sideOffset={7}
             collisionPadding={10}
-            className="z-[120] min-w-[15.5rem] animate-[fade-in_110ms_ease-out] rounded-2xl border border-stone-200 bg-white p-1 text-[0.875rem] text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+            className="z-[120] min-w-[15.5rem] animate-[fade-in_110ms_ease-out] rounded-2xl border border-edge bg-canvas p-1 text-[0.875rem] text-ink shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
           >
             <WorkbenchMenuItem icon={Globe2} label={t('view.browser')} onSelect={onOpenBrowser} />
             {onOpenTasks && (
@@ -471,7 +471,7 @@ export function WorkbenchHeaderActions({
         </DropdownMenu.Portal>
       </DropdownMenu.Root>
       <button
-        className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-md text-stone-500 outline-none transition-colors hover:bg-[rgb(241,241,241)] hover:text-stone-900 focus-visible:bg-[rgb(241,241,241)] focus-visible:text-stone-900"
+        className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-md text-ink-muted outline-none transition-colors hover:bg-surface-active hover:text-ink focus-visible:bg-surface-active focus-visible:text-ink"
         data-testid="workbench-maximize"
         type="button"
         title={maximized ? t('workbench.restore') : t('workbench.maximize')}
@@ -501,15 +501,15 @@ function WorkbenchMenuItem({
 }) {
   return (
     <DropdownMenu.Item
-      className="mb-0.5 flex h-[30px] cursor-default select-none items-center gap-2.5 rounded-[10px] px-2.5 outline-none last:mb-0 data-[disabled]:opacity-40 data-[highlighted]:bg-[rgb(241,241,241)]"
+      className="mb-0.5 flex h-[30px] cursor-default select-none items-center gap-2.5 rounded-[10px] px-2.5 outline-none last:mb-0 data-[disabled]:opacity-40 data-[highlighted]:bg-surface-active"
       disabled={disabled}
       aria-busy={loading}
       onSelect={onSelect}
     >
       {loading ? (
-        <LoaderCircle className="size-4 shrink-0 animate-spin text-stone-500" aria-hidden="true" />
+        <LoaderCircle className="size-4 shrink-0 animate-spin text-ink-muted" aria-hidden="true" />
       ) : (
-        <Icon className="size-4 shrink-0 text-stone-600" aria-hidden="true" />
+        <Icon className="size-4 shrink-0 text-ink-muted" aria-hidden="true" />
       )}
       <span>{label}</span>
     </DropdownMenu.Item>

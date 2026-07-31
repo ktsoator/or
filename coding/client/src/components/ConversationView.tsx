@@ -67,7 +67,7 @@ export function ConversationView({
 
   return (
     <section
-      className="flex h-full min-h-0 flex-col bg-white"
+      className="flex h-full min-h-0 flex-col bg-canvas"
       data-testid="workbench-conversation"
       aria-label={thread.session.title}
     >
@@ -88,17 +88,17 @@ export function ConversationView({
           )}
         >
           {thread.loading ? (
-            <div className="flex items-center gap-2 pb-[8vh] text-xs text-stone-400">
+            <div className="flex items-center gap-2 pb-[8vh] text-xs text-ink-faint">
               <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
               {t('app.loadingSession')}
             </div>
           ) : empty ? (
             <div className="flex w-full -translate-y-[2vh] flex-col items-center gap-7">
               <div className="max-w-sm text-center">
-                <h2 className="m-0 text-[1.25rem] leading-tight font-medium text-stone-900">
+                <h2 className="m-0 text-[1.25rem] leading-tight font-medium text-ink">
                   {t('app.emptyTitle')}
                 </h2>
-                <p className="mt-2 text-[0.875rem] leading-5 text-stone-500">
+                <p className="mt-2 text-[0.875rem] leading-5 text-ink-muted">
                   {t('app.emptyDescription')}
                 </p>
               </div>

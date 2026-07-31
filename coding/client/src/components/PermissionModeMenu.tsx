@@ -79,7 +79,7 @@ export function PermissionModeMenu({
             {t(selected.shortLabelKey)}
           </span>
           <ChevronDown
-            className="size-3.5 shrink-0 text-stone-400 transition-transform duration-150 group-data-[state=open]:rotate-180"
+            className="size-3.5 shrink-0 text-ink-faint transition-transform duration-150 group-data-[state=open]:rotate-180"
             aria-hidden="true"
           />
         </button>
@@ -91,9 +91,9 @@ export function PermissionModeMenu({
           align="start"
           sideOffset={7}
           collisionPadding={10}
-          className="z-[110] w-[25rem] max-w-[calc(100vw-1.25rem)] animate-[fade-in_110ms_ease-out] rounded-2xl border border-stone-200 bg-white p-1.5 text-stone-900 shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+          className="z-[110] w-[25rem] max-w-[calc(100vw-1.25rem)] animate-[fade-in_110ms_ease-out] rounded-2xl border border-edge bg-canvas p-1.5 text-ink shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
         >
-          <DropdownMenu.Label className="px-3 pt-1.5 pb-2 text-[0.75rem] font-medium text-stone-400">
+          <DropdownMenu.Label className="px-3 pt-1.5 pb-2 text-[0.75rem] font-medium text-ink-faint">
             {t('permission.choose')}
           </DropdownMenu.Label>
           <DropdownMenu.RadioGroup
@@ -109,18 +109,18 @@ export function PermissionModeMenu({
                 <DropdownMenu.RadioItem
                   key={option.value}
                   value={option.value}
-                  className="relative flex min-h-12 cursor-default select-none items-center gap-2.5 rounded-[12px] px-2.5 py-1.5 pr-9 outline-none data-[highlighted]:bg-[rgb(244,244,244)]"
+                  className="relative flex min-h-12 cursor-default select-none items-center gap-2.5 rounded-[12px] px-2.5 py-1.5 pr-9 outline-none data-[highlighted]:bg-surface-active"
                 >
-                  <Icon className="size-4 shrink-0 text-stone-600" aria-hidden="true" />
+                  <Icon className="size-4 shrink-0 text-ink-muted" aria-hidden="true" />
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[0.875rem] leading-5 font-medium text-stone-900">
+                    <span className="block text-[0.875rem] leading-5 font-medium text-ink">
                       {t(option.labelKey)}
                     </span>
-                    <span className="block text-[0.75rem] leading-4 text-stone-500">
+                    <span className="block text-[0.75rem] leading-4 text-ink-muted">
                       {t(option.descriptionKey)}
                     </span>
                   </span>
-                  <DropdownMenu.ItemIndicator className="absolute right-2.5 grid size-5 place-items-center text-stone-700">
+                  <DropdownMenu.ItemIndicator className="absolute right-2.5 grid size-5 place-items-center text-ink-soft">
                     <Check className="size-4" aria-hidden="true" />
                   </DropdownMenu.ItemIndicator>
                 </DropdownMenu.RadioItem>

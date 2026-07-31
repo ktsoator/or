@@ -38,7 +38,7 @@ export function CopyButton({ value, className }: { value: string; className?: st
       aria-label={label}
       onClick={() => void copy()}
       className={cn(
-        'grid size-6 shrink-0 cursor-pointer place-items-center rounded text-stone-400 outline-none transition-colors hover:bg-stone-100 hover:text-stone-950 focus-visible:bg-stone-100 focus-visible:text-stone-950',
+        'grid size-6 shrink-0 cursor-pointer place-items-center rounded text-ink-faint outline-none transition-colors hover:bg-canvas-sunken hover:text-ink focus-visible:bg-canvas-sunken focus-visible:text-ink',
         className,
       )}
     >

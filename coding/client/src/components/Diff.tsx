@@ -10,7 +10,7 @@ export function FileChange({ change }: { change: Change }) {
   const [copied, setCopied] = useState(false)
   if (change.changeType === 'failure') {
     return (
-      <div className="mt-1 ml-5 border-l-2 border-red-300 py-1 pl-3 font-mono text-[0.8125rem] leading-5.5 text-red-700 max-md:ml-0">
+      <div className="mt-1 ml-5 border-l-2 border-danger-edge py-1 pl-3 font-mono text-[0.8125rem] leading-5.5 text-danger max-md:ml-0">
         {(change.path ? `${change.path}: ` : '') + (change.detail || t('diff.writeFailed'))}
       </div>
     )
@@ -37,20 +37,20 @@ export function FileChange({ change }: { change: Change }) {
   }
 
   return (
-    <div className="mt-1 ml-5 overflow-hidden rounded-lg border border-stone-300/80 bg-white max-md:ml-0">
-      <div className="flex h-7 min-w-0 items-center gap-1.5 border-b border-stone-300/70 bg-stone-50/60 px-2.5">
+    <div className="mt-1 ml-5 overflow-hidden rounded-lg border border-edge-strong/80 bg-canvas max-md:ml-0">
+      <div className="flex h-7 min-w-0 items-center gap-1.5 border-b border-edge-strong/70 bg-canvas-raised/60 px-2.5">
         <span
-          className="min-w-0 overflow-hidden text-[0.8125rem] font-normal text-stone-700 underline decoration-stone-400/70 underline-offset-2 text-ellipsis whitespace-nowrap"
+          className="min-w-0 overflow-hidden text-[0.8125rem] font-normal text-ink-soft underline decoration-ink-faint/70 underline-offset-2 text-ellipsis whitespace-nowrap"
           title={change.path}
         >
           {filename}
         </span>
         <span className="flex shrink-0 gap-1 font-mono text-[0.75rem] font-normal">
-          <span className="text-emerald-700">+{change.additions || 0}</span>
-          <span className="text-rose-700">-{change.deletions || 0}</span>
+          <span className="text-success">+{change.additions || 0}</span>
+          <span className="text-danger">-{change.deletions || 0}</span>
         </span>
         <button
-          className="ml-auto grid size-6 shrink-0 cursor-pointer place-items-center rounded text-stone-400 outline-none transition-colors hover:bg-stone-100 hover:text-stone-950 focus-visible:bg-stone-100 focus-visible:text-stone-950"
+          className="ml-auto grid size-6 shrink-0 cursor-pointer place-items-center rounded text-ink-faint outline-none transition-colors hover:bg-canvas-sunken hover:text-ink focus-visible:bg-canvas-sunken focus-visible:text-ink"
           type="button"
           title={copied ? t('diff.copied') : t('diff.copy')}
           aria-label={copied ? t('diff.copied') : t('diff.copy')}
@@ -65,7 +65,7 @@ export function FileChange({ change }: { change: Change }) {
       </div>
 
       {hunks.length > 0 && (
-        <div className="max-h-[28.75rem] overflow-auto bg-[#fdfdfc] [scrollbar-color:#8f8f89_transparent] [scrollbar-width:thin]">
+        <div className="max-h-[28.75rem] overflow-auto bg-canvas-raised [scrollbar-color:var(--scrollbar-code-thumb)_transparent] [scrollbar-width:thin]">
           {hunks.map((hunk, index) => (
             <Hunk key={index} hunk={hunk} language={language} />
           ))}
@@ -80,8 +80,8 @@ function Hunk({ hunk, language }: { hunk: HunkType; language: string }) {
   let newLine = hunk.newStart
 
   return (
-    <div className="border-b border-stone-300/70 last:border-b-0">
-      <div className="bg-stone-100 px-2.5 py-0.5 font-mono text-[0.6875rem] leading-4 font-medium text-stone-500">
+    <div className="border-b border-edge-strong/70 last:border-b-0">
+      <div className="bg-canvas-sunken px-2.5 py-0.5 font-mono text-[0.6875rem] leading-4 font-medium text-ink-muted">
         {`@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`}
       </div>
       {(hunk.lines ?? []).map((line, index) => {
@@ -98,21 +98,21 @@ function Hunk({ hunk, language }: { hunk: HunkType; language: string }) {
           <div
             key={index}
             className={cn(
-              'grid min-h-[1.125rem] grid-cols-[1.375rem_2.25rem_minmax(max-content,1fr)] font-mono text-[0.8125rem] leading-4.5 text-stone-900',
-              isAdd && 'bg-[#dcefe2]',
-              isDelete && 'bg-[#f5dddd]',
+              'grid min-h-[1.125rem] grid-cols-[1.375rem_2.25rem_minmax(max-content,1fr)] font-mono text-[0.8125rem] leading-4.5 text-ink',
+              isAdd && 'bg-diff-add',
+              isDelete && 'bg-diff-delete',
             )}
           >
             <span
               className={cn(
-                'pl-2 text-stone-400 select-none',
-                isAdd && 'text-emerald-700',
-                isDelete && 'text-rose-700',
+                'pl-2 text-ink-faint select-none',
+                isAdd && 'text-success',
+                isDelete && 'text-danger',
               )}
             >
               {isAdd ? '+' : isDelete ? '−' : ''}
             </span>
-            <span className="pr-2 text-right text-stone-500 select-none">{number}</span>
+            <span className="pr-2 text-right text-ink-muted select-none">{number}</span>
             <code
               className="or-code-theme hljs block min-w-full overflow-visible bg-transparent! px-2.5 whitespace-pre"
               dangerouslySetInnerHTML={{ __html: html }}
