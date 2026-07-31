@@ -44,9 +44,18 @@ func (r PathResolver) Resolve(access Access) Access {
 	if err != nil {
 		access.Location = LocationUnknown
 		access.ResolutionError = err.Error()
+		// An unresolvable path still carries a usable name. Classifying it means
+		// an unverifiable target cannot also shed its sensitivity.
+		access.Sensitive = ClassifySensitive(target)
 		return access
 	}
 	access.ResolvedPath = resolved
+	// Classify both the resolved target and the path as written: a symlink named
+	// innocuously may point at a secret, and one named .env may point elsewhere.
+	access.Sensitive = ClassifySensitive(resolved)
+	if access.Sensitive == NotSensitive {
+		access.Sensitive = ClassifySensitive(target)
+	}
 	if pathWithin(r.workspace, resolved) {
 		access.Location = Workspace
 	} else {
