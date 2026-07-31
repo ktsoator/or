@@ -82,11 +82,21 @@ func runGrep(ctx context.Context, root string, ops FileOps, in grepArgs) (agent.
 
 	var lines []string
 	truncated := false
+	skippedSensitive := 0
 	for _, f := range files {
 		if globRe != nil && !globRe.MatchString(f.rel) {
 			continue
 		}
-		data, err := ops.ReadFile(ctx, filepath.Join(searchRoot, filepath.FromSlash(f.rel)))
+		full := filepath.Join(searchRoot, filepath.FromSlash(f.rel))
+		// Grep reads whole files that no preflight named, so a credentials file
+		// would otherwise reach the model without ever passing an approval the
+		// way `read` does. Matching on one is also an oracle for its contents,
+		// so these are skipped in both modes rather than only in content mode.
+		if permission.ClassifySensitive(full) == permission.SecretFile {
+			skippedSensitive++
+			continue
+		}
+		data, err := ops.ReadFile(ctx, full)
 		if err != nil || bytes.IndexByte(data, 0) >= 0 {
 			continue // unreadable or binary; skip
 		}
@@ -111,14 +121,24 @@ func runGrep(ctx context.Context, root string, ops FileOps, in grepArgs) (agent.
 		}
 	}
 
+	// Told to the model so a skipped credentials file reads as a deliberate
+	// boundary with a named way through it, not as an empty search to retry
+	// with bash.
+	notice := ""
+	if skippedSensitive > 0 {
+		notice = fmt.Sprintf(
+			"\n\n[%d file(s) that may hold credentials were not searched; use read on a specific path if one is needed]",
+			skippedSensitive,
+		)
+	}
 	if len(lines) == 0 {
-		return textResult("No matches found."), nil
+		return textResult("No matches found." + notice), nil
 	}
 	out := strings.Join(lines, "\n")
 	if truncated {
 		out += fmt.Sprintf("\n\n[truncated at %d results; refine the pattern or set a higher limit]", limit)
 	}
-	return textResult(out), nil
+	return textResult(out + notice), nil
 }
 
 // displayPath renders a file found under searchRoot (relative path f) as a path

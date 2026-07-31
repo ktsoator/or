@@ -35,13 +35,34 @@ type FileOps interface {
 	ReadDir(ctx context.Context, path string) ([]os.DirEntry, error)
 }
 
-// ExecOps abstracts shell command execution for the bash tool.
+// ExecOps abstracts shell command execution for the bash tool. Both the
+// foreground and the background paths go through it, so a backend that
+// sandboxes, containerizes, or forwards commands governs every command the
+// session runs rather than only the ones the model waits on.
 type ExecOps interface {
 	// Exec runs command in a shell within dir and returns its combined output.
 	// A non-zero exit code is reported in ExecResult, not as an error; an error
 	// is returned only when the command could not be started. Exec must honor ctx
 	// cancellation (e.g. a timeout).
 	Exec(ctx context.Context, command string, dir string) (ExecResult, error)
+	// Start launches command in a shell within dir, writing its combined output
+	// to out, and returns once the command is running. A background command
+	// outlives the turn that started it, so it is bounded by its Process rather
+	// than by a context.
+	Start(command string, dir string, out io.Writer) (Process, error)
+}
+
+// Process is one running background command. Implementations must terminate
+// everything the command spawned, not just the shell that fronts it.
+type Process interface {
+	// Wait blocks until the command exits and reports its exit code. A command
+	// that exits non-zero is not an error; a failure to wait on it is, and
+	// reports exit code -1.
+	Wait() (exitCode int, err error)
+	// Stop asks the command to exit and returns without waiting for it.
+	Stop() error
+	// Kill terminates the command immediately.
+	Kill() error
 }
 
 // ExecResult is the outcome of one shell command.
@@ -222,3 +243,37 @@ func (LocalOps) Exec(ctx context.Context, command string, dir string) (ExecResul
 	}
 	return result, nil
 }
+
+// Start launches command with `bash -c` inside dir and returns once it is
+// running, with its combined output going to out. The command leads its own
+// process group so the whole tree it spawns can be stopped later.
+func (LocalOps) Start(command string, dir string, out io.Writer) (Process, error) {
+	cmd := exec.Command("bash", "-c", command)
+	cmd.Dir = dir
+	cmd.Stdout = out
+	cmd.Stderr = out
+	configureProcessGroup(cmd)
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	return localProcess{cmd: cmd}, nil
+}
+
+// localProcess is one background command running on the local machine.
+type localProcess struct{ cmd *exec.Cmd }
+
+func (p localProcess) Wait() (int, error) {
+	err := p.cmd.Wait()
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return exitErr.ExitCode(), nil
+	}
+	if err != nil {
+		return -1, err
+	}
+	return 0, nil
+}
+
+func (p localProcess) Stop() error { return terminateProcessGroup(p.cmd, syscall.SIGTERM) }
+
+func (p localProcess) Kill() error { return terminateProcessGroup(p.cmd, syscall.SIGKILL) }

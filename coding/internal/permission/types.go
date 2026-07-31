@@ -54,13 +54,14 @@ const (
 )
 
 // Access is one effect of a validated tool call. Tools fill Path or Command;
-// Service fills ResolvedPath and Location before applying policy.
+// Service fills ResolvedPath, Location, and Sensitive before applying policy.
 type Access struct {
 	Action          Action
 	Path            string
 	Command         string
 	ResolvedPath    string
 	Location        Location
+	Sensitive       SensitiveKind
 	ResolutionError string
 }
 

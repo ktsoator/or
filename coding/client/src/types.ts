@@ -175,6 +175,12 @@ export type ApprovalItem = {
   id: string
   summary: string
   reason: string
+  // The complete shell command, when the approval covers one. It is shown in
+  // full rather than summarized: a decision must not rest on a truncated view.
+  command: string
+  // Conservative count of the commands the shell would run. Above one, the user
+  // is told the command is compound.
+  commandSegments: number
 }
 export type QuestionItem = {
   kind: 'question'

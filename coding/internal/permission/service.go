@@ -118,6 +118,12 @@ func decideAccess(mode Mode, access Access) Decision {
 	case Internal:
 		return Decision{Behavior: Allow, Reason: "allowed internal session access"}
 	case Read:
+		// Checked before Location: a credentials file inside the workspace is
+		// still a credentials file, and reading it copies secrets into the
+		// model's context and the durable transcript.
+		if access.Sensitive == SecretFile {
+			return Decision{Behavior: Ask, Reason: "reading a file that may hold credentials requires approval"}
+		}
 		if access.Location == Workspace {
 			return Decision{Behavior: Allow, Reason: "allowed workspace read"}
 		}
@@ -128,6 +134,15 @@ func decideAccess(mode Mode, access Access) Decision {
 	case Write:
 		if mode == ModeReadOnly {
 			return Decision{Behavior: Deny, Reason: "file changes are blocked in read-only mode"}
+		}
+		// Checked before the auto-edit allowance below. Enabling workspace edits
+		// is consent to change the project's own files, not to rewrite its
+		// credentials or the Git state that decides what later commands run.
+		if access.Sensitive == SecretFile {
+			return Decision{Behavior: Ask, Reason: "changing a file that may hold credentials requires approval"}
+		}
+		if access.Sensitive == RepositoryInternals {
+			return Decision{Behavior: Ask, Reason: "changing Git's internal state requires approval"}
 		}
 		if access.Location == OutsideWorkspace {
 			return Decision{Behavior: Ask, Reason: "writing outside the workspace requires approval"}

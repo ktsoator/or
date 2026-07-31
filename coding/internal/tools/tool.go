@@ -41,7 +41,7 @@ func (t Tool) Name() string { return t.Definition.Name }
 // distinction to the reusable agent package.
 func CoreToolsWithTasks(root string, ops Ops) ([]Tool, *TaskManager) {
 	files := NewFileStateStore()
-	tasks := NewTaskManager()
+	tasks := NewTaskManager(ops)
 	return []Tool{
 		Read(root, ops, files, tasks.OwnsOutputPath),
 		Grep(root, ops),

@@ -288,6 +288,8 @@ export type WireEvent = {
   id?: string
   summary?: string
   reason?: string
+  command?: string
+  commandSegments?: number
   disposition?: BrowserDisposition
   tabID?: string
   questions?: Question[]

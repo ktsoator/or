@@ -3,6 +3,8 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"testing"
 
 	"github.com/ktsoator/or/agent"
@@ -15,6 +17,10 @@ type stubExecOps struct {
 
 func (s stubExecOps) Exec(context.Context, string, string) (ExecResult, error) {
 	return s.result, s.err
+}
+
+func (s stubExecOps) Start(string, string, io.Writer) (Process, error) {
+	return nil, errors.New("stubExecOps does not start background commands")
 }
 
 func TestBashReturnsExitCodeInToolOutcome(t *testing.T) {

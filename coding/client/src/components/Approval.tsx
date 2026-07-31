@@ -14,6 +14,10 @@ export function Approval({
   const [decision, setDecision] = useState<ApprovalChoice>()
   const [error, setError] = useState('')
   const busy = decision !== undefined
+  // The summary is a single line. Show the command in full whenever that line
+  // cannot carry all of it, so nothing runs that the user did not read.
+  const compound = item.commandSegments > 1
+  const showCommand = item.command !== '' && (compound || item.command.includes('\n'))
 
   const decide = async (choice: ApprovalChoice) => {
     setDecision(choice)
@@ -78,6 +82,19 @@ export function Approval({
           </button>
         </div>
       </div>
+      {showCommand && (
+        <div className="mt-1 mb-1.5 rounded-2xl border border-stone-200 bg-stone-50">
+          {compound && (
+            <div className="flex items-center gap-1.5 border-b border-stone-200 px-3 py-1.5 text-[0.75rem] leading-4 font-medium text-amber-700">
+              <ShieldAlert className="size-3.5 shrink-0" aria-hidden="true" />
+              {t('approval.compoundCommand', { count: item.commandSegments })}
+            </div>
+          )}
+          <pre className="code-scroll-area max-h-[13rem] overflow-auto px-3 py-2 font-mono text-[0.78125rem] leading-5 whitespace-pre text-stone-700">
+            {item.command}
+          </pre>
+        </div>
+      )}
       {error && (
         <div className="border-t border-red-100 pt-2 text-[0.75rem] leading-4 text-red-600" role="alert">
           {error}

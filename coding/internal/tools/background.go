@@ -5,12 +5,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -59,7 +57,7 @@ type TaskOutput struct {
 
 type managedTask struct {
 	state         TaskState
-	cmd           *exec.Cmd
+	proc          Process
 	done          chan struct{}
 	stopRequested bool
 }
@@ -67,7 +65,13 @@ type managedTask struct {
 // TaskManager owns background processes and their output files for one coding
 // session. Tasks run in separate process groups, survive across turns, and are
 // stopped and removed when the session closes.
+//
+// Commands are launched through the session's ExecOps, the same seam the
+// foreground bash tool uses, so a backend cannot be bypassed by asking for a
+// background task.
 type TaskManager struct {
+	ops ExecOps
+
 	mu sync.Mutex
 
 	counter      int
@@ -78,9 +82,11 @@ type TaskManager struct {
 	nextListener int
 }
 
-// NewTaskManager returns an empty session-scoped task manager.
-func NewTaskManager() *TaskManager {
+// NewTaskManager returns an empty session-scoped task manager that launches its
+// commands through ops.
+func NewTaskManager(ops ExecOps) *TaskManager {
 	return &TaskManager{
+		ops:       ops,
 		tasks:     make(map[string]*managedTask),
 		listeners: make(map[int]func(TaskState)),
 	}
@@ -118,12 +124,8 @@ func (m *TaskManager) Start(command, description, dir string) (TaskInfo, error) 
 		return TaskInfo{}, fmt.Errorf("create task output: %w", err)
 	}
 
-	cmd := exec.Command("bash", "-c", command)
-	cmd.Dir = dir
-	configureProcessGroup(cmd)
-	cmd.Stdout = output
-	cmd.Stderr = output
-	if err := cmd.Start(); err != nil {
+	proc, err := m.ops.Start(command, dir, output)
+	if err != nil {
 		_ = output.Close()
 		_ = os.Remove(info.OutputPath)
 		return TaskInfo{}, err
@@ -131,14 +133,14 @@ func (m *TaskManager) Start(command, description, dir string) (TaskInfo, error) 
 
 	task := &managedTask{
 		state: TaskState{TaskInfo: info, Status: TaskRunning},
-		cmd:   cmd,
+		proc:  proc,
 		done:  make(chan struct{}),
 	}
 	m.mu.Lock()
 	if m.closed {
 		m.mu.Unlock()
-		_ = terminateProcessGroup(cmd, syscall.SIGKILL)
-		_ = cmd.Wait()
+		_ = proc.Kill()
+		_, _ = proc.Wait()
 		_ = output.Close()
 		_ = os.Remove(info.OutputPath)
 		return TaskInfo{}, errors.New("task manager is closed")
@@ -155,16 +157,8 @@ func (m *TaskManager) Start(command, description, dir string) (TaskInfo, error) 
 }
 
 func (m *TaskManager) wait(task *managedTask, output *os.File) {
-	err := task.cmd.Wait()
+	exitCode, _ := task.proc.Wait()
 	_ = output.Close()
-
-	exitCode := 0
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
-		exitCode = exitErr.ExitCode()
-	} else if err != nil {
-		exitCode = -1
-	}
 
 	m.mu.Lock()
 	status := TaskSucceeded
@@ -206,14 +200,14 @@ func (m *TaskManager) Stop(id string) error {
 	task.stopRequested = true
 	m.mu.Unlock()
 
-	if err := terminateProcessGroup(task.cmd, syscall.SIGTERM); err != nil {
+	if err := task.proc.Stop(); err != nil {
 		return err
 	}
 	select {
 	case <-task.done:
 		return nil
 	case <-time.After(gracefulStopDelay):
-		return terminateProcessGroup(task.cmd, syscall.SIGKILL)
+		return task.proc.Kill()
 	}
 }
 
