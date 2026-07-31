@@ -56,6 +56,7 @@ process.once('SIGINT', () => app.quit())
 process.once('SIGTERM', () => app.quit())
 
 async function start(): Promise<void> {
+  applyDevelopmentDockIcon()
   registerIPC()
   const desktop = await startSidecar()
   await session.defaultSession.cookies.set({
@@ -73,6 +74,22 @@ async function start(): Promise<void> {
     rendererURL = await startRendererDevServer(desktop.url)
   }
   createWindow(rendererURL)
+}
+
+/**
+ * A packaged build takes its Dock icon from the bundle that electron-builder
+ * assembles out of build/appicon.png. An unpackaged `electron .` has no bundle,
+ * so it shows Electron's own icon unless the same art is set at runtime.
+ */
+function applyDevelopmentDockIcon(): void {
+  if (app.isPackaged || process.platform !== 'darwin' || !app.dock) return
+  const icon = path.resolve(__dirname, '../build/appicon.png')
+  try {
+    app.dock.setIcon(icon)
+  } catch (error) {
+    // Cosmetic only: a missing or unreadable icon must not stop startup.
+    console.warn(`[desktop] could not set the development dock icon`, error)
+  }
 }
 
 function createWindow(url: string): void {
