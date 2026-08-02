@@ -698,7 +698,7 @@ test('Coding API startup retries recover the Composer automatically', async ({ p
   ).toBeGreaterThanOrEqual(3)
 })
 
-test('approval keeps command review compact and actions balanced', async ({ page }) => {
+test('approval replaces the Composer with a complete command review', async ({ page }) => {
   const command = [
     "python3 - <<'EOF'",
     'def ratio(a, b):',
@@ -726,6 +726,15 @@ test('approval keeps command review compact and actions balanced', async ({ page
         startedAt: '2026-07-30T12:00:00Z',
       },
       {
+        type: 'tool_start',
+        id: 'approval-tool',
+        tool: 'bash',
+        args: {
+          command,
+          description: 'Inspect interface contrast',
+        },
+      },
+      {
         type: 'approval_request',
         id: 'approval-layout',
         summary: "bash: python3 - <<'EOF' …",
@@ -736,18 +745,41 @@ test('approval keeps command review compact and actions balanced', async ({ page
     ],
   })
 
-  const approval = page.getByTestId('approval')
+  const transcript = page.getByTestId('conversation-transcript')
+  const composer = page.getByTestId('composer')
+  const approval = composer.getByTestId('approval')
   const deny = approval.getByRole('button', { name: 'Deny' })
   const allow = approval.getByRole('button', { name: 'Allow once' })
+  const input = composer.locator('textarea')
   await expect(approval).toBeVisible()
-  await expect(approval).toHaveCSS('border-radius', '8px')
+  await expect(composer).toBeVisible()
+  await expect(transcript.getByTestId('approval')).toHaveCount(0)
+  await expect(input).toBeHidden()
+  await expect(input).toBeDisabled()
+  await expect(input).toHaveAttribute('placeholder', 'Resolve the approval above to continue…')
+  await expect(approval).toHaveCSS('border-radius', '24px')
+  await expect(approval.getByText('Terminal', { exact: true })).toBeVisible()
+  await expect(approval.getByRole('heading', { name: 'Allow this command to run?' })).toBeVisible()
+  await expect(approval.getByText('17 commands', { exact: true })).toBeVisible()
+  await expect(approval.locator('pre')).toContainText(command)
   await expect
     .poll(() =>
       approval.locator('pre').evaluate((element) => parseFloat(getComputedStyle(element).maxHeight)),
     )
-    .toBeLessThanOrEqual(176)
-  await expect.poll(() => deny.evaluate((element) => element.getBoundingClientRect().height)).toBe(30)
-  await expect.poll(() => allow.evaluate((element) => element.getBoundingClientRect().height)).toBe(30)
+    .toBeLessThanOrEqual(144)
+  await expect
+    .poll(() => deny.evaluate((element) => element.getBoundingClientRect().height))
+    .toBeGreaterThanOrEqual(32)
+  await expect
+    .poll(() => allow.evaluate((element) => element.getBoundingClientRect().height))
+    .toBeGreaterThanOrEqual(32)
+  const desktopApprovalBox = await approval.boundingBox()
+  const transcriptBox = await transcript.boundingBox()
+  expect(desktopApprovalBox).not.toBeNull()
+  expect(transcriptBox).not.toBeNull()
+  expect(desktopApprovalBox!.y).toBeGreaterThanOrEqual(
+    transcriptBox!.y + transcriptBox!.height,
+  )
 
   await page.setViewportSize({ width: 500, height: 800 })
   const denyBox = await deny.boundingBox()
@@ -757,11 +789,16 @@ test('approval keeps command review compact and actions balanced', async ({ page
   expect(allowBox).not.toBeNull()
   expect(approvalBox).not.toBeNull()
   expect(denyBox!.y).toBeCloseTo(allowBox!.y, 1)
-  expect(allowBox!.x + allowBox!.width).toBeLessThan(approvalBox!.x + approvalBox!.width)
+  expect(allowBox!.x + allowBox!.width).toBeLessThanOrEqual(
+    approvalBox!.x + approvalBox!.width,
+  )
   expect(denyBox!.width + allowBox!.width).toBeLessThan(approvalBox!.width * 0.6)
 
   await allow.click()
   await expect(approval).toHaveCount(0)
+  await expect(input).toBeVisible()
+  await expect(input).toBeEnabled()
+  await expect(input).toHaveAttribute('placeholder', 'Guide the current run…')
   await expect.poll(
     () =>
       requests.find(
@@ -770,6 +807,154 @@ test('approval keeps command review compact and actions balanced', async ({ page
           request.path === '/api/sessions/test-session/approvals/approval-layout',
       )?.body,
   ).toEqual({ choice: 'allow_once' })
+})
+
+test('right-panel approval replaces its Composer without duplicating in the transcript', async ({ page }) => {
+  const command = 'ls -la coding/client/src/components'
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    secondarySession: true,
+    secondaryHistoryEvents: [
+      {
+        type: 'user_message',
+        id: 'secondary-approval-user',
+        text: 'Inspect component files',
+        images: [],
+      },
+      {
+        type: 'run_start',
+        id: 'secondary-approval-run',
+        startedAt: '2026-07-30T12:00:00Z',
+      },
+      {
+        type: 'tool_start',
+        id: 'secondary-approval-tool',
+        tool: 'bash',
+        args: { command, description: 'List component files' },
+      },
+      {
+        type: 'approval_request',
+        id: 'secondary-approval',
+        summary: `bash: ${command}`,
+        reason: 'shell commands require approval',
+        command,
+        commandSegments: 1,
+      },
+    ],
+  })
+
+  await page.getByRole('button', { name: 'Actions for Secondary task' }).click()
+  await page.getByRole('menuitem', { name: 'Open in right panel' }).click()
+
+  const conversation = page
+    .getByTestId('workbench-panel')
+    .getByTestId('workbench-conversation')
+  const transcript = conversation.getByTestId('workbench-conversation-transcript')
+  const composer = conversation.getByTestId('composer')
+  const approval = composer.getByTestId('approval')
+  await expect(approval).toBeVisible()
+  await expect(approval.locator('pre')).toHaveText(command)
+  await expect(transcript.getByTestId('approval')).toHaveCount(0)
+  await expect(composer).toBeVisible()
+  await expect(composer.locator('textarea')).toBeHidden()
+  await approval.getByRole('button', { name: 'Deny' }).click()
+  await expect(approval).toHaveCount(0)
+  await expect(composer.locator('textarea')).toBeVisible()
+  await expect.poll(
+    () =>
+      requests.find(
+        (request) =>
+          request.method === 'POST' &&
+          request.path === '/api/sessions/secondary-session/approvals/secondary-approval',
+      )?.body,
+  ).toEqual({ choice: 'deny' })
+})
+
+test('guided questions replace the Composer with a clear selected state and progress', async ({ page }) => {
+  const questions = [
+    {
+      header: 'Checks',
+      question: 'Which checks should run?',
+      multiSelect: true,
+      options: [
+        { label: 'Lint', description: 'Catch static analysis issues' },
+        { label: 'UI tests', description: 'Exercise the desktop workflow' },
+      ],
+    },
+    {
+      header: 'Location',
+      question: 'Where should the prompt appear?',
+      options: [
+        { label: 'Composer', description: 'Replace the input temporarily' },
+        { label: 'Transcript', description: 'Place it beside the messages' },
+      ],
+    },
+    {
+      header: 'Confirm',
+      question: 'Apply this direction?',
+      options: [
+        { label: 'Apply', description: 'Continue with the selected direction' },
+        { label: 'Revisit', description: 'Return to the previous choices' },
+      ],
+    },
+  ]
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    historyEvents: [
+      {
+        type: 'user_message',
+        id: 'question-user',
+        text: 'Polish the guided question UI',
+        images: [],
+      },
+      {
+        type: 'run_start',
+        id: 'question-run',
+        startedAt: '2026-07-30T12:00:00Z',
+      },
+      {
+        type: 'question_request',
+        id: 'question-layout',
+        questions,
+      },
+    ],
+  })
+
+  const composer = page.getByTestId('composer')
+  const question = composer.getByTestId('question')
+  const input = composer.locator('textarea')
+  await expect(question).toBeVisible()
+  await expect(question).toHaveCSS('border-radius', '24px')
+  await expect(input).toBeHidden()
+  await expect(question.getByText('1 / 3', { exact: true })).toBeVisible()
+
+  const lint = question.getByRole('button', { name: /Lint/ })
+  await lint.click()
+  await expect(lint).toHaveAttribute('aria-pressed', 'true')
+  await question.getByRole('button', { name: 'Next question' }).click()
+  await expect(question.getByText('2 / 3', { exact: true })).toBeVisible()
+
+  await question.getByRole('button', { name: /Composer/ }).click()
+  await expect(question.getByText('3 / 3', { exact: true })).toBeVisible()
+  await question.getByRole('button', { name: /Apply/ }).click()
+  await question.getByRole('button', { name: 'Send answer' }).click()
+
+  await expect(question).toHaveCount(0)
+  await expect(input).toBeVisible()
+  await expect.poll(
+    () =>
+      requests.find(
+        (request) =>
+          request.method === 'POST' &&
+          request.path === '/api/sessions/test-session/questions/question-layout',
+      )?.body,
+  ).toEqual({
+    answers: [
+      { question: questions[0].question, values: ['Lint'] },
+      { question: questions[1].question, values: ['Composer'] },
+      { question: questions[2].question, values: ['Apply'] },
+    ],
+  })
 })
 
 test('workbench opens before a preview and launches Browser without hiding Chat', async ({
