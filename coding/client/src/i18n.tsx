@@ -228,9 +228,12 @@ const en = {
   'settings.languageDescription': 'Language used by the application interface.',
 
   'approval.couldNotSend': 'Could not send decision',
-  'approval.required': 'Approval required',
+  'approval.terminal': 'Terminal',
+  'approval.permission': 'Permission',
+  'approval.allowCommandQuestion': 'Allow this command to run?',
+  'approval.allowActionQuestion': 'Allow this action?',
   'approval.noDetails': 'No details provided',
-  'approval.compoundCommand': '{count} commands · Review before allowing',
+  'approval.compoundCommand': '{count} commands',
   'approval.deny': 'Deny',
   'approval.allowOnce': 'Allow once',
 
@@ -788,9 +791,12 @@ const zh: Record<TranslationKey, string> = {
   'settings.languageDescription': '设置应用界面语言',
 
   'approval.couldNotSend': '无法提交审批决定',
-  'approval.required': '需要审批',
+  'approval.terminal': '终端',
+  'approval.permission': '权限请求',
+  'approval.allowCommandQuestion': '是否允许执行以下命令？',
+  'approval.allowActionQuestion': '是否允许执行此操作？',
   'approval.noDetails': '未提供详细信息',
-  'approval.compoundCommand': '{count} 条命令 · 允许前请确认',
+  'approval.compoundCommand': '{count} 条命令',
   'approval.deny': '拒绝',
   'approval.allowOnce': '允许一次',
 
