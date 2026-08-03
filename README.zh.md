@@ -132,12 +132,13 @@ macOS 安装包。具体流程参见 [RELEASING.md](RELEASING.md)。
 
 内置适配器实现了:
 
+- OpenAI Responses
 - OpenAI 兼容的 Chat Completions
 - Anthropic 兼容的 Messages
 
 模型目录为 DeepSeek、MiniMax、小米 MiMo、Z.AI、Moonshot AI、Kimi、Anthropic、
 OpenCode 等兼容提供方提供了明确的兼容性元数据。目录中存在并不保证每个模型都经过
-实测;两个通信适配器都有自动化的 mock server 测试覆盖。
+实测;所有内置通信适配器都有自动化的 mock server 测试覆盖。
 
 ## 项目状态
 
