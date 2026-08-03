@@ -510,7 +510,7 @@ func TestBuiltInMoonshotKimiThinkingMetadata(t *testing.T) {
 }
 
 func TestBuiltInZAIToggleThinkingMetadata(t *testing.T) {
-	modelIDs := []string{"glm-4.5-air", "glm-4.7", "glm-5-turbo", "glm-5.1", "glm-5v-turbo"}
+	modelIDs := []string{"glm-4.7", "glm-5-turbo"}
 	want := []ModelThinkingLevel{ModelThinkingOff, ModelThinkingHigh}
 
 	for _, provider := range []string{"zai", "zai-coding-cn"} {

@@ -38,15 +38,15 @@ The current catalog contains the following provider IDs. Counts come from `llm/c
 | `anthropic` | 13 | Anthropic Messages | `ANTHROPIC_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` |
 | `cerebras` | 3 | OpenAI Completions | `CEREBRAS_API_KEY` |
 | `deepseek` | 4 | OpenAI Completions | `DEEPSEEK_API_KEY` |
-| `fireworks` | 16 | Anthropic Messages | `FIREWORKS_API_KEY` |
+| `fireworks` | 17 | Anthropic Messages | `FIREWORKS_API_KEY` |
 | `github-copilot` | 18 | Both implemented protocols | `COPILOT_GITHUB_TOKEN` |
 | `google` | 20 | Google Generative AI | `GEMINI_API_KEY` |
 | `groq` | 7 | OpenAI Completions | `GROQ_API_KEY` |
-| `huggingface` | 51 | OpenAI Completions | `HF_TOKEN` |
+| `huggingface` | 54 | OpenAI Completions | `HF_TOKEN` |
 | `kimi-coding` | 4 | Anthropic Messages | `KIMI_API_KEY` |
 | `minimax` | 7 | Anthropic Messages | `MINIMAX_API_KEY` |
 | `minimax-cn` | 7 | Anthropic Messages | `MINIMAX_CN_API_KEY` |
-| `mistral` | 21 | Mistral Conversations | `MISTRAL_API_KEY` |
+| `mistral` | 22 | Mistral Conversations | `MISTRAL_API_KEY` |
 | `moonshotai` | 10 | OpenAI Completions | `MOONSHOT_API_KEY` |
 | `moonshotai-cn` | 10 | OpenAI Completions | `MOONSHOT_API_KEY` |
 | `nvidia` | 57 | OpenAI Completions | `NVIDIA_API_KEY` |
@@ -56,11 +56,11 @@ The current catalog contains the following provider IDs. Counts come from `llm/c
 | `together` | 17 | OpenAI Completions | `TOGETHER_API_KEY` |
 | `xai` | 5 | OpenAI Completions | `XAI_API_KEY` |
 | `xiaomi` | 3 | OpenAI Completions | `XIAOMI_API_KEY` or `MIMO_API_KEY` |
-| `xiaomi-token-plan-ams` | 3 | OpenAI Completions | `XIAOMI_TOKEN_PLAN_AMS_API_KEY` |
-| `xiaomi-token-plan-cn` | 3 | OpenAI Completions | `XIAOMI_TOKEN_PLAN_CN_API_KEY` |
-| `xiaomi-token-plan-sgp` | 3 | OpenAI Completions | `XIAOMI_TOKEN_PLAN_SGP_API_KEY` |
-| `zai` | 6 | OpenAI Completions | `ZAI_API_KEY` |
-| `zai-coding-cn` | 6 | OpenAI Completions | `ZAI_CODING_CN_API_KEY` |
+| `xiaomi-token-plan-ams` | 2 | OpenAI Completions | `XIAOMI_TOKEN_PLAN_AMS_API_KEY` |
+| `xiaomi-token-plan-cn` | 2 | OpenAI Completions | `XIAOMI_TOKEN_PLAN_CN_API_KEY` |
+| `xiaomi-token-plan-sgp` | 2 | OpenAI Completions | `XIAOMI_TOKEN_PLAN_SGP_API_KEY` |
+| `zai` | 4 | OpenAI Completions | `ZAI_API_KEY` |
+| `zai-coding-cn` | 4 | OpenAI Completions | `ZAI_CODING_CN_API_KEY` |
 
 Built-in credential configuration is defined in `llm/keys.go`. At runtime, call
 `APIKeyEnvVars(provider)` to query the variable names for a provider.
