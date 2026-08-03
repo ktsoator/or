@@ -12,7 +12,7 @@ func TestNormalizeZAIToggleThinking(t *testing.T) {
 		ReasoningOptions: []sourceReasoningOption{{Type: "toggle"}},
 	}
 	wantLevels := unsupportedThinkingLevels("minimal", "low", "medium")
-	modelIDs := []string{"glm-4.5-air", "glm-4.7", "glm-5-turbo", "glm-5.1", "glm-5v-turbo"}
+	modelIDs := []string{"glm-4.7", "glm-5-turbo"}
 
 	for provider := range zaiProviders {
 		for _, modelID := range modelIDs {

@@ -356,7 +356,7 @@ func TestBuildParamsProviderThinkingWireMatrix(t *testing.T) {
 		{
 			name:     "zai glm toggle",
 			provider: "zai",
-			modelID:  "glm-5.1",
+			modelID:  "glm-4.7",
 			cases: []thinkingWireCase{
 				{name: "unset", want: map[string]any{}},
 				{name: "off", reasoning: llm.ModelThinkingOff, want: map[string]any{"thinking": disabled}},

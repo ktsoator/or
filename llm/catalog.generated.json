@@ -532,6 +532,25 @@
     "maxTokens": 384000
   },
   {
+    "id": "accounts/fireworks/models/deepseek-v4-flash-0731",
+    "name": "DeepSeek V4 Flash 0731",
+    "provider": "fireworks",
+    "protocol": "anthropic-messages",
+    "baseUrl": "https://api.fireworks.ai/inference",
+    "reasoning": true,
+    "input": [
+      "text"
+    ],
+    "cost": {
+      "input": 0.14,
+      "output": 0.28,
+      "cacheRead": 0.028,
+      "cacheWrite": 0
+    },
+    "contextWindow": 1000000,
+    "maxTokens": 384000
+  },
+  {
     "id": "accounts/fireworks/models/deepseek-v4-pro",
     "name": "DeepSeek V4 Pro",
     "provider": "fireworks",
@@ -2965,6 +2984,92 @@
     }
   },
   {
+    "id": "tencent/Hy3",
+    "name": "Hy3",
+    "provider": "huggingface",
+    "protocol": "openai-completions",
+    "baseUrl": "https://router.huggingface.co/v1",
+    "reasoning": true,
+    "thinkingLevelMap": {
+      "high": "high",
+      "low": "low",
+      "max": null,
+      "medium": null,
+      "minimal": null,
+      "off": "none",
+      "xhigh": null
+    },
+    "input": [
+      "text"
+    ],
+    "cost": {
+      "input": 0.14,
+      "output": 0.58,
+      "cacheRead": 0,
+      "cacheWrite": 0
+    },
+    "contextWindow": 262144,
+    "maxTokens": 64000,
+    "compat": {
+      "supportsDeveloperRole": false
+    }
+  },
+  {
+    "id": "thinkingmachines/Inkling",
+    "name": "Inkling",
+    "provider": "huggingface",
+    "protocol": "openai-completions",
+    "baseUrl": "https://router.huggingface.co/v1",
+    "reasoning": true,
+    "thinkingLevelMap": {
+      "high": "high",
+      "low": "low",
+      "max": null,
+      "medium": "medium",
+      "minimal": null,
+      "off": null,
+      "xhigh": null
+    },
+    "input": [
+      "text",
+      "image"
+    ],
+    "cost": {
+      "input": 1,
+      "output": 4.05,
+      "cacheRead": 0,
+      "cacheWrite": 0
+    },
+    "contextWindow": 1048576,
+    "maxTokens": 1048576,
+    "compat": {
+      "supportsDeveloperRole": false
+    }
+  },
+  {
+    "id": "thinkingmachines/Inkling-Small",
+    "name": "Inkling Small",
+    "provider": "huggingface",
+    "protocol": "openai-completions",
+    "baseUrl": "https://router.huggingface.co/v1",
+    "reasoning": true,
+    "input": [
+      "text",
+      "image"
+    ],
+    "cost": {
+      "input": 0.5,
+      "output": 1.2,
+      "cacheRead": 0,
+      "cacheWrite": 0
+    },
+    "contextWindow": 524288,
+    "maxTokens": 1048576,
+    "compat": {
+      "supportsDeveloperRole": false
+    }
+  },
+  {
     "id": "zai-org/GLM-4.5",
     "name": "GLM-4.5",
     "provider": "huggingface",
@@ -3319,8 +3424,8 @@
     "cost": {
       "input": 0.3,
       "output": 1.2,
-      "cacheRead": 0,
-      "cacheWrite": 0
+      "cacheRead": 0.03,
+      "cacheWrite": 0.375
     },
     "contextWindow": 204800,
     "maxTokens": 131072
@@ -3464,8 +3569,8 @@
     "cost": {
       "input": 0.3,
       "output": 1.2,
-      "cacheRead": 0,
-      "cacheWrite": 0
+      "cacheRead": 0.03,
+      "cacheWrite": 0.375
     },
     "contextWindow": 204800,
     "maxTokens": 131072
@@ -3986,6 +4091,25 @@
     },
     "contextWindow": 128000,
     "maxTokens": 128000
+  },
+  {
+    "id": "voxtral-small-latest",
+    "name": "Voxtral Small (latest)",
+    "provider": "mistral",
+    "protocol": "mistral-conversations",
+    "baseUrl": "https://api.mistral.ai",
+    "reasoning": false,
+    "input": [
+      "text"
+    ],
+    "cost": {
+      "input": 0.1,
+      "output": 0.3,
+      "cacheRead": 0,
+      "cacheWrite": 0
+    },
+    "contextWindow": 32000,
+    "maxTokens": 32000
   },
   {
     "id": "kimi-k2-0711-preview",
@@ -6201,10 +6325,10 @@
       "image"
     ],
     "cost": {
-      "input": 1,
-      "output": 6,
-      "cacheRead": 0.1,
-      "cacheWrite": 1.25
+      "input": 0.2,
+      "output": 1.2,
+      "cacheRead": 0.02,
+      "cacheWrite": 0.25
     },
     "contextWindow": 1050000,
     "maxTokens": 128000
@@ -6241,10 +6365,10 @@
       "image"
     ],
     "cost": {
-      "input": 2.5,
-      "output": 15,
-      "cacheRead": 0.25,
-      "cacheWrite": 3.125
+      "input": 2,
+      "output": 12,
+      "cacheRead": 0.2,
+      "cacheWrite": 2.5
     },
     "contextWindow": 1050000,
     "maxTokens": 128000
@@ -6631,7 +6755,7 @@
   },
   {
     "id": "deepseek-v4-flash",
-    "name": "DeepSeek V4 Flash",
+    "name": "DeepSeek V4 Flash 0731",
     "provider": "opencode",
     "protocol": "openai-completions",
     "baseUrl": "https://opencode.ai/zen/v1",
@@ -6664,7 +6788,7 @@
   },
   {
     "id": "deepseek-v4-flash-free",
-    "name": "DeepSeek V4 Flash Free",
+    "name": "DeepSeek V4 Flash Free (New)",
     "provider": "opencode",
     "protocol": "openai-completions",
     "baseUrl": "https://opencode.ai/zen/v1",
@@ -7251,7 +7375,7 @@
   },
   {
     "id": "deepseek-v4-flash",
-    "name": "DeepSeek V4 Flash",
+    "name": "DeepSeek V4 Flash (New)",
     "provider": "opencode-go",
     "protocol": "openai-completions",
     "baseUrl": "https://opencode.ai/zen/go/v1",
@@ -7471,7 +7595,7 @@
   },
   {
     "id": "kimi-k3",
-    "name": "Kimi K3 (2x usage)",
+    "name": "Kimi K3",
     "provider": "opencode-go",
     "protocol": "openai-completions",
     "baseUrl": "https://opencode.ai/zen/go/v1",
@@ -7856,7 +7980,7 @@
     "cost": {
       "input": 1.25,
       "output": 3.75,
-      "cacheRead": 0,
+      "cacheRead": 0.125,
       "cacheWrite": 0
     },
     "contextWindow": 1000000,
@@ -8594,36 +8718,6 @@
     }
   },
   {
-    "id": "glm-4.5-air",
-    "name": "GLM-4.5-Air",
-    "provider": "zai",
-    "protocol": "openai-completions",
-    "baseUrl": "https://api.z.ai/api/coding/paas/v4",
-    "reasoning": true,
-    "thinkingLevelMap": {
-      "low": null,
-      "medium": null,
-      "minimal": null
-    },
-    "input": [
-      "text"
-    ],
-    "cost": {
-      "input": 0,
-      "output": 0,
-      "cacheRead": 0,
-      "cacheWrite": 0
-    },
-    "contextWindow": 131072,
-    "maxTokens": 98304,
-    "compat": {
-      "supportsDeveloperRole": false,
-      "supportsReasoningEffort": false,
-      "thinkingFormat": "zai",
-      "zaiToolStream": true
-    }
-  },
-  {
     "id": "glm-4.7",
     "name": "GLM-4.7",
     "provider": "zai",
@@ -8684,36 +8778,6 @@
     }
   },
   {
-    "id": "glm-5.1",
-    "name": "GLM-5.1",
-    "provider": "zai",
-    "protocol": "openai-completions",
-    "baseUrl": "https://api.z.ai/api/coding/paas/v4",
-    "reasoning": true,
-    "thinkingLevelMap": {
-      "low": null,
-      "medium": null,
-      "minimal": null
-    },
-    "input": [
-      "text"
-    ],
-    "cost": {
-      "input": 0,
-      "output": 0,
-      "cacheRead": 0,
-      "cacheWrite": 0
-    },
-    "contextWindow": 200000,
-    "maxTokens": 131072,
-    "compat": {
-      "supportsDeveloperRole": false,
-      "supportsReasoningEffort": false,
-      "thinkingFormat": "zai",
-      "zaiToolStream": true
-    }
-  },
-  {
     "id": "glm-5.2",
     "name": "GLM-5.2",
     "provider": "zai",
@@ -8746,48 +8810,12 @@
     }
   },
   {
-    "id": "glm-5v-turbo",
-    "name": "GLM-5V-Turbo",
+    "id": "glm-5.2-highspeed",
+    "name": "GLM-5.2 Highspeed",
     "provider": "zai",
     "protocol": "openai-completions",
     "baseUrl": "https://api.z.ai/api/coding/paas/v4",
     "reasoning": true,
-    "thinkingLevelMap": {
-      "low": null,
-      "medium": null,
-      "minimal": null
-    },
-    "input": [
-      "text",
-      "image"
-    ],
-    "cost": {
-      "input": 0,
-      "output": 0,
-      "cacheRead": 0,
-      "cacheWrite": 0
-    },
-    "contextWindow": 200000,
-    "maxTokens": 131072,
-    "compat": {
-      "supportsDeveloperRole": false,
-      "supportsReasoningEffort": false,
-      "thinkingFormat": "zai",
-      "zaiToolStream": true
-    }
-  },
-  {
-    "id": "glm-4.5-air",
-    "name": "GLM-4.5-Air",
-    "provider": "zai-coding-cn",
-    "protocol": "openai-completions",
-    "baseUrl": "https://open.bigmodel.cn/api/coding/paas/v4",
-    "reasoning": true,
-    "thinkingLevelMap": {
-      "low": null,
-      "medium": null,
-      "minimal": null
-    },
     "input": [
       "text"
     ],
@@ -8797,8 +8825,8 @@
       "cacheRead": 0,
       "cacheWrite": 0
     },
-    "contextWindow": 131072,
-    "maxTokens": 98304,
+    "contextWindow": 1000000,
+    "maxTokens": 131072,
     "compat": {
       "supportsDeveloperRole": false,
       "supportsReasoningEffort": false,
@@ -8867,36 +8895,6 @@
     }
   },
   {
-    "id": "glm-5.1",
-    "name": "GLM-5.1",
-    "provider": "zai-coding-cn",
-    "protocol": "openai-completions",
-    "baseUrl": "https://open.bigmodel.cn/api/coding/paas/v4",
-    "reasoning": true,
-    "thinkingLevelMap": {
-      "low": null,
-      "medium": null,
-      "minimal": null
-    },
-    "input": [
-      "text"
-    ],
-    "cost": {
-      "input": 0,
-      "output": 0,
-      "cacheRead": 0,
-      "cacheWrite": 0
-    },
-    "contextWindow": 200000,
-    "maxTokens": 131072,
-    "compat": {
-      "supportsDeveloperRole": false,
-      "supportsReasoningEffort": false,
-      "thinkingFormat": "zai",
-      "zaiToolStream": true
-    }
-  },
-  {
     "id": "glm-5.2",
     "name": "GLM-5.2",
     "provider": "zai-coding-cn",
@@ -8929,20 +8927,14 @@
     }
   },
   {
-    "id": "glm-5v-turbo",
-    "name": "GLM-5V-Turbo",
+    "id": "glm-5.2-highspeed",
+    "name": "GLM-5.2 Highspeed",
     "provider": "zai-coding-cn",
     "protocol": "openai-completions",
     "baseUrl": "https://open.bigmodel.cn/api/coding/paas/v4",
     "reasoning": true,
-    "thinkingLevelMap": {
-      "low": null,
-      "medium": null,
-      "minimal": null
-    },
     "input": [
-      "text",
-      "image"
+      "text"
     ],
     "cost": {
       "input": 0,
@@ -8950,7 +8942,7 @@
       "cacheRead": 0,
       "cacheWrite": 0
     },
-    "contextWindow": 200000,
+    "contextWindow": 1000000,
     "maxTokens": 131072,
     "compat": {
       "supportsDeveloperRole": false,

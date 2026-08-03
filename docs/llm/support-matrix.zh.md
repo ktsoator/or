@@ -2,17 +2,17 @@
 
 内置模型清单和协议实现是两套独立信息。`GetModels` 返回清单中收录的模型；只有模型的 `Protocol` 已在当前进程注册协议适配器时，请求才能被路由。使用 `GetRunnableModels` 构建运行时模型列表。
 
-<!-- catalog-stats: total=370 runnable=299 openai-completions=227 anthropic-messages=72 openai-responses=30 google-generative-ai=20 mistral-conversations=21 -->
+<!-- catalog-stats: total=371 runnable=299 openai-completions=226 anthropic-messages=73 openai-responses=30 google-generative-ai=20 mistral-conversations=22 -->
 
 ## 协议状态
 
 | 协议 | 收录模型数 | 状态 | 注册方式 | 说明 |
 |---|---:|---|---|---|
-| `openai-completions` | 230 | 已实现 | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Chat Completions 及兼容服务 |
-| `anthropic-messages` | 72 | 已实现 | `_ "github.com/ktsoator/or/llm/anthropic"` | Anthropic Messages 及兼容服务 |
+| `openai-completions` | 226 | 已实现 | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Chat Completions 及兼容服务 |
+| `anthropic-messages` | 73 | 已实现 | `_ "github.com/ktsoator/or/llm/anthropic"` | Anthropic Messages 及兼容服务 |
 | `openai-responses` | 30 | 仅收录 | 无 | 当前没有协议适配器；内置模型清单中的 OpenAI 模型使用该协议 |
 | `google-generative-ai` | 20 | 仅收录 | 无 | 当前没有协议适配器 |
-| `mistral-conversations` | 21 | 仅收录 | 无 | 当前没有协议适配器 |
+| `mistral-conversations` | 22 | 仅收录 | 无 | 当前没有协议适配器 |
 
 导入 `github.com/ktsoator/or/llm/all` 会注册两个已实现协议。它不会为三个仅收录协议增加实现。
 
@@ -38,15 +38,15 @@ runnable := llm.GetRunnableModels("openai") // 当前为空
 | `anthropic` | 13 | Anthropic Messages | `ANTHROPIC_OAUTH_TOKEN` 或 `ANTHROPIC_API_KEY` |
 | `cerebras` | 3 | OpenAI Completions | `CEREBRAS_API_KEY` |
 | `deepseek` | 4 | OpenAI Completions | `DEEPSEEK_API_KEY` |
-| `fireworks` | 16 | Anthropic Messages | `FIREWORKS_API_KEY` |
+| `fireworks` | 17 | Anthropic Messages | `FIREWORKS_API_KEY` |
 | `github-copilot` | 18 | 两种已实现协议 | `COPILOT_GITHUB_TOKEN` |
 | `google` | 20 | Google Generative AI | `GEMINI_API_KEY` |
 | `groq` | 7 | OpenAI Completions | `GROQ_API_KEY` |
-| `huggingface` | 51 | OpenAI Completions | `HF_TOKEN` |
+| `huggingface` | 54 | OpenAI Completions | `HF_TOKEN` |
 | `kimi-coding` | 4 | Anthropic Messages | `KIMI_API_KEY` |
 | `minimax` | 7 | Anthropic Messages | `MINIMAX_API_KEY` |
 | `minimax-cn` | 7 | Anthropic Messages | `MINIMAX_CN_API_KEY` |
-| `mistral` | 21 | Mistral Conversations | `MISTRAL_API_KEY` |
+| `mistral` | 22 | Mistral Conversations | `MISTRAL_API_KEY` |
 | `moonshotai` | 10 | OpenAI Completions | `MOONSHOT_API_KEY` |
 | `moonshotai-cn` | 10 | OpenAI Completions | `MOONSHOT_API_KEY` |
 | `nvidia` | 57 | OpenAI Completions | `NVIDIA_API_KEY` |
@@ -56,11 +56,11 @@ runnable := llm.GetRunnableModels("openai") // 当前为空
 | `together` | 17 | OpenAI Completions | `TOGETHER_API_KEY` |
 | `xai` | 5 | OpenAI Completions | `XAI_API_KEY` |
 | `xiaomi` | 3 | OpenAI Completions | `XIAOMI_API_KEY` 或 `MIMO_API_KEY` |
-| `xiaomi-token-plan-ams` | 3 | OpenAI Completions | `XIAOMI_TOKEN_PLAN_AMS_API_KEY` |
-| `xiaomi-token-plan-cn` | 3 | OpenAI Completions | `XIAOMI_TOKEN_PLAN_CN_API_KEY` |
-| `xiaomi-token-plan-sgp` | 3 | OpenAI Completions | `XIAOMI_TOKEN_PLAN_SGP_API_KEY` |
-| `zai` | 6 | OpenAI Completions | `ZAI_API_KEY` |
-| `zai-coding-cn` | 6 | OpenAI Completions | `ZAI_CODING_CN_API_KEY` |
+| `xiaomi-token-plan-ams` | 2 | OpenAI Completions | `XIAOMI_TOKEN_PLAN_AMS_API_KEY` |
+| `xiaomi-token-plan-cn` | 2 | OpenAI Completions | `XIAOMI_TOKEN_PLAN_CN_API_KEY` |
+| `xiaomi-token-plan-sgp` | 2 | OpenAI Completions | `XIAOMI_TOKEN_PLAN_SGP_API_KEY` |
+| `zai` | 4 | OpenAI Completions | `ZAI_API_KEY` |
+| `zai-coding-cn` | 4 | OpenAI Completions | `ZAI_CODING_CN_API_KEY` |
 
 各提供方使用哪些凭证环境变量，由 `llm/keys.go` 中的内置配置定义。运行时可调用 `APIKeyEnvVars(provider)` 查询指定提供方的变量名。
 
