@@ -7,7 +7,7 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/goccy/go-yaml v1.19.2
 	github.com/invopop/jsonschema v0.14.0
-	github.com/openai/openai-go/v3 v3.47.0
+	github.com/openai/openai-go/v3 v3.48.0
 	modernc.org/sqlite v1.55.0
 )
 
