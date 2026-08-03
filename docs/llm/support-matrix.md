@@ -2,17 +2,17 @@
 
 The model catalog and protocol implementations are independent. `GetModels` returns catalog entries. A request is routable only when the current process has registered an adapter for the model's `Protocol`. Use `GetRunnableModels` for runtime model lists.
 
-<!-- catalog-stats: total=370 runnable=299 openai-completions=227 anthropic-messages=72 openai-responses=30 google-generative-ai=20 mistral-conversations=21 -->
+<!-- catalog-stats: total=371 runnable=299 openai-completions=226 anthropic-messages=73 openai-responses=30 google-generative-ai=20 mistral-conversations=22 -->
 
 ## Protocol status
 
 | Protocol | Catalog models | Status | Registration | Meaning |
 |---|---:|---|---|---|
-| `openai-completions` | 230 | Implemented | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Chat Completions and compatible endpoints |
-| `anthropic-messages` | 72 | Implemented | `_ "github.com/ktsoator/or/llm/anthropic"` | Anthropic Messages and compatible endpoints |
+| `openai-completions` | 226 | Implemented | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Chat Completions and compatible endpoints |
+| `anthropic-messages` | 73 | Implemented | `_ "github.com/ktsoator/or/llm/anthropic"` | Anthropic Messages and compatible endpoints |
 | `openai-responses` | 30 | Catalog only | None | No adapter; official OpenAI catalog models use this protocol |
 | `google-generative-ai` | 20 | Catalog only | None | No adapter |
-| `mistral-conversations` | 21 | Catalog only | None | No adapter |
+| `mistral-conversations` | 22 | Catalog only | None | No adapter |
 
 Importing `github.com/ktsoator/or/llm/all` registers the two implemented protocols. It does not implement the three catalog-only protocols.
 

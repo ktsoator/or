@@ -2,17 +2,17 @@
 
 内置模型清单和协议实现是两套独立信息。`GetModels` 返回清单中收录的模型；只有模型的 `Protocol` 已在当前进程注册协议适配器时，请求才能被路由。使用 `GetRunnableModels` 构建运行时模型列表。
 
-<!-- catalog-stats: total=370 runnable=299 openai-completions=227 anthropic-messages=72 openai-responses=30 google-generative-ai=20 mistral-conversations=21 -->
+<!-- catalog-stats: total=371 runnable=299 openai-completions=226 anthropic-messages=73 openai-responses=30 google-generative-ai=20 mistral-conversations=22 -->
 
 ## 协议状态
 
 | 协议 | 收录模型数 | 状态 | 注册方式 | 说明 |
 |---|---:|---|---|---|
-| `openai-completions` | 230 | 已实现 | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Chat Completions 及兼容服务 |
-| `anthropic-messages` | 72 | 已实现 | `_ "github.com/ktsoator/or/llm/anthropic"` | Anthropic Messages 及兼容服务 |
+| `openai-completions` | 226 | 已实现 | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Chat Completions 及兼容服务 |
+| `anthropic-messages` | 73 | 已实现 | `_ "github.com/ktsoator/or/llm/anthropic"` | Anthropic Messages 及兼容服务 |
 | `openai-responses` | 30 | 仅收录 | 无 | 当前没有协议适配器；内置模型清单中的 OpenAI 模型使用该协议 |
 | `google-generative-ai` | 20 | 仅收录 | 无 | 当前没有协议适配器 |
-| `mistral-conversations` | 21 | 仅收录 | 无 | 当前没有协议适配器 |
+| `mistral-conversations` | 22 | 仅收录 | 无 | 当前没有协议适配器 |
 
 导入 `github.com/ktsoator/or/llm/all` 会注册两个已实现协议。它不会为三个仅收录协议增加实现。
 
