@@ -1,7 +1,8 @@
-package openai
+package chatcompletions
 
 import (
 	"github.com/ktsoator/or/llm"
+	"github.com/ktsoator/or/llm/openai/internal/protocolutil"
 	oai "github.com/openai/openai-go/v3"
 )
 
@@ -20,10 +21,8 @@ func (thinking resolvedThinking) enabled() bool {
 // supports. An empty request stays unspecified so the provider keeps its own
 // default instead of receiving a disable-thinking parameter.
 func resolveThinking(model llm.Model, requested llm.ModelThinkingLevel) resolvedThinking {
-	if requested == "" {
-		return resolvedThinking{}
-	}
-	return resolvedThinking{specified: true, level: llm.ClampThinkingLevel(model, requested)}
+	thinking := protocolutil.ResolveThinking(model, requested)
+	return resolvedThinking{specified: thinking.Specified, level: thinking.Level}
 }
 
 // applyThinking sets the request fields that control reasoning, dispatching on
@@ -131,25 +130,16 @@ func zaiThinkingType(enabled bool) map[string]any {
 // mappedEffort returns the provider-specific value for a level, falling back to
 // the level's own name when the model maps it to nil or omits it.
 func mappedEffort(model llm.Model, level llm.ModelThinkingLevel) string {
-	if value, ok := model.ThinkingLevelMap[level]; ok && value != nil {
-		return *value
-	}
-	return string(level)
+	return protocolutil.MappedEffort(model, level)
 }
 
 // offEffort returns the provider value for the disabled state, defaulting to
 // "none" when the model does not map "off" to a concrete value.
 func offEffort(model llm.Model) string {
-	if value, ok := model.ThinkingLevelMap[llm.ModelThinkingOff]; ok && value != nil {
-		return *value
-	}
-	return "none"
+	return protocolutil.OffEffort(model)
 }
 
 // offString returns the model's explicit "off" mapping, if any.
 func offString(model llm.Model) (string, bool) {
-	if value, ok := model.ThinkingLevelMap[llm.ModelThinkingOff]; ok && value != nil {
-		return *value, true
-	}
-	return "", false
+	return protocolutil.OffString(model)
 }

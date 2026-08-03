@@ -653,6 +653,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
           ...cur,
           id: ev.id ?? cur.id,
           name: ev.tool || cur.name,
+          args: `${typeof cur.args === 'string' ? cur.args : ''}${ev.delta ?? ''}`,
           generatedBytes: (cur.generatedBytes ?? 0) + (ev.bytes ?? 0),
         })
       } else {
@@ -662,7 +663,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
             kind: 'tool',
             id: ev.id ?? nextId(),
             name: ev.tool ?? 'tool',
-            args: undefined,
+            args: ev.delta ?? '',
             status: 'preparing',
             toolContentIndex: ev.toolContentIndex,
             generatedBytes: ev.bytes ?? 0,

@@ -20,11 +20,11 @@ response, err := llm.Complete(ctx, model, llm.Prompt("..."), options)
 | Whether a model can reason | `Model.Reasoning` (bool) |
 | Read thinking while streaming | `EventThinkingStart` / `Delta` / `End` |
 | Read thinking from the final message | `ThinkingContent` (`Thinking`, `ThinkingSignature`, `Redacted`) |
-| Control how thinking is returned (Anthropic) | `AnthropicStreamOptions.ThinkingDisplay` |
+| Control how thinking is returned | `AnthropicStreamOptions.ThinkingDisplay`, `OpenAIResponsesStreamOptions.ThinkingDisplay` |
 
 Effort only decides *how much* the model thinks. Whether the thinking text is
-returned with the response is a separate, orthogonal knob — on Anthropic it is
-controlled by `ThinkingDisplay` (see [Anthropic thinking display](#anthropic-thinking-display)).
+returned with the response is a separate, orthogonal knob on Anthropic Messages
+and OpenAI Responses (see [Thinking display](#thinking-display)).
 
 ## Effort levels
 
@@ -107,7 +107,7 @@ for _, block := range response.Content {
 }
 ```
 
-## Anthropic thinking display
+## Thinking display
 
 On the Anthropic protocol, `ThinkingDisplay` controls how reasoning is returned
 without changing whether the model reasons. An empty value defaults to
@@ -138,9 +138,24 @@ options := llm.StreamOptions{
 With `ThinkingDisplayOmitted`, no `EventThinkingDelta` events arrive and the
 `ThinkingContent` block is marked `Redacted`.
 
+OpenAI Responses uses the same display values through
+`OpenAIResponsesStreamOptions`. Summarized requests `reasoning.summary: auto`;
+omitted does not request a summary. Both modes preserve encrypted reasoning
+metadata for stateless follow-up turns.
+
+```go
+options := llm.StreamOptions{
+	Reasoning: llm.ModelThinkingHigh,
+	ProtocolOptions: &llm.OpenAIResponsesStreamOptions{
+		ThinkingDisplay: llm.ThinkingDisplayOmitted,
+	},
+}
+```
+
 ## Conversation continuity
 
-Reasoning metadata needed by a provider, such as Anthropic signatures, is
+Reasoning metadata needed by a provider, such as Anthropic signatures or OpenAI
+Responses encrypted reasoning items, is
 retained in assistant messages and replayed
 when required by later tool calls. This matters most for tool use with thinking:
 some providers require the signed thinking block to be sent back verbatim before

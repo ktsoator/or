@@ -2863,6 +2863,7 @@ test('streaming tool input shows write progress without duplicating the tool row
       type: 'tool_input_delta',
       tool: 'write',
       toolContentIndex: 0,
+      delta: '{"path":"src/main.go","content":"one',
       bytes: 1024,
     })
     emit?.({
@@ -2870,12 +2871,17 @@ test('streaming tool input shows write progress without duplicating the tool row
       id: 'write-call',
       tool: 'write',
       toolContentIndex: 0,
+      delta: '\\ntwo',
       bytes: 512,
     })
   })
 
   await expect(page.getByText('Preparing file content')).toBeVisible()
   await expect(page.getByText('1.5 KB')).toBeVisible()
+  await page.getByText('Preparing file content').click()
+  await expect(
+    page.getByText('{"path":"src/main.go","content":"one\\ntwo', { exact: true }),
+  ).toBeVisible()
 
   await page.evaluate(() => {
     const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
@@ -2931,6 +2937,35 @@ test('streaming tool input shows write progress without duplicating the tool row
     emit?.({ type: 'done' })
   })
   await expect(page.getByText('Preparing file content')).toHaveCount(0)
+})
+
+test('a leading bold reasoning line becomes the collapsible thinking title', async ({ page }) => {
+  await openDesktopClient(page, {
+    existingSession: true,
+    historyEvents: [
+      { type: 'user_message', text: 'Review the workspace' },
+      { type: 'run_start', startedAt: '2026-08-02T12:00:00Z' },
+      {
+        type: 'delta',
+        kind: 'thinking',
+        delta:
+          '**Considering workspace modifications**\n\nI need to inspect the **current files** first.',
+      },
+      { type: 'delta', kind: 'text', delta: 'I reviewed the workspace.' },
+      { type: 'message_end', text: 'I reviewed the workspace.', finalResponse: true },
+    ],
+  })
+
+  const title = page.getByRole('button', {
+    name: 'Considering workspace modifications',
+    exact: true,
+  })
+  await expect(title).toBeVisible()
+  await expect(page.getByText('**Considering workspace modifications**')).toHaveCount(0)
+
+  await title.click()
+  await expect(page.getByText('I need to inspect the current files first.')).toBeVisible()
+  await expect(page.getByText('current files', { exact: true })).toHaveCSS('font-weight', '600')
 })
 
 test('history restores in-flight assistant text and tool input after reload', async ({ page }) => {

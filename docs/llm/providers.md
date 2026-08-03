@@ -8,9 +8,9 @@ is maintained in [Protocol and provider status](support-matrix.md), together wit
 IDs, model counts, and credential variables.
 
 The catalog also contains metadata for additional compatible providers and
-models. Those entries can be queried and may work through one of the two
+models. Those entries can be queried and may work through one of the three
 protocol adapters, but they have not all been verified against live provider
-APIs and are not a support guarantee. Automated tests exercise both adapters
+APIs and are not a support guarantee. Automated tests exercise all three adapters
 with local mock servers rather than live integration tests for every provider.
 
 Only the key for the provider selected for the current request is resolved. Request-scoped

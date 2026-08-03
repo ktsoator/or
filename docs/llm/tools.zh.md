@@ -20,7 +20,9 @@
 | 无 Go 类型时校验 | `ValidateToolCall` / `ValidateToolArguments` / `ParseToolArguments` |
 | 强制或限制选择 | `StreamOptions.ProtocolOptions` |
 
-`ToolDefinition` 只包含 `Name`、`Description` 与一段 `Parameters` JSON Schema。模型返回的 `ToolCall` 携带 `ID`、`Name` 与解码后的 `Arguments`；回传 `ToolResult` 时需回填其 `ID` 与 `Name`。
+`ToolDefinition` 包含 `Name`、`Description`、一段 `Parameters` JSON Schema，以及可选的 `Strict` 配置。模型返回的 `ToolCall` 携带 `ID`、`Name` 与解码后的 `Arguments`；回传 `ToolResult` 时需回填其 `ID` 与 `Name`。
+
+设置 `Strict` 可要求 OpenAI function 参数严格遵循 schema。保持 nil 会沿用协议默认行为：Responses 会尝试把 schema 转成 strict，无法兼容时回退；Chat Completions 使用 best-effort 参数。Strict schema 要求每个属性都列入 `required`，并且每个 object 都设置 `additionalProperties: false`。
 
 ## 类型化工具
 
@@ -99,6 +101,8 @@ options := llm.StreamOptions{
 }
 ```
 
+OpenAI Responses 在 `OpenAIResponsesStreamOptions` 中复用同一组 `OpenAIToolChoice`。
+
 Anthropic Messages 使用 `any` 和 tool 选择：
 
 ```go
@@ -111,7 +115,7 @@ options := llm.StreamOptions{
 }
 ```
 
-两种协议都提供 `Auto` 和 `None` 常量。任何显式的工具选择都要求 `Context.Tools` 中至少有一个工具。
+三种协议都提供 `Auto` 和 `None` 常量。任何显式的工具选择都要求 `Context.Tools` 中至少有一个工具。
 
 ## 执行边界
 

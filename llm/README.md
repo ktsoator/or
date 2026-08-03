@@ -2,9 +2,10 @@
 
 English | [简体中文](README.zh.md)
 
-A provider-neutral API for large language models. One set of types speaks two
-wire protocols (OpenAI Chat Completions and Anthropic Messages); the same
-conversation can be sent to any model on either protocol, re-adapted per request.
+A provider-neutral API for large language models. One set of types speaks three
+wire protocols (OpenAI Chat Completions, OpenAI Responses, and Anthropic
+Messages); the same conversation can be sent to any supported model,
+re-adapted per request.
 The package is a stateless translation layer — it decides what to send and how to
 read the streamed response, and leaves history storage, compaction, and the
 tool loop to the caller.
@@ -47,7 +48,7 @@ streamed back — the package never talks to a provider directly.
 | [`default.go`](default.go) | Package-level `Stream`/`Complete`/`Register`/`SupportsProtocol` and `DefaultProviderRegistry` over a default client; documents the import-for-side-effects registration pattern. **Start reading here.** |
 | [`client.go`](client.go) | `Client.Stream`/`Complete`: validate options, resolve provider config (API key, overrides, headers) through the provider registry, pick the adapter, consume the stream |
 | [`adapters.go`](adapters.go) | `ProtocolAdapter` (the extension point providers implement) and `AdapterRegistry`, the concurrency-safe protocol→adapter map |
-| [`options.go`](options.go) | `StreamOptions`, protocol-specific extensions (`AnthropicStreamOptions`, `OpenAICompletionsStreamOptions`), native tool-choice types, and their validation |
+| [`options.go`](options.go) | `StreamOptions`, protocol-specific extensions (`AnthropicStreamOptions`, `OpenAICompletionsStreamOptions`, `OpenAIResponsesStreamOptions`), native tool-choice types, and their validation |
 
 **Deep dive:** [Architecture overview](../docs/internals/overview.md) · [Protocol adapters](../docs/internals/adapters.md)
 
@@ -135,9 +136,9 @@ narrated tour of each layer with annotated source, follow the
 
 | Package | Role |
 |---|---|
-| [`openai/`](openai) | The OpenAI Chat Completions adapter; registers itself on import |
+| [`openai/`](openai) | The OpenAI Chat Completions and Responses adapters; registers both on import |
 | [`anthropic/`](anthropic) | The Anthropic Messages adapter; registers itself on import |
-| [`all/`](all) | Blank-imports both providers to register every built-in protocol at once |
+| [`all/`](all) | Blank-imports both provider packages to register every built-in protocol at once |
 | [`internal/jsonx`](internal/jsonx) | Partial/lenient JSON parsing used by `jsonparse.go` |
 | [`internal/genmodels`](internal/genmodels) | Generator for `catalog.generated.json` |
 

@@ -70,9 +70,10 @@ to process text, reasoning, or tool calls as they arrive.
 
 Before calling package-level `Complete` or `Stream`, import the adapter package
 for the target model's protocol. The blank `llm/openai` import in the example
-registers the adapter for OpenAI Chat Completions-compatible APIs during program
-initialization. Import `llm/anthropic` for Anthropic Messages-compatible APIs;
-import `llm/all` when the application needs both built-in protocols.
+registers both the OpenAI Chat Completions and OpenAI Responses adapters during
+program initialization. Import `llm/anthropic` for Anthropic
+Messages-compatible APIs; import `llm/all` when the application needs every
+built-in protocol.
 
 Importing only the adapters in use avoids linking unused provider SDKs into the
 binary.

@@ -12,6 +12,7 @@ type Protocol string
 
 const (
 	ProtocolOpenAICompletions Protocol = "openai-completions"
+	ProtocolOpenAIResponses   Protocol = "openai-responses"
 	ProtocolAnthropicMessages Protocol = "anthropic-messages"
 )
 
@@ -48,7 +49,7 @@ const (
 
 // ThinkingDisplay controls how a reasoning model returns its thinking. It does
 // not change whether the model reasons or what it is billed; it only governs
-// what travels back. Only Anthropic-protocol models honor it today.
+// what travels back. Anthropic Messages and OpenAI Responses models honor it.
 type ThinkingDisplay string
 
 const (

@@ -67,8 +67,8 @@ effort metadata into explicit `off`/`high`/`max` controls. Aggregation gateways
 retain exact route profiles instead of inheriting behavior from model family
 names.
 
-The catalog includes models for the implemented `openai-completions` and
-`anthropic-messages` protocols, plus selected catalog-only protocols planned
-for future adapters. Use the public runtime model APIs to distinguish catalog
-entries from runnable models. The generated JSON is sorted by provider and
-model ID.
+The catalog includes models for the implemented `openai-completions`,
+`openai-responses`, and `anthropic-messages` protocols, plus selected
+catalog-only protocols planned for future adapters. Use the public runtime
+model APIs to distinguish catalog entries from runnable models. The generated
+JSON is sorted by provider and model ID.

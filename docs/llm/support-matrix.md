@@ -2,7 +2,7 @@
 
 The model catalog and protocol implementations are independent. `GetModels` returns catalog entries. A request is routable only when the current process has registered an adapter for the model's `Protocol`. Use `GetRunnableModels` for runtime model lists.
 
-<!-- catalog-stats: total=371 runnable=299 openai-completions=226 anthropic-messages=73 openai-responses=30 google-generative-ai=20 mistral-conversations=22 -->
+<!-- catalog-stats: total=394 runnable=352 openai-completions=226 anthropic-messages=73 openai-responses=53 google-generative-ai=20 mistral-conversations=22 -->
 
 ## Protocol status
 
@@ -10,11 +10,11 @@ The model catalog and protocol implementations are independent. `GetModels` retu
 |---|---:|---|---|---|
 | `openai-completions` | 226 | Implemented | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Chat Completions and compatible endpoints |
 | `anthropic-messages` | 73 | Implemented | `_ "github.com/ktsoator/or/llm/anthropic"` | Anthropic Messages and compatible endpoints |
-| `openai-responses` | 30 | Catalog only | None | No adapter; official OpenAI catalog models use this protocol |
+| `openai-responses` | 53 | Implemented | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Responses API and compatible gateways |
 | `google-generative-ai` | 20 | Catalog only | None | No adapter |
 | `mistral-conversations` | 22 | Catalog only | None | No adapter |
 
-Importing `github.com/ktsoator/or/llm/all` registers the two implemented protocols. It does not implement the three catalog-only protocols.
+Importing `github.com/ktsoator/or/llm/all` registers the three implemented protocols. It does not implement the two catalog-only protocols.
 
 ## Catalog versus runtime state
 
@@ -24,7 +24,7 @@ for _, model := range models {
 	fmt.Println(model.ID, llm.SupportsProtocol(model.Protocol))
 }
 
-runnable := llm.GetRunnableModels("openai") // currently empty
+runnable := llm.GetRunnableModels("openai") // returns the runnable Responses models
 ```
 
 `GetModel` and `LookupModel` only check catalog membership. They do not check adapter registration. Call `SupportsProtocol` before sending, or build selection UIs from `GetRunnableModels`.
@@ -51,8 +51,8 @@ The current catalog contains the following provider IDs. Counts come from `llm/c
 | `moonshotai-cn` | 10 | OpenAI Completions | `MOONSHOT_API_KEY` |
 | `nvidia` | 57 | OpenAI Completions | `NVIDIA_API_KEY` |
 | `openai` | 30 | OpenAI Responses | `OPENAI_API_KEY` |
-| `opencode` | 34 | Both implemented protocols | `OPENCODE_API_KEY` |
-| `opencode-go` | 15 | Both implemented protocols | `OPENCODE_API_KEY` |
+| `opencode` | 55 | All three implemented protocols | `OPENCODE_API_KEY` |
+| `opencode-go` | 17 | All three implemented protocols | `OPENCODE_API_KEY` |
 | `together` | 17 | OpenAI Completions | `TOGETHER_API_KEY` |
 | `xai` | 5 | OpenAI Completions | `XAI_API_KEY` |
 | `xiaomi` | 3 | OpenAI Completions | `XIAOMI_API_KEY` or `MIMO_API_KEY` |
@@ -67,7 +67,7 @@ Built-in credential configuration is defined in `llm/keys.go`. At runtime, call
 
 ## Validation scope
 
-Built-in tests cover the adapters for both implemented protocols with local mock servers. The project does not run continuous live integration tests against every provider in the table. Therefore:
+Built-in tests cover the adapters for all three implemented protocols with local mock servers. The project does not run continuous live integration tests against every provider in the table. Therefore:
 
 - “implemented” means the built-in adapter handles the protocol's request and response formats;
 - “model is listed” means only that its metadata exists in the built-in model catalog; it is not a live-provider compatibility guarantee;

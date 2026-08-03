@@ -1,4 +1,4 @@
-package openai
+package responses
 
 import (
 	"context"
@@ -8,9 +8,10 @@ import (
 	"strings"
 
 	"github.com/ktsoator/or/llm"
+	"github.com/ktsoator/or/llm/openai/internal/transport"
 )
 
-// Adapter translates the OpenAI-compatible Chat Completions protocol.
+// Adapter translates the OpenAI Responses protocol.
 type Adapter struct {
 	httpClient *http.Client
 }
@@ -24,13 +25,13 @@ func NewAdapter(httpClient *http.Client) *Adapter {
 	return &Adapter{httpClient: httpClient}
 }
 
-// Protocol returns the registry key for the Chat Completions protocol.
+// Protocol returns the registry key for the OpenAI Responses protocol.
 func (a *Adapter) Protocol() llm.Protocol {
-	return llm.ProtocolOpenAICompletions
+	return llm.ProtocolOpenAIResponses
 }
 
-// Stream validates and translates a request, then delegates the asynchronous
-// response lifecycle to consumeStream.
+// Stream validates and translates a request, then consumes the Responses SSE
+// stream asynchronously.
 func (a *Adapter) Stream(
 	ctx context.Context,
 	model llm.Model,
@@ -44,32 +45,24 @@ func (a *Adapter) Stream(
 		return nil, errors.New("model ID is empty")
 	}
 	if model.Compatibility != nil {
-		compatibility, ok := model.Compatibility.(*llm.OpenAICompletionsCompatibility)
-		if !ok || compatibility == nil {
-			return nil, fmt.Errorf(
-				"model compatibility type %T is not valid for protocol %q",
-				model.Compatibility,
-				model.Protocol,
-			)
-		}
+		return nil, fmt.Errorf("model compatibility type %T is not valid for protocol %q", model.Compatibility, model.Protocol)
 	}
 	if strings.TrimSpace(options.APIKey) == "" {
 		return nil, llm.MissingAPIKeyError(model.Provider)
 	}
 
-	compat := resolveCompat(model)
-	messages, err := convertMessages(input, model, compat)
+	items, err := convertResponsesInput(input, model)
 	if err != nil {
 		return nil, err
 	}
-	tools, err := convertTools(input.Tools, compat)
+	tools, err := convertResponsesTools(input.Tools)
 	if err != nil {
 		return nil, err
 	}
 
-	client := buildClient(a.httpClient, model, options)
-	params := buildParams(model, messages, tools, options, compat)
+	client := transport.BuildClient(a.httpClient, model, options)
+	params := buildResponsesParams(model, input.SystemPrompt, items, tools, options)
 	events := make(chan llm.Event)
-	go consumeStream(ctx, client, params, model, events)
+	go consumeResponsesStream(ctx, client, params, model, events)
 	return events, nil
 }

@@ -15,7 +15,7 @@ and credential-resolution rules, see [Failure signals](errors.md).
 
 ```go
 import (
-	_ "github.com/ktsoator/or/llm/openai"    // openai-completions providers
+	_ "github.com/ktsoator/or/llm/openai"    // openai-completions and openai-responses
 	_ "github.com/ktsoator/or/llm/anthropic" // anthropic-messages providers
 )
 ```

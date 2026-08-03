@@ -1,4 +1,4 @@
-package openai
+package chatcompletions
 
 import (
 	"encoding/json"
@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ktsoator/or/llm"
+	"github.com/ktsoator/or/llm/openai/internal/transport"
 	oai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/packages/respjson"
 )
@@ -210,7 +211,7 @@ func TestBuildClientHonorsTimeoutAndRetries(t *testing.T) {
 		BaseURL:  server.URL,
 		Headers:  map[string]string{"X-Model": "y"},
 	}
-	client := buildClient(server.Client(), model, options)
+	client := transport.BuildClient(server.Client(), model, options)
 	// The SDK surfaces options through the constructed client; the bare smoke is
 	// that the value is usable.
 	_ = client

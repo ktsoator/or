@@ -26,9 +26,16 @@ production policy, see [Executing tool calls](recipes/tool-loop.md).
 | Validate without a Go type | `ValidateToolCall` / `ValidateToolArguments` / `ParseToolArguments` |
 | Force or restrict the choice | `StreamOptions.ProtocolOptions` |
 
-A `ToolDefinition` is just `Name`, `Description`, and a `Parameters` JSON Schema.
+A `ToolDefinition` contains `Name`, `Description`, a `Parameters` JSON Schema,
+and an optional `Strict` setting.
 A `ToolCall` the model returns carries an `ID`, a `Name`, and decoded
 `Arguments`; the `ID` and `Name` are what you echo back in the `ToolResult`.
+
+Set `Strict` to request schema-constrained OpenAI function arguments. Leaving it
+nil preserves protocol defaults: Responses attempts strict normalization and
+falls back when the schema is incompatible, while Chat Completions uses
+best-effort arguments. Strict schemas must mark every property as required and
+set `additionalProperties: false` on each object.
 
 ## Typed tools
 
@@ -136,6 +143,9 @@ options := llm.StreamOptions{
 }
 ```
 
+OpenAI Responses uses the same `OpenAIToolChoice` union inside
+`OpenAIResponsesStreamOptions`.
+
 Anthropic Messages uses `any` and tool choices:
 
 ```go
@@ -148,7 +158,7 @@ options := llm.StreamOptions{
 }
 ```
 
-Both protocols expose `Auto` and `None` constants. Any explicit tool choice
+All three protocols expose `Auto` and `None` constants. Any explicit tool choice
 requires at least one tool in `Context.Tools`.
 
 ## Execution boundary

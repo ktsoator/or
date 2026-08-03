@@ -88,6 +88,7 @@ func TestProjectEventIncludesToolInputProgress(t *testing.T) {
 		ToolCallID:       "call-1",
 		ToolName:         "write",
 		ToolContentIndex: 0,
+		Delta:            `{"path":`,
 		ToolInputBytes:   128,
 	})
 	if !ok {
@@ -106,6 +107,9 @@ func TestProjectEventIncludesToolInputProgress(t *testing.T) {
 	}
 	if event.Bytes != 128 {
 		t.Fatalf("bytes = %d, want 128", event.Bytes)
+	}
+	if event.Delta != `{"path":` {
+		t.Fatalf("delta = %q, want streamed tool arguments", event.Delta)
 	}
 }
 

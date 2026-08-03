@@ -64,7 +64,7 @@ func projectEvent(ev engine.Event) (wireEvent, bool) {
 		out = wireEvent{Type: wireEventToolInputStart, ID: ev.ToolCallID, Tool: ev.ToolName, ToolContentIndex: intPointer(ev.ToolContentIndex)}
 
 	case engine.ToolInputDelta:
-		out = wireEvent{Type: wireEventToolInputDelta, ID: ev.ToolCallID, Tool: ev.ToolName, ToolContentIndex: intPointer(ev.ToolContentIndex), Bytes: ev.ToolInputBytes}
+		out = wireEvent{Type: wireEventToolInputDelta, ID: ev.ToolCallID, Tool: ev.ToolName, Delta: ev.Delta, ToolContentIndex: intPointer(ev.ToolContentIndex), Bytes: ev.ToolInputBytes}
 
 	case engine.ToolInputCompleted:
 		out = wireEvent{Type: wireEventToolInputEnd, ID: ev.ToolCallID, Tool: ev.ToolName, Args: ev.ToolArgs, ToolContentIndex: intPointer(ev.ToolContentIndex)}

@@ -48,11 +48,14 @@ func fromOpenCode(catalog map[string]sourceProvider) []model {
 				protocol = "anthropic-messages"
 				baseURL = variant.BaseURL
 				compat = compatibility{}
-			case "@ai-sdk/openai", "@ai-sdk/google":
-				// These require protocols that the Go package does not implement yet.
+			case "@ai-sdk/openai":
+				protocol = "openai-responses"
+				compat = compatibility{}
+			case "@ai-sdk/google":
+				// Google Generative AI does not have a built-in adapter yet.
 				continue
 			}
-			// These models are mislabeled upstream and use the OpenAI-compatible path.
+			// These Anthropic-labeled models use the OpenAI-compatible path.
 			if variant.Provider == "opencode-go" && (id == "minimax-m2.7" || id == "qwen3.5-plus" || id == "qwen3.6-plus") {
 				protocol = "openai-completions"
 				baseURL = variant.BaseURL + "/v1"
@@ -61,7 +64,7 @@ func fromOpenCode(catalog map[string]sourceProvider) []model {
 					compat.ThinkingFormat = "qwen"
 				}
 			}
-			if protocol != "openai-completions" && protocol != "anthropic-messages" {
+			if protocol != "openai-completions" && protocol != "openai-responses" && protocol != "anthropic-messages" {
 				continue
 			}
 			models = append(models, normalize(id, source, providerRule{

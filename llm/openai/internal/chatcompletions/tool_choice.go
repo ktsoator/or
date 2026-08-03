@@ -1,4 +1,4 @@
-package openai
+package chatcompletions
 
 import (
 	"github.com/ktsoator/or/llm"

@@ -2,9 +2,10 @@
 
 Adapters are the edge of the `llm` package. Everything before them is
 provider-neutral; everything inside an adapter is allowed to speak one concrete
-wire protocol. The package ships two built-ins:
+wire protocol. The package ships three built-ins:
 
 - `openai-completions` for OpenAI-compatible Chat Completions endpoints.
+- `openai-responses` for the OpenAI Responses API.
 - `anthropic-messages` for Anthropic-compatible Messages endpoints.
 
 ## The adapter contract
@@ -58,6 +59,9 @@ every built-in — makes its protocol available to `llm.Stream` and `llm.Complet
 ```go
 func init() {
 	if err := llm.Register(NewAdapter(nil)); err != nil {
+		panic(err)
+	}
+	if err := llm.Register(NewResponsesAdapter(nil)); err != nil {
 		panic(err)
 	}
 }
@@ -114,7 +118,7 @@ func buildClient(httpClient *http.Client, model llm.Model, options llm.StreamOpt
 
 ## What an adapter translates
 
-Both built-ins follow the same shape:
+All three built-ins follow the same shape:
 
 1. Validate that `model.Protocol` and `model.Compatibility` match the adapter.
 2. Call `TransformMessages` before serializing history for the target model.
@@ -124,9 +128,21 @@ Both built-ins follow the same shape:
 6. Consume the provider stream and rebuild an `AssistantMessage` plus events.
 
 The protocol-specific knobs stay nested in `StreamOptions.ProtocolOptions`.
-OpenAI-compatible models accept `OpenAICompletionsStreamOptions`; Anthropic
-models accept `AnthropicStreamOptions`. The shared options validator rejects a
-protocol mismatch before any HTTP request is sent.
+OpenAI-compatible Chat Completions models accept
+`OpenAICompletionsStreamOptions`, OpenAI Responses models accept
+`OpenAIResponsesStreamOptions`, and Anthropic models accept
+`AnthropicStreamOptions`. The shared options validator rejects a protocol
+mismatch before any HTTP request is sent.
+
+The Responses adapter is stateless: it sends `store: false`, replays the full
+transformed history as input items, and requests encrypted reasoning content for
+reasoning models so later turns do not depend on `previous_response_id`.
+
+The public `llm/openai` package is only the stable construction and registration
+surface. Chat Completions and Responses live in separate internal packages, so
+their request types, compatibility rules, and stream event state cannot leak
+across protocol boundaries. Only transport behavior and protocol-neutral
+serialization helpers are shared.
 
 ## Compatible vendors
 

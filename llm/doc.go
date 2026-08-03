@@ -1,8 +1,8 @@
 // Package llm is a unified, provider-neutral API for large language models.
 //
-// It speaks two wire protocols, OpenAI Chat Completions and Anthropic Messages,
-// behind one set of types. The same conversation can be sent to any model on
-// either protocol, and the target model can change between turns; the library
+// It speaks three wire protocols, OpenAI Chat Completions, OpenAI Responses,
+// and Anthropic Messages, behind one set of types. The same conversation can be
+// sent to any supported model, and the target model can change between turns; the library
 // re-adapts the history for each request. It is a stateless translation layer:
 // it decides what to send for a request and how to interpret the streamed
 // response, and leaves history storage, context compaction, and tool-loop
@@ -69,6 +69,8 @@
 //   - [OpenAICompletionsStreamOptions]: a native OpenAI ToolChoice
 //     ([OpenAIToolChoiceAuto], [OpenAIToolChoiceNone], [OpenAIToolChoiceRequired],
 //     or [OpenAIToolChoiceFunction]).
+//   - [OpenAIResponsesStreamOptions]: ThinkingDisplay (summarized or omitted)
+//     and the same native OpenAI ToolChoice union.
 //
 // # Streaming
 //
@@ -108,8 +110,8 @@
 // registry can route a protocol, and GetRunnableModels filters the catalog by
 // that registration state. SupportedThinkingLevels and ClampThinkingLevel report
 // and adjust a model's reasoning levels. A caller may also construct a [Model]
-// directly, pointing BaseURL at any OpenAI-compatible or Anthropic-compatible
-// endpoint.
+// directly, pointing BaseURL at an OpenAI Chat Completions, OpenAI Responses,
+// or Anthropic Messages endpoint.
 //
 // # Providers
 //

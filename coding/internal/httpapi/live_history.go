@@ -49,6 +49,7 @@ func compactLiveEvent(previous *wireEvent, next wireEvent) bool {
 	if previous.Type == wireEventToolInputDelta && next.Type == wireEventToolInputDelta &&
 		previous.ID == next.ID && previous.Tool == next.Tool &&
 		sameOptionalInt(previous.ToolContentIndex, next.ToolContentIndex) {
+		previous.Delta += next.Delta
 		previous.Bytes += next.Bytes
 		return true
 	}

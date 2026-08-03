@@ -1,4 +1,4 @@
-package openai
+package chatcompletions
 
 import (
 	"encoding/json"
@@ -442,9 +442,10 @@ func TestConvertToolResultMessageImageOnlyFillsPlaceholderText(t *testing.T) {
 }
 
 func TestConvertTools(t *testing.T) {
+	strict := true
 	tools := []llm.ToolDefinition{
 		{Name: "noop"},
-		{Name: "weather", Description: "look up the weather", Parameters: json.RawMessage(`{"type":"object"}`)},
+		{Name: "weather", Description: "look up the weather", Parameters: json.RawMessage(`{"type":"object"}`), Strict: &strict},
 	}
 	got, err := convertTools(tools, resolvedCompat{supportsStrictMode: true})
 	if err != nil {
@@ -455,10 +456,8 @@ func TestConvertTools(t *testing.T) {
 	if !strings.Contains(wire, `"name":"noop"`) || !strings.Contains(wire, `"name":"weather"`) {
 		t.Fatalf("tool names missing: %s", wire)
 	}
-	// Strict mode is advertised but defaulted to false, so the wire must include
-	// the field with the value false.
-	if !strings.Contains(wire, `"strict":false`) {
-		t.Fatalf("expected strict=false in wire: %s", wire)
+	if strings.Count(wire, `"strict":true`) != 1 || strings.Contains(wire, `"strict":false`) {
+		t.Fatalf("only the explicitly strict tool should enable strict mode: %s", wire)
 	}
 	if !strings.Contains(wire, `"description":"look up the weather"`) {
 		t.Fatalf("description missing for weather: %s", wire)
@@ -467,7 +466,7 @@ func TestConvertTools(t *testing.T) {
 
 func TestConvertToolsOmitsStrictWhenUnsupported(t *testing.T) {
 	got, err := convertTools(
-		[]llm.ToolDefinition{{Name: "noop"}},
+		[]llm.ToolDefinition{{Name: "noop", Strict: boolPtr(true)}},
 		resolvedCompat{supportsStrictMode: false},
 	)
 	if err != nil {

@@ -545,7 +545,7 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
   const skillArgs = kind === 'skill' ? skillField(item.args, 'arguments') : ''
   const lineCount = generatedLineCount(kind, item.args)
   const preparingLabel =
-    item.status === 'preparing' && item.args === undefined
+    item.status === 'preparing' && (item.args === undefined || typeof item.args === 'string')
       ? kind === 'browserOpen'
         ? t('tool.browserOpeningPage')
         : kind === 'browserTabs'
