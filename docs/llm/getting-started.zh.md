@@ -62,7 +62,7 @@ go run .
 
 ### 注册协议适配器
 
-调用包级 `Complete` 或 `Stream` 前，必须导入目标模型所使用协议的适配器包。示例中的空导入 `llm/openai` 会在程序初始化时注册 OpenAI Chat Completions 兼容接口的适配器。使用 Anthropic Messages 兼容接口时导入 `llm/anthropic`；同时需要两种内置协议时可导入 `llm/all`。
+调用包级 `Complete` 或 `Stream` 前，必须导入目标模型所使用协议的适配器包。示例中的空导入 `llm/openai` 会在程序初始化时同时注册 OpenAI Chat Completions 与 Responses adapter。使用 Anthropic Messages 兼容接口时导入 `llm/anthropic`；需要全部内置协议时可导入 `llm/all`。
 
 按需导入适配器包，可以避免把未使用的 provider SDK 链接进二进制。
 

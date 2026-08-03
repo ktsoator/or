@@ -2,7 +2,7 @@
 
 内置模型清单和协议实现是两套独立信息。`GetModels` 返回清单中收录的模型；只有模型的 `Protocol` 已在当前进程注册协议适配器时，请求才能被路由。使用 `GetRunnableModels` 构建运行时模型列表。
 
-<!-- catalog-stats: total=371 runnable=299 openai-completions=226 anthropic-messages=73 openai-responses=30 google-generative-ai=20 mistral-conversations=22 -->
+<!-- catalog-stats: total=394 runnable=352 openai-completions=226 anthropic-messages=73 openai-responses=53 google-generative-ai=20 mistral-conversations=22 -->
 
 ## 协议状态
 
@@ -10,11 +10,11 @@
 |---|---:|---|---|---|
 | `openai-completions` | 226 | 已实现 | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Chat Completions 及兼容服务 |
 | `anthropic-messages` | 73 | 已实现 | `_ "github.com/ktsoator/or/llm/anthropic"` | Anthropic Messages 及兼容服务 |
-| `openai-responses` | 30 | 仅收录 | 无 | 当前没有协议适配器；内置模型清单中的 OpenAI 模型使用该协议 |
+| `openai-responses` | 53 | 已实现 | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Responses API 及兼容网关 |
 | `google-generative-ai` | 20 | 仅收录 | 无 | 当前没有协议适配器 |
 | `mistral-conversations` | 22 | 仅收录 | 无 | 当前没有协议适配器 |
 
-导入 `github.com/ktsoator/or/llm/all` 会注册两个已实现协议。它不会为三个仅收录协议增加实现。
+导入 `github.com/ktsoator/or/llm/all` 会注册三个已实现协议。它不会为两个仅收录协议增加实现。
 
 ## 模型清单与运行状态
 
@@ -24,7 +24,7 @@ for _, model := range models {
 	fmt.Println(model.ID, llm.SupportsProtocol(model.Protocol))
 }
 
-runnable := llm.GetRunnableModels("openai") // 当前为空
+runnable := llm.GetRunnableModels("openai") // 返回可调用的 Responses 模型
 ```
 
 `GetModel` 和 `LookupModel` 只验证模型是否收录在清单中，不验证协议适配器。发送前可调用 `SupportsProtocol`，或从一开始只使用 `GetRunnableModels`。
@@ -51,8 +51,8 @@ runnable := llm.GetRunnableModels("openai") // 当前为空
 | `moonshotai-cn` | 10 | OpenAI Completions | `MOONSHOT_API_KEY` |
 | `nvidia` | 57 | OpenAI Completions | `NVIDIA_API_KEY` |
 | `openai` | 30 | OpenAI Responses | `OPENAI_API_KEY` |
-| `opencode` | 34 | 两种已实现协议 | `OPENCODE_API_KEY` |
-| `opencode-go` | 15 | 两种已实现协议 | `OPENCODE_API_KEY` |
+| `opencode` | 55 | 三种已实现协议 | `OPENCODE_API_KEY` |
+| `opencode-go` | 17 | 三种已实现协议 | `OPENCODE_API_KEY` |
 | `together` | 17 | OpenAI Completions | `TOGETHER_API_KEY` |
 | `xai` | 5 | OpenAI Completions | `XAI_API_KEY` |
 | `xiaomi` | 3 | OpenAI Completions | `XIAOMI_API_KEY` 或 `MIMO_API_KEY` |
@@ -66,7 +66,7 @@ runnable := llm.GetRunnableModels("openai") // 当前为空
 
 ## 验证范围
 
-内置测试通过本地模拟服务覆盖两种已实现协议的适配器。项目未对表中每个提供方执行持续的线上集成测试，因此：
+内置测试通过本地模拟服务覆盖三种已实现协议的适配器。项目未对表中每个提供方执行持续的线上集成测试，因此：
 
 - “已实现”表示内置协议适配器可以处理该协议的请求与响应格式；
 - “模型已收录”只表示模型元数据存在于内置模型清单中，不代表已验证目标提供方的线上兼容性；

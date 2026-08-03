@@ -265,7 +265,7 @@ func TestGenerateInspectionFetchesModelsDevOnceAndDoesNotWriteCatalog(t *testing
 	}
 	var openCodeRoute inspectionRoute
 	mustDecodeJSONFile(t, filepath.Join(inspectionDirectory, "opencode-go", "route.json"), &openCodeRoute)
-	if !equalStrings(openCodeRoute.OutputProtocols, []string{"anthropic-messages", "openai-completions"}) {
+	if !equalStrings(openCodeRoute.OutputProtocols, []string{"anthropic-messages", "openai-completions", "openai-responses"}) {
 		t.Fatalf("OpenCode output protocols = %v", openCodeRoute.OutputProtocols)
 	}
 	var copilotRoute inspectionRoute

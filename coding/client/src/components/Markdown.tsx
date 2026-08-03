@@ -4,6 +4,7 @@ import hljs from 'highlight.js/lib/common'
 import DOMPurify from 'dompurify'
 import 'highlight.js/styles/github.css'
 import { useI18n } from '@/i18n'
+import { cn } from '@/lib/utils'
 
 const COPY_ICON =
   '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>'
@@ -43,7 +44,7 @@ const marked = new Marked({
 
 // Model output is untrusted, so every render is sanitized before it reaches the
 // DOM. Rendered inside Tailwind Typography for polished prose defaults.
-export function Markdown({ source }: { source: string }) {
+export function Markdown({ source, className }: { source: string; className?: string }) {
   const { t } = useI18n()
   const ref = useRef<HTMLDivElement>(null)
   const html = useMemo(
@@ -93,7 +94,10 @@ export function Markdown({ source }: { source: string }) {
     <div
       ref={ref}
       onClick={handleClick}
-      className="or-code-theme prose prose-stone max-w-none text-[14px] leading-[22px] prose-headings:font-semibold prose-headings:tracking-normal prose-h1:mt-4 prose-h1:mb-1.5 prose-h1:text-[1.25rem] prose-h1:leading-7 prose-h2:mt-3.5 prose-h2:mb-1.5 prose-h2:text-[1.125rem] prose-h2:leading-6 prose-h3:mt-3 prose-h3:mb-1 prose-h3:text-[1.0625rem] prose-h3:leading-6 prose-h4:mt-2.5 prose-h4:mb-1 prose-h4:text-[1rem] prose-h4:leading-6 prose-p:my-1 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-blockquote:my-2 prose-hr:my-4 prose-a:text-info prose-a:decoration-info/40 prose-a:underline-offset-3 prose-strong:font-semibold prose-code:rounded prose-code:border prose-code:border-edge prose-code:bg-canvas-sunken prose-code:px-1 prose-code:py-0.5 prose-code:text-[0.86em] prose-code:font-medium prose-code:before:content-none prose-code:after:content-none [&_table]:my-2 [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto [&_pre_code.hljs]:block [&_pre_code.hljs]:overflow-x-auto [&_pre_code.hljs]:bg-canvas [&_pre_code.hljs]:px-3.5 [&_pre_code.hljs]:py-2.5 [&_pre_code.hljs]:font-mono [&_pre_code.hljs]:text-[0.875rem] [&_pre_code.hljs]:leading-[1.375rem]"
+      className={cn(
+        'or-code-theme prose prose-stone max-w-none text-[14px] leading-[22px] prose-headings:font-semibold prose-headings:tracking-normal prose-h1:mt-4 prose-h1:mb-1.5 prose-h1:text-[1.25rem] prose-h1:leading-7 prose-h2:mt-3.5 prose-h2:mb-1.5 prose-h2:text-[1.125rem] prose-h2:leading-6 prose-h3:mt-3 prose-h3:mb-1 prose-h3:text-[1.0625rem] prose-h3:leading-6 prose-h4:mt-2.5 prose-h4:mb-1 prose-h4:text-[1rem] prose-h4:leading-6 prose-p:my-1 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-blockquote:my-2 prose-hr:my-4 prose-a:text-info prose-a:decoration-info/40 prose-a:underline-offset-3 prose-strong:font-semibold prose-code:rounded prose-code:border prose-code:border-edge prose-code:bg-canvas-sunken prose-code:px-1 prose-code:py-0.5 prose-code:text-[0.86em] prose-code:font-medium prose-code:before:content-none prose-code:after:content-none [&_table]:my-2 [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto [&_pre_code.hljs]:block [&_pre_code.hljs]:overflow-x-auto [&_pre_code.hljs]:bg-canvas [&_pre_code.hljs]:px-3.5 [&_pre_code.hljs]:py-2.5 [&_pre_code.hljs]:font-mono [&_pre_code.hljs]:text-[0.875rem] [&_pre_code.hljs]:leading-[1.375rem]',
+        className,
+      )}
       dangerouslySetInnerHTML={{ __html: html }}
     />
   )

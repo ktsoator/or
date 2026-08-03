@@ -8,7 +8,7 @@
 若干设置都是小型字符串类型，各自构成一组固定的常量。将它们定义为具名类型——而非裸字符串——既能让编译器捕捉拼写错误，也使公开 API 自带文档。
 
 ```go
-type Protocol string           // "openai-completions"、"anthropic-messages"
+type Protocol string           // "openai-completions"、"openai-responses"、"anthropic-messages"
 type ModelInput string         // "text"、"image"
 type ModelThinkingLevel string // off、minimal、low、medium、high、xhigh、max
 type ThinkingDisplay string    // summarized、omitted

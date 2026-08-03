@@ -51,9 +51,9 @@ Valid event fields, order, and termination rules are maintained only in
 |---|---|---|
 | Shared options | `StreamOptions`, `StreamOptions.Validate` | [Request options](configuration.md) |
 | Protocol option interface | `ProtocolStreamOptions` | [Request options](configuration.md) |
-| OpenAI options | `OpenAICompletionsStreamOptions` and `OpenAIToolChoice` types and constants | [Tool definitions and calls](tools.md#protocol-specific-tool-choice) |
+| OpenAI options | `OpenAICompletionsStreamOptions`, `OpenAIResponsesStreamOptions`, and `OpenAIToolChoice` types and constants | [Tool definitions and calls](tools.md#protocol-specific-tool-choice) |
 | Anthropic options | `AnthropicStreamOptions` and `AnthropicToolChoice` types and constants | [Tool definitions and calls](tools.md#protocol-specific-tool-choice) |
-| Thinking display | `ThinkingDisplay`, `ThinkingDisplaySummarized`, `ThinkingDisplayOmitted` | [Reasoning options](reasoning.md#anthropic-thinking-display) |
+| Thinking display | `ThinkingDisplay`, `ThinkingDisplaySummarized`, `ThinkingDisplayOmitted` | [Reasoning options](reasoning.md#thinking-display) |
 
 See [Request options](configuration.md) for field defaults, credential
 precedence, hooks, and request rewriting.
@@ -92,11 +92,11 @@ maintained only in [Models and providers](providers.md). See
 
 | Category | Public symbols | Reference |
 |---|---|---|
-| Protocols | `Protocol`, `ProtocolOpenAICompletions`, `ProtocolAnthropicMessages` | [Protocol and provider status](support-matrix.md) |
+| Protocols | `Protocol`, `ProtocolOpenAICompletions`, `ProtocolOpenAIResponses`, `ProtocolAnthropicMessages` | [Protocol and provider status](support-matrix.md) |
 | Compatibility | `ModelCompatibility`, `OpenAICompletionsCompatibility`, `AnthropicMessagesCompatibility` | [Models and providers](providers.md#custom-and-compatible-endpoints) |
 | Adapter | `ProtocolAdapter` | [Custom protocols](extending.md) |
 | Adapter registry | `AdapterRegistry`, `NewAdapterRegistry`, `Register` | [Clients and registries](clients-and-registries.md) |
-| Built-in adapters | `openai.NewAdapter`, `anthropic.NewAdapter`, `llm/all` | [Getting started](getting-started.md#register-a-protocol-adapter) |
+| Built-in adapters | `openai.NewAdapter`, `openai.NewResponsesAdapter`, `anthropic.NewAdapter`, `llm/all` | [Getting started](getting-started.md#register-a-protocol-adapter) |
 
 ## Results, failures, and diagnostics
 

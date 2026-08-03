@@ -246,6 +246,10 @@ type ToolDefinition struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
 	Parameters  json.RawMessage `json:"parameters"`
+	// Strict requests schema-constrained function arguments when set. Nil leaves
+	// protocol behavior unchanged: Responses attempts strict normalization with
+	// fallback, while Chat Completions defaults to best-effort arguments.
+	Strict *bool `json:"strict,omitempty"`
 }
 
 // Context

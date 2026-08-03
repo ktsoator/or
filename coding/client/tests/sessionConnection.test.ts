@@ -413,6 +413,7 @@ describe('startSessionConnection', () => {
           type: 'tool_input_delta',
           tool: 'write',
           toolContentIndex: 0,
+          delta: '{"path":"README.md"',
           bytes: 128,
         },
       ],
@@ -457,6 +458,7 @@ describe('startSessionConnection', () => {
         kind: 'tool',
         name: 'write',
         status: 'preparing',
+        args: '{"path":"README.md"',
         generatedBytes: 128,
       }),
     )

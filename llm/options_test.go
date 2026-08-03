@@ -68,6 +68,14 @@ func TestStreamOptionsValidateAcceptsNativeToolChoices(t *testing.T) {
 			protocol: ProtocolOpenAICompletions,
 			options:  &OpenAICompletionsStreamOptions{ToolChoice: OpenAIToolChoiceFunction{Name: "weather"}},
 		},
+		{
+			name:     "OpenAI Responses summarized",
+			protocol: ProtocolOpenAIResponses,
+			options: &OpenAIResponsesStreamOptions{
+				ThinkingDisplay: ThinkingDisplaySummarized,
+				ToolChoice:      OpenAIToolChoiceRequired,
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -108,6 +116,13 @@ func TestStreamOptionsValidateRejectsInvalidNativeToolChoices(t *testing.T) {
 			options:  &OpenAICompletionsStreamOptions{ToolChoice: OpenAIToolChoiceFunction{Name: "missing"}},
 			tools:    tools,
 			want:     "unknown tool",
+		},
+		{
+			name:     "unknown Responses thinking display",
+			protocol: ProtocolOpenAIResponses,
+			options:  &OpenAIResponsesStreamOptions{ThinkingDisplay: ThinkingDisplay("verbatim")},
+			tools:    tools,
+			want:     "thinking display",
 		},
 	}
 

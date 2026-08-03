@@ -148,7 +148,7 @@ func checkCatalogMarker(path string, models map[string]catalogModel) error {
 	for _, model := range models {
 		counts[model.Protocol]++
 	}
-	runnable := counts["openai-completions"] + counts["anthropic-messages"]
+	runnable := counts["openai-completions"] + counts["openai-responses"] + counts["anthropic-messages"]
 	expected := fmt.Sprintf(
 		"<!-- catalog-stats: total=%d runnable=%d openai-completions=%d anthropic-messages=%d openai-responses=%d google-generative-ai=%d mistral-conversations=%d -->",
 		len(models), runnable, counts["openai-completions"], counts["anthropic-messages"], counts["openai-responses"], counts["google-generative-ai"], counts["mistral-conversations"],

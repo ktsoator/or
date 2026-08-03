@@ -111,6 +111,7 @@ func projectAgentEvent(ev agent.AgentEvent) (Event, bool) {
 			return projectToolInputEvent(ToolInputStarted, ev.LLMEvent), true
 		case llm.EventToolCallDelta:
 			projected := projectToolInputEvent(ToolInputDelta, ev.LLMEvent)
+			projected.Delta = ev.LLMEvent.Delta
 			projected.ToolInputBytes = len([]byte(ev.LLMEvent.Delta))
 			return projected, true
 		case llm.EventToolCallEnd:

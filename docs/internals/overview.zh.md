@@ -12,9 +12,12 @@
 | 路径 | 职责 |
 |---|---|
 | [`llm/`](https://github.com/ktsoator/or/tree/main/llm) | 整个中立核心与公开 API：模型、消息、选项、流式、迁移、适配器与 provider 两张注册表，以及默认 client |
-| [`llm/openai/`](https://github.com/ktsoator/or/tree/main/llm/openai) | `openai-completions` 适配器；在 `init` 中自行注册 |
+| [`llm/openai/`](https://github.com/ktsoator/or/tree/main/llm/openai) | `openai-completions` 与 `openai-responses` 适配器；在 `init` 中同时注册 |
+| `llm/openai/internal/chatcompletions/` | Chat Completions 请求转换、兼容方言与流状态 |
+| `llm/openai/internal/responses/` | Responses input item 转换与事件状态机 |
+| `llm/openai/internal/transport/` | HTTP client、请求 Hook 与共享 SSE 过滤 |
 | [`llm/anthropic/`](https://github.com/ktsoator/or/tree/main/llm/anthropic) | `anthropic-messages` 适配器；在 `init` 中自行注册 |
-| [`llm/all/`](https://github.com/ktsoator/or/tree/main/llm/all) | 空导入两个适配器，供想要全部内置协议的调用方使用 |
+| [`llm/all/`](https://github.com/ktsoator/or/tree/main/llm/all) | 空导入两个 provider 包，供想要全部内置协议的调用方使用 |
 | [`llm/internal/`](https://github.com/ktsoator/or/tree/main/llm/internal) | `jsonx`（宽容的 JSON 辅助）与 `genmodels`（模型清单生成器） |
 
 适配器通过副作用被引入：
@@ -58,8 +61,10 @@ flowchart TD
     RR --> C{"adapters.Get(model.Protocol)"}
     C -->|anthropic-messages| D["Anthropic 适配器"]
     C -->|openai-completions| E["OpenAI 适配器"]
+    C -->|openai-responses| F["OpenAI Responses 适配器"]
     D --> T["TransformMessages → convert → SDK 请求"]
     E --> T
+    F --> T
     T --> G["StreamWriter: Emit / Done / Fail"]
     G --> H["chan Event → 调用方"]
 ```

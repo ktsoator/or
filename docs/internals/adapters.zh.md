@@ -1,8 +1,9 @@
 # 协议适配器
 
-适配器是 `llm` 包的边界。在适配器之前，所有类型都是与厂商无关的；进入适配器之后，代码就可以面向某一种具体线路协议。内置适配器有两个：
+适配器是 `llm` 包的边界。在适配器之前，所有类型都是与厂商无关的；进入适配器之后，代码就可以面向某一种具体线路协议。内置适配器有三个：
 
 - `openai-completions`：面向 OpenAI 兼容的 Chat Completions 端点。
+- `openai-responses`：面向 OpenAI 官方 Responses API。
 - `anthropic-messages`：面向 Anthropic 兼容的 Messages 端点。
 
 ## 适配器契约
@@ -49,6 +50,9 @@ func (registry *AdapterRegistry) Register(adapter ProtocolAdapter) error {
 ```go
 func init() {
 	if err := llm.Register(NewAdapter(nil)); err != nil {
+		panic(err)
+	}
+	if err := llm.Register(NewResponsesAdapter(nil)); err != nil {
 		panic(err)
 	}
 }
@@ -99,7 +103,7 @@ func buildClient(httpClient *http.Client, model llm.Model, options llm.StreamOpt
 
 ## 适配器翻译什么
 
-两个内置适配器都遵循同一条路径：
+三个内置适配器都遵循同一条路径：
 
 1. 校验 `model.Protocol` 和 `model.Compatibility` 是否匹配当前适配器。
 2. 序列化历史前先调用 `TransformMessages`，为目标模型适配历史。
@@ -108,7 +112,11 @@ func buildClient(httpClient *http.Client, model llm.Model, options llm.StreamOpt
 5. 把推理、最大 token 等中立选项映射到厂商字段。
 6. 消费厂商流，并重建 `AssistantMessage` 与事件流。
 
-协议特有的开关都放在 `StreamOptions.ProtocolOptions` 里。OpenAI 兼容模型接受 `OpenAICompletionsStreamOptions`；Anthropic 模型接受 `AnthropicStreamOptions`。共享的 options 校验会在发出任何 HTTP 请求之前拒绝协议不匹配的配置。
+协议特有的开关都放在 `StreamOptions.ProtocolOptions` 里。OpenAI Chat Completions 兼容模型接受 `OpenAICompletionsStreamOptions`，OpenAI Responses 模型接受 `OpenAIResponsesStreamOptions`，Anthropic 模型接受 `AnthropicStreamOptions`。共享的 options 校验会在发出任何 HTTP 请求之前拒绝协议不匹配的配置。
+
+Responses adapter 保持无状态：固定发送 `store: false`，把转换后的完整历史重放为 input items，并为 reasoning 模型请求加密 reasoning 内容，因此后续轮次不依赖 `previous_response_id`。
+
+公开的 `llm/openai` 包只保留稳定的构造与注册入口。Chat Completions 和 Responses 分别位于独立的 internal package 中，请求类型、兼容规则和流事件状态不会跨越协议边界；两者只共享 transport 行为与协议无关的序列化辅助。
 
 ## 兼容厂商
 

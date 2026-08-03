@@ -17,9 +17,9 @@ response, err := llm.Complete(ctx, model, llm.Prompt("..."), options)
 | 是否具备推理能力 | `Model.Reasoning`（bool） |
 | 流式读回思考 | `EventThinkingStart` / `Delta` / `End` |
 | 从最终消息读回思考 | `ThinkingContent`（`Thinking`、`ThinkingSignature`、`Redacted`） |
-| 控制思考如何返回（Anthropic） | `AnthropicStreamOptions.ThinkingDisplay` |
+| 控制思考如何返回 | `AnthropicStreamOptions.ThinkingDisplay`、`OpenAIResponsesStreamOptions.ThinkingDisplay` |
 
-强度只决定"思考多少"。思考文本是否随响应返回则是另一个正交的旋钮:在 Anthropic 上由 `ThinkingDisplay` 控制（见 [Anthropic 思考显示](#anthropic-思考显示)）。
+强度只决定"思考多少"。思考文本是否随响应返回则是另一个正交的旋钮，在 Anthropic Messages 与 OpenAI Responses 上由 `ThinkingDisplay` 控制（见[思考显示](#思考显示)）。
 
 ## 推理强度
 
@@ -87,7 +87,7 @@ for _, block := range response.Content {
 }
 ```
 
-## Anthropic 思考显示
+## 思考显示
 
 在 Anthropic 协议上，`ThinkingDisplay` 控制推理内容如何返回，但不改变模型是否进行推理。留空时默认为摘要化思考。
 
@@ -113,6 +113,17 @@ options := llm.StreamOptions{
 
 使用 `ThinkingDisplayOmitted` 时，不会有 `EventThinkingDelta` 事件到达，且 `ThinkingContent` 块会被标记为 `Redacted`。
 
+OpenAI Responses 通过 `OpenAIResponsesStreamOptions` 使用相同的显示值。`Summarized` 会请求 `reasoning.summary: auto`，`Omitted` 不请求摘要；两种模式都会保留无状态后续轮次所需的加密 reasoning 元数据。
+
+```go
+options := llm.StreamOptions{
+	Reasoning: llm.ModelThinkingHigh,
+	ProtocolOptions: &llm.OpenAIResponsesStreamOptions{
+		ThinkingDisplay: llm.ThinkingDisplayOmitted,
+	},
+}
+```
+
 ## 对话连续性
 
-提供方所需的推理元数据（例如 Anthropic 签名）会保留在 assistant 消息中，并在后续工具调用需要时重放。这一点对带思考的工具调用尤为重要:一些提供方要求把带签名的思考块原样回传，才会接受下一次工具调用，丢失它可能导致该轮失败。即使用 `ThinkingDisplayOmitted` 隐去了文本，本库仍保留该块，以保证历史有效。当目标模型发生变化时，前一个模型产生的推理会被删除，而不会作为普通文本重放。底层消息规则见[消息与上下文](conversations.md)。
+提供方所需的推理元数据（例如 Anthropic 签名或 OpenAI Responses 的加密 reasoning item）会保留在 assistant 消息中，并在后续工具调用需要时重放。这一点对带思考的工具调用尤为重要:一些提供方要求把带签名的思考块原样回传，才会接受下一次工具调用，丢失它可能导致该轮失败。即使用 `ThinkingDisplayOmitted` 隐去了文本，本库仍保留该块，以保证历史有效。当目标模型发生变化时，前一个模型产生的推理会被删除，而不会作为普通文本重放。底层消息规则见[消息与上下文](conversations.md)。

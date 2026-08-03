@@ -2,7 +2,7 @@
 
 [English](README.md) | 简体中文
 
-面向大语言模型的、与厂商无关的统一 API。一套类型同时支持两种 wire 协议（OpenAI Chat Completions 与 Anthropic Messages）；同一段对话可以发给任一协议下的任意模型，每次请求都会重新适配。本包是一个无状态的翻译层——只负责决定「发什么」以及「如何解读流式响应」，把历史存储、上下文压缩和工具循环交给调用方。
+面向大语言模型的、与厂商无关的统一 API。一套类型同时支持三种 wire 协议（OpenAI Chat Completions、OpenAI Responses 与 Anthropic Messages）；同一段对话可以发给任意受支持模型，每次请求都会重新适配。本包是一个无状态的翻译层——只负责决定「发什么」以及「如何解读流式响应」，把历史存储、上下文压缩和工具循环交给调用方。
 
 本文为阅读或扩展本包的人梳理源码结构。用法请看 [pkg.go.dev 上的包文档](https://pkg.go.dev/github.com/ktsoator/or/llm)（即 [`doc.go`](doc.go) 中的 godoc）与[使用指南](../docs/llm/README.zh.md)。下面每一块都链接到对应的[内部实现指南](../docs/internals/overview.zh.md)，那里有带注解代码的深入讲解。
 
@@ -31,7 +31,7 @@
 | [`default.go`](default.go) | 包级 `Stream`/`Complete`/`Register`/`SupportsProtocol` 与 `DefaultProviderRegistry`，基于默认 client；说明了「import 触发 init 注册」的用法。**建议从这里开始读。** |
 | [`client.go`](client.go) | `Client.Stream`/`Complete`：校验选项、经 provider 注册表解析 provider 配置（API key、override、headers）、选中 adapter、消费流 |
 | [`adapters.go`](adapters.go) | `ProtocolAdapter`（provider 实现的扩展点）与 `AdapterRegistry`——并发安全的「协议 → adapter」映射 |
-| [`options.go`](options.go) | `StreamOptions`、协议特化扩展（`AnthropicStreamOptions`、`OpenAICompletionsStreamOptions`）、各家原生 tool-choice 类型及其校验 |
+| [`options.go`](options.go) | `StreamOptions`、协议特化扩展（`AnthropicStreamOptions`、`OpenAICompletionsStreamOptions`、`OpenAIResponsesStreamOptions`）、各家原生 tool-choice 类型及其校验 |
 
 **深入：** [架构总览](../docs/internals/overview.zh.md) · [协议适配器](../docs/internals/adapters.zh.md)
 
@@ -109,9 +109,9 @@ flowchart TD
 
 | 包 | 作用 |
 |---|---|
-| [`openai/`](openai) | OpenAI Chat Completions adapter；import 时自注册 |
+| [`openai/`](openai) | OpenAI Chat Completions 与 Responses adapter；import 时同时注册 |
 | [`anthropic/`](anthropic) | Anthropic Messages adapter；import 时自注册 |
-| [`all/`](all) | 空白导入两个 provider，一次注册所有内置协议 |
+| [`all/`](all) | 空白导入两个 provider 包，一次注册所有内置协议 |
 | [`internal/jsonx`](internal/jsonx) | `jsonparse.go` 使用的宽松/部分 JSON 解析 |
 | [`internal/genmodels`](internal/genmodels) | `catalog.generated.json` 的生成器 |
 

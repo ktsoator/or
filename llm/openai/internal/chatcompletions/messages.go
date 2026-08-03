@@ -1,4 +1,4 @@
-package openai
+package chatcompletions
 
 import (
 	"encoding/json"
@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ktsoator/or/llm"
+	"github.com/ktsoator/or/llm/openai/internal/protocolutil"
 	oai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/shared"
 )
@@ -101,23 +102,13 @@ func toolCallIDNormalizer(model llm.Model) func(string) string {
 // sanitizeToolCallID replaces any character outside the Anthropic-compatible set
 // [a-zA-Z0-9_-] with an underscore.
 func sanitizeToolCallID(id string) string {
-	return strings.Map(func(r rune) rune {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_', r == '-':
-			return r
-		default:
-			return '_'
-		}
-	}, id)
+	return protocolutil.SanitizeToolCallID(id)
 }
 
 // truncateASCII caps an ASCII identifier at limit bytes. Tool-call IDs are ASCII,
 // so a byte slice never splits a multi-byte rune.
 func truncateASCII(id string, limit int) string {
-	if len(id) > limit {
-		return id[:limit]
-	}
-	return id
+	return protocolutil.TruncateASCII(id, limit)
 }
 
 func convertUserMessage(message *llm.UserMessage) (*oai.ChatCompletionMessageParamUnion, error) {
@@ -315,14 +306,7 @@ func convertAssistantMessage(
 }
 
 func encodeToolArguments(arguments map[string]any) (string, error) {
-	if arguments == nil {
-		return "{}", nil
-	}
-	encoded, err := json.Marshal(arguments)
-	if err != nil {
-		return "", err
-	}
-	return string(encoded), nil
+	return protocolutil.EncodeToolArguments(arguments)
 }
 
 // convertTools maps tool definitions to OpenAI function tool params.
@@ -348,11 +332,8 @@ func convertTools(tools []llm.ToolDefinition, compat resolvedCompat) ([]oai.Chat
 			}
 			function.Parameters = parameters
 		}
-		if compat.supportsStrictMode {
-			// Advertise the standard strict field while leaving strict schema
-			// enforcement disabled unless the public Tool API gains an explicit
-			// strict option.
-			function.Strict = oai.Bool(false)
+		if compat.supportsStrictMode && tool.Strict != nil {
+			function.Strict = oai.Bool(*tool.Strict)
 		}
 
 		converted = append(converted, oai.ChatCompletionFunctionTool(function))

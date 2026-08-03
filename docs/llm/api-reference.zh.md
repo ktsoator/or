@@ -44,9 +44,9 @@
 |---|---|---|
 | 通用选项 | `StreamOptions`、`StreamOptions.Validate` | [请求选项](configuration.md) |
 | 协议选项接口 | `ProtocolStreamOptions` | [请求选项](configuration.md) |
-| OpenAI 选项 | `OpenAICompletionsStreamOptions`、`OpenAIToolChoice` 相关类型与常量 | [工具定义与调用](tools.md#协议特定的工具选择) |
+| OpenAI 选项 | `OpenAICompletionsStreamOptions`、`OpenAIResponsesStreamOptions`、`OpenAIToolChoice` 相关类型与常量 | [工具定义与调用](tools.md#协议特定的工具选择) |
 | Anthropic 选项 | `AnthropicStreamOptions`、`AnthropicToolChoice` 相关类型与常量 | [工具定义与调用](tools.md#协议特定的工具选择) |
-| 推理显示 | `ThinkingDisplay`、`ThinkingDisplaySummarized`、`ThinkingDisplayOmitted` | [推理配置](reasoning.md#anthropic-思考显示) |
+| 推理显示 | `ThinkingDisplay`、`ThinkingDisplaySummarized`、`ThinkingDisplayOmitted` | [推理配置](reasoning.md#思考显示) |
 
 字段默认值、凭证优先级、Hook 与请求改写规则见[请求选项](configuration.md)。
 
@@ -81,11 +81,11 @@
 
 | 分类 | 公开符号 | 参考页 |
 |---|---|---|
-| 协议 | `Protocol`、`ProtocolOpenAICompletions`、`ProtocolAnthropicMessages` | [协议与提供方状态](support-matrix.md) |
+| 协议 | `Protocol`、`ProtocolOpenAICompletions`、`ProtocolOpenAIResponses`、`ProtocolAnthropicMessages` | [协议与提供方状态](support-matrix.md) |
 | 兼容配置 | `ModelCompatibility`、`OpenAICompletionsCompatibility`、`AnthropicMessagesCompatibility` | [模型与提供方](providers.md#自定义与兼容端点) |
 | Adapter | `ProtocolAdapter` | [自定义协议](extending.md) |
 | Adapter 注册表 | `AdapterRegistry`、`NewAdapterRegistry`、`Register` | [Client 与注册表](clients-and-registries.md) |
-| 内置 Adapter | `openai.NewAdapter`、`anthropic.NewAdapter`、`llm/all` | [快速开始](getting-started.md#注册协议适配器) |
+| 内置 Adapter | `openai.NewAdapter`、`openai.NewResponsesAdapter`、`anthropic.NewAdapter`、`llm/all` | [快速开始](getting-started.md#注册协议适配器) |
 
 ## 结果、错误与诊断
 

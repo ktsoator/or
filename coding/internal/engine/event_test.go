@@ -23,6 +23,7 @@ func TestProjectAgentEventProjectsToolInputLifecycle(t *testing.T) {
 		name      string
 		llmEvent  llm.Event
 		wantType  EventType
+		wantDelta string
 		wantBytes int
 		wantArgs  bool
 	}{
@@ -44,6 +45,7 @@ func TestProjectAgentEventProjectsToolInputLifecycle(t *testing.T) {
 				ToolCall:     &llm.ToolCall{ID: "call-1", Name: "write"},
 			},
 			wantType:  ToolInputDelta,
+			wantDelta: "\u4f60a",
 			wantBytes: 4,
 		},
 		{
@@ -79,6 +81,9 @@ func TestProjectAgentEventProjectsToolInputLifecycle(t *testing.T) {
 			}
 			if got.ToolInputBytes != tt.wantBytes {
 				t.Fatalf("ToolInputBytes = %d, want %d", got.ToolInputBytes, tt.wantBytes)
+			}
+			if got.Delta != tt.wantDelta {
+				t.Fatalf("Delta = %q, want %q", got.Delta, tt.wantDelta)
 			}
 			if (got.ToolArgs != nil) != tt.wantArgs {
 				t.Fatalf("ToolArgs = %#v, want present %v", got.ToolArgs, tt.wantArgs)

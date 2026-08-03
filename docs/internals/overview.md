@@ -8,7 +8,7 @@
 `or/llm` is a stateless translation layer. It decides what to send for one
 request and how to interpret the streamed response, and leaves history storage,
 context compaction, and tool-loop orchestration to the caller. The same
-conversation can target any model on either wire protocol, and the target can
+conversation can target any model on any supported wire protocol, and the target can
 change between turns; the library re-adapts the history for each request.
 
 ## Package layout
@@ -21,9 +21,12 @@ vendor SDKs it actually uses.
 | Path | Role |
 |---|---|
 | [`llm/`](https://github.com/ktsoator/or/tree/main/llm) | The whole neutral core and public API: models, messages, options, streaming, transform, the adapter and provider registries, and the default client |
-| [`llm/openai/`](https://github.com/ktsoator/or/tree/main/llm/openai) | The `openai-completions` adapter; registers itself from `init` |
+| [`llm/openai/`](https://github.com/ktsoator/or/tree/main/llm/openai) | The `openai-completions` and `openai-responses` adapters; registers both from `init` |
+| `llm/openai/internal/chatcompletions/` | Chat Completions request conversion, compatibility dialects, and stream state |
+| `llm/openai/internal/responses/` | Responses input-item conversion and event state machine |
+| `llm/openai/internal/transport/` | HTTP client setup, request hooks, and shared SSE filtering |
 | [`llm/anthropic/`](https://github.com/ktsoator/or/tree/main/llm/anthropic) | The `anthropic-messages` adapter; registers itself from `init` |
-| [`llm/all/`](https://github.com/ktsoator/or/tree/main/llm/all) | Blank-imports both adapters, for callers that want every built-in protocol |
+| [`llm/all/`](https://github.com/ktsoator/or/tree/main/llm/all) | Blank-imports both provider packages, for callers that want every built-in protocol |
 | [`llm/internal/`](https://github.com/ktsoator/or/tree/main/llm/internal) | `jsonx` (lenient JSON helpers) and `genmodels` (the catalog generator) |
 
 An adapter is pulled in for its side effects:
@@ -79,8 +82,10 @@ flowchart TD
     RR --> C{"adapters.Get(model.Protocol)"}
     C -->|anthropic-messages| D["Anthropic adapter"]
     C -->|openai-completions| E["OpenAI adapter"]
+    C -->|openai-responses| F["OpenAI Responses adapter"]
     D --> T["TransformMessages → convert → SDK request"]
     E --> T
+    F --> T
     T --> G["StreamWriter: Emit / Done / Fail"]
     G --> H["chan Event → caller"]
 ```

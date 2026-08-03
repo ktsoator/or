@@ -11,7 +11,7 @@
 
 ```go
 import (
-	_ "github.com/ktsoator/or/llm/openai"    // openai-completions 提供方
+	_ "github.com/ktsoator/or/llm/openai"    // openai-completions 与 openai-responses
 	_ "github.com/ktsoator/or/llm/anthropic" // anthropic-messages 提供方
 )
 ```

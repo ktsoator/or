@@ -12,10 +12,10 @@ func TestActiveRunHistoryCompactsStreamingProgressAndClearsOnDone(t *testing.T) 
 		Type: wireEventToolInputStart, Tool: "write", ToolContentIndex: &contentIndex,
 	})
 	history.apply(wireEvent{
-		Type: wireEventToolInputDelta, Tool: "write", ToolContentIndex: &contentIndex, Bytes: 8,
+		Type: wireEventToolInputDelta, Tool: "write", ToolContentIndex: &contentIndex, Delta: `{"path":`, Bytes: 8,
 	})
 	history.apply(wireEvent{
-		Type: wireEventToolInputDelta, Tool: "write", ToolContentIndex: &contentIndex, Bytes: 13,
+		Type: wireEventToolInputDelta, Tool: "write", ToolContentIndex: &contentIndex, Delta: `"main.go"}`, Bytes: 13,
 	})
 
 	snapshot := history.snapshot()
@@ -30,6 +30,9 @@ func TestActiveRunHistoryCompactsStreamingProgressAndClearsOnDone(t *testing.T) 
 	}
 	if snapshot.events[3].Bytes != 21 {
 		t.Fatalf("compacted tool bytes = %d", snapshot.events[3].Bytes)
+	}
+	if snapshot.events[3].Delta != `{"path":"main.go"}` {
+		t.Fatalf("compacted tool delta = %q", snapshot.events[3].Delta)
 	}
 
 	history.apply(wireEvent{Type: wireEventDone})

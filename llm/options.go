@@ -72,8 +72,9 @@ func (options *AnthropicStreamOptions) Validate(tools []ToolDefinition) error {
 	return validateAnthropicToolChoice(options.ToolChoice, tools)
 }
 
-// OpenAIToolChoice is the native OpenAI Chat Completions tool_choice union. Use
-// one of the OpenAIToolChoice* mode constants or OpenAIToolChoiceFunction.
+// OpenAIToolChoice is the native OpenAI tool_choice union shared by Chat
+// Completions and Responses. Use one of the OpenAIToolChoice* mode constants or
+// OpenAIToolChoiceFunction.
 type OpenAIToolChoice interface {
 	isOpenAIToolChoice()
 }
@@ -111,6 +112,34 @@ func (*OpenAICompletionsStreamOptions) Protocol() Protocol {
 func (options *OpenAICompletionsStreamOptions) Validate(tools []ToolDefinition) error {
 	if options == nil {
 		return errors.New("stream options for the OpenAI Completions protocol are nil")
+	}
+	return validateOpenAIToolChoice(options.ToolChoice, tools)
+}
+
+// OpenAIResponsesStreamOptions contains settings understood only by the OpenAI
+// Responses protocol.
+type OpenAIResponsesStreamOptions struct {
+	// ThinkingDisplay controls whether reasoning summaries are requested. Empty
+	// defaults to summarized.
+	ThinkingDisplay ThinkingDisplay
+	// ToolChoice controls OpenAI's native tool selection behavior.
+	ToolChoice OpenAIToolChoice
+}
+
+// Protocol identifies the protocol that accepts these options.
+func (*OpenAIResponsesStreamOptions) Protocol() Protocol {
+	return ProtocolOpenAIResponses
+}
+
+// Validate checks Responses-specific settings against the available tools.
+func (options *OpenAIResponsesStreamOptions) Validate(tools []ToolDefinition) error {
+	if options == nil {
+		return errors.New("stream options for the OpenAI Responses protocol are nil")
+	}
+	switch options.ThinkingDisplay {
+	case "", ThinkingDisplaySummarized, ThinkingDisplayOmitted:
+	default:
+		return fmt.Errorf("unsupported OpenAI Responses thinking display %q", options.ThinkingDisplay)
 	}
 	return validateOpenAIToolChoice(options.ToolChoice, tools)
 }

@@ -30,6 +30,12 @@ func TestDefaultClientIncludesBuiltInAdapters(t *testing.T) {
 			provider: "anthropic",
 			want:     `API key is empty for provider "anthropic" (set ANTHROPIC_OAUTH_TOKEN or ANTHROPIC_API_KEY or pass StreamOptions.APIKey)`,
 		},
+		{
+			name:     "openai responses",
+			protocol: llm.ProtocolOpenAIResponses,
+			provider: "openai",
+			want:     `API key is empty for provider "openai" (set OPENAI_API_KEY or pass StreamOptions.APIKey)`,
+		},
 	}
 
 	for _, test := range tests {
@@ -99,14 +105,12 @@ func TestGetModelUsesBuiltInCatalog(t *testing.T) {
 func TestSupportsProtocolReportsDefaultAdapters(t *testing.T) {
 	for _, protocol := range []llm.Protocol{
 		llm.ProtocolOpenAICompletions,
+		llm.ProtocolOpenAIResponses,
 		llm.ProtocolAnthropicMessages,
 	} {
 		if !llm.SupportsProtocol(protocol) {
 			t.Errorf("SupportsProtocol(%q) = false, want true", protocol)
 		}
-	}
-	if llm.SupportsProtocol("openai-responses") {
-		t.Fatal("SupportsProtocol(openai-responses) = true, want false")
 	}
 }
 
@@ -124,8 +128,8 @@ func TestGetRunnableModelsFiltersCatalogOnlyProtocols(t *testing.T) {
 	if catalog := llm.GetModels("openai"); len(catalog) == 0 {
 		t.Fatal("GetModels(openai) returned no catalog models")
 	}
-	if got := llm.GetRunnableModels("openai"); len(got) != 0 {
-		t.Fatalf("GetRunnableModels(openai) returned %d catalog-only models", len(got))
+	if got := llm.GetRunnableModels("openai"); len(got) == 0 {
+		t.Fatal("GetRunnableModels(openai) returned no Responses models")
 	}
 }
 

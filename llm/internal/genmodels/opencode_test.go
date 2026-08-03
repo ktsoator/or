@@ -256,6 +256,32 @@ func TestFromOpenCodeKeepsMiniMaxRoutesDistinct(t *testing.T) {
 	}
 }
 
+func TestFromOpenCodeRoutesOpenAIModelsThroughResponses(t *testing.T) {
+	luna := sourceModel{Name: "GPT-5.6 Luna", ToolCall: true, Reasoning: true}
+	luna.Provider.NPM = "@ai-sdk/openai"
+	google := sourceModel{Name: "Gemini", ToolCall: true}
+	google.Provider.NPM = "@ai-sdk/google"
+	catalog := map[string]sourceProvider{
+		"opencode-go": {Models: map[string]sourceModel{
+			"gpt-5.6-luna": luna,
+			"gemini":       google,
+		}},
+	}
+
+	models := fromOpenCode(catalog)
+	if len(models) != 1 {
+		t.Fatalf("generated %d models, want only the OpenAI Responses model", len(models))
+	}
+	got := models[0]
+	if got.ID != "gpt-5.6-luna" || got.Provider != "opencode-go" ||
+		got.Protocol != "openai-responses" || got.BaseURL != "https://opencode.ai/zen/go/v1" {
+		t.Fatalf("Luna route = %#v, want opencode-go OpenAI Responses /v1", got)
+	}
+	if got.Compat != (compatibility{}) {
+		t.Fatalf("Luna compatibility = %#v, want none for Responses", got.Compat)
+	}
+}
+
 func TestApplyOpenCodeOverridesKeepsRoutesIndependent(t *testing.T) {
 	candidate := model{
 		ID: "mimo-v2.5", Provider: "xiaomi", Protocol: "openai-completions", Reasoning: true,

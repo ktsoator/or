@@ -17,7 +17,7 @@ them as named types — rather than bare strings — lets the compiler catch typ
 and keeps the public API self-documenting.
 
 ```go
-type Protocol string           // "openai-completions", "anthropic-messages"
+type Protocol string           // "openai-completions", "openai-responses", "anthropic-messages"
 type ModelInput string         // "text", "image"
 type ModelThinkingLevel string // off, minimal, low, medium, high, xhigh, max
 type ThinkingDisplay string    // summarized, omitted
