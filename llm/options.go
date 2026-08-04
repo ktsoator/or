@@ -157,7 +157,8 @@ type StreamOptions struct {
 	Temperature *float64
 	// MaxTokens caps the output tokens for this request. Zero leaves it unset.
 	MaxTokens int64
-	// Headers are merged into the request, overriding model default headers.
+	// Headers are merged into the request case-insensitively, overriding model
+	// default headers.
 	Headers map[string]string
 	// Reasoning requests a thinking level. The provider clamps it to what the
 	// model supports. Empty leaves the model's default; "off" explicitly

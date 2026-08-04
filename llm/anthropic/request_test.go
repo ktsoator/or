@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/anthropics/anthropic-sdk-go/option"
+	"github.com/ktsoator/or/llm"
 )
 
 func TestOnRequestMiddlewareObservesBodyAndRestoresIt(t *testing.T) {
@@ -36,6 +37,19 @@ func TestOnRequestMiddlewareObservesBodyAndRestoresIt(t *testing.T) {
 	}
 	if string(forwarded) != `{"model":"x"}` {
 		t.Fatalf("downstream body = %q, want body restored", forwarded)
+	}
+}
+
+func TestMergedHeadersIgnoresCaseWhenOptionsOverrideModel(t *testing.T) {
+	model := llm.Model{Headers: map[string]string{"X-API-Key": "model", "X-Model": "model-only"}}
+	options := llm.StreamOptions{Headers: map[string]string{"x-api-key": "options"}}
+
+	got := mergedHeaders(model, options)
+	if got["X-Api-Key"] != "options" {
+		t.Fatalf("merged API key = %q, want options override; headers=%v", got["X-Api-Key"], got)
+	}
+	if got["X-Model"] != "model-only" || len(got) != 2 {
+		t.Fatalf("merged headers = %v, want canonical override plus model-only header", got)
 	}
 }
 

@@ -37,7 +37,7 @@ func captureThinkingRequest(t *testing.T, adaptive bool, display llm.ThinkingDis
 		Provider:  "test",
 		BaseURL:   server.URL,
 		Reasoning: true,
-		Input:     []llm.ModelInput{llm.Text},
+		Input:     []llm.ModelInput{llm.ModelInputText},
 		MaxTokens: 4096,
 	}
 	if adaptive {

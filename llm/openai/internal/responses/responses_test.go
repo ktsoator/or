@@ -40,7 +40,7 @@ func TestResponsesRequestConvertsStatelessHistoryAndOptions(t *testing.T) {
 	strict := true
 	model := responsesTestModel(server.URL + "/v1")
 	model.Reasoning = true
-	model.Input = []llm.ModelInput{llm.Text, llm.Image}
+	model.Input = []llm.ModelInput{llm.ModelInputText, llm.ModelInputImage}
 	input := llm.Context{
 		SystemPrompt: "Be concise.",
 		Messages: []llm.Message{
@@ -440,7 +440,7 @@ func responsesTestModel(baseURL string) llm.Model {
 		Protocol: llm.ProtocolOpenAIResponses,
 		Provider: "openai",
 		BaseURL:  baseURL,
-		Input:    []llm.ModelInput{llm.Text},
+		Input:    []llm.ModelInput{llm.ModelInputText},
 		Cost:     llm.ModelCost{Input: 1, Output: 2, CacheRead: 0.5, CacheWrite: 1.5},
 	}
 }

@@ -30,7 +30,7 @@ func newModelOption(model llm.Model) modelOption {
 		ContextWindow:      model.ContextWindow,
 		ThinkingLevels:     llm.SupportedThinkingLevels(model),
 		ThinkingVisibility: model.ThinkingVisibility,
-		SupportsImages:     slices.Contains(model.Input, llm.Image),
+		SupportsImages:     slices.Contains(model.Input, llm.ModelInputImage),
 	}
 }
 

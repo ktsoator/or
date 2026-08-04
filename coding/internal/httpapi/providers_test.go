@@ -28,7 +28,7 @@ func TestProviderConnectionTestEndpointProjectsRequestAndResponse(t *testing.T) 
 			Protocol:  llm.ProtocolOpenAICompletions,
 			BaseURL:   "https://catalog.example.com/v1",
 			Reasoning: true,
-			Input:     []llm.ModelInput{llm.Text},
+			Input:     []llm.ModelInput{llm.ModelInputText},
 		}},
 	})); err != nil {
 		t.Fatal(err)
@@ -125,19 +125,19 @@ func TestProvidersEndpointFiltersCatalogOnlyAndProjectsRepairs(t *testing.T) {
 		{
 			ID: "runnable", Name: "Runnable", Models: []llm.Model{{
 				ID: "available", Provider: "runnable", Protocol: llm.ProtocolOpenAICompletions,
-				BaseURL: "https://runnable.example.com/v1", Input: []llm.ModelInput{llm.Text},
+				BaseURL: "https://runnable.example.com/v1", Input: []llm.ModelInput{llm.ModelInputText},
 			}},
 		},
 		{
 			ID: "catalog-only", Name: "Catalog only", Models: []llm.Model{{
 				ID: "listed", Provider: "catalog-only", Protocol: "unsupported",
-				BaseURL: "https://catalog.example.com", Input: []llm.ModelInput{llm.Text},
+				BaseURL: "https://catalog.example.com", Input: []llm.ModelInput{llm.ModelInputText},
 			}},
 		},
 		{
 			ID: "configured-catalog-only", Name: "Configured catalog only", Models: []llm.Model{{
 				ID: "listed", Provider: "configured-catalog-only", Protocol: "unsupported",
-				BaseURL: "https://configured.example.com", Input: []llm.ModelInput{llm.Text},
+				BaseURL: "https://configured.example.com", Input: []llm.ModelInput{llm.ModelInputText},
 			}},
 		},
 	} {

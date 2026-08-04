@@ -553,7 +553,7 @@ func testModel() llm.Model {
 		Provider: "test-provider",
 		Protocol: llm.ProtocolOpenAICompletions,
 		BaseURL:  "https://catalog.example.com/v1",
-		Input:    []llm.ModelInput{llm.Text},
+		Input:    []llm.ModelInput{llm.ModelInputText},
 	}
 }
 

@@ -79,7 +79,7 @@ runnable := llm.GetRunnableModels("openai") // 返回可调用的 Responses 模�
 
 | 能力 | 字段或接口 |
 |---|---|
-| 图像输入 | `slices.Contains(model.Input, llm.Image)` |
+| 图像输入 | `slices.Contains(model.Input, llm.ModelInputImage)` |
 | 推理 | `model.Reasoning`、`SupportedThinkingLevels(model)` |
 | 上下文窗口 | `model.ContextWindow` |
 | 最大输出 | `model.MaxTokens` |

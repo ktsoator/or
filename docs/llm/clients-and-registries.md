@@ -124,7 +124,7 @@ if err := models.Register(llm.Model{
 	Provider: "local",
 	Protocol: llm.ProtocolOpenAICompletions,
 	BaseURL:  "http://localhost:8080/v1",
-	Input:    []llm.ModelInput{llm.Text},
+	Input:    []llm.ModelInput{llm.ModelInputText},
 }); err != nil {
 	log.Fatal(err)
 }

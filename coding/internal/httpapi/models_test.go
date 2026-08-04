@@ -21,7 +21,7 @@ func TestNewModelOptionIncludesThinkingPresentation(t *testing.T) {
 			llm.ModelThinkingMax:     nil,
 		},
 		ThinkingVisibility: llm.ModelThinkingHidden,
-		Input:              []llm.ModelInput{llm.Text, llm.Image},
+		Input:              []llm.ModelInput{llm.ModelInputText, llm.ModelInputImage},
 		ContextWindow:      204_800,
 	})
 

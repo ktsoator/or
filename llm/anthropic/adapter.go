@@ -16,6 +16,7 @@ import (
 	sdk "github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/ktsoator/or/llm"
+	"github.com/ktsoator/or/llm/internal/httpheader"
 )
 
 // Adapter translates the Anthropic Messages protocol.
@@ -187,15 +188,5 @@ func onResponseMiddleware(hook func(int, http.Header)) option.Middleware {
 }
 
 func mergedHeaders(model llm.Model, options llm.StreamOptions) map[string]string {
-	if len(model.Headers) == 0 && len(options.Headers) == 0 {
-		return nil
-	}
-	merged := make(map[string]string, len(model.Headers)+len(options.Headers))
-	for name, value := range model.Headers {
-		merged[name] = value
-	}
-	for name, value := range options.Headers {
-		merged[name] = value
-	}
-	return merged
+	return httpheader.Merge(model.Headers, options.Headers)
 }

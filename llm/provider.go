@@ -4,6 +4,8 @@ import (
 	"maps"
 	"slices"
 	"strings"
+
+	"github.com/ktsoator/or/llm/internal/httpheader"
 )
 
 // Provider is the runtime entity for one vendor key: its identity, credential
@@ -215,22 +217,10 @@ func envAPIKeyFrom(envKeys []string, env ProviderEnv) string {
 	return ""
 }
 
-// mergeHeaders merges header maps in order, later maps overriding same-named
-// keys of earlier ones. It returns nil when every input is empty.
+// mergeHeaders merges header maps in order, later maps overriding earlier maps
+// case-insensitively. It returns nil when every input is empty.
 func mergeHeaders(layers ...map[string]string) map[string]string {
-	size := 0
-	for _, layer := range layers {
-		size += len(layer)
-	}
-	if size == 0 {
-		return nil
-	}
-
-	merged := make(map[string]string, size)
-	for _, layer := range layers {
-		maps.Copy(merged, layer)
-	}
-	return merged
+	return httpheader.Merge(layers...)
 }
 
 // mergeEnv layers request-scoped env values over base values. It returns the

@@ -80,3 +80,49 @@ func TestValidateToolArgumentsRejectsMalformedSchema(t *testing.T) {
 		t.Fatalf("ValidateToolArguments() error = %v, want invalid schema error", err)
 	}
 }
+
+func TestValidateToolArgumentsDoesNotCoerceNullToZeroValue(t *testing.T) {
+	for _, jsonType := range []string{"number", "integer", "boolean", "string"} {
+		t.Run(jsonType, func(t *testing.T) {
+			tool := ToolDefinition{
+				Name: "null_" + jsonType,
+				Parameters: json.RawMessage(`{
+					"type":"object",
+					"required":["value"],
+					"properties":{"value":{"type":"` + jsonType + `"}}
+				}`),
+			}
+			call := ToolCall{Name: tool.Name, Arguments: map[string]any{"value": nil}}
+
+			_, err := ValidateToolArguments(tool, call)
+			if err == nil || !strings.Contains(err.Error(), "expected "+jsonType) {
+				t.Fatalf("ValidateToolArguments() error = %v, want %s type error", err, jsonType)
+			}
+			if call.Arguments["value"] != nil {
+				t.Fatalf("original null argument changed to %#v", call.Arguments["value"])
+			}
+		})
+	}
+}
+
+func TestValidateToolArgumentsPreservesAllowedNull(t *testing.T) {
+	tool := ToolDefinition{
+		Name: "nullable",
+		Parameters: json.RawMessage(`{
+			"type":"object",
+			"required":["value"],
+			"properties":{"value":{"type":["boolean","null"]}}
+		}`),
+	}
+
+	arguments, err := ValidateToolArguments(tool, ToolCall{
+		Name:      tool.Name,
+		Arguments: map[string]any{"value": nil},
+	})
+	if err != nil {
+		t.Fatalf("ValidateToolArguments() error = %v", err)
+	}
+	if value, present := arguments["value"]; !present || value != nil {
+		t.Fatalf("nullable value = %#v, present = %v; want preserved null", value, present)
+	}
+}

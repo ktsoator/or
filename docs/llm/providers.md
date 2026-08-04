@@ -117,7 +117,7 @@ model := llm.Model{
 	Provider:      "ollama",
 	Protocol:      llm.ProtocolOpenAICompletions,
 	BaseURL:       "http://localhost:11434/v1",
-	Input:         []llm.ModelInput{llm.Text},
+	Input:         []llm.ModelInput{llm.ModelInputText},
 	ContextWindow: 32768,
 	MaxTokens:     4096,
 }
@@ -236,7 +236,7 @@ registry.Register(llm.NewSpecProvider(llm.ProviderSpec{
 		Provider: "local",
 		Protocol: llm.ProtocolOpenAICompletions,
 		BaseURL:  "http://localhost:11434/v1",
-		Input:    []llm.ModelInput{llm.Text},
+		Input:    []llm.ModelInput{llm.ModelInputText},
 	}},
 }))
 ```

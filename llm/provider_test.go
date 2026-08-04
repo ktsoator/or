@@ -147,7 +147,7 @@ func TestResolveHeaderMerge(t *testing.T) {
 	provider := testProvider()
 	registry := registryWithProvider(t, provider)
 	registry.SetOverride("acme", ProviderOverride{
-		Headers: map[string]string{"X-Override": "override", "X-Spec": "override-wins"},
+		Headers: map[string]string{"X-Override": "override", "x-spec": "override-wins"},
 	})
 
 	model := provider.Models()[0]
@@ -334,7 +334,7 @@ func TestNewSpecProviderCopiesSpec(t *testing.T) {
 			Protocol: ProtocolOpenAICompletions,
 			BaseURL:  "https://snapshot.test/v1",
 			Headers:  map[string]string{"X-Model": "original"},
-			Input:    []ModelInput{Text},
+			Input:    []ModelInput{ModelInputText},
 			Compatibility: &OpenAICompletionsCompatibility{
 				SupportsStore: &supportsStore,
 			},
@@ -347,7 +347,7 @@ func TestNewSpecProviderCopiesSpec(t *testing.T) {
 	spec.EnvKeys[0] = "MUTATED_API_KEY"
 	spec.Models[0].BaseURL = "https://mutated.test/v1"
 	spec.Models[0].Headers["X-Model"] = "mutated"
-	spec.Models[0].Input[0] = Image
+	spec.Models[0].Input[0] = ModelInputImage
 	*spec.Models[0].Compatibility.(*OpenAICompletionsCompatibility).SupportsStore = false
 	spec.Headers["X-Spec"] = "mutated"
 
@@ -357,7 +357,7 @@ func TestNewSpecProviderCopiesSpec(t *testing.T) {
 	model := provider.Models()[0]
 	if model.BaseURL != "https://snapshot.test/v1" ||
 		model.Headers["X-Model"] != "original" ||
-		!reflect.DeepEqual(model.Input, []ModelInput{Text}) {
+		!reflect.DeepEqual(model.Input, []ModelInput{ModelInputText}) {
 		t.Fatalf("model snapshot was mutated: %#v", model)
 	}
 	compatibility, ok := model.Compatibility.(*OpenAICompletionsCompatibility)

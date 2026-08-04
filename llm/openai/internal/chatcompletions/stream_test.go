@@ -163,7 +163,7 @@ func openAITestModel(baseURL string) llm.Model {
 		Protocol: llm.ProtocolOpenAICompletions,
 		Provider: "test",
 		BaseURL:  baseURL,
-		Input:    []llm.ModelInput{llm.Text},
+		Input:    []llm.ModelInput{llm.ModelInputText},
 		Cost:     llm.ModelCost{Input: 1, Output: 2, CacheRead: 0.5},
 	}
 }

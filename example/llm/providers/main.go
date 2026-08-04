@@ -46,7 +46,7 @@ func main() {
 			Provider: "local",
 			Protocol: llm.ProtocolOpenAICompletions,
 			BaseURL:  "http://localhost:11434/v1",
-			Input:    []llm.ModelInput{llm.Text},
+			Input:    []llm.ModelInput{llm.ModelInputText},
 		}},
 	})); err != nil {
 		log.Fatal(err)

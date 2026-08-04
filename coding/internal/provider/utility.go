@@ -181,7 +181,7 @@ func findRunnableUtilityModel(models []llm.Model, id string) (llm.Model, bool) {
 // product's small text requests with thinking disabled.
 func IsUtilityModelEligible(model llm.Model) bool {
 	return slices.Contains(llm.SupportedThinkingLevels(model), llm.ModelThinkingOff) &&
-		slices.Contains(model.Input, llm.Text) &&
+		slices.Contains(model.Input, llm.ModelInputText) &&
 		llm.SupportsProtocol(model.Protocol)
 }
 

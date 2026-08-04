@@ -17,7 +17,7 @@ func TestTransformMessagesDowngradesImagesWithoutMutatingHistory(t *testing.T) {
 		},
 	}
 
-	transformed := TransformMessages([]Message{user, toolResult}, Model{Input: []ModelInput{Text}}, nil)
+	transformed := TransformMessages([]Message{user, toolResult}, Model{Input: []ModelInput{ModelInputText}}, nil)
 	gotUser := transformed[0].(*UserMessage)
 	if len(gotUser.Content) != 3 {
 		t.Fatalf("user content length = %d, want 3", len(gotUser.Content))
@@ -53,7 +53,7 @@ func TestTransformMessagesDropsCrossModelReasoningAndRemapsToolResult(t *testing
 		StopReason: StopReasonToolUse,
 	}
 	result := &ToolResultMessage{ToolCallID: "source|call", ToolName: "lookup"}
-	target := Model{ID: "target-model", Provider: "target", Protocol: ProtocolAnthropicMessages, Input: []ModelInput{Text}}
+	target := Model{ID: "target-model", Provider: "target", Protocol: ProtocolAnthropicMessages, Input: []ModelInput{ModelInputText}}
 
 	transformed := TransformMessages([]Message{assistant, result}, target, func(string) string { return "normalized_call" })
 	gotAssistant := transformed[0].(*AssistantMessage)
@@ -82,7 +82,7 @@ func TestTransformMessagesPreservesSameModelReasoning(t *testing.T) {
 		ID:       "model",
 		Provider: "provider",
 		Protocol: ProtocolAnthropicMessages,
-		Input:    []ModelInput{Text},
+		Input:    []ModelInput{ModelInputText},
 	}
 	assistant := &AssistantMessage{
 		Protocol: model.Protocol,
@@ -127,7 +127,7 @@ func TestTransformMessagesSynthesizesOnlyMissingToolResults(t *testing.T) {
 	existing := &ToolResultMessage{ToolCallID: "call_b", ToolName: "second", Content: []ToolResultContent{&TextContent{Text: "ok"}}}
 	user := &UserMessage{Content: []UserContent{&TextContent{Text: "continue"}}}
 
-	transformed := TransformMessages([]Message{assistant, existing, user}, Model{Input: []ModelInput{Text}}, nil)
+	transformed := TransformMessages([]Message{assistant, existing, user}, Model{Input: []ModelInput{ModelInputText}}, nil)
 	if len(transformed) != 4 {
 		t.Fatalf("message count = %d, want 4", len(transformed))
 	}
@@ -157,7 +157,7 @@ func TestTransformMessagesDropsIncompleteAssistantTurns(t *testing.T) {
 	}
 	user := &UserMessage{Content: []UserContent{&TextContent{Text: "retry"}}}
 
-	transformed := TransformMessages([]Message{failed, user}, Model{Input: []ModelInput{Text}}, nil)
+	transformed := TransformMessages([]Message{failed, user}, Model{Input: []ModelInput{ModelInputText}}, nil)
 	gotUser, ok := transformed[0].(*UserMessage)
 	if len(transformed) != 1 || !ok || gotUser.Content[0].(*TextContent).Text != "retry" {
 		t.Fatalf("transformed messages = %#v", transformed)

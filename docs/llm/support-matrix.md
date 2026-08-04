@@ -80,7 +80,7 @@ Read capabilities from each `Model`:
 
 | Capability | Field or API |
 |---|---|
-| Image input | `slices.Contains(model.Input, llm.Image)` |
+| Image input | `slices.Contains(model.Input, llm.ModelInputImage)` |
 | Reasoning | `model.Reasoning`, `SupportedThinkingLevels(model)` |
 | Context window | `model.ContextWindow` |
 | Maximum output | `model.MaxTokens` |
