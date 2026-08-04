@@ -70,7 +70,7 @@ func main() {
 	}
 
 	model := llm.GetModel("anthropic", "claude-sonnet-4-6")
-	if !slices.Contains(model.Input, llm.Image) {
+	if !slices.Contains(model.Input, llm.ModelInputImage) {
 		log.Fatalf("model %s does not advertise image input", model.ID)
 	}
 
@@ -115,11 +115,11 @@ message := &llm.UserMessage{Content: []llm.UserContent{
 
 ## 选择支持图片的模型
 
-示例通过 `slices.Contains(model.Input, llm.Image)` 检查内置模型清单是否标注该模型支持图片。这是调用前检查，不替代目标模型服务的实际兼容性测试。
+示例通过 `slices.Contains(model.Input, llm.ModelInputImage)` 检查内置模型清单是否标注该模型支持图片。这是调用前检查，不替代目标模型服务的实际兼容性测试。
 
 构建模型选择列表时，可从 `GetRunnableModels(provider)` 的结果中继续筛选 `Model.Input`。`GetRunnableModels` 只检查协议适配器是否已注册，不会按文本或图片能力过滤模型。
 
-即使 `Model.Input` 包含 `llm.Image`，模型服务仍可能对格式、像素、文件大小、图片数量或动画另有限制。内置模型清单没有统一表达这些限制。
+即使 `Model.Input` 包含 `llm.ModelInputImage`，模型服务仍可能对格式、像素、文件大小、图片数量或动画另有限制。内置模型清单没有统一表达这些限制。
 
 ## 切换到纯文本模型
 

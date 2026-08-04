@@ -71,7 +71,7 @@ model := llm.Model{
 	ID: "local-model", Name: "Local Model", Provider: "local",
 	Protocol: llm.ProtocolOpenAICompletions,
 	BaseURL: "http://localhost:8080/v1",
-	Input: []llm.ModelInput{llm.Text}, MaxTokens: 4096,
+	Input: []llm.ModelInput{llm.ModelInputText}, MaxTokens: 4096,
 }
 response, err := llm.Complete(ctx, model, llm.Prompt("hello"),
 	llm.StreamOptions{APIKey: "local-key"})

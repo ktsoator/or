@@ -16,7 +16,7 @@ func openAIModel() Model {
 		Protocol: ProtocolOpenAICompletions,
 		Provider: "demo",
 		BaseURL:  "https://example.com",
-		Input:    []ModelInput{Text},
+		Input:    []ModelInput{ModelInputText},
 		Headers:  map[string]string{"X-Test": "1"},
 		Compatibility: &OpenAICompletionsCompatibility{
 			SupportsStore:           ptr(true),
@@ -38,7 +38,7 @@ func anthropicReasoningModel() Model {
 		Protocol:  ProtocolAnthropicMessages,
 		Provider:  "demo",
 		BaseURL:   "https://example.com",
-		Input:     []ModelInput{Text, Image},
+		Input:     []ModelInput{ModelInputText, ModelInputImage},
 		Reasoning: true,
 		ThinkingLevelMap: map[ModelThinkingLevel]*string{
 			ModelThinkingLow:    &low,
@@ -154,7 +154,7 @@ func TestModelRegistryGetReturnsDeepCopy(t *testing.T) {
 	got, _ := reg.Get("demo", "demo-a")
 	got.Headers["X-Test"] = "mutated"
 	got.ThinkingLevelMap[ModelThinkingLow] = nil
-	got.Input[0] = Image
+	got.Input[0] = ModelInputImage
 
 	again, _ := reg.Get("demo", "demo-a")
 	if again.Headers["X-Test"] != "1" {
@@ -163,7 +163,7 @@ func TestModelRegistryGetReturnsDeepCopy(t *testing.T) {
 	if again.ThinkingLevelMap[ModelThinkingLow] == nil {
 		t.Fatalf("ThinkingLevelMap mutation leaked: low became nil")
 	}
-	if again.Input[0] != Text {
+	if again.Input[0] != ModelInputText {
 		t.Fatalf("Input mutation leaked: %v", again.Input)
 	}
 }

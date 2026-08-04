@@ -70,7 +70,7 @@ func main() {
 	}
 
 	model := llm.GetModel("anthropic", "claude-sonnet-4-6")
-	if !slices.Contains(model.Input, llm.Image) {
+	if !slices.Contains(model.Input, llm.ModelInputImage) {
 		log.Fatalf("model %s does not advertise image input", model.ID)
 	}
 
@@ -115,11 +115,11 @@ Content block order is preserved. Describe the meaning of each image in text; `l
 
 ## Selecting an image-capable model
 
-The example checks whether the built-in model catalog marks a model as accepting images with `slices.Contains(model.Input, llm.Image)`. This preflight check does not replace compatibility testing against the target model service.
+The example checks whether the built-in model catalog marks a model as accepting images with `slices.Contains(model.Input, llm.ModelInputImage)`. This preflight check does not replace compatibility testing against the target model service.
 
 For a model picker, filter the result of `GetRunnableModels(provider)` by `Model.Input`. `GetRunnableModels` checks whether a protocol adapter is registered; it does not filter by text or image capability.
 
-Even when `Model.Input` contains `llm.Image`, a model service can impose separate limits on format, pixels, file size, image count, or animation. The built-in model catalog does not normalize these limits.
+Even when `Model.Input` contains `llm.ModelInputImage`, a model service can impose separate limits on format, pixels, file size, image count, or animation. The built-in model catalog does not normalize these limits.
 
 ## Switching to a text-only model
 

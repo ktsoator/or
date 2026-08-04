@@ -41,7 +41,7 @@ func anthropicReplayModel() llm.Model {
 		Protocol:  llm.ProtocolAnthropicMessages,
 		Provider:  "test",
 		Reasoning: true,
-		Input:     []llm.ModelInput{llm.Text},
+		Input:     []llm.ModelInput{llm.ModelInputText},
 		MaxTokens: 128,
 	}
 }

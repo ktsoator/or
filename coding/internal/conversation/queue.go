@@ -54,7 +54,7 @@ func (m *Manager) QueueMessage(id string, message QueuedMessage) error {
 	}
 	if len(message.Images) > 0 {
 		model, found := llm.LookupModel(runtime.record.Provider, runtime.record.Model)
-		if !found || !slices.Contains(model.Input, llm.Image) {
+		if !found || !slices.Contains(model.Input, llm.ModelInputImage) {
 			m.mu.RUnlock()
 			return ErrImagesUnsupported
 		}

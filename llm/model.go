@@ -20,8 +20,8 @@ const (
 type ModelInput string
 
 const (
-	Text  ModelInput = "text"
-	Image ModelInput = "image"
+	ModelInputText  ModelInput = "text"
+	ModelInputImage ModelInput = "image"
 )
 
 // ModelThinkingLevel is a provider-independent reasoning effort level.

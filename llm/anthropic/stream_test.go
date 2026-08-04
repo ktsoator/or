@@ -227,7 +227,7 @@ func captureCacheControlRequest(t *testing.T, provider string) string {
 		Protocol:  llm.ProtocolAnthropicMessages,
 		Provider:  provider,
 		BaseURL:   server.URL,
-		Input:     []llm.ModelInput{llm.Text},
+		Input:     []llm.ModelInput{llm.ModelInputText},
 		MaxTokens: 128,
 	}
 	input := llm.Context{
@@ -273,7 +273,7 @@ func anthropicTestModel(baseURL string) llm.Model {
 		Protocol:  llm.ProtocolAnthropicMessages,
 		Provider:  "test",
 		BaseURL:   baseURL,
-		Input:     []llm.ModelInput{llm.Text},
+		Input:     []llm.ModelInput{llm.ModelInputText},
 		Cost:      llm.ModelCost{Input: 1, Output: 2, CacheRead: 0.5, CacheWrite: 1.5},
 		MaxTokens: 128,
 	}

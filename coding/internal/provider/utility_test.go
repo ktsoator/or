@@ -17,7 +17,7 @@ func TestIsUtilityModelEligible(t *testing.T) {
 			name: "plain text model",
 			model: llm.Model{
 				Protocol: llm.ProtocolOpenAICompletions,
-				Input:    []llm.ModelInput{llm.Text},
+				Input:    []llm.ModelInput{llm.ModelInputText},
 			},
 			want: true,
 		},
@@ -26,7 +26,7 @@ func TestIsUtilityModelEligible(t *testing.T) {
 			model: llm.Model{
 				Protocol:  llm.ProtocolOpenAICompletions,
 				Reasoning: true,
-				Input:     []llm.ModelInput{llm.Text},
+				Input:     []llm.ModelInput{llm.ModelInputText},
 			},
 			want: true,
 		},
@@ -38,7 +38,7 @@ func TestIsUtilityModelEligible(t *testing.T) {
 				ThinkingLevelMap: map[llm.ModelThinkingLevel]*string{
 					llm.ModelThinkingOff: nil,
 				},
-				Input: []llm.ModelInput{llm.Text},
+				Input: []llm.ModelInput{llm.ModelInputText},
 			},
 			want: false,
 		},
@@ -46,7 +46,7 @@ func TestIsUtilityModelEligible(t *testing.T) {
 			name: "image-only model",
 			model: llm.Model{
 				Protocol: llm.ProtocolOpenAICompletions,
-				Input:    []llm.ModelInput{llm.Image},
+				Input:    []llm.ModelInput{llm.ModelInputImage},
 			},
 			want: false,
 		},
@@ -54,7 +54,7 @@ func TestIsUtilityModelEligible(t *testing.T) {
 			name: "unsupported protocol",
 			model: llm.Model{
 				Protocol: "unsupported",
-				Input:    []llm.ModelInput{llm.Text},
+				Input:    []llm.ModelInput{llm.ModelInputText},
 			},
 			want: false,
 		},

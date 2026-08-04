@@ -17,7 +17,7 @@ func TestGenerateUsesUtilityRouteWithThinkingDisabled(t *testing.T) {
 		Provider: "test-provider",
 		Protocol: llm.ProtocolOpenAICompletions,
 		BaseURL:  "https://catalog.example.com/v1",
-		Input:    []llm.ModelInput{llm.Text},
+		Input:    []llm.ModelInput{llm.ModelInputText},
 	}
 	if err := registry.Register(llm.NewSpecProvider(llm.ProviderSpec{
 		ID:     "test-provider",

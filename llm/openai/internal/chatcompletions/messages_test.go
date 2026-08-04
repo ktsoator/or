@@ -45,7 +45,7 @@ func openAIReplayModel() llm.Model {
 		Protocol:  llm.ProtocolOpenAICompletions,
 		Provider:  "test",
 		Reasoning: true,
-		Input:     []llm.ModelInput{llm.Text},
+		Input:     []llm.ModelInput{llm.ModelInputText},
 	}
 }
 
@@ -376,7 +376,7 @@ func TestConvertToolResultMessageWithImagesProducesFollowupUserMessage(t *testin
 	// a follow-up user message containing the images, since the tool role does
 	// not accept image content parts on the OpenAI protocol.
 	model := openAIReplayModel()
-	model.Input = []llm.ModelInput{llm.Text, llm.Image}
+	model.Input = []llm.ModelInput{llm.ModelInputText, llm.ModelInputImage}
 	input := llm.Context{Messages: []llm.Message{
 		&llm.UserMessage{Content: []llm.UserContent{&llm.TextContent{Text: "weather"}}},
 		&llm.AssistantMessage{
