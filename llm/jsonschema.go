@@ -74,11 +74,15 @@ func matchesJSONType(value any, jsonType string) bool {
 // coercePrimitiveByType nudges a primitive toward the requested JSON type. It
 // returns the value unchanged when no safe conversion applies.
 func coercePrimitiveByType(value any, jsonType string) any {
+	// An explicit JSON null is not a representation of a primitive zero value.
+	// Preserve it so nullable schemas can accept it and non-nullable schemas can
+	// report the type mismatch instead of silently changing tool semantics.
+	if value == nil {
+		return nil
+	}
+
 	switch jsonType {
 	case "number":
-		if value == nil {
-			return float64(0)
-		}
 		if text, ok := value.(string); ok && strings.TrimSpace(text) != "" {
 			if parsed, err := strconv.ParseFloat(text, 64); err == nil {
 				return parsed
@@ -89,9 +93,6 @@ func coercePrimitiveByType(value any, jsonType string) any {
 		}
 		return value
 	case "integer":
-		if value == nil {
-			return float64(0)
-		}
 		if text, ok := value.(string); ok && strings.TrimSpace(text) != "" {
 			if parsed, err := strconv.ParseFloat(text, 64); err == nil && parsed == math.Trunc(parsed) {
 				return parsed
@@ -102,9 +103,6 @@ func coercePrimitiveByType(value any, jsonType string) any {
 		}
 		return value
 	case "boolean":
-		if value == nil {
-			return false
-		}
 		if text, ok := value.(string); ok {
 			if text == "true" {
 				return true
@@ -123,9 +121,6 @@ func coercePrimitiveByType(value any, jsonType string) any {
 		}
 		return value
 	case "string":
-		if value == nil {
-			return ""
-		}
 		switch typed := value.(type) {
 		case float64:
 			return strconv.FormatFloat(typed, 'f', -1, 64)
