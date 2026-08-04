@@ -8,7 +8,7 @@ import (
 
 var providerAPIKeyEnvVars = map[string][]string{
 	"github-copilot":         {"COPILOT_GITHUB_TOKEN"},
-	"anthropic":              {"ANTHROPIC_OAUTH_TOKEN", "ANTHROPIC_API_KEY"},
+	"anthropic":              {"ANTHROPIC_API_KEY"},
 	"ant-ling":               {"ANT_LING_API_KEY"},
 	"openai":                 {"OPENAI_API_KEY"},
 	"azure-openai-responses": {"AZURE_OPENAI_API_KEY"},

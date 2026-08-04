@@ -20,7 +20,7 @@
 找不到 key 时，错误会按优先级顺序列出提供方及其检查过的每个环境变量：
 
 ```
-API key is empty for provider "anthropic" (set ANTHROPIC_OAUTH_TOKEN or ANTHROPIC_API_KEY or pass StreamOptions.APIKey)
+API key is empty for provider "anthropic" (set ANTHROPIC_API_KEY or pass StreamOptions.APIKey)
 ```
 
 凭证可能来自 `StreamOptions`、provider override 或进程环境。完整优先级只在[请求选项 § 按请求提供凭证](configuration.md#按请求提供凭证)维护。

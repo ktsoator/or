@@ -7,9 +7,8 @@ import (
 )
 
 func TestAPIKeyEnvVarsReturnsConfiguredOrder(t *testing.T) {
-	// Anthropic intentionally checks the OAuth token before the API key.
 	got := APIKeyEnvVars("anthropic")
-	want := []string{"ANTHROPIC_OAUTH_TOKEN", "ANTHROPIC_API_KEY"}
+	want := []string{"ANTHROPIC_API_KEY"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("APIKeyEnvVars = %v, want %v", got, want)
 	}
@@ -35,11 +34,11 @@ func TestAPIKeyEnvVarsUnknownProviderReturnsEmpty(t *testing.T) {
 
 func TestGetEnvAPIKeyWithEnvPrefersFirstConfigured(t *testing.T) {
 	env := ProviderEnv{
-		"ANTHROPIC_OAUTH_TOKEN": "oauth-token",
-		"ANTHROPIC_API_KEY":     "api-key",
+		"XIAOMI_API_KEY": "xiaomi-key",
+		"MIMO_API_KEY":   "mimo-key",
 	}
-	if got := GetEnvAPIKeyWithEnv("anthropic", env); got != "oauth-token" {
-		t.Fatalf("GetEnvAPIKey = %q, want oauth-token", got)
+	if got := GetEnvAPIKeyWithEnv("xiaomi", env); got != "xiaomi-key" {
+		t.Fatalf("GetEnvAPIKey = %q, want xiaomi-key", got)
 	}
 }
 
@@ -47,10 +46,10 @@ func TestGetEnvAPIKeyWithEnvFallsThroughEmpty(t *testing.T) {
 	// First var is set but empty, second is the real one — the lookup must skip
 	// the empty value and fall through.
 	env := ProviderEnv{
-		"ANTHROPIC_OAUTH_TOKEN": "",
-		"ANTHROPIC_API_KEY":     "real-key",
+		"XIAOMI_API_KEY": "",
+		"MIMO_API_KEY":   "real-key",
 	}
-	if got := GetEnvAPIKeyWithEnv("anthropic", env); got != "real-key" {
+	if got := GetEnvAPIKeyWithEnv("xiaomi", env); got != "real-key" {
 		t.Fatalf("GetEnvAPIKey = %q, want real-key", got)
 	}
 }

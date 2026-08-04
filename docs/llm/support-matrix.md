@@ -35,7 +35,7 @@ The current catalog contains the following provider IDs. Counts come from `llm/c
 
 | Provider ID | Models | Protocol | Credential variables |
 |---|---:|---|---|
-| `anthropic` | 13 | Anthropic Messages | `ANTHROPIC_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` |
+| `anthropic` | 13 | Anthropic Messages | `ANTHROPIC_API_KEY` |
 | `cerebras` | 3 | OpenAI Completions | `CEREBRAS_API_KEY` |
 | `deepseek` | 4 | OpenAI Completions | `DEEPSEEK_API_KEY` |
 | `fireworks` | 17 | Anthropic Messages | `FIREWORKS_API_KEY` |

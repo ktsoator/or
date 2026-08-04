@@ -28,7 +28,7 @@ func TestDefaultClientIncludesBuiltInAdapters(t *testing.T) {
 			name:     "anthropic",
 			protocol: llm.ProtocolAnthropicMessages,
 			provider: "anthropic",
-			want:     `API key is empty for provider "anthropic" (set ANTHROPIC_OAUTH_TOKEN or ANTHROPIC_API_KEY or pass StreamOptions.APIKey)`,
+			want:     `API key is empty for provider "anthropic" (set ANTHROPIC_API_KEY or pass StreamOptions.APIKey)`,
 		},
 		{
 			name:     "openai responses",

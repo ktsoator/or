@@ -35,7 +35,7 @@ runnable := llm.GetRunnableModels("openai") // 返回可调用的 Responses 模�
 
 | 提供方 ID | 模型数 | 协议 | 凭证变量 |
 |---|---:|---|---|
-| `anthropic` | 13 | Anthropic Messages | `ANTHROPIC_OAUTH_TOKEN` 或 `ANTHROPIC_API_KEY` |
+| `anthropic` | 13 | Anthropic Messages | `ANTHROPIC_API_KEY` |
 | `cerebras` | 3 | OpenAI Completions | `CEREBRAS_API_KEY` |
 | `deepseek` | 4 | OpenAI Completions | `DEEPSEEK_API_KEY` |
 | `fireworks` | 17 | Anthropic Messages | `FIREWORKS_API_KEY` |

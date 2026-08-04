@@ -38,7 +38,7 @@ When no key is found, the error names the provider and every environment
 variable that was checked, in precedence order:
 
 ```
-API key is empty for provider "anthropic" (set ANTHROPIC_OAUTH_TOKEN or ANTHROPIC_API_KEY or pass StreamOptions.APIKey)
+API key is empty for provider "anthropic" (set ANTHROPIC_API_KEY or pass StreamOptions.APIKey)
 ```
 
 Credentials may come from `StreamOptions`, a provider override, or the process
