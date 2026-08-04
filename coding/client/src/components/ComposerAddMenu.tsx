@@ -38,6 +38,7 @@ export function ComposerAddMenu({
   const { t } = useI18n()
   const [activeIndex, setActiveIndex] = useState(0)
   const [keyboardNavigating, setKeyboardNavigating] = useState(false)
+  const panelOpen = open && !disabled
   const attachDisabled =
     disabled || !imageAttachmentAvailable || imageLimitReached
   const attachFilesDisabled = disabled || fileLimitReached
@@ -94,10 +95,14 @@ export function ComposerAddMenu({
   const optionCount = items.length
 
   useEffect(() => {
-    if (!open) return
+    if (!panelOpen) return
     setActiveIndex(!attachFilesDisabled ? 0 : !attachDisabled ? 1 : 2)
     setKeyboardNavigating(false)
-  }, [attachDisabled, attachFilesDisabled, open])
+  }, [attachDisabled, attachFilesDisabled, panelOpen])
+
+  useEffect(() => {
+    if (disabled && open) onOpenChange(false)
+  }, [disabled, onOpenChange, open])
 
   const moveActive = (offset: -1 | 1) => {
     let next = activeIndex
@@ -129,13 +134,15 @@ export function ComposerAddMenu({
         aria-label={t('composer.addContent')}
         title={t('composer.addContent')}
         aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-controls={open ? composerAddPanelID : undefined}
-        aria-activedescendant={open ? composerAddOptionID(activeIndex) : undefined}
+        aria-expanded={panelOpen}
+        aria-controls={panelOpen ? composerAddPanelID : undefined}
+        aria-activedescendant={panelOpen ? composerAddOptionID(activeIndex) : undefined}
         disabled={disabled}
-        onClick={() => onOpenChange(!open)}
+        onClick={() => {
+          if (!disabled) onOpenChange(!panelOpen)
+        }}
         onKeyDown={(event) => {
-          if (!open) return
+          if (!panelOpen) return
           if (event.key === 'Escape') {
             event.preventDefault()
             onOpenChange(false)
@@ -162,12 +169,12 @@ export function ComposerAddMenu({
         <Plus
           className={cn(
             'size-[1.125rem] transition-transform duration-150',
-            open && 'rotate-45',
+            panelOpen && 'rotate-45',
           )}
           aria-hidden="true"
         />
       </button>
-      {open && (
+      {panelOpen && (
         <div
           id={composerAddPanelID}
           role="listbox"

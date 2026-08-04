@@ -790,7 +790,7 @@ export function Composer({
                   <ProjectPicker
                     workspaces={workspaces}
                     selectedPath={workspacePath}
-                    disabled={inputDisabled}
+                    disabled={settingsDisabled}
                     onSelect={onSelectProject}
                     onBrowse={onBrowseProjects}
                   />
@@ -1080,7 +1080,7 @@ function DeliveryOption({ value, label, hint }: { value: DeliveryMode; label: st
   return (
     <DropdownMenu.RadioItem
       value={value}
-      className="relative flex h-10 cursor-default select-none items-center gap-2 rounded-[10px] px-2.5 pr-8 outline-none data-[highlighted]:bg-surface-active data-[state=checked]:bg-surface-selected"
+      className="relative flex h-[35px] cursor-default select-none items-center gap-2 rounded-[10px] px-2.5 pr-8 outline-none data-[highlighted]:bg-surface-active data-[state=checked]:bg-surface-selected"
     >
       <span className="font-medium">{label}</span>
       <span className="ml-auto text-[0.71875rem] text-ink-faint">{hint}</span>

@@ -152,6 +152,7 @@ async function openDesktopClient(
     modelName?: string
     modelThinkingLevels?: Array<'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'>
     modelThinkingVisibility?: 'visible' | 'hidden'
+    composerUpdateDelayMs?: number
     nativeDirectory?: string
   } = {},
 ) {
@@ -562,6 +563,14 @@ async function openDesktopClient(
     if (path === '/api/sessions/workbench-session/prompt') {
       body = {}
       status = 202
+    }
+    if (
+      /\/api\/sessions\/[^/]+\/(?:settings|permission-mode)$/.test(path) &&
+      method === 'PATCH'
+    ) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, options.composerUpdateDelayMs ?? 0),
+      )
     }
     await route.fulfill({
       status,
@@ -3583,6 +3592,54 @@ test('Composer adds and removes a text attachment from the add menu', async ({ p
   await composer.getByRole('button', { name: 'Remove main.go' }).click()
   await expect(composer.getByText('main.go')).toBeHidden()
 })
+
+test('Composer closes the add menu when the input becomes disabled', async ({ page }) => {
+  await openDesktopClient(page, {
+    existingSession: true,
+    composerUpdateDelayMs: 500,
+  })
+
+  const composer = page.getByTestId('composer')
+  const input = composer.locator('textarea')
+  const addContent = composer.getByRole('button', { name: 'Add content' })
+  await addContent.click()
+  await expect(composer.getByRole('listbox', { name: 'Add content' })).toBeVisible()
+
+  await composer.getByTestId('permission-mode-trigger').click()
+  await page.getByRole('menuitemradio', { name: /Auto edit/ }).click()
+
+  await expect(input).toBeDisabled()
+  await expect(addContent).toBeDisabled()
+  await expect(composer.getByRole('listbox', { name: 'Add content' })).toHaveCount(0)
+  await expect(input).toBeEnabled()
+})
+
+for (const control of [
+  { name: 'permission', testID: 'permission-mode-trigger' },
+  { name: 'model', testID: 'model-settings-trigger' },
+]) {
+  test(`Composer closes the ${control.name} menu when a run starts`, async ({ page }) => {
+    await openDesktopClient(page, { existingSession: true })
+
+    const composer = page.getByTestId('composer')
+    const permission = composer.getByTestId('permission-mode-trigger')
+    const model = composer.getByTestId('model-settings-trigger')
+    await composer.getByTestId(control.testID).click()
+    await expect(page.getByRole('menu')).toBeVisible()
+
+    await page.evaluate((runID) => {
+      const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+      emit?.({ type: 'run_start', id: runID, startedAt: '2026-08-04T12:00:00Z' })
+    }, `configuration-lock-${control.name}`)
+
+    await expect(permission).toBeDisabled()
+    await expect(model).toBeDisabled()
+    await expect(page.getByRole('menu')).toHaveCount(0)
+    await expect(
+      composer.getByRole('button', { name: 'Choose how this message is delivered' }),
+    ).toBeEnabled()
+  })
+}
 
 test('desktop project browsing uses the native directory picker', async ({ page }) => {
   const requests = await openDesktopClient(page, { nativeDirectory: '/tmp/native-project' })

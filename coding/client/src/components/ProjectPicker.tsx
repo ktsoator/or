@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Check, ChevronDown, ChevronRight, Folder, FolderOpen, Plus, Search } from 'lucide-react'
 import { DropdownMenu } from 'radix-ui'
 import type { WorkspaceSummary } from '@/types'
@@ -22,6 +22,7 @@ export function ProjectPicker({
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const menuOpen = open && !disabled
   const selected = workspaces.find((workspace) => workspace.path === selectedPath)
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase()
@@ -33,10 +34,17 @@ export function ProjectPicker({
     )
   }, [query, workspaces])
 
+  useEffect(() => {
+    if (!disabled) return
+    setOpen(false)
+    setQuery('')
+  }, [disabled])
+
   return (
     <DropdownMenu.Root
-      open={open}
+      open={menuOpen}
       onOpenChange={(nextOpen) => {
+        if (nextOpen && disabled) return
         setOpen(nextOpen)
         if (!nextOpen) setQuery('')
       }}

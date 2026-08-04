@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Check, ChevronDown, Eye, Hand, PencilLine } from 'lucide-react'
 import { DropdownMenu } from 'radix-ui'
 import type { LucideIcon } from 'lucide-react'
@@ -54,11 +55,20 @@ export function PermissionModeMenu({
   onChange: (mode: PermissionMode) => Promise<void>
 }) {
   const { t } = useI18n()
+  const [open, setOpen] = useState(false)
   const selected = options.find((option) => option.value === value) ?? options[0]
   const SelectedIcon = selected.icon
+  const menuOpen = open && !disabled
+
+  useEffect(() => {
+    if (disabled) setOpen(false)
+  }, [disabled])
 
   return (
-    <DropdownMenu.Root>
+    <DropdownMenu.Root
+      open={menuOpen}
+      onOpenChange={(nextOpen) => setOpen(!disabled && nextOpen)}
+    >
       <DropdownMenu.Trigger asChild>
         <button
           data-testid="permission-mode-trigger"

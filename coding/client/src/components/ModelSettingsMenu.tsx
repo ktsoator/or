@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Check, ChevronDown, ChevronRight, LoaderCircle, Minimize2 } from 'lucide-react'
 import { DropdownMenu } from 'radix-ui'
 import type { ContextUsage, ModelOption, ThinkingLevel } from '@/types'
@@ -70,13 +70,19 @@ export function ModelSettingsMenu({
       ? t(thinkingLevelLabelKey(currentModel, thinkingLevel))
       : t(toggleThinking ? 'model.thinkingOff' : 'model.effort')
   const unavailable = disabled || !modelKey || models.length === 0
+  const menuOpen = open && !unavailable
   const contextWindow = currentModel?.contextWindow ?? contextUsage?.contextWindow ?? 0
   const currentContextUsage =
     contextUsage && contextUsage.provider === modelProvider && contextUsage.model === modelID
       ? contextUsage
       : undefined
 
+  useEffect(() => {
+    if (unavailable) setOpen(false)
+  }, [unavailable])
+
   const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen && unavailable) return
     if (nextOpen) setSelectedProvider(modelProvider ?? '')
     setOpen(nextOpen)
   }
@@ -102,7 +108,7 @@ export function ModelSettingsMenu({
   }
 
   return (
-    <DropdownMenu.Root open={open} onOpenChange={handleOpenChange}>
+    <DropdownMenu.Root open={menuOpen} onOpenChange={handleOpenChange}>
       <DropdownMenu.Trigger asChild>
         <button
           data-testid="model-settings-trigger"
