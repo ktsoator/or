@@ -3,10 +3,10 @@ package transport
 import (
 	"bytes"
 	"io"
-	"maps"
 	"net/http"
 
 	"github.com/ktsoator/or/llm"
+	"github.com/ktsoator/or/llm/internal/httpheader"
 	oai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 )
@@ -96,11 +96,5 @@ func onResponseMiddleware(hook func(int, http.Header)) option.Middleware {
 }
 
 func mergedHeaders(model llm.Model, options llm.StreamOptions) map[string]string {
-	if len(model.Headers) == 0 && len(options.Headers) == 0 {
-		return nil
-	}
-	merged := make(map[string]string, len(model.Headers)+len(options.Headers))
-	maps.Copy(merged, model.Headers)
-	maps.Copy(merged, options.Headers)
-	return merged
+	return httpheader.Merge(model.Headers, options.Headers)
 }

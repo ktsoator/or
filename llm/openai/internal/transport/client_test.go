@@ -130,7 +130,7 @@ func TestOnResponseMiddlewareSkipsNilResponse(t *testing.T) {
 
 func TestMergedHeaders(t *testing.T) {
 	model := llm.Model{Headers: map[string]string{"X-A": "model-a", "X-Both": "model"}}
-	options := llm.StreamOptions{Headers: map[string]string{"X-B": "opt-b", "X-Both": "opts"}}
+	options := llm.StreamOptions{Headers: map[string]string{"X-B": "opt-b", "x-both": "opts"}}
 	got := mergedHeaders(model, options)
 
 	if got["X-A"] != "model-a" {
@@ -141,6 +141,9 @@ func TestMergedHeaders(t *testing.T) {
 	}
 	if got["X-Both"] != "opts" {
 		t.Errorf("options must override model: %v", got)
+	}
+	if len(got) != 3 {
+		t.Errorf("case variants must collapse to one header: %v", got)
 	}
 }
 

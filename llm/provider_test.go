@@ -147,7 +147,7 @@ func TestResolveHeaderMerge(t *testing.T) {
 	provider := testProvider()
 	registry := registryWithProvider(t, provider)
 	registry.SetOverride("acme", ProviderOverride{
-		Headers: map[string]string{"X-Override": "override", "X-Spec": "override-wins"},
+		Headers: map[string]string{"X-Override": "override", "x-spec": "override-wins"},
 	})
 
 	model := provider.Models()[0]
