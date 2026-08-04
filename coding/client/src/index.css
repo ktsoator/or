@@ -53,7 +53,7 @@
   --scrim: 12, 10, 9;
   /* Interaction fills, one step apart, for hover / active / selected rows. */
   --surface-hover: rgb(246, 246, 246);
-  --surface-active: rgb(241, 241, 241);
+  --surface-active: rgb(244, 244, 244);
   --surface-selected: rgb(237, 237, 237);
   /* Destructive confirmation buttons carry white text in both themes. */
   --danger-solid: #b42318;

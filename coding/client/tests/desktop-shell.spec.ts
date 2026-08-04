@@ -3624,8 +3624,37 @@ for (const control of [
     const composer = page.getByTestId('composer')
     const permission = composer.getByTestId('permission-mode-trigger')
     const model = composer.getByTestId('model-settings-trigger')
-    await composer.getByTestId(control.testID).click()
-    await expect(page.getByRole('menu')).toBeVisible()
+    const trigger = composer.getByTestId(control.testID)
+    await trigger.click()
+    const menu = page.getByRole('menu')
+    await expect(menu).toBeVisible()
+    await expect.poll(async () => {
+      const [triggerBox, menuBox] = await Promise.all([
+        trigger.boundingBox(),
+        menu.boundingBox(),
+      ])
+      if (!triggerBox || !menuBox) return Number.POSITIVE_INFINITY
+      return Math.abs(triggerBox.y - (menuBox.y + menuBox.height) - 2)
+    }).toBeLessThanOrEqual(0.5)
+    if (control.name === 'permission') {
+      const autoEdit = page.getByRole('menuitemradio', { name: /Auto edit/ })
+      await autoEdit.hover()
+      await expect(autoEdit).toHaveCSS('background-color', 'rgb(244, 244, 244)')
+    } else {
+      const provider = page.getByRole('menuitem', { name: /Provider/ })
+      await provider.hover()
+      await expect(provider).toHaveCSS('background-color', 'rgb(244, 244, 244)')
+      await provider.focus()
+      await provider.press('ArrowRight')
+      const selectedProvider = page.getByRole('menuitemradio', { name: 'OpenAI' })
+      await expect(selectedProvider).toBeVisible()
+      await expect(selectedProvider).toHaveAttribute('data-state', 'checked')
+      await expect(selectedProvider).toHaveAttribute('data-highlighted', '')
+      await expect(selectedProvider).toHaveCSS(
+        'background-color',
+        'rgb(244, 244, 244)',
+      )
+    }
 
     await page.evaluate((runID) => {
       const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE

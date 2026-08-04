@@ -153,7 +153,7 @@ export function ModelSettingsMenu({
         <DropdownMenu.Content
           side="top"
           align="end"
-          sideOffset={7}
+          sideOffset={2}
           collisionPadding={10}
           className="z-[100] min-w-[15.5rem] animate-[fade-in_110ms_ease-out] rounded-2xl border border-edge bg-canvas p-1 text-[0.875rem] text-ink shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
         >
@@ -394,13 +394,13 @@ function formatTokenDecimal(value: number, formatNumber: NumberFormatter): strin
 
 const subTriggerClass = cn(
   'mb-0.5 flex h-[30px] cursor-default select-none items-center rounded-[10px] px-2.5 outline-none last:mb-0',
-  'data-[highlighted]:bg-surface-active data-[state=open]:bg-surface-selected',
+  'data-[highlighted]:bg-surface-active data-[state=open]:bg-surface-selected data-[state=open]:data-[highlighted]:bg-surface-active',
   'data-[disabled]:opacity-40',
 )
 
 const radioItemClass = cn(
   'relative flex h-[30px] cursor-default select-none items-center gap-2 rounded-[10px] px-2.5 pr-9 text-[0.875rem] outline-none',
-  'data-[highlighted]:bg-surface-active data-[state=checked]:bg-surface-selected data-[state=checked]:font-medium',
+  'data-[highlighted]:bg-surface-active data-[state=checked]:bg-surface-selected data-[state=checked]:data-[highlighted]:bg-surface-active data-[state=checked]:font-medium',
 )
 
 const menuLabelClass = 'px-2.5 py-1.5 text-[0.75rem] font-medium text-ink-faint'

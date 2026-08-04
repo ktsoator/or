@@ -99,7 +99,7 @@ export function PermissionModeMenu({
         <DropdownMenu.Content
           side="top"
           align="start"
-          sideOffset={7}
+          sideOffset={2}
           collisionPadding={10}
           className="z-[110] w-[25rem] max-w-[calc(100vw-1.25rem)] animate-[fade-in_110ms_ease-out] rounded-2xl border border-edge bg-canvas p-1.5 text-ink shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
         >
