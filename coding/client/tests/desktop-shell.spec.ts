@@ -572,6 +572,20 @@ async function openDesktopClient(
         setTimeout(resolve, options.composerUpdateDelayMs ?? 0),
       )
     }
+    const permissionModeMatch = path.match(
+      /^\/api\/sessions\/([^/]+)\/permission-mode$/,
+    )
+    if (permissionModeMatch && method === 'PATCH') {
+      const mode = (requestBody as { mode: string }).mode
+      const target =
+        permissionModeMatch[1] === secondarySession.id
+          ? secondarySession
+          : permissionModeMatch[1] === workbenchSession.id
+            ? workbenchSession
+            : createdSession
+      target.permissionMode = mode
+      body = target
+    }
     await route.fulfill({
       status,
       contentType: 'application/json',
@@ -3612,6 +3626,70 @@ test('Composer closes the add menu when the input becomes disabled', async ({ pa
   await expect(addContent).toBeDisabled()
   await expect(composer.getByRole('listbox', { name: 'Add content' })).toHaveCount(0)
   await expect(input).toBeEnabled()
+})
+
+test('Full access requires confirmation before updating the session', async ({ page }) => {
+  const requests = await openDesktopClient(page, { existingSession: true })
+  const composer = page.getByTestId('composer')
+  const permission = composer.getByTestId('permission-mode-trigger')
+
+  await permission.click()
+  await page.getByRole('menuitemradio', { name: /^Full access/ }).click()
+
+  const confirmation = page.getByRole('dialog', { name: 'Enable full access?' })
+  await expect(confirmation).toBeVisible()
+  await expect(confirmation).toHaveCSS('width', '510px')
+  await expect(confirmation.getByText('Files and folders', { exact: true })).toBeVisible()
+  await expect(confirmation.getByText('Terminal commands', { exact: true })).toBeVisible()
+  await expect(
+    confirmation.getByText('Internet and connected apps', { exact: true }),
+  ).toBeVisible()
+  expect(
+    requests.filter((request) => request.path.endsWith('/permission-mode')),
+  ).toHaveLength(0)
+
+  await confirmation.getByRole('button', { name: 'Cancel' }).click()
+  await expect(confirmation).toHaveCount(0)
+  await expect(composer.getByTestId('permission-mode-label')).toHaveText('Ask')
+
+  await permission.click()
+  await page.getByRole('menuitemradio', { name: /^Full access/ }).click()
+  await page
+    .getByRole('dialog', { name: 'Enable full access?' })
+    .getByRole('button', { name: 'Enable full access' })
+    .click()
+
+  await expect.poll(() =>
+    requests.find(
+      (request) =>
+        request.path === '/api/sessions/test-session/permission-mode' &&
+        request.method === 'PATCH',
+    )?.body,
+  ).toEqual({ mode: 'full_access' })
+  await expect(page.getByRole('dialog', { name: 'Enable full access?' })).toHaveCount(0)
+  await expect(composer.getByTestId('permission-mode-label')).toHaveText('Full access')
+  await expect(permission).toHaveClass(/text-warning/)
+})
+
+test('Full access confirmation closes when a run starts', async ({ page }) => {
+  const requests = await openDesktopClient(page, { existingSession: true })
+  const composer = page.getByTestId('composer')
+  const permission = composer.getByTestId('permission-mode-trigger')
+
+  await permission.click()
+  await page.getByRole('menuitemradio', { name: /^Full access/ }).click()
+  await expect(page.getByRole('dialog', { name: 'Enable full access?' })).toBeVisible()
+
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({ type: 'run_start', id: 'full-access-lock', startedAt: '2026-08-04T12:00:00Z' })
+  })
+
+  await expect(permission).toBeDisabled()
+  await expect(page.getByRole('dialog', { name: 'Enable full access?' })).toHaveCount(0)
+  expect(
+    requests.filter((request) => request.path.endsWith('/permission-mode')),
+  ).toHaveLength(0)
 })
 
 for (const control of [

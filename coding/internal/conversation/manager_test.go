@@ -102,6 +102,30 @@ func TestManagerCreatesAndRestoresProjectConversation(t *testing.T) {
 	}
 }
 
+func TestManagerPersistsFullAccessMode(t *testing.T) {
+	dataDir := t.TempDir()
+	model, thinking := testCatalogModel(t)
+	manager := newTestManager(t, dataDir)
+	created, err := manager.Create("Full access", t.TempDir(), ScopeProject, model, thinking, permission.ModeAsk)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := manager.UpdatePermissionMode(created.ID, permission.ModeFullAccess)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.PermissionMode != permission.ModeFullAccess {
+		t.Fatalf("updated permission mode = %q, want %q", updated.PermissionMode, permission.ModeFullAccess)
+	}
+
+	restored := newTestManager(t, dataDir)
+	items := restored.List()
+	if len(items) != 1 || items[0].PermissionMode != permission.ModeFullAccess {
+		t.Fatalf("restored conversations = %+v, want full access mode", items)
+	}
+}
+
 func TestManagerRestoresConversationsLazily(t *testing.T) {
 	dataDir := t.TempDir()
 	projectDir := t.TempDir()

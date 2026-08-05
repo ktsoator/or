@@ -107,6 +107,10 @@ func TestPolicyModes(t *testing.T) {
 		{name: "read only blocks writes", mode: ModeReadOnly, access: Access{Action: Write, Location: Workspace}, want: Deny},
 		{name: "read only blocks shell commands", mode: ModeReadOnly, access: Access{Action: Execute}, want: Deny},
 		{name: "read only still prompts for external reads", mode: ModeReadOnly, access: Access{Action: Read, Location: OutsideWorkspace}, want: Ask},
+		{name: "full access allows external reads", mode: ModeFullAccess, access: Access{Action: Read, Location: OutsideWorkspace}, want: Allow},
+		{name: "full access allows external writes", mode: ModeFullAccess, access: Access{Action: Write, Location: OutsideWorkspace}, want: Allow},
+		{name: "full access allows sensitive writes", mode: ModeFullAccess, access: Access{Action: Write, Location: Workspace, Sensitive: SecretFile}, want: Allow},
+		{name: "full access allows shell commands", mode: ModeFullAccess, access: Access{Action: Execute}, want: Allow},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -115,6 +119,13 @@ func TestPolicyModes(t *testing.T) {
 				t.Fatalf("PolicyForMode(%q) = %+v, want %q", test.mode, got, test.want)
 			}
 		})
+	}
+}
+
+func TestFullAccessAllowsToolsWithoutDeclaredAccess(t *testing.T) {
+	decision := PolicyForMode(ModeFullAccess)(Request{})
+	if decision.Behavior != Allow {
+		t.Fatalf("PolicyForMode(%q) without accesses = %+v, want %q", ModeFullAccess, decision, Allow)
 	}
 }
 

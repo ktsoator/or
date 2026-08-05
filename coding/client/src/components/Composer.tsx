@@ -458,7 +458,9 @@ export function Composer({
     try {
       await onPermissionModeChange(mode)
     } catch (error) {
-      setSettingsError(error instanceof Error ? error.message : t('permission.couldNotUpdate'))
+      const failure = error instanceof Error ? error : new Error(t('permission.couldNotUpdate'))
+      setSettingsError(failure.message)
+      throw failure
     }
   }
 

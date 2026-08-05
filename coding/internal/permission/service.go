@@ -94,6 +94,9 @@ func DefaultPolicy(req Request) Decision {
 }
 
 func decideForMode(mode Mode, req Request) Decision {
+	if mode == ModeFullAccess {
+		return Decision{Behavior: Allow, Reason: "full access is enabled for this session"}
+	}
 	if len(req.Accesses) == 0 {
 		if mode == ModeReadOnly {
 			return Decision{Behavior: Deny, Reason: "tools without a declared access policy are blocked in read-only mode"}
