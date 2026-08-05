@@ -3568,6 +3568,27 @@ test('Models settings show full configured model names when space is available',
       )?.width,
     )
     .toBeLessThan(260)
+
+  for (const testID of ['default-model-controls', 'utility-model-controls']) {
+    const controls = page.getByTestId(testID).locator('button')
+    await expect(controls.first()).toHaveCSS('border-radius', '10px')
+    await expect(controls.nth(1)).toHaveCSS('border-radius', '10px')
+    const gap = await controls.evaluateAll(([first, second]) => {
+      const firstRect = first.getBoundingClientRect()
+      const secondRect = second.getBoundingClientRect()
+      return secondRect.left - firstRect.right
+    })
+    expect(gap).toBeGreaterThan(0)
+  }
+
+  const defaultsLayout = page.getByTestId('model-defaults-section').locator(':scope > div')
+  await expect(defaultsLayout).toHaveCSS('border-top-width', '0px')
+  await expect(defaultsLayout).toHaveCSS('border-bottom-width', '0px')
+  const connectionHeader = page
+    .getByTestId('connection-editor-panel')
+    .locator(':scope > section > div')
+    .first()
+  await expect(connectionHeader).toHaveCSS('border-bottom-width', '0px')
 })
 
 test('fixed hidden thinking is shown as a read-only model capability', async ({ page }) => {

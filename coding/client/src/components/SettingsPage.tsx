@@ -131,7 +131,15 @@ export function SettingsPage({
             {activeItem?.label ?? t('settings.general')}
           </h1>
 
-          <div className={active === 'usage' ? 'mt-8 max-md:mt-6' : 'mt-11 max-md:mt-7'}>
+          <div
+            className={
+              active === 'usage'
+                ? 'mt-8 max-md:mt-6'
+                : active === 'models'
+                  ? 'mt-8 max-md:mt-6'
+                  : 'mt-11 max-md:mt-7'
+            }
+          >
             {active === 'general' ? (
               <GeneralSettings />
             ) : active === 'usage' ? (

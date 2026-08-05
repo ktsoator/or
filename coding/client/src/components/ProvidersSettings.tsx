@@ -336,17 +336,17 @@ function DefaultModelSection({
   const providerLabel = provider ? providerName(provider) : t('settings.defaultModelNone')
   const modelLabel = current?.name ?? (model || t('settings.defaultModelNone'))
 
-  // The three selectors are one control, so they share a trigger style. The
-  // cursor has to say why a trigger is dead: a wait cursor during a save, and
-  // not-allowed when there is simply nothing to choose from yet.
+  // The related selectors use the same standalone pill style. The cursor has
+  // to say why a trigger is dead: a wait cursor during a save, and not-allowed
+  // when there is simply nothing to choose from yet.
   const triggerClass = cn(
     'inline-flex h-9 min-w-0 items-center gap-1.5 rounded-[10px] bg-surface-hover px-2.5 text-left text-[0.8125rem] text-ink-soft outline-none transition-colors hover:bg-surface-active focus-visible:bg-surface-active data-[state=open]:bg-surface-selected disabled:opacity-60',
     saving ? 'cursor-wait' : 'cursor-pointer disabled:cursor-not-allowed',
   )
 
   return (
-    <section className="mb-8">
-      <div className="overflow-hidden rounded-[18px] border border-edge/90 bg-canvas px-4 shadow-[0_10px_32px_-30px_rgba(28,25,23,0.45)]">
+    <section className="mb-9" data-testid="model-defaults-section">
+      <div>
         {loading ? (
           <div className={cn(
             'flex items-center gap-2 py-6 text-[0.8125rem] text-ink-faint',
@@ -364,14 +364,17 @@ function DefaultModelSection({
           </div>
         ) : (
           <SettingsRowLike label={t('settings.defaultModel')} description={t('settings.defaultModelDescription')}>
-            <div className="flex items-center gap-1.5">
+            <div
+              data-testid="default-model-controls"
+              className="flex min-w-0 items-center gap-1.5 max-sm:w-full"
+            >
                 {/* Provider */}
                 <DropdownMenu.Root>
                   <DropdownMenu.Trigger asChild>
                     <button
                       type="button"
                       aria-label={t('settings.defaultModelProvider')}
-                      className={triggerClass}
+                      className={cn(triggerClass, 'max-sm:flex-1')}
                       disabled={saving}
                     >
                       {provider && <ProviderIcon provider={provider} />}
@@ -414,7 +417,7 @@ function DefaultModelSection({
                     <button
                       type="button"
                       aria-label={t('settings.defaultModelModel')}
-                      className={triggerClass}
+                      className={cn(triggerClass, 'max-sm:min-w-0 max-sm:flex-[1.35]')}
                       disabled={saving || providerModels.length === 0}
                     >
                       <span
@@ -534,12 +537,12 @@ function SettingsRowLike({
   children: ReactNode
 }) {
   return (
-    <div className="flex min-h-[4.375rem] items-center gap-6 border-b border-edge/75 py-3 last:border-b-0 max-sm:items-start max-sm:gap-3">
+    <div className="grid min-h-[4.625rem] grid-cols-[minmax(14rem,1fr)_auto] items-center gap-x-8 border-b border-edge/75 px-1 py-3.5 last:border-b-0 max-sm:grid-cols-1 max-sm:items-start max-sm:gap-2.5 max-sm:px-0">
       <div className="min-w-0 flex-1">
         <div className="text-[0.84375rem] leading-5 font-medium text-ink">{label}</div>
-        <p className="mt-0.5 max-w-[38.75rem] text-[0.78125rem] leading-[1.45] text-ink-muted">{description}</p>
+        <p className="mt-0.5 max-w-[31rem] text-[0.78125rem] leading-[1.45] text-ink-muted">{description}</p>
       </div>
-      <div className="shrink-0 max-sm:pt-0.5">{children}</div>
+      <div className="min-w-0 shrink-0 max-sm:w-full">{children}</div>
     </div>
   )
 }
@@ -824,11 +827,15 @@ function ProviderConfigPanel({
   }
 
   return (
-    <>
-      <div className="mb-5 flex items-center justify-between gap-3 max-sm:items-start">
-        <div className="text-[0.875rem] font-medium text-ink-soft">{t('providers.routing')}</div>
+    <section data-testid="provider-connections-section">
+      <div className="mb-3 flex items-center justify-between gap-4 max-sm:items-start max-sm:flex-col">
+        <div className="text-[0.84375rem] font-medium text-ink-soft">{t('providers.routing')}</div>
         <div className="flex shrink-0 items-center gap-1.5 max-sm:grid max-sm:w-full max-sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2.25rem]">
-          <ProviderPicker providers={providers} value={selectedProviderId} onChange={onSelectProvider} />
+          <ProviderPicker
+            providers={providers}
+            value={selectedProviderId}
+            onChange={onSelectProvider}
+          />
           <ConnectionPicker
             connections={connections}
             officialBaseURL={info.officialBaseURL ?? ''}
@@ -848,7 +855,10 @@ function ProviderConfigPanel({
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-edge bg-canvas shadow-[0_12px_32px_-32px_rgba(28,25,23,0.45)]">
+      <div
+        data-testid="connection-editor-panel"
+        className="overflow-hidden rounded-[12px] border border-edge/85 bg-canvas"
+      >
         {selectedConnection && (
           <ConnectionEditor
             key={selectedConnection.id}
@@ -888,7 +898,7 @@ function ProviderConfigPanel({
           }}
         />
       )}
-    </>
+    </section>
   )
 }
 
@@ -948,7 +958,7 @@ function ConnectionEditor({
     !connection.activeKeyId
 
   return (
-    <section className="px-5 py-4 max-sm:px-4">
+    <section className="px-4 py-4">
       <div className="flex items-center gap-2.5">
         {connection.official ? (
           <span className="min-w-0 flex-1 text-[0.84375rem] font-medium text-ink">
@@ -1022,11 +1032,11 @@ function ConnectionEditor({
         )}
       </div>
 
-      <div className="mt-3">
+      <div className="mt-4">
         <label className="block">
           <span className="mb-1 block text-[0.71875rem] text-ink-muted">{t('providers.baseUrl')}</span>
           {connection.official ? (
-            <div className="truncate rounded-md bg-canvas-raised px-3 py-2 font-mono text-[0.78125rem] text-ink-muted ring-1 ring-edge" title={officialBaseURL}>
+            <div className="truncate rounded-[8px] border border-edge/80 bg-canvas px-3 py-2 font-mono text-[0.78125rem] text-ink-muted" title={officialBaseURL}>
               {officialBaseURL || t('providers.notSet')}
             </div>
           ) : (
@@ -1053,16 +1063,13 @@ function ConnectionEditor({
         </div>
 
         {connection.keys.length > 0 && (
-          <div className="mt-1 divide-y divide-edge-soft border-y border-edge-soft">
+          <div className="mt-1 divide-y divide-edge-soft">
             {connection.keys.map((key) => {
               const effective = active && connection.activeKeyId === key.id
               return (
                 <div
                   key={key.id}
-                  className={cn(
-                    'grid grid-cols-[minmax(6rem,0.75fr)_minmax(8rem,1fr)_auto] items-center gap-2 px-2 py-2.5 transition-colors max-sm:grid-cols-[minmax(0,1fr)_auto]',
-                    effective && 'bg-canvas-raised/80',
-                  )}
+                  className="grid grid-cols-[minmax(6rem,0.75fr)_minmax(8rem,1fr)_auto] items-center gap-2 px-2 py-2.5 max-sm:grid-cols-[minmax(0,1fr)_auto]"
                 >
                   <input
                     value={key.name}

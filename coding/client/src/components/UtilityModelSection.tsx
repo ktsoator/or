@@ -133,7 +133,10 @@ export function UtilityModelSection({
       description={t('settings.utilityModelDescription')}
     >
       <div className="flex min-w-0 flex-col items-end gap-1.5 max-sm:w-full max-sm:items-stretch">
-        <div className="flex min-w-0 items-center justify-end gap-1.5 max-sm:w-full">
+        <div
+          data-testid="utility-model-controls"
+          className="flex min-w-0 items-center gap-1.5 max-sm:w-full"
+        >
           <UtilitySelect
             ariaLabel={t('settings.utilityModelProvider')}
             value={route?.provider}
@@ -141,7 +144,7 @@ export function UtilityModelSection({
             options={providerOptions}
             disabled={false}
             busy={saving}
-            className="sm:w-[9.5rem]"
+            className="sm:w-[9.5rem] max-sm:flex-1"
             onChange={chooseProvider}
           />
           <UtilitySelect
@@ -151,7 +154,7 @@ export function UtilityModelSection({
             options={modelOptions}
             disabled={!routeProvider}
             busy={saving}
-            className="sm:w-auto sm:min-w-[11rem] sm:max-w-[20rem]"
+            className="sm:w-auto sm:min-w-[11rem] sm:max-w-[20rem] max-sm:flex-[1.35]"
             onChange={(model) => route && persistRoute({ ...route, model })}
           />
           {showAdvanced && route && (
@@ -182,10 +185,10 @@ function UtilityRow({
   children: ReactNode
 }) {
   return (
-    <div className="flex min-h-[4.375rem] items-center gap-6 border-b border-edge/75 py-3 last:border-b-0 max-sm:items-start max-sm:flex-col max-sm:gap-2">
+    <div className="grid min-h-[4.625rem] grid-cols-[minmax(14rem,1fr)_auto] items-center gap-x-8 border-b border-edge/75 px-1 py-3.5 last:border-b-0 max-sm:grid-cols-1 max-sm:items-start max-sm:gap-2.5 max-sm:px-0">
       <div className="min-w-0 flex-1">
         <div className="text-[0.84375rem] leading-5 font-medium text-ink">{label}</div>
-        <p className="mt-0.5 max-w-[38.75rem] text-[0.78125rem] leading-[1.45] text-ink-muted">{description}</p>
+        <p className="mt-0.5 max-w-[31rem] text-[0.78125rem] leading-[1.45] text-ink-muted">{description}</p>
       </div>
       <div className="min-w-0 shrink-0 max-sm:w-full">{children}</div>
     </div>
