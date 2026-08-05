@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/ktsoator/or/agent"
+	"github.com/ktsoator/or/coding/internal/invocation"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -39,10 +40,11 @@ type Event struct {
 	Type EventType
 
 	// Streaming and completed assistant content.
-	Delta  string
-	Text   string
-	Images []llm.ImageContent
-	Files  []File
+	Delta      string
+	Text       string
+	Images     []llm.ImageContent
+	Files      []File
+	Invocation *invocation.Record
 	// QueueHandle identifies the queued user message represented by a
 	// UserMessageCompleted event. It is zero for an ordinary prompt.
 	QueueHandle QueueHandle
@@ -138,12 +140,13 @@ func projectAgentEvent(ev agent.AgentEvent) (Event, bool) {
 		}, true
 
 	case agent.MessageEnd:
-		if text, images, files, ok := eventUserMessage(ev.Message); ok {
+		if text, images, files, invoked, ok := eventUserMessage(ev.Message); ok {
 			projected := Event{
-				Type:   UserMessageCompleted,
-				Text:   text,
-				Images: images,
-				Files:  files,
+				Type:       UserMessageCompleted,
+				Text:       text,
+				Images:     images,
+				Files:      files,
+				Invocation: invoked,
 			}
 			if handle, queued := agent.QueueHandleOf(ev.Message); queued {
 				projected.QueueHandle = QueueHandle{agent: handle}
@@ -193,17 +196,19 @@ func projectToolInputEvent(eventType EventType, event *llm.Event) Event {
 	return projected
 }
 
-func eventUserMessage(message agent.AgentMessage) (string, []llm.ImageContent, []File, bool) {
+func eventUserMessage(
+	message agent.AgentMessage,
+) (string, []llm.ImageContent, []File, *invocation.Record, bool) {
 	llmMessage, ok := agent.ToLLM(message)
 	if !ok {
-		return "", nil, nil, false
+		return "", nil, nil, nil, false
 	}
 	user, ok := llmMessage.(*llm.UserMessage)
 	if !ok {
-		return "", nil, nil, false
+		return "", nil, nil, nil, false
 	}
 	text, images, files := userMessageContent(user)
-	return text, images, files, true
+	return text, images, files, messageInvocation(message), true
 }
 
 func addUsage(total *llm.Usage, usage llm.Usage) {

@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 import {
   buildSkillInvocation,
+  displaySkillInvocation,
   filterSkills,
   parseSkillSlashQuery,
+  parseSkillReference,
+  serializeSkillReferenceCopy,
   skillArgumentsFromDraft,
   type SkillEntry,
 } from '../src/skills'
@@ -29,8 +32,37 @@ describe('Skill composer commands', () => {
   })
 
   test('builds the backend command only at submission time', () => {
-    expect(buildSkillInvocation('pptx', 'make slides')).toBe('/skill:pptx make slides')
-    expect(buildSkillInvocation('review', '  ')).toBe('/skill:review')
+    expect(
+      buildSkillInvocation(
+        { name: 'pptx', dir: '/skills/pptx', path: '/skills/pptx/SKILL.md' },
+        'make slides',
+      ),
+    ).toBe('[$pptx](/skills/pptx/SKILL.md) make slides')
+    expect(
+      buildSkillInvocation({ name: 'review', dir: '/skills/review path' }, '  '),
+    ).toBe('[$review](</skills/review path/SKILL.md>)')
+  })
+
+  test('upgrades legacy backend commands into skill references', () => {
+    expect(displaySkillInvocation('/skill:pptx make slides')).toBe('[$pptx]() make slides')
+    expect(displaySkillInvocation('/skill:review')).toBe('[$review]()')
+    expect(displaySkillInvocation('/review existing')).toBe('/review existing')
+  })
+
+  test('parses and serializes rich skill references', () => {
+    const reference = parseSkillReference(
+      '[$frontend-design](</skills/frontend design/SKILL.md>) 做一个网页',
+    )
+    expect(reference).toEqual({
+      name: 'frontend-design',
+      path: '/skills/frontend design/SKILL.md',
+      argumentsText: '做一个网页',
+      markdown: '[$frontend-design](</skills/frontend design/SKILL.md>)',
+    })
+    expect(serializeSkillReferenceCopy(reference!, 'frontend-design 做一个')).toBe(
+      '[$frontend-design](</skills/frontend design/SKILL.md>) 做一个',
+    )
+    expect(serializeSkillReferenceCopy(reference!, '做一个')).toBe('做一个')
   })
 })
 

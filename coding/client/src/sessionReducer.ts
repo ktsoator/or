@@ -23,6 +23,7 @@ import type {
   Usage,
   WireEvent,
 } from './types'
+import { displaySkillInvocation } from './skills'
 
 export type ThreadState = {
   items: Item[]
@@ -456,7 +457,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
 
     case 'user_message':
       {
-        const text = ev.text ?? ''
+        const text = displaySkillInvocation(ev.text ?? '')
         const images = ev.images ?? []
         const files = ev.files ?? []
         if (ev.queued && ev.delivery) {
@@ -537,6 +538,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
         )
         const existingItem = idx >= 0 ? items[idx] : undefined
         const existingUser = existingItem?.kind === 'user' ? existingItem : undefined
+        const invocation = ev.invocation ?? existingUser?.invocation
         const openRun = openRunIndex >= 0 ? items[openRunIndex] : undefined
         const user = {
           kind: 'user' as const,
@@ -544,6 +546,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
           text,
           images,
           ...(files.length ? { files } : {}),
+          ...(invocation ? { invocation } : {}),
           sentAt:
             existingUser?.sentAt ?? (openRun?.kind === 'run' ? openRun.startedAt : undefined),
         }

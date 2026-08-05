@@ -1,5 +1,5 @@
 export const composerFloatingPanelClass =
-  'absolute right-0 bottom-[calc(100%+0.5rem)] left-0 z-[115] max-h-[min(23rem,calc(100vh-2rem))] overflow-hidden rounded-[16px] border border-edge bg-canvas p-1.5 text-ink shadow-[0_18px_50px_-24px_rgba(28,25,23,0.5)] outline-none animate-[fade-in_100ms_ease-out]'
+  'absolute right-0 bottom-[calc(100%+0.5rem)] left-0 z-[115] max-h-[min(23rem,calc(100vh-2rem))] overflow-hidden rounded-[16px] border border-edge bg-canvas p-1.5 text-ink outline-none animate-[fade-in_100ms_ease-out]'
 
 export const skillSuggestionsID = 'composer-skill-suggestions'
 export const composerPreviewCommands = [

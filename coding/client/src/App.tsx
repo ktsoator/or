@@ -10,6 +10,7 @@ import {
   BookOpenText,
   CircleAlert,
   Ellipsis,
+  FileText,
   Folder,
   FolderOpen,
   GitFork,
@@ -43,6 +44,7 @@ import { chooseNativeDirectory } from './lib/desktop'
 import { ProfileMenu } from './components/ProfileMenu'
 import { SettingsPage, type SettingsSection } from './components/SettingsPage'
 import { SkillsPage } from './components/SkillsPage'
+import { PromptTemplatesPage } from './components/PromptTemplatesPage'
 import { WorkspacePickerDialog } from './components/WorkspacePickerDialog'
 import { WorkbenchPanel } from './components/WorkbenchPanel'
 import type { WorkbenchTaskSource } from './components/BackgroundTasksView'
@@ -129,6 +131,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
   const [skillsOpen, setSkillsOpen] = useState(false)
+  const [promptTemplatesOpen, setPromptTemplatesOpen] = useState(false)
   const [workspacePickerOpen, setWorkspacePickerOpen] = useState(false)
   const [selectedWorkspacePath, setSelectedWorkspacePath] = useState<string>()
   const {
@@ -173,7 +176,7 @@ export default function App() {
     stopResize: stopWorkbenchResize,
     resizeWithKeyboard: resizeWorkbenchWithKeyboard,
   } = useWorkbenchLayout({
-    enabled: !settingsOpen && !skillsOpen,
+    enabled: !settingsOpen && !skillsOpen && !promptTemplatesOpen,
     activeSessionID,
     activeDraftID: draft?.id,
     primaryPreviewRevision: preview?.revision,
@@ -585,7 +588,19 @@ export default function App() {
                 icon={BookOpenText}
                 label={t('app.skills')}
                 collapsed={sidebarCollapsed}
-                onClick={() => setSkillsOpen(true)}
+                onClick={() => {
+                  setPromptTemplatesOpen(false)
+                  setSkillsOpen(true)
+                }}
+              />
+              <SidebarNavItem
+                icon={FileText}
+                label={t('app.promptTemplates')}
+                collapsed={sidebarCollapsed}
+                onClick={() => {
+                  setSkillsOpen(false)
+                  setPromptTemplatesOpen(true)
+                }}
               />
             </div>
           </div>
@@ -711,6 +726,14 @@ export default function App() {
       {skillsOpen ? (
         <SkillsPage
           onBack={() => setSkillsOpen(false)}
+          sidebarCollapsed={sidebarCollapsed}
+          onExpandSidebar={expandSidebar}
+          workspacePath={activeSession?.workspacePath}
+          workspaceName={activeSession?.workspaceName}
+        />
+      ) : promptTemplatesOpen ? (
+        <PromptTemplatesPage
+          onBack={() => setPromptTemplatesOpen(false)}
           sidebarCollapsed={sidebarCollapsed}
           onExpandSidebar={expandSidebar}
           workspacePath={activeSession?.workspacePath}

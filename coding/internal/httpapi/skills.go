@@ -15,6 +15,7 @@ type skillDTO struct {
 	Description            string `json:"description"`
 	Source                 string `json:"source"`
 	Dir                    string `json:"dir"`
+	Path                   string `json:"path"`
 	DisableModelInvocation bool   `json:"disableModelInvocation"`
 }
 
@@ -47,6 +48,7 @@ func (s *Server) handleSkills(c *gin.Context) {
 			Description:            sk.Description,
 			Source:                 string(sk.Source),
 			Dir:                    sk.Dir,
+			Path:                   sk.Path,
 			DisableModelInvocation: sk.DisableModelInvocation,
 		}
 		if sk.Source == skills.SourceProject {
@@ -89,6 +91,7 @@ func (s *Server) handleSkillContent(c *gin.Context) {
 			Description:            sk.Description,
 			Source:                 string(sk.Source),
 			Dir:                    sk.Dir,
+			Path:                   sk.Path,
 			DisableModelInvocation: sk.DisableModelInvocation,
 		},
 		Content: sk.Content,

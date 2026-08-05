@@ -1,13 +1,25 @@
-import { useEffect, useState } from 'react'
+import { type ClipboardEvent, useEffect, useState } from 'react'
 import {
+  BookOpen,
   CircleAlert,
   CircleCheck,
   CircleStop,
   CircleX,
   FileCode2,
+  FileText,
   LoaderCircle,
 } from 'lucide-react'
 import { formatFileSize } from '@/attachments'
+import {
+  parseSkillReference,
+  serializeSkillReferenceCopy,
+  type SkillReference,
+} from '@/skills'
+import {
+  promptTemplateArgumentsText,
+  serializePromptTemplateInvocationCopy,
+  type PromptTemplateInvocation,
+} from '@/promptTemplates'
 import type { Item } from '@/types'
 import { useI18n } from '@/i18n'
 import { formatMessageTime } from '@/lib/time'
@@ -93,7 +105,7 @@ export function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
             )}
             {item.text && (
               <div className="rounded-[10px] bg-canvas-sunken px-3 py-2 text-[14px] leading-[22px] whitespace-pre-wrap">
-                {item.text}
+                <UserMessageText text={item.text} invocation={item.invocation} />
               </div>
             )}
             {(item.sentAt || item.deliveryStatus === 'failed') && (
@@ -147,6 +159,88 @@ export function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
         </div>
       )
   }
+}
+
+function UserMessageText({
+  text,
+  invocation,
+}: Pick<Extract<Item, { kind: 'user' }>, 'text' | 'invocation'>) {
+  if (invocation?.kind === 'prompt_template') {
+    const template: PromptTemplateInvocation = {
+      name: invocation.name,
+      argumentsText: promptTemplateArgumentsText(text, invocation.name),
+    }
+    return (
+      <span
+        className="flex min-w-0 items-center gap-1.5"
+        onCopy={(event) => copyPromptTemplateInvocation(event, template)}
+      >
+        <span
+          className="inline-flex h-6 max-w-[16rem] shrink-0 items-center gap-1.5 rounded-md bg-surface-active px-1.5 font-mono text-[13px] font-medium text-ink-soft"
+          data-testid="prompt-template-reference"
+          title={invocation.path}
+        >
+          <FileText
+            className="size-3.5 shrink-0 text-ink-muted"
+            strokeWidth={1.8}
+            aria-hidden="true"
+          />
+          <span className="truncate">{invocation.name}</span>
+        </span>
+        {template.argumentsText && (
+          <span className="min-w-0 whitespace-pre-wrap break-words">
+            {template.argumentsText}
+          </span>
+        )}
+      </span>
+    )
+  }
+
+  const reference = parseSkillReference(text)
+  if (!reference) return text
+
+  return (
+    <span
+      className="flex min-w-0 items-center gap-1.5"
+      onCopy={(event) => copySkillReference(event, reference)}
+    >
+      <span
+        className="inline-flex h-6 max-w-[16rem] shrink-0 items-center gap-1.5 rounded-md bg-info-surface px-1.5 font-mono text-[13px] font-medium text-info"
+        data-testid="skill-reference"
+        title={reference.path}
+      >
+        <BookOpen className="size-3.5 shrink-0" strokeWidth={1.9} aria-hidden="true" />
+        <span className="truncate">{reference.name}</span>
+      </span>
+      {reference.argumentsText && (
+        <span className="min-w-0 whitespace-pre-wrap break-words">
+          {reference.argumentsText}
+        </span>
+      )}
+    </span>
+  )
+}
+
+function copyPromptTemplateInvocation(
+  event: ClipboardEvent<HTMLSpanElement>,
+  invocation: PromptTemplateInvocation,
+) {
+  const selectedText = window.getSelection()?.toString() ?? ''
+  const serialized = serializePromptTemplateInvocationCopy(invocation, selectedText)
+  if (!selectedText || serialized === selectedText) return
+  event.preventDefault()
+  event.clipboardData.setData('text/plain', serialized)
+}
+
+function copySkillReference(
+  event: ClipboardEvent<HTMLSpanElement>,
+  reference: SkillReference,
+) {
+  const selectedText = window.getSelection()?.toString() ?? ''
+  const serialized = serializeSkillReferenceCopy(reference, selectedText)
+  if (!selectedText || serialized === selectedText) return
+  event.preventDefault()
+  event.clipboardData.setData('text/plain', serialized)
 }
 
 function TaskCompletion({ item }: { item: Extract<Item, { kind: 'task' }> }) {

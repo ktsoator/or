@@ -154,6 +154,28 @@ async function openDesktopClient(
     modelThinkingVisibility?: 'visible' | 'hidden'
     composerUpdateDelayMs?: number
     nativeDirectory?: string
+    promptTemplates?: Array<{
+      name: string
+      description: string
+      descriptions?: { en?: string; 'zh-CN'?: string }
+      argumentHint: string
+      argumentHints?: { en?: string; 'zh-CN'?: string }
+      source: 'user' | 'project'
+      path: string
+    }>
+    promptTemplateDiagnostics?: Array<{
+      path: string
+      message: string
+    }>
+    promptTemplateContents?: Record<string, string>
+    skills?: Array<{
+      name: string
+      description: string
+      source: 'user' | 'project'
+      dir: string
+      path?: string
+      disableModelInvocation: boolean
+    }>
   } = {},
 ) {
   const requests: Array<{ method: string; path: string; body?: unknown }> = []
@@ -552,6 +574,34 @@ async function openDesktopClient(
           connectionId: 'official',
           keyId: 'default',
         },
+      }
+    }
+    if (path === '/api/skills') {
+      body = {
+        user: options.skills?.filter((item) => item.source === 'user') ?? [],
+        project: options.skills?.filter((item) => item.source === 'project') ?? [],
+        diagnostics: [],
+      }
+    }
+    if (path === '/api/prompt-templates') {
+      body = {
+        user: options.promptTemplates?.filter((item) => item.source === 'user') ?? [],
+        project:
+          options.promptTemplates?.filter((item) => item.source === 'project') ?? [],
+        diagnostics: options.promptTemplateDiagnostics ?? [],
+      }
+    }
+    if (path.startsWith('/api/prompt-templates/')) {
+      const name = decodeURIComponent(path.slice('/api/prompt-templates/'.length))
+      const template = options.promptTemplates?.find((item) => item.name === name)
+      if (template) {
+        body = {
+          ...template,
+          content: options.promptTemplateContents?.[name] ?? `# ${name}`,
+        }
+      } else {
+        status = 404
+        body = { error: 'prompt template not found' }
       }
     }
     if (path === '/api/sessions') {
@@ -3702,6 +3752,256 @@ test('first send creates a session and renders the user message', async ({ page 
   ).toEqual({ text: message, images: [] })
 })
 
+test('prompt templates page groups resources, reports diagnostics, and opens details', async ({
+  page,
+}) => {
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    promptTemplates: [
+      {
+        name: 'review',
+        description: 'Review current changes',
+        argumentHint: '[focus]',
+        source: 'project',
+        path: '/tmp/test-session/.or/prompts/review.md',
+      },
+      {
+        name: 'commit',
+        description: 'Create a local commit',
+        argumentHint: '[instructions]',
+        source: 'user',
+        path: '/tmp/home/.or/prompts/commit.md',
+      },
+    ],
+    promptTemplateDiagnostics: [
+      {
+        path: '/tmp/test-session/.or/prompts/broken.md',
+        message: "unterminated YAML frontmatter (missing closing '---' line)",
+      },
+    ],
+    promptTemplateContents: {
+      review: '# Project review\n\nInspect the diff carefully.',
+    },
+  })
+
+  await page.getByRole('button', { name: 'Prompt templates' }).click()
+
+  await expect(page.getByRole('heading', { name: 'Prompt templates' })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Project templates · test-session' }),
+  ).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Global templates' })).toBeVisible()
+  const review = page.getByRole('button', {
+    name: /review.*\[focus\].*Review current changes/,
+  })
+  await expect(review).toBeVisible()
+  await expect(
+    page.getByRole('button', {
+      name: /commit.*\[instructions\].*Create a local commit/,
+    }),
+  ).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Problems' })).toBeVisible()
+  await expect(page.getByText('/tmp/test-session/.or/prompts/broken.md')).toBeVisible()
+  await expect(page.getByText(/unterminated YAML frontmatter/)).toBeVisible()
+
+  await review.click()
+  const dialog = page.getByRole('dialog', { name: 'review' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('heading', { name: 'Project review' })).toBeVisible()
+  await expect(dialog.getByText('Inspect the diff carefully.')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Close' }).click()
+  await expect(dialog).toBeHidden()
+
+  const listRequests = () =>
+    requests.filter((request) => request.path === '/api/prompt-templates').length
+  const beforeRefresh = listRequests()
+  await page.getByRole('button', { name: 'Refresh prompt templates' }).click()
+  await expect.poll(listRequests).toBe(beforeRefresh + 1)
+})
+
+test('prompt templates share the slash menu and send a compact invocation', async ({
+  page,
+}) => {
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    historyEvents: [
+      { type: 'user_message', text: '/hello', images: [] },
+    ],
+    promptTemplates: [
+      {
+        name: 'review',
+        description: '审查当前代码改动',
+        descriptions: {
+          en: 'Review working tree changes',
+          'zh-CN': '审查当前代码改动',
+        },
+        argumentHint: '[关注点]',
+        argumentHints: { en: '[focus]', 'zh-CN': '[关注点]' },
+        source: 'project',
+        path: '/tmp/test-session/.or/prompts/review.md',
+      },
+    ],
+  })
+  const composer = page.getByTestId('composer')
+  const input = composer.locator('textarea')
+  const transcript = page.getByTestId('conversation-transcript')
+
+  await expect(transcript.getByText('/hello', { exact: true })).toBeVisible()
+  await expect(transcript.getByTestId('prompt-template-reference')).toHaveCount(0)
+
+  await input.fill('/rev')
+  const suggestions = page.getByRole('listbox', { name: 'Commands and resources' })
+  await expect(suggestions).toBeVisible()
+  const template = suggestions.getByRole('option', { name: /review.*\[focus\]/ })
+  await expect(template).toContainText('Review working tree changes')
+  await expect(template).not.toContainText('/review')
+  await template.click()
+
+  await expect(
+    composer.getByRole('button', { name: 'Remove prompt template review' }),
+  ).toBeVisible()
+  await expect(input).toHaveAttribute('placeholder', 'Arguments [focus]')
+  await input.fill('security')
+  await input.press('Enter')
+
+  await expect.poll(() =>
+    requests.find((request) => request.path === '/api/sessions/test-session/prompt')
+      ?.body,
+  ).toEqual({ text: '/review security', images: [] })
+  await expect(transcript.getByTestId('prompt-template-reference')).toHaveCount(0)
+  await page.evaluate(() => {
+    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
+    emit?.({
+      type: 'user_message',
+      text: '/review security',
+      images: [],
+      invocation: {
+        kind: 'prompt_template',
+        name: 'review',
+        source: 'project',
+        path: '/tmp/test-session/.or/prompts/review.md',
+      },
+    })
+  })
+  const reference = transcript.getByTestId('prompt-template-reference')
+  await expect(reference).toContainText('review')
+  await expect(reference).not.toContainText('/review')
+  await expect(reference.locator('svg')).toBeVisible()
+  await expect(reference.locator('xpath=..')).toContainText('security')
+  const copied = await reference.evaluate((element) => {
+    const range = document.createRange()
+    range.selectNodeContents(element)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+    const clipboardData = new DataTransfer()
+    element.dispatchEvent(
+      new ClipboardEvent('copy', { bubbles: true, cancelable: true, clipboardData }),
+    )
+    selection?.removeAllRanges()
+    return clipboardData.getData('text/plain')
+  })
+  expect(copied).toBe('/review')
+})
+
+test('skill invocations render and copy as file references', async ({
+  page,
+}) => {
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    skills: [
+      {
+        name: 'frontend-design',
+        description: 'Build polished interfaces',
+        source: 'user',
+        dir: '/tmp/skills/frontend-design',
+        path: '/tmp/skills/frontend-design/SKILL.md',
+        disableModelInvocation: false,
+      },
+    ],
+  })
+  const composer = page.getByTestId('composer')
+  const input = composer.locator('textarea')
+
+  await input.fill('/front')
+  const suggestions = page.getByRole('listbox', { name: 'Commands and resources' })
+  const skill = suggestions.getByRole('option', { name: /frontend-design/ })
+  await expect(skill).toBeVisible()
+  await skill.click()
+
+  await expect(composer.getByText('frontend-design', { exact: true })).toBeVisible()
+  await input.fill('hello')
+  await input.press('Enter')
+
+  const reference = page.getByTestId('conversation-transcript').getByTestId('skill-reference')
+  await expect(reference).toContainText('frontend-design')
+  await expect(reference).not.toContainText('$frontend-design')
+  await expect(reference.locator('svg')).toBeVisible()
+  await expect(reference).toHaveAttribute('title', '/tmp/skills/frontend-design/SKILL.md')
+  await expect(reference.locator('xpath=..')).toContainText('hello')
+  const copied = await reference.evaluate((element) => {
+    const range = document.createRange()
+    range.selectNodeContents(element)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+    const clipboardData = new DataTransfer()
+    element.dispatchEvent(
+      new ClipboardEvent('copy', { bubbles: true, cancelable: true, clipboardData }),
+    )
+    selection?.removeAllRanges()
+    return clipboardData.getData('text/plain')
+  })
+  expect(copied).toBe(
+    '[$frontend-design](/tmp/skills/frontend-design/SKILL.md)',
+  )
+  await expect(page.getByText('/skill:frontend-design hello', { exact: true })).toHaveCount(0)
+  await expect.poll(() =>
+    requests.find((request) => request.path === '/api/sessions/test-session/prompt')
+      ?.body,
+  ).toEqual({
+    text: '[$frontend-design](/tmp/skills/frontend-design/SKILL.md) hello',
+    images: [],
+  })
+})
+
+test('slash menu scroll follows keyboard navigation', async ({ page }) => {
+  await openDesktopClient(page, {
+    existingSession: true,
+    promptTemplates: ['commit', 'review', 'test'].map((name) => ({
+      name,
+      description: `${name} workspace changes`,
+      argumentHint: '',
+      source: 'user' as const,
+      path: `/tmp/prompts/${name}.md`,
+    })),
+    skills: Array.from({ length: 8 }, (_, index) => ({
+      name: `skill-${index + 1}`,
+      description: `Skill ${index + 1} description`,
+      source: 'user' as const,
+      dir: `/tmp/skills/skill-${index + 1}`,
+      disableModelInvocation: false,
+    })),
+  })
+  const input = page.getByTestId('composer').locator('textarea')
+  await input.fill('/')
+
+  const suggestions = page.getByRole('listbox', { name: 'Commands and resources' })
+  const scrollArea = suggestions.locator(':scope > div').first()
+  await expect.poll(() => scrollArea.evaluate((element) => element.scrollHeight)).toBeGreaterThan(
+    await scrollArea.evaluate((element) => element.clientHeight),
+  )
+
+  for (let index = 0; index < 11; index++) await input.press('ArrowDown')
+
+  await expect.poll(() => scrollArea.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+  await expect(suggestions.locator('[role="option"][aria-selected="true"]')).toBeInViewport()
+
+  for (let index = 0; index < 11; index++) await input.press('ArrowUp')
+
+  await expect.poll(() => scrollArea.evaluate((element) => element.scrollTop)).toBe(0)
+})
+
 test('failed first send keeps the draft and shows the server error', async ({ page }) => {
   await openDesktopClient(page, { failCreate: true })
   const message = 'Keep this draft after a failed send'
@@ -3970,7 +4270,7 @@ test('desktop project browsing uses the native directory picker', async ({ page 
   const requests = await openDesktopClient(page, { nativeDirectory: '/tmp/native-project' })
 
   const projectPicker = page.getByRole('button', { name: 'Choose project' })
-  await expect(projectPicker).toHaveClass(/text-ink-muted/)
+  await expect(projectPicker).toHaveClass(/text-\[rgb\(138,139,141\)\]/)
   await projectPicker.click()
   await page.getByText('New project', { exact: true }).hover()
   await page.getByText('Use an existing folder', { exact: true }).click()

@@ -305,6 +305,27 @@ func TestExplicitInvocationExpandsManualSkill(t *testing.T) {
 	}
 }
 
+func TestDisplayExplicitInvocation(t *testing.T) {
+	registry := NewRegistry([]Skill{{
+		Name: "deploy", Dir: "/skills/deploy", Path: "/skills/deploy/SKILL.md",
+	}, {
+		Name: "review", Dir: "/skills/review path", Path: "/skills/review path/SKILL.md",
+	}})
+	for _, tt := range []struct {
+		input string
+		want  string
+	}{
+		{input: "/skill:deploy staging", want: "[$deploy](/skills/deploy/SKILL.md) staging"},
+		{input: "  /skill:review  ", want: "[$review](</skills/review path/SKILL.md>)"},
+		{input: "[$deploy](/old/SKILL.md) staging", want: "[$deploy](/skills/deploy/SKILL.md) staging"},
+		{input: "/review staging", want: "/review staging"},
+	} {
+		if got := registry.DisplayExplicitInvocation(tt.input); got != tt.want {
+			t.Errorf("DisplayExplicitInvocation(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
 // resultText extracts the concatenated text of a tool result.
 func resultText(t *testing.T, res agent.ToolResult) string {
 	t.Helper()

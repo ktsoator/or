@@ -83,6 +83,7 @@ func (s *Server) Handler() http.Handler {
 	s.mountWorkspaces(api)
 	s.mountUsage(api)
 	s.mountSkills(api)
+	s.mountPromptTemplates(api)
 	s.mountDirectories(api)
 	s.mountPreview(api)
 

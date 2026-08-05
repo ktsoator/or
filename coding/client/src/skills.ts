@@ -5,6 +5,7 @@ export type SkillEntry = {
   description: string
   source: 'user' | 'project'
   dir: string
+  path?: string
   disableModelInvocation: boolean
 }
 
@@ -37,8 +38,8 @@ export type SkillSlashQuery = {
   argumentsText: string
 }
 
-// parseSkillSlashQuery recognizes the composer shorthand `/name arguments`.
-// The durable/backend command remains `/skill:name arguments`.
+// parseSkillSlashQuery recognizes the composer search shorthand `/name arguments`.
+// Selection serializes the skill as a durable Markdown reference to SKILL.md.
 export function parseSkillSlashQuery(draft: string): SkillSlashQuery | undefined {
   if (!draft.startsWith('/')) return undefined
   const token = draft.slice(1).match(/^[^\s]*/)?.[0] ?? ''
@@ -56,10 +57,58 @@ export function skillArgumentsFromDraft(draft: string): string {
   return explicit ? draft.trimStart().slice(explicit.length).trimStart() : draft
 }
 
-export function buildSkillInvocation(name: string, argumentsText: string): string {
-  const command = `/skill:${name}`
+export function buildSkillInvocation(
+  skill: Pick<SkillEntry, 'name' | 'dir' | 'path'>,
+  argumentsText: string,
+): string {
+  const path = skill.path || `${skill.dir.replace(/[\\/]$/, '')}/SKILL.md`
+  const destination = /[\s()]/.test(path)
+    ? `<${path.replaceAll('>', '%3E')}>`
+    : path
+  const command = `[$${skill.name}](${destination})`
   const trimmed = argumentsText.trim()
   return trimmed ? `${command} ${trimmed}` : command
+}
+
+export function displaySkillInvocation(text: string): string {
+  const trimmed = text.trim()
+  const match = trimmed.match(/^\/skill:([^\s]+)(?:\s+([\s\S]*))?$/)
+  if (!match) return text
+  const argumentsText = match[2]?.trim()
+  const reference = `[$${match[1]}]()`
+  return argumentsText ? `${reference} ${argumentsText}` : reference
+}
+
+export type SkillReference = {
+  name: string
+  path: string
+  argumentsText: string
+  markdown: string
+}
+
+export function parseSkillReference(text: string): SkillReference | undefined {
+  const trimmed = text.trim()
+  const match = trimmed.match(/^\[\$([^\]]+)\]\((?:<([^>]+)>|([^)]*))\)/)
+  if (!match) return undefined
+  return {
+    name: match[1],
+    path: match[2] ?? match[3] ?? '',
+    argumentsText: trimmed.slice(match[0].length).trimStart(),
+    markdown: match[0],
+  }
+}
+
+export function serializeSkillReferenceCopy(
+  reference: SkillReference,
+  selectedText: string,
+): string {
+  const visibleLabel = reference.name
+  if (selectedText.startsWith(visibleLabel)) {
+    return reference.markdown + selectedText.slice(visibleLabel.length)
+  }
+  const storedLabel = `$${reference.name}`
+  if (!selectedText.startsWith(storedLabel)) return selectedText
+  return reference.markdown + selectedText.slice(storedLabel.length)
 }
 
 export function filterSkills(skills: SkillEntry[], query: string): SkillEntry[] {

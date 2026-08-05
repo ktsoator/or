@@ -18,6 +18,7 @@ import (
 	"github.com/ktsoator/or/coding/internal/modelcontext"
 	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/coding/internal/prompt"
+	"github.com/ktsoator/or/coding/internal/prompttemplate"
 	"github.com/ktsoator/or/coding/internal/skills"
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/transcript"
@@ -49,6 +50,10 @@ type Options struct {
 	// Skills static. The loader is deliberately not called for provider retries,
 	// tool-loop turns, or context-overflow recovery.
 	SkillLoader func() []skills.Skill
+	// PromptTemplates is the initial prompt-template snapshot. The optional
+	// loader refreshes it before every top-level prompt.
+	PromptTemplates      []prompttemplate.Template
+	PromptTemplateLoader func() []prompttemplate.Template
 	// Policy classifies resolved tool access. Nil uses permission.DefaultPolicy.
 	Policy permission.Policy
 	// Approver obtains decisions for calls classified as Ask. Nil denies them.
@@ -111,6 +116,8 @@ type Session struct {
 	skillRevision          string
 	pendingSkills          *skills.Registry
 	pendingSkillRevision   string
+	promptTemplates        *prompttemplate.Registry
+	promptTemplateLoader   func() []prompttemplate.Template
 	contextRevision        string
 	pendingContextRevision string
 	modelContext           *modelcontext.Manager
@@ -163,6 +170,10 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	}
 	initialRegistry := skills.NewRegistry(initialSkills)
 	dynamicSkills := skills.NewDynamicRegistry(initialRegistry)
+	initialPromptTemplates := opts.PromptTemplates
+	if opts.PromptTemplateLoader != nil {
+		initialPromptTemplates = opts.PromptTemplateLoader()
+	}
 
 	registry := capability.NewRegistry()
 	var tasks *tools.TaskManager
@@ -245,25 +256,27 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	}
 
 	s := &Session{
-		store:          opts.Store,
-		tools:          toolSet,
-		toolByName:     toolsByName(toolSet),
-		authorizer:     authorizer,
-		tasks:          tasks,
-		cwd:            cwd,
-		promptSections: registry.PromptSections(),
-		skillRegistry:  dynamicSkills,
-		skillLoader:    opts.SkillLoader,
-		skillRevision:  initialRegistry.ModelRevision(),
-		maxRetries:     maxRetries,
-		contextWindow:  opts.Model.ContextWindow,
-		compactor:      opts.Compactor,
-		persistedLen:   len(seed),
-		entries:        append([]transcript.Entry(nil), entries...),
-		usageStart:     usageStart,
-		detailsStore:   opts.DetailsStore,
-		outcomes:       outcomes,
-		eventListeners: make(map[int]func(Event)),
+		store:                opts.Store,
+		tools:                toolSet,
+		toolByName:           toolsByName(toolSet),
+		authorizer:           authorizer,
+		tasks:                tasks,
+		cwd:                  cwd,
+		promptSections:       registry.PromptSections(),
+		skillRegistry:        dynamicSkills,
+		skillLoader:          opts.SkillLoader,
+		skillRevision:        initialRegistry.ModelRevision(),
+		promptTemplates:      prompttemplate.NewRegistry(initialPromptTemplates),
+		promptTemplateLoader: opts.PromptTemplateLoader,
+		maxRetries:           maxRetries,
+		contextWindow:        opts.Model.ContextWindow,
+		compactor:            opts.Compactor,
+		persistedLen:         len(seed),
+		entries:              append([]transcript.Entry(nil), entries...),
+		usageStart:           usageStart,
+		detailsStore:         opts.DetailsStore,
+		outcomes:             outcomes,
+		eventListeners:       make(map[int]func(Event)),
 	}
 	if s.compactor == nil {
 		s.compactor = compaction.LLM{
@@ -411,6 +424,20 @@ func (s *Session) promptMessage(
 	if err != nil {
 		return nil, err
 	}
+	if matched {
+		return userMessage(
+			registry.DisplayExplicitInvocation(text),
+			files,
+			images,
+			expanded,
+		), nil
+	}
+	templates := s.promptTemplates
+	if s.promptTemplateLoader != nil {
+		templates = prompttemplate.NewRegistry(s.promptTemplateLoader())
+		s.promptTemplates = templates
+	}
+	expanded, matched = templates.ExpandExplicitInvocation(text)
 	if !matched {
 		return userMessage(text, files, images), nil
 	}
@@ -614,7 +641,10 @@ func (s *Session) persistMessages(
 	entries := make([]transcript.Entry, 0, len(contextEntries)+len(added)+1)
 	entries = append(entries, contextEntries...)
 	for _, message := range added {
-		entries = append(entries, transcript.NewMessage(message))
+		entries = append(entries, transcript.NewMessageWithInvocation(
+			message,
+			messageInvocation(message),
+		))
 	}
 	if !startedAt.IsZero() && !completedAt.IsZero() {
 		candidate := append(existing, entries...)

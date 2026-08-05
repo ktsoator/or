@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ktsoator/or/agent"
+	"github.com/ktsoator/or/coding/internal/invocation"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -88,6 +89,33 @@ func TestJSONLRoundTripsRunTiming(t *testing.T) {
 	}
 	if entries[1].Run.FirstEntryID != message.ID || !entries[1].Run.StartedAt.Equal(startedAt) {
 		t.Fatalf("run timing = %#v", entries[1].Run)
+	}
+}
+
+func TestJSONLRoundTripsMessageInvocation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	entry := NewMessageWithInvocation(agent.UserMessage("/review security"), &invocation.Record{
+		Kind:   invocation.PromptTemplate,
+		Name:   "review",
+		Source: "project",
+		Path:   "/workspace/.or/prompts/review.md",
+	})
+	store := NewJSONL(path)
+	if err := store.Append(context.Background(), entry); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := store.Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Invocation == nil {
+		t.Fatalf("entries = %#v", entries)
+	}
+	if got := entries[0].Invocation; got.Kind != invocation.PromptTemplate ||
+		got.Name != "review" || got.Source != "project" ||
+		got.Path != "/workspace/.or/prompts/review.md" {
+		t.Fatalf("invocation = %#v", got)
 	}
 }
 
