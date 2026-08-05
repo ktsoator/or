@@ -4,7 +4,7 @@ import { DropdownMenu } from 'radix-ui'
 import type { WorkspaceSummary } from '@/types'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { composerMenuTriggerClass } from './composerControlStyles'
+import { composerControlTextClass, composerMenuTriggerClass } from './composerControlStyles'
 
 export function ProjectPicker({
   workspaces,
@@ -54,6 +54,7 @@ export function ProjectPicker({
           type="button"
           className={cn(
             composerMenuTriggerClass,
+            composerControlTextClass,
             'h-[30px] max-w-full gap-2 rounded-[10px] disabled:opacity-45 max-sm:size-[30px] max-sm:justify-center max-sm:p-0',
           )}
           aria-label={t('workspace.chooseProject')}

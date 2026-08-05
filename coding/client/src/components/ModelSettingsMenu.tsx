@@ -14,7 +14,7 @@ import {
   thinkingLevelLabelKey,
   toggleThinkingLevel,
 } from '@/modelThinking'
-import { composerMenuTriggerClass } from './composerControlStyles'
+import { composerControlTextClass, composerMenuTriggerClass } from './composerControlStyles'
 
 export function ModelSettingsMenu({
   models,
@@ -115,6 +115,7 @@ export function ModelSettingsMenu({
           type="button"
           className={cn(
             composerMenuTriggerClass,
+            composerControlTextClass,
             'h-[30px] max-w-[15.5rem] rounded-[10px] max-sm:max-w-[8rem] max-sm:px-2',
           )}
           aria-label={t('model.settings')}
@@ -123,13 +124,16 @@ export function ModelSettingsMenu({
           <ProviderIcon provider={modelProvider ?? ''} />
           <span
             data-testid="model-settings-name"
-            className="min-w-0 max-w-[9.375rem] flex-1 truncate text-ink-muted max-sm:max-w-[5.5rem]"
+            className={cn(
+              composerControlTextClass,
+              'min-w-0 max-w-[9.375rem] flex-1 truncate max-sm:max-w-[5.5rem]',
+            )}
           >
             {modelName}
           </span>
           {fixedThinking ? (
             <FixedThinkingStatus
-              className="shrink-0 text-ink-faint"
+              className={cn(composerControlTextClass, 'shrink-0')}
               focusable={false}
               hidden={currentModel?.thinkingVisibility === 'hidden'}
               iconOnly
@@ -137,7 +141,10 @@ export function ModelSettingsMenu({
           ) : (
             <span
               data-testid="model-settings-effort"
-              className="shrink-0 text-ink-faint @max-[430px]:hidden max-sm:hidden"
+              className={cn(
+                composerControlTextClass,
+                'shrink-0 @max-[430px]:hidden max-sm:hidden',
+              )}
             >
               {thinkingName}
             </span>

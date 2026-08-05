@@ -82,7 +82,7 @@
    light, and whenever the user pinned dark. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --canvas: #1e1e1e;
+    --canvas: rgb(31, 33, 36);
     --canvas-raised: #252525;
     --canvas-sunken: #2c2c2c;
     --canvas-strong: #383838;
@@ -141,7 +141,7 @@
 /* The explicit override has to restate the dark values rather than reuse the
    block above: a media query cannot be re-entered from a selector. */
 :root[data-theme="dark"] {
-  --canvas: #1e1e1e;
+  --canvas: rgb(31, 33, 36);
   --canvas-raised: #252525;
   --canvas-sunken: #2c2c2c;
   --canvas-strong: #383838;

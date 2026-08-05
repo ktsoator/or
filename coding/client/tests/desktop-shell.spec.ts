@@ -690,6 +690,14 @@ test('desktop headers expose native drag regions while controls remain interacti
   await expect(workbenchToggle).toHaveAccessibleName('Show workbench')
 })
 
+test('dark theme uses the cool neutral canvas', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('or.theme', 'dark'))
+  await openDesktopClient(page)
+
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(31, 33, 36)')
+})
+
 test('desktop external links open in the system browser without leaving Coding', async ({ page }) => {
   await openDesktopClient(page)
   const appURL = page.url()
@@ -3703,6 +3711,7 @@ for (const control of [
     const permission = composer.getByTestId('permission-mode-trigger')
     const model = composer.getByTestId('model-settings-trigger')
     const trigger = composer.getByTestId(control.testID)
+    await expect(trigger).toHaveCSS('color', 'rgb(138, 139, 141)')
     await trigger.click()
     const menu = page.getByRole('menu')
     await expect(menu).toBeVisible()
@@ -3715,7 +3724,12 @@ for (const control of [
       return Math.abs(triggerBox.y - (menuBox.y + menuBox.height) - 2)
     }).toBeLessThanOrEqual(0.5)
     if (control.name === 'permission') {
+      await expect(menu).toHaveCSS('width', '450px')
       const autoEdit = page.getByRole('menuitemradio', { name: /Auto edit/ })
+      await expect(autoEdit.getByText('Auto edit', { exact: true })).toHaveCSS(
+        'font-weight',
+        '400',
+      )
       await autoEdit.hover()
       await expect(autoEdit).toHaveCSS('background-color', 'rgb(244, 244, 244)')
     } else {
