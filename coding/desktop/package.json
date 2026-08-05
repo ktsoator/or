@@ -26,6 +26,7 @@
   "build": {
     "appId": "com.ktsoator.or.coding",
     "productName": "Coding",
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
     "asar": true,
     "directories": {
       "output": "release"

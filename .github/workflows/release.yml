@@ -24,6 +24,10 @@ jobs:
       - name: Match Coding versions to tag
         run: node scripts/set-version.mjs "${GITHUB_REF_NAME}" --check
 
+      - name: Check release artifact names
+        working-directory: coding/desktop
+        run: node scripts/check-artifact-names.mjs
+
       - name: Check release notes
         run: test -f ".github/release-notes/${GITHUB_REF_NAME}.md"
 
