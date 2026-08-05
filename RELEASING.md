@@ -38,7 +38,7 @@ Commit the version change, merge it to `main`, and wait for CI to pass.
 Tag the release commit and push the tag:
 
 ```sh
-git tag -a v0.6.0 -m "Or v0.6.0"
+git tag -a v0.6.0 -m "v0.6.0"
 git push origin v0.6.0
 ```
 
