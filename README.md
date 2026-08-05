@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/assets/coding-logo-flat-transparent.png" alt="Coding swirl logo" width="120">
+  <img src="docs/assets/coding-logo-flat-transparent.png" alt="Or swirl logo" width="120">
   <p><strong>Choose the path from intent to action.</strong></p>
   <p>English | <a href="README.zh.md">简体中文</a></p>
   <p>
@@ -17,7 +17,7 @@
 higher-level agents. A provider-neutral LLM package keeps conversations, tools,
 reasoning, and streaming events stable while models and wire protocols change
 underneath, and an agent package builds the tool-call loop, state, and streaming
-events on top. The repository also includes Coding, a coding agent built with
+events on top. The repository also includes Or, a coding agent built with
 these packages.
 
 ## Why `or`
@@ -41,7 +41,7 @@ these packages.
 | [`or/llm`](docs/llm/README.md) | Available | Unified model access, streaming, tools, reasoning, images, and conversation history |
 | [`or/agent`](docs/agent/README.md) | Available | Stateful agent loop with tools, streaming events, steering, follow-ups, and abort |
 | [`or/harness`](https://pkg.go.dev/github.com/ktsoator/or/harness) | Available | Orchestration over the agent: transcript persistence, context compaction, per-turn system prompt, skills, and prompt templates |
-| [`Coding`](coding/README.md) | Product | Coding agent service, React client, and Electron desktop application |
+| [`Or`](coding/README.md) | Product | Coding agent service, React client, and Electron desktop application |
 
 Future packages can build higher-level orchestration on the same foundations
 without turning the root package into a single large API.
@@ -132,7 +132,7 @@ API reference: [`or/llm`](https://pkg.go.dev/github.com/ktsoator/or/llm) ·
 
 ## Releases
 
-The Go SDK and Coding share a version. Pushing a `vX.Y.Z` tag creates the
+The Go SDK and Or share a version. Pushing a `vX.Y.Z` tag creates the
 GitHub Release and attaches the macOS builds. See
 [RELEASING.md](RELEASING.md).
 
@@ -152,7 +152,7 @@ mock-server tests.
 
 ## Project status
 
-`v0.6.0` is the first public release of Coding. It also moves `or/harness`, the
+`v0.6.0` is the first public release of Or. It also moves `or/harness`, the
 stateful orchestration layer for `or/agent`, to a top-level package. The project
 remains pre-1.0, so APIs may continue to evolve between minor versions. Breaking
 changes will be called out in release notes.

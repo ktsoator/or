@@ -102,7 +102,7 @@ export function onBrowserState(
   return browserBridge()?.onState(listener) ?? (() => undefined)
 }
 
-// Opens a URL outside Coding when the native runtime is available, with the
+// Opens a URL outside Or when the native runtime is available, with the
 // browser's normal new-tab behavior as the web-client fallback.
 export function openExternalURL(url: string): void {
   const open = window.codingDesktop?.openExternalURL

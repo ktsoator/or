@@ -787,7 +787,7 @@ test('dark theme uses the cool neutral canvas', async ({ page }) => {
   await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(31, 33, 36)')
 })
 
-test('desktop external links open in the system browser without leaving Coding', async ({ page }) => {
+test('desktop external links open in the system browser without leaving Or', async ({ page }) => {
   await openDesktopClient(page)
   const appURL = page.url()
 
@@ -806,7 +806,7 @@ test('desktop external links open in the system browser without leaving Coding',
   await expect(page.getByTestId('conversation-header')).toBeVisible()
 })
 
-test('Coding API startup retries recover the Composer automatically', async ({ page }) => {
+test('Or API startup retries recover the Composer automatically', async ({ page }) => {
   const requests = await openDesktopClient(page, { healthFailures: 2, legacyHealth: true })
   const input = page.getByTestId('composer').locator('textarea')
 

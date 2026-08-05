@@ -2,7 +2,7 @@
   "name": "coding-desktop",
   "version": "0.6.4",
   "private": true,
-  "description": "Electron desktop shell for Coding",
+  "description": "Electron desktop shell for Or",
   "author": "Kt <ktsoator@gmail.com>",
   "main": "dist/main.js",
   "scripts": {
@@ -25,7 +25,7 @@
   },
   "build": {
     "appId": "com.ktsoator.or.coding",
-    "productName": "Coding",
+    "productName": "Or",
     "artifactName": "${productName}-${version}-${arch}.${ext}",
     "asar": true,
     "directories": {

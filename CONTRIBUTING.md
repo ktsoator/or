@@ -21,7 +21,7 @@ go test ./...      # run the full test suite
 go vet ./...       # static checks
 ```
 
-For Coding client or desktop changes, install
+For Or client or desktop changes, install
 [Bun](https://bun.sh/) and run:
 
 ```bash

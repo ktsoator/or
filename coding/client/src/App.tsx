@@ -811,7 +811,7 @@ export default function App() {
               >
                 {draft || activeSession?.title === 'New session'
                   ? t('app.newSession')
-                  : (activeSession?.title ?? 'OR coding')}
+                  : (activeSession?.title ?? 'Or')}
               </span>
             </div>
           </div>

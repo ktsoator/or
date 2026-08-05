@@ -21,7 +21,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Match Coding versions to tag
+      - name: Match Or versions to tag
         run: node scripts/set-version.mjs "${GITHUB_REF_NAME}" --check
 
       - name: Check release artifact names
@@ -37,7 +37,7 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Test SDK and Coding service
+      - name: Test SDK and Or service
         run: go test ./...
 
       - name: Set up Bun
@@ -47,16 +47,16 @@ jobs:
         working-directory: coding/client
         run: bun install --frozen-lockfile
 
-      - name: Lint Coding client
+      - name: Lint Or client
         working-directory: coding/client
         run: bun run lint
 
-      - name: Test Coding client
+      - name: Test Or client
         working-directory: coding/client
         run: bun run test
 
   build-coding:
-    name: Build Coding (${{ matrix.arch }})
+    name: Build Or (${{ matrix.arch }})
     needs: validate
     strategy:
       fail-fast: false
@@ -89,7 +89,7 @@ jobs:
         working-directory: coding/desktop
         run: bun install --frozen-lockfile
 
-      - name: Package Coding
+      - name: Package Or
         working-directory: coding/desktop
         run: >-
           bun run package --
@@ -100,7 +100,7 @@ jobs:
 
       - name: Verify application signature
         working-directory: coding/desktop
-        run: codesign --verify --deep --strict --verbose=2 release/mac*/Coding.app
+        run: codesign --verify --deep --strict --verbose=2 release/mac*/Or.app
 
       - name: Collect installers
         uses: actions/upload-artifact@v7
@@ -139,7 +139,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          name: or ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
           body_path: .github/release-notes/${{ github.ref_name }}.md
           files: release-assets/*
           make_latest: ${{ contains(github.ref_name, '-') && 'false' || 'true' }}

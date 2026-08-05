@@ -1,6 +1,6 @@
-# Coding client
+# Or client
 
-The React application consumes the Coding product through relative `/api`
+The React application consumes the Or product through relative `/api`
 HTTP and SSE routes. Vite proxies them to `http://localhost:8787` for standalone
 browser development. The Electron sidecar serves the production build and API
 from one authenticated loopback origin.

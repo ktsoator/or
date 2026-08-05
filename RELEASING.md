@@ -1,13 +1,13 @@
 # Release
 
-The Go packages and Coding share one `vX.Y.Z` version. A tag publishes the Go
-module and creates a GitHub Release with Coding installers for Apple Silicon and
+The Go packages and Or share one `vX.Y.Z` version. A tag publishes the Go
+module and creates a GitHub Release with Or installers for Apple Silicon and
 Intel Macs.
 
 ## Prepare
 
 Add `.github/release-notes/v0.6.0.md` with the user-visible changes and any
-known limitations. Then update the Coding package versions:
+known limitations. Then update the Or package versions:
 
 ```sh
 node scripts/set-version.mjs v0.6.0
@@ -38,7 +38,7 @@ Commit the version change, merge it to `main`, and wait for CI to pass.
 Tag the release commit and push the tag:
 
 ```sh
-git tag -a v0.6.0 -m "or v0.6.0"
+git tag -a v0.6.0 -m "Or v0.6.0"
 git push origin v0.6.0
 ```
 

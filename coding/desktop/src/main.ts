@@ -94,7 +94,7 @@ function applyDevelopmentDockIcon(): void {
 
 function createWindow(url: string): void {
   const window = new BrowserWindow({
-    title: 'Coding',
+    title: 'Or',
     width: 1280,
     height: 820,
     minWidth: 960,
@@ -224,10 +224,10 @@ async function startSidecar(): Promise<ReadyMessage & { token: string }> {
 
   const ready = await waitForReadyMessage(child)
   if (child.exitCode !== null || child.signalCode !== null) {
-    throw new Error(`Coding sidecar exited after startup (${child.signalCode ?? child.exitCode})`)
+    throw new Error(`Or service exited after startup (${child.signalCode ?? child.exitCode})`)
   }
   child.once('exit', (code, signal) => {
-    if (!quitting) failStartup(new Error(`Coding sidecar exited (${signal ?? code ?? 'unknown'})`))
+    if (!quitting) failStartup(new Error(`Or service exited (${signal ?? code ?? 'unknown'})`))
   })
   return { ...ready, token }
 }
@@ -235,7 +235,7 @@ async function startSidecar(): Promise<ReadyMessage & { token: string }> {
 function waitForReadyMessage(child: ChildProcessWithoutNullStreams): Promise<ReadyMessage> {
   return new Promise((resolve, reject) => {
     const lines = readline.createInterface({ input: child.stdout })
-    const timer = setTimeout(() => finish(new Error('timed out waiting for Coding sidecar')), sidecarReadyTimeoutMs)
+    const timer = setTimeout(() => finish(new Error('timed out waiting for Or service')), sidecarReadyTimeoutMs)
 
     const finish = (error?: Error, ready?: ReadyMessage): void => {
       clearTimeout(timer)
@@ -255,7 +255,7 @@ function waitForReadyMessage(child: ChildProcessWithoutNullStreams): Promise<Rea
       }
     })
     child.once('error', (error) => finish(error))
-    child.once('exit', (code) => finish(new Error(`Coding sidecar exited before ready (${code ?? 'unknown'})`)))
+    child.once('exit', (code) => finish(new Error(`Or service exited before ready (${code ?? 'unknown'})`)))
   })
 }
 
@@ -319,6 +319,6 @@ function stopChild(child: ChildProcessWithoutNullStreams | null): void {
 
 function failStartup(error: unknown): void {
   const message = error instanceof Error ? error.message : String(error)
-  dialog.showErrorBox('Coding could not start', message)
+  dialog.showErrorBox('Or could not start', message)
   app.quit()
 }

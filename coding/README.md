@@ -1,9 +1,9 @@
-# Coding
+# Or
 
-Coding is the product built on the reusable `agent` and `llm` libraries. Its
+Or is the product built on the reusable `agent` and `llm` libraries. Its
 packages are product implementation details and are not a public SDK.
 
-Coding and the Go packages use the same version.
+Or and the Go packages use the same version.
 
 ## Layout
 
@@ -20,10 +20,10 @@ coding/
     ├── transcript/         Transcript model and persistence
     ├── compaction/         Context compaction
     ├── permission/         Tool-call approval policy
-    ├── prompt/             Coding system prompt
+    ├── prompt/             Or system prompt
     ├── prompttemplate/     Prompt template discovery and expansion
     ├── skills/             Skill discovery and loading
-    ├── tools/              Coding tools and local execution
+    ├── tools/              Or tools and local execution
     ├── provider/           Provider settings
     ├── workspace/          Workspace registry and scratch directories
     ├── usage/              Usage ledger
@@ -41,11 +41,11 @@ client -> HTTP/SSE -> httpapi -> conversation -> engine -> agent -> llm
 
 Both `cmd/coding` and `desktop` host the reusable runtime assembled by
 `internal/app`. Product policy stays inside `coding`; `agent` and `llm` must not
-import it. Coding must not depend on `harness`.
+import it. The `coding` product packages must not depend on `harness`.
 
 ## Prompt templates
 
-Prompt templates are Markdown files that expand from slash commands. Coding
+Prompt templates are Markdown files that expand from slash commands. Or
 loads user templates from `~/.or/prompts/*.md` and project templates from
 `<workspace>/.or/prompts/*.md`. A project template replaces a user template
 with the same filename-derived name.
@@ -68,7 +68,7 @@ model as product-owned context.
 
 Localized menu metadata is optional. Add `description-en`,
 `description-zh-CN`, `argument-hint-en`, and `argument-hint-zh-CN` to make a
-template follow Coding's interface language. The original fields remain the
+template follow Or's interface language. The original fields remain the
 fallback for older and single-language templates.
 
 ## Desktop
