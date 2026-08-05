@@ -65,10 +65,12 @@ const options: ModeOption[] = [
 export function PermissionModeMenu({
   value,
   disabled,
+  confirmationBlocked,
   onChange,
 }: {
   value: PermissionMode
   disabled: boolean
+  confirmationBlocked: boolean
   onChange: (mode: PermissionMode) => Promise<void>
 }) {
   const { t } = useI18n()
@@ -80,11 +82,12 @@ export function PermissionModeMenu({
   const fullAccessSelected = selected.value === 'full_access'
 
   useEffect(() => {
-    if (disabled) {
-      setOpen(false)
-      setConfirmOpen(false)
-    }
+    if (disabled) setOpen(false)
   }, [disabled])
+
+  useEffect(() => {
+    if (confirmationBlocked) setConfirmOpen(false)
+  }, [confirmationBlocked])
 
   const chooseMode = (next: string) => {
     const mode = next as PermissionMode

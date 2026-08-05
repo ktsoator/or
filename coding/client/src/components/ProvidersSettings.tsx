@@ -417,7 +417,12 @@ function DefaultModelSection({
                       className={triggerClass}
                       disabled={saving || providerModels.length === 0}
                     >
-                      <span className="max-w-[9rem] truncate">{modelLabel}</span>
+                      <span
+                        className="max-w-[9rem] truncate xl:max-w-[20rem]"
+                        title={modelLabel}
+                      >
+                        {modelLabel}
+                      </span>
                       <ChevronDown className="size-3.5 shrink-0 text-ink-faint" aria-hidden="true" />
                     </button>
                   </DropdownMenu.Trigger>

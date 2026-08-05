@@ -23,6 +23,7 @@ export function ModelSettingsMenu({
   thinkingLevel,
   contextUsage,
   disabled,
+  updating,
   compacting,
   onChange,
   onCompact,
@@ -33,6 +34,7 @@ export function ModelSettingsMenu({
   thinkingLevel?: ThinkingLevel
   contextUsage?: ContextUsage
   disabled: boolean
+  updating: boolean
   compacting: boolean
   onChange: (
     provider: string,
@@ -70,6 +72,7 @@ export function ModelSettingsMenu({
       ? t(thinkingLevelLabelKey(currentModel, thinkingLevel))
       : t(toggleThinking ? 'model.thinkingOff' : 'model.effort')
   const unavailable = disabled || !modelKey || models.length === 0
+  const controlsDisabled = unavailable || updating
   const menuOpen = open && !unavailable
   const contextWindow = currentModel?.contextWindow ?? contextUsage?.contextWindow ?? 0
   const currentContextUsage =
@@ -116,18 +119,19 @@ export function ModelSettingsMenu({
           className={cn(
             composerMenuTriggerClass,
             composerControlTextClass,
-            'h-[30px] max-w-[15.5rem] rounded-[10px] max-sm:max-w-[8rem] max-sm:px-2',
+            'h-[30px] max-w-[24rem] rounded-[10px] max-sm:max-w-[8rem] max-sm:px-2',
           )}
           aria-label={t('model.settings')}
-          disabled={unavailable}
+          disabled={controlsDisabled}
         >
           <ProviderIcon provider={modelProvider ?? ''} />
           <span
             data-testid="model-settings-name"
             className={cn(
               composerControlTextClass,
-              'min-w-0 max-w-[9.375rem] flex-1 truncate max-sm:max-w-[5.5rem]',
+              'min-w-0 max-w-[18rem] flex-1 truncate max-sm:max-w-[5.5rem]',
             )}
+            title={modelName}
           >
             {modelName}
           </span>
@@ -165,7 +169,7 @@ export function ModelSettingsMenu({
           className="z-[100] min-w-[15.5rem] animate-[fade-in_110ms_ease-out] rounded-2xl border border-edge bg-canvas p-1 text-[0.875rem] text-ink shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
         >
           <DropdownMenu.Sub>
-            <DropdownMenu.SubTrigger className={subTriggerClass}>
+            <DropdownMenu.SubTrigger className={subTriggerClass} disabled={updating}>
               <span>{t('model.provider')}</span>
               <span className="ml-auto flex min-w-0 items-center gap-1.5 text-ink-muted">
                 <ProviderIcon provider={selectedProvider || modelProvider || ''} />
@@ -194,6 +198,7 @@ export function ModelSettingsMenu({
                       key={provider}
                       value={provider}
                       className={radioItemClass}
+                      disabled={updating}
                       onSelect={(event) => event.preventDefault()}
                     >
                       <ProviderIcon provider={provider} />
@@ -209,7 +214,7 @@ export function ModelSettingsMenu({
           </DropdownMenu.Sub>
 
           <DropdownMenu.Sub>
-            <DropdownMenu.SubTrigger className={subTriggerClass}>
+            <DropdownMenu.SubTrigger className={subTriggerClass} disabled={updating}>
               <span>{t('model.model')}</span>
               <span className="ml-auto flex min-w-0 items-center gap-1.5 text-ink-muted">
                 <span className="max-w-[8rem] truncate">{selectedModelName}</span>
@@ -237,6 +242,7 @@ export function ModelSettingsMenu({
                       key={`${model.provider}/${model.id}`}
                       value={JSON.stringify([model.provider, model.id])}
                       className={radioItemClass}
+                      disabled={updating}
                     >
                       <span className="min-w-0 flex-1 truncate">{model.name}</span>
                       <DropdownMenu.ItemIndicator className="absolute right-2.5 grid size-4 place-items-center text-ink-soft">
@@ -258,27 +264,38 @@ export function ModelSettingsMenu({
               />
             </div>
           ) : toggleThinking ? (
-            <DropdownMenu.CheckboxItem
-              data-testid="model-thinking-toggle"
-              checked={thinkingLevel === 'high'}
-              disabled={selectedProvider !== modelProvider}
-              onCheckedChange={(checked) => selectEffort(toggleThinkingLevel(checked === true))}
-              className={cn(
-                'mb-0.5 flex h-[30px] cursor-default select-none items-center rounded-[10px] px-2.5 outline-none',
-                'data-[highlighted]:bg-surface-active data-[disabled]:opacity-40',
-              )}
+            <div
+              data-testid="model-thinking-row"
+              className="mb-0.5 flex h-[30px] select-none items-center px-2.5"
             >
               <span>{t('model.thinking')}</span>
-              <span className="ml-auto flex items-center gap-2 text-ink-muted">
+              <button
+                data-testid="model-thinking-toggle"
+                type="button"
+                role="switch"
+                aria-label={t('model.thinking')}
+                aria-checked={thinkingLevel === 'high'}
+                disabled={updating || selectedProvider !== modelProvider}
+                className={cn(
+                  'ml-auto flex h-7 cursor-pointer items-center gap-2 rounded-[8px] px-1.5 text-ink-muted outline-none transition-colors hover:bg-surface-active focus-visible:bg-surface-active disabled:opacity-40',
+                  updating ? 'disabled:cursor-wait' : 'disabled:cursor-not-allowed',
+                )}
+                onClick={() =>
+                  selectEffort(toggleThinkingLevel(thinkingLevel !== 'high'))
+                }
+              >
                 <span>{thinkingName}</span>
-                <ThinkingSwitchIndicator checked={thinkingLevel === 'high'} />
-              </span>
-            </DropdownMenu.CheckboxItem>
+                <ThinkingSwitchIndicator
+                  checked={thinkingLevel === 'high'}
+                  disabled={updating}
+                />
+              </button>
+            </div>
           ) : (
             <DropdownMenu.Sub>
               <DropdownMenu.SubTrigger
                 className={subTriggerClass}
-                disabled={selectedProvider !== modelProvider}
+                disabled={updating || selectedProvider !== modelProvider}
               >
                 <span>{t('model.effort')}</span>
                 <span className="ml-auto flex items-center gap-1.5 text-ink-muted">
@@ -303,7 +320,12 @@ export function ModelSettingsMenu({
                     onValueChange={selectEffort}
                   >
                     {thinkingLevels.map((level) => (
-                      <DropdownMenu.RadioItem key={level} value={level} className={radioItemClass}>
+                      <DropdownMenu.RadioItem
+                        key={level}
+                        value={level}
+                        className={radioItemClass}
+                        disabled={updating}
+                      >
                         <span>{t(`effort.${level}`)}</span>
                         <DropdownMenu.ItemIndicator className="absolute right-2.5 grid size-4 place-items-center text-ink-soft">
                           <Check className="size-3.5" aria-hidden="true" />
@@ -323,7 +345,7 @@ export function ModelSettingsMenu({
               <DropdownMenu.Separator className="mx-2 my-1 h-px bg-canvas-sunken" />
               <DropdownMenu.Item
                 className="flex h-[30px] cursor-default select-none items-center gap-2.5 rounded-[10px] px-2.5 outline-none data-[highlighted]:bg-surface-active data-[disabled]:opacity-40"
-                disabled={compacting}
+                disabled={compacting || updating}
                 onSelect={onCompact}
               >
                 {compacting ? (

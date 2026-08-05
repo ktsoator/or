@@ -161,9 +161,10 @@ export function Composer({
   // parked inside a tool call until the user answers it.
   const awaitingUser = awaitingApproval || awaitingQuestion
   const modelConfigured = Boolean(modelProvider && modelID && thinkingLevel)
-  const inputDisabled =
-    awaitingUser || !connected || updatingSettings || compacting || !modelConfigured
-  const settingsDisabled = running || inputDisabled
+  const editorDisabled = awaitingUser || !connected || compacting || !modelConfigured
+  const settingsLocked = running || editorDisabled
+  const settingsDisabled = settingsLocked || updatingSettings
+  const sendDisabled = editorDisabled || updatingSettings
   const supportsImages = Boolean(
     models.find((model) => model.provider === modelProvider && model.id === modelID)
       ?.supportsImages,
@@ -184,7 +185,7 @@ export function Composer({
     : 0
   const suggestionCount = previewCommandCount + suggestedSkills.length
   const skillSuggestionsVisible = Boolean(
-    slashQuery && !inputDisabled,
+    slashQuery && !editorDisabled,
   )
 
   const autosize = () => {
@@ -196,8 +197,8 @@ export function Composer({
   }
 
   useEffect(() => {
-    if (!inputDisabled) ref.current?.focus()
-  }, [inputDisabled])
+    if (!editorDisabled) ref.current?.focus()
+  }, [editorDisabled])
 
   useEffect(() => {
     if (!running) setDelivery('steer')
@@ -301,7 +302,7 @@ export function Composer({
   }
 
   const runPreviewCommand = async (command: ComposerPreviewCommand) => {
-    if (command !== 'compact') return
+    if (command !== 'compact' || sendDisabled) return
     setDraftValue('')
     setAddPanelOpen(false)
     setSkillSuggestionsDismissed(true)
@@ -311,7 +312,7 @@ export function Composer({
 
   const submit = async () => {
     const el = ref.current
-    if (!el || submittingRef.current) return
+    if (!el || submittingRef.current || sendDisabled) return
     const command = parseExecutableComposerCommand(draftValue)
     if (command) {
       await runPreviewCommand(command)
@@ -321,7 +322,7 @@ export function Composer({
     const text = selectedSkill
       ? buildSkillInvocation(selectedSkill.name, argumentsText)
       : argumentsText
-    if ((!text && images.length === 0 && files.length === 0) || inputDisabled) return
+    if (!text && images.length === 0 && files.length === 0) return
     if (images.length > 0 && !supportsImages) {
       setAttachmentError(t('composer.modelNoImages'))
       return
@@ -518,7 +519,7 @@ export function Composer({
             className="grid min-h-24 grid-cols-[2.5rem_minmax(0,1fr)] grid-rows-[auto_2.5rem] items-center gap-x-3 gap-y-1 px-3 py-2.5 max-sm:gap-x-2"
           >
             <ComposerAddMenu
-              disabled={inputDisabled}
+              disabled={editorDisabled}
               open={addPanelOpen}
               imageAttachmentAvailable={supportsImages}
               imageLimitReached={images.length >= maxImages}
@@ -643,7 +644,7 @@ export function Composer({
                   ref={ref}
                   rows={1}
                   value={draftValue}
-                  disabled={inputDisabled}
+                  disabled={editorDisabled}
                   aria-autocomplete={!selectedSkill ? 'list' : undefined}
                   aria-controls={skillSuggestionsVisible ? skillSuggestionsID : undefined}
                   aria-expanded={!selectedSkill ? skillSuggestionsVisible : undefined}
@@ -662,8 +663,6 @@ export function Composer({
                       ? t('composer.resolveApprovalPlaceholder')
                       : compacting
                         ? t('composer.compactingContext')
-                        : updatingSettings
-                          ? t('composer.updatingSettings')
                       : !modelConfigured
                         ? t('composer.configureModelPlaceholder')
                       : connected
@@ -786,6 +785,7 @@ export function Composer({
                 <PermissionModeMenu
                   value={permissionMode}
                   disabled={settingsDisabled}
+                  confirmationBlocked={settingsLocked}
                   onChange={changePermissionMode}
                 />
                 {projectPickerVisible && (
@@ -809,7 +809,8 @@ export function Composer({
                     modelID={modelID}
                     thinkingLevel={thinkingLevel}
                     contextUsage={contextUsage}
-                    disabled={settingsDisabled}
+                    disabled={settingsLocked}
+                    updating={updatingSettings}
                     onChange={changeSettings}
                     compacting={compacting}
                     onCompact={onCompact ? compactContext : undefined}
@@ -857,7 +858,7 @@ export function Composer({
                           : t('composer.sendPrompt')
                         : t('composer.waitingForCodingAPI')
                   }
-                  disabled={inputDisabled}
+                  disabled={sendDisabled}
                   onClick={() => void submit()}
                 >
                   <ArrowUp className="size-4" aria-hidden="true" />

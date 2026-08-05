@@ -151,7 +151,7 @@ export function UtilityModelSection({
             options={modelOptions}
             disabled={!routeProvider}
             busy={saving}
-            className="sm:w-[11rem]"
+            className="sm:w-auto sm:min-w-[11rem] sm:max-w-[20rem]"
             onChange={(model) => route && persistRoute({ ...route, model })}
           />
           {showAdvanced && route && (
@@ -229,7 +229,12 @@ function UtilitySelect({
           )}
         >
           {selected?.icon}
-          <span className="min-w-0 flex-1 truncate">{selected?.label ?? fallback}</span>
+          <span
+            className="min-w-0 flex-1 truncate"
+            title={selected?.label ?? fallback}
+          >
+            {selected?.label ?? fallback}
+          </span>
           <ChevronDown className="size-3.5 shrink-0 text-ink-faint" aria-hidden="true" />
         </button>
       </DropdownMenu.Trigger>

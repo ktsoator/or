@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useReducer,
+  useRef,
   useState,
 } from 'react'
 import { APIError, apiURL, sessionURL } from './api'
@@ -150,7 +151,9 @@ export function useSession(secondarySessionID?: string): Session {
   )
   const { sessions, workspaces, draft, pendingDraftSend, activeSessionID } = sessionStore
   const [creating, setCreating] = useState(false)
-  const [updatingSettings, setUpdatingSettings] = useState(false)
+  const updatingSettingsSessionIDsRef = useRef<ReadonlySet<string>>(new Set())
+  const [updatingSettingsSessionIDs, setUpdatingSettingsSessionIDs] =
+    useState<ReadonlySet<string>>(() => new Set())
   const [compactingSessionID, setCompactingSessionID] = useState<string>()
   const [models, setModels] = useState<ModelOption[]>([])
   const [modelDefaults, setModelDefaults] = useState<ModelDefaults>()
@@ -462,8 +465,10 @@ export function useSession(secondarySessionID?: string): Session {
     model: string,
     thinkingLevel: ThinkingLevel,
   ) => {
-    if (updatingSettings) return
-    setUpdatingSettings(true)
+    if (updatingSettingsSessionIDsRef.current.has(sessionID)) return
+    const pendingSessionIDs = new Set(updatingSettingsSessionIDsRef.current).add(sessionID)
+    updatingSettingsSessionIDsRef.current = pendingSessionIDs
+    setUpdatingSettingsSessionIDs(pendingSessionIDs)
     try {
       const updated = await patchSessionSettings(sessionID, provider, model, thinkingLevel)
       const previous = sessions.find((session) => session.id === sessionID)
@@ -486,7 +491,10 @@ export function useSession(secondarySessionID?: string): Session {
         })
       }
     } finally {
-      setUpdatingSettings(false)
+      const remainingSessionIDs = new Set(updatingSettingsSessionIDsRef.current)
+      remainingSessionIDs.delete(sessionID)
+      updatingSettingsSessionIDsRef.current = remainingSessionIDs
+      setUpdatingSettingsSessionIDs(remainingSessionIDs)
     }
   }
 
@@ -509,8 +517,10 @@ export function useSession(secondarySessionID?: string): Session {
   }
 
   const updateSessionPermissionMode = async (sessionID: string, mode: PermissionMode) => {
-    if (updatingSettings) return
-    setUpdatingSettings(true)
+    if (updatingSettingsSessionIDsRef.current.has(sessionID)) return
+    const pendingSessionIDs = new Set(updatingSettingsSessionIDsRef.current).add(sessionID)
+    updatingSettingsSessionIDsRef.current = pendingSessionIDs
+    setUpdatingSettingsSessionIDs(pendingSessionIDs)
     try {
       const response = await fetch(sessionURL(sessionID, '/permission-mode'), {
         method: 'PATCH',
@@ -530,7 +540,10 @@ export function useSession(secondarySessionID?: string): Session {
       const updated = (await response.json()) as SessionSummary
       dispatchSessionStore({ t: 'sessionUpdated', session: updated, front: true })
     } finally {
-      setUpdatingSettings(false)
+      const remainingSessionIDs = new Set(updatingSettingsSessionIDsRef.current)
+      remainingSessionIDs.delete(sessionID)
+      updatingSettingsSessionIDsRef.current = remainingSessionIDs
+      setUpdatingSettingsSessionIDs(remainingSessionIDs)
     }
   }
 
@@ -859,7 +872,7 @@ export function useSession(secondarySessionID?: string): Session {
         running: secondaryState?.running ?? secondarySession.running,
         autoCompacting: secondaryState?.autoCompacting ?? false,
         loading: !secondaryState?.loaded,
-        updatingSettings,
+        updatingSettings: updatingSettingsSessionIDs.has(secondarySession.id),
         compacting: compactingSessionID === secondarySession.id,
         status: secondaryState?.status ?? serviceStatus,
         send: (
@@ -906,7 +919,9 @@ export function useSession(secondarySessionID?: string): Session {
     autoCompacting: thread?.autoCompacting ?? false,
     loading: initializing || (Boolean(activeSessionID) && !thread?.loaded),
     creating,
-    updatingSettings,
+    updatingSettings: Boolean(
+      activeSessionID && updatingSettingsSessionIDs.has(activeSessionID),
+    ),
     compacting: Boolean(activeSessionID && compactingSessionID === activeSessionID),
     status: thread?.status ?? serviceStatus,
     models,

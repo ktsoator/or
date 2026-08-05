@@ -515,6 +515,45 @@ async function openDesktopClient(
         })),
       }
     }
+    if (path === '/api/providers') {
+      body = {
+        providers: [
+          {
+            id: 'openai',
+            name: 'OpenAI',
+            configured: true,
+            models: 1,
+            officialBaseURL: 'https://api.openai.com/v1',
+            effectiveBaseURL: 'https://api.openai.com/v1',
+            activeConnectionId: 'official',
+            connections: [
+              {
+                id: 'official',
+                name: 'Official',
+                baseURL: 'https://api.openai.com/v1',
+                official: true,
+                activeKeyId: 'default',
+                keys: [{ id: 'default', name: 'Default', preview: 'sk-test' }],
+              },
+            ],
+            utilityModels: [
+              { id: 'test-model', name: options.modelName ?? 'Test model' },
+            ],
+          },
+        ],
+        activeModel: {
+          provider: 'openai',
+          model: 'test-model',
+          thinkingLevel: modelThinkingLevel,
+        },
+        utilityModel: {
+          provider: 'openai',
+          model: 'test-model',
+          connectionId: 'official',
+          keyId: 'default',
+        },
+      }
+    }
     if (path === '/api/sessions') {
       body = sessionCreated
         ? [
@@ -3469,8 +3508,11 @@ test('Composer controls stay separate and compact when Chat is narrow', async ({
   )
   expect(modelBox!.width).toBeGreaterThan(40)
 
-  await expect(permission).toHaveClass(/text-ink-muted/)
-  await expect(page.getByTestId('model-settings-name')).toHaveClass(/text-ink-muted/)
+  await expect(permission).toHaveCSS('color', 'rgb(138, 139, 141)')
+  await expect(page.getByTestId('model-settings-name')).toHaveCSS(
+    'color',
+    'rgb(138, 139, 141)',
+  )
   await expect(page.getByTestId('model-settings-effort')).toBeHidden()
   await expect(page.getByTestId('permission-mode-label')).toBeHidden()
   await expect(page.getByTestId('model-settings-name')).toHaveCSS('text-overflow', 'ellipsis')
@@ -3481,6 +3523,51 @@ test('Composer controls stay separate and compact when Chat is narrow', async ({
   }))
   expect(modelNameLayout.whiteSpace).toBe('nowrap')
   expect(modelNameLayout.scrollWidth).toBeGreaterThan(modelNameLayout.clientWidth)
+})
+
+test('Composer shows the full model name when space is available', async ({ page }) => {
+  const modelName = 'DeepSeek V4 Flash Chat Preview'
+  await openDesktopClient(page, { existingSession: true, modelName })
+
+  const label = page.getByTestId('model-settings-name')
+  await expect(label).toHaveText(modelName)
+  await expect(label).toHaveAttribute('title', modelName)
+  const layout = await label.evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }))
+  expect(layout.scrollWidth).toBe(layout.clientWidth)
+})
+
+test('Models settings show full configured model names when space is available', async ({
+  page,
+}) => {
+  const modelName = 'DeepSeek V4 Flash (New)'
+  await page.setViewportSize({ width: 1440, height: 800 })
+  await openDesktopClient(page, { existingSession: true, modelName })
+
+  await page.getByRole('button', { name: 'Open profile menu' }).click()
+  await page.getByRole('menuitem', { name: 'Settings' }).click()
+  await page.getByRole('button', { name: 'Models', exact: true }).click()
+
+  const labels = page.getByTitle(modelName)
+  await expect(labels).toHaveCount(2)
+  for (const label of await labels.all()) {
+    const layout = await label.evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+    }))
+    expect(layout.scrollWidth).toBe(layout.clientWidth)
+  }
+  await expect
+    .poll(async () =>
+      (
+        await page
+          .getByRole('button', { name: 'Utility model', exact: true })
+          .boundingBox()
+      )?.width,
+    )
+    .toBeLessThan(260)
 })
 
 test('fixed hidden thinking is shown as a read-only model capability', async ({ page }) => {
@@ -3532,6 +3619,7 @@ test('binary thinking capability is presented as an off/on switch', async ({ pag
   const requests = await openDesktopClient(page, {
     existingSession: true,
     modelThinkingLevels: ['off', 'high'],
+    composerUpdateDelayMs: 500,
   })
 
   const trigger = page.getByTestId('model-settings-trigger')
@@ -3539,17 +3627,32 @@ test('binary thinking capability is presented as an off/on switch', async ({ pag
   await trigger.click()
 
   const toggle = page.getByTestId('model-thinking-toggle')
-  await expect(toggle).toHaveRole('menuitemcheckbox')
-  await expect(toggle).toHaveText(/Thinking.*Off/)
+  await expect(toggle).toHaveRole('switch')
+  await expect(toggle).toHaveText('Off')
   await expect(toggle).toHaveAttribute('aria-checked', 'false')
 
+  await page.getByTestId('model-thinking-row').click({ position: { x: 5, y: 15 } })
+  expect(
+    requests.filter(
+      (request) =>
+        request.path === '/api/sessions/test-session/settings' &&
+        request.method === 'PATCH',
+    ),
+  ).toHaveLength(0)
+  await expect(page.getByRole('menu')).toBeVisible()
+
   await toggle.click()
+  await expect(page.getByRole('menu')).toBeVisible()
+  await expect(toggle).toBeDisabled()
+  await expect(trigger).toBeDisabled()
   await expect.poll(() =>
     requests.find(
       (request) =>
         request.path === '/api/sessions/test-session/settings' && request.method === 'PATCH',
     )?.body,
   ).toEqual({ provider: 'openai', model: 'test-model', thinkingLevel: 'high' })
+  await expect(toggle).toBeEnabled()
+  await expect(page.getByRole('menu')).toBeVisible()
 })
 
 test('first send creates a session and renders the user message', async ({ page }) => {
@@ -3615,29 +3718,106 @@ test('Composer adds and removes a text attachment from the add menu', async ({ p
   await expect(composer.getByText('main.go')).toBeHidden()
 })
 
-test('Composer closes the add menu when the input becomes disabled', async ({ page }) => {
-  await openDesktopClient(page, {
+for (const setting of ['permission', 'model'] as const) {
+  test(`Composer keeps the editor stable while ${setting} settings update`, async ({ page }) => {
+    await openDesktopClient(page, {
+      existingSession: true,
+      composerUpdateDelayMs: 500,
+      modelThinkingLevels: ['off', 'high'],
+    })
+
+    const composer = page.getByTestId('composer')
+    const input = composer.locator('textarea')
+    const addContent = composer.locator('button[aria-label="Add content"]')
+    const permission = composer.getByTestId('permission-mode-trigger')
+    const model = composer.getByTestId('model-settings-trigger')
+    const send = composer.getByTestId('composer-send')
+    const draft = `Keep this draft during the ${setting} update`
+    await input.fill(draft)
+
+    if (setting === 'permission') {
+      await permission.click()
+      await page.getByRole('menuitemradio', { name: /Auto edit/ }).click()
+    } else {
+      await model.click()
+      await page.getByTestId('model-thinking-toggle').click()
+    }
+
+    await expect(permission).toBeDisabled()
+    await expect(model).toBeDisabled()
+    await expect(send).toBeDisabled()
+    await expect(input).toBeEnabled()
+    await expect(input).toHaveValue(draft)
+    await expect(input).toHaveAttribute('placeholder', 'Ask anything')
+    await expect(addContent).toBeEnabled()
+
+    await expect(permission).toBeEnabled()
+    await expect(model).toBeEnabled()
+    await expect(send).toBeEnabled()
+    await expect(input).toHaveValue(draft)
+  })
+}
+
+test('settings updates are isolated between the main and right-panel composers', async ({
+  page,
+}) => {
+  const requests = await openDesktopClient(page, {
     existingSession: true,
+    secondarySession: true,
     composerUpdateDelayMs: 500,
   })
 
-  const composer = page.getByTestId('composer')
-  const input = composer.locator('textarea')
-  const addContent = composer.getByRole('button', { name: 'Add content' })
-  await addContent.click()
-  await expect(composer.getByRole('listbox', { name: 'Add content' })).toBeVisible()
+  await page.getByRole('button', { name: 'Actions for Secondary task' }).click()
+  await page.getByRole('menuitem', { name: 'Open in right panel' }).click()
 
-  await composer.getByTestId('permission-mode-trigger').click()
+  const mainComposer = page.getByTestId('conversation-pane').getByTestId('composer')
+  const sideComposer = page
+    .getByTestId('workbench-panel')
+    .getByTestId('workbench-conversation')
+    .getByTestId('composer')
+  const mainPermission = mainComposer.getByTestId('permission-mode-trigger')
+  const sidePermission = sideComposer.getByTestId('permission-mode-trigger')
+
+  await mainPermission.click()
   await page.getByRole('menuitemradio', { name: /Auto edit/ }).click()
+  await expect(mainPermission).toBeDisabled()
 
-  await expect(input).toBeDisabled()
-  await expect(addContent).toBeDisabled()
-  await expect(composer.getByRole('listbox', { name: 'Add content' })).toHaveCount(0)
-  await expect(input).toBeEnabled()
+  await expect(sideComposer.locator('textarea')).toBeEnabled()
+  await expect(sideComposer.getByRole('button', { name: 'Add content' })).toBeEnabled()
+  await expect(sideComposer.getByTestId('model-settings-trigger')).toBeEnabled()
+  await expect(sidePermission).toBeEnabled()
+  await expect(sideComposer.getByTestId('composer-send')).toBeEnabled()
+
+  await sidePermission.click()
+  await page.getByRole('menuitemradio', { name: /Read-only/ }).click()
+  await expect(sidePermission).toBeDisabled()
+
+  await expect.poll(() =>
+    requests
+      .filter(
+        (request) =>
+          request.method === 'PATCH' && request.path.endsWith('/permission-mode'),
+      )
+      .map((request) => ({ path: request.path, body: request.body })),
+  ).toEqual([
+    {
+      path: '/api/sessions/test-session/permission-mode',
+      body: { mode: 'auto_edit' },
+    },
+    {
+      path: '/api/sessions/secondary-session/permission-mode',
+      body: { mode: 'read_only' },
+    },
+  ])
+  await expect(mainPermission).toBeEnabled()
+  await expect(sidePermission).toBeEnabled()
 })
 
 test('Full access requires confirmation before updating the session', async ({ page }) => {
-  const requests = await openDesktopClient(page, { existingSession: true })
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    composerUpdateDelayMs: 500,
+  })
   const composer = page.getByTestId('composer')
   const permission = composer.getByTestId('permission-mode-trigger')
 
@@ -3662,10 +3842,13 @@ test('Full access requires confirmation before updating the session', async ({ p
 
   await permission.click()
   await page.getByRole('menuitemradio', { name: /^Full access/ }).click()
-  await page
-    .getByRole('dialog', { name: 'Enable full access?' })
-    .getByRole('button', { name: 'Enable full access' })
-    .click()
+  const enableFullAccess = confirmation.getByRole('button', {
+    name: 'Enable full access',
+  })
+  await enableFullAccess.click()
+
+  await expect(confirmation).toBeVisible()
+  await expect(confirmation.getByRole('button', { name: 'Enabling…' })).toBeDisabled()
 
   await expect.poll(() =>
     requests.find(
