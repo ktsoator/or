@@ -4270,7 +4270,7 @@ test('desktop project browsing uses the native directory picker', async ({ page 
   const requests = await openDesktopClient(page, { nativeDirectory: '/tmp/native-project' })
 
   const projectPicker = page.getByRole('button', { name: 'Choose project' })
-  await expect(projectPicker).toHaveClass(/text-ink-muted/)
+  await expect(projectPicker).toHaveClass(/text-\[rgb\(138,139,141\)\]/)
   await projectPicker.click()
   await page.getByText('New project', { exact: true }).hover()
   await page.getByText('Use an existing folder', { exact: true }).click()
