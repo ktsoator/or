@@ -6,6 +6,7 @@ import type {
   HistoryResponse,
   MessageFile,
   MessageImage,
+  MessageInvocation,
   PreviewRequest,
   Question,
   TaskStatus,
@@ -135,6 +136,7 @@ export type UserItem = {
   text: string
   images: MessageImage[]
   files?: MessageFile[]
+  invocation?: MessageInvocation
   sentAt?: string
   deliveryStatus?: 'sending' | 'failed'
 }

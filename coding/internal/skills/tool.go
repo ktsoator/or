@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/ktsoator/or/agent"
@@ -109,9 +110,39 @@ func IsExplicitInvocationText(text string) bool {
 	return strings.HasPrefix(text, explicitInvocationPrefix)
 }
 
+// DisplayExplicitInvocation converts an explicit invocation into a durable
+// Markdown reference to its SKILL.md file. The UI can render the reference as a
+// rich token while copying it remains useful plain text.
+func (r *Registry) DisplayExplicitInvocation(text string) string {
+	name, arguments, matched := parseExplicitInvocation(text)
+	if !matched || name == "" {
+		return text
+	}
+	skill, ok := r.Lookup(name)
+	if !ok {
+		return text
+	}
+	path := skill.Path
+	if path == "" && skill.Dir != "" {
+		path = filepath.Join(skill.Dir, skillFile)
+	}
+	destination := path
+	if strings.ContainsAny(destination, " \t\r\n()") {
+		destination = "<" + strings.ReplaceAll(destination, ">", "%3E") + ">"
+	}
+	reference := fmt.Sprintf("[$%s](%s)", name, destination)
+	if arguments == "" {
+		return reference
+	}
+	return reference + " " + arguments
+}
+
 func parseExplicitInvocation(text string) (name, arguments string, matched bool) {
 	const prefix = "/skill:"
 	trimmed := strings.TrimSpace(text)
+	if name, arguments, matched := parseSkillReference(trimmed); matched {
+		return name, arguments, true
+	}
 	if !strings.HasPrefix(trimmed, prefix) {
 		return "", "", false
 	}
@@ -122,6 +153,33 @@ func parseExplicitInvocation(text string) (name, arguments string, matched bool)
 		return rest[:split], strings.TrimSpace(rest[split:]), true
 	}
 	return rest, "", true
+}
+
+func parseSkillReference(text string) (name, arguments string, matched bool) {
+	if !strings.HasPrefix(text, "[$") {
+		return "", "", false
+	}
+	labelEnd := strings.Index(text, "](")
+	if labelEnd < 2 {
+		return "", "", false
+	}
+	name = text[2:labelEnd]
+	rest := text[labelEnd+2:]
+	var destinationEnd int
+	if strings.HasPrefix(rest, "<") {
+		destinationEnd = strings.Index(rest, ">)")
+		if destinationEnd < 1 {
+			return "", "", false
+		}
+		destinationEnd++
+	} else {
+		destinationEnd = strings.Index(rest, ")")
+		if destinationEnd < 0 {
+			return "", "", false
+		}
+	}
+	after := rest[destinationEnd+1:]
+	return name, strings.TrimSpace(after), name != ""
 }
 
 // unknownSkillMessage explains an unknown skill name and lists the valid ones.

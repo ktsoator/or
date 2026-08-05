@@ -21,6 +21,7 @@ coding/
     ├── compaction/         Context compaction
     ├── permission/         Tool-call approval policy
     ├── prompt/             Coding system prompt
+    ├── prompttemplate/     Prompt template discovery and expansion
     ├── skills/             Skill discovery and loading
     ├── tools/              Coding tools and local execution
     ├── provider/           Provider settings
@@ -41,6 +42,34 @@ client -> HTTP/SSE -> httpapi -> conversation -> engine -> agent -> llm
 Both `cmd/coding` and `desktop` host the reusable runtime assembled by
 `internal/app`. Product policy stays inside `coding`; `agent` and `llm` must not
 import it. Coding must not depend on `harness`.
+
+## Prompt templates
+
+Prompt templates are Markdown files that expand from slash commands. Coding
+loads user templates from `~/.or/prompts/*.md` and project templates from
+`<workspace>/.or/prompts/*.md`. A project template replaces a user template
+with the same filename-derived name.
+
+For example, `.or/prompts/review.md` defines `/review`:
+
+```markdown
+---
+description: Review working tree changes
+argument-hint: "[focus]"
+---
+Review the current changes. Focus on ${ARGUMENTS:-bugs and regressions}.
+```
+
+Templates support `$1`, `$2`, `$@`, `$ARGUMENTS`, default values such as
+`${1:-default}`, and slices such as `${@:2}` or `${@:2:3}`. The slash menu
+shows the short command, argument hint, source, and description. Conversation
+history keeps the short invocation while the expanded Markdown is sent to the
+model as product-owned context.
+
+Localized menu metadata is optional. Add `description-en`,
+`description-zh-CN`, `argument-hint-en`, and `argument-hint-zh-CN` to make a
+template follow Coding's interface language. The original fields remain the
+fallback for older and single-language templates.
 
 ## Desktop
 

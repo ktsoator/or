@@ -23,6 +23,7 @@ func TestExplicitManualSkillReachesProviderButNotHistoryOrEvents(t *testing.T) {
 			Description:            "Deploy the application",
 			Content:                "Deploy target: $ARGUMENTS",
 			Dir:                    "/skills/deploy",
+			Path:                   "/skills/deploy/SKILL.md",
 			DisableModelInvocation: true,
 		}},
 		StreamFn: func(
@@ -59,7 +60,7 @@ func TestExplicitManualSkillReachesProviderButNotHistoryOrEvents(t *testing.T) {
 	}
 	visible, _ := user.Content[0].(*llm.TextContent)
 	expanded, _ := user.Content[1].(*llm.TextContent)
-	if visible == nil || visible.Text != "/skill:deploy staging" {
+	if visible == nil || visible.Text != "[$deploy](/skills/deploy/SKILL.md) staging" {
 		t.Fatalf("visible block = %#v", visible)
 	}
 	if expanded == nil ||
@@ -73,11 +74,11 @@ func TestExplicitManualSkillReachesProviderButNotHistoryOrEvents(t *testing.T) {
 
 	history := session.History()
 	if len(history) == 0 || history[0].Type != HistoryUser ||
-		history[0].Text != "/skill:deploy staging" {
-		t.Fatalf("history = %#v, want only original command", history)
+		history[0].Text != "[$deploy](/skills/deploy/SKILL.md) staging" {
+		t.Fatalf("history = %#v, want short display command", history)
 	}
-	if userEvent.Text != "/skill:deploy staging" {
-		t.Fatalf("user event text = %q, want only original command", userEvent.Text)
+	if userEvent.Text != "[$deploy](/skills/deploy/SKILL.md) staging" {
+		t.Fatalf("user event text = %q, want short display command", userEvent.Text)
 	}
 	if _, err := executeSkillResult(session, "deploy"); err == nil {
 		t.Fatal("model-facing skill tool loaded a manual skill")

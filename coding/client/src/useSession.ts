@@ -9,6 +9,7 @@ import { APIError, apiURL, sessionURL } from './api'
 import { sessionCommands } from './sessionCommands'
 import { useSessionConnection } from './sessionConnection'
 import { threadsReducer } from './sessionReducer'
+import { displaySkillInvocation } from './skills'
 import { useBrowserResultOutbox } from './useBrowserResultOutbox'
 import { useServiceConnection } from './serviceConnection'
 import {
@@ -618,11 +619,12 @@ export function useSession(secondarySessionID?: string): Session {
       images: MessageImage[],
       files: PromptFile[],
     ) => {
+      const displayText = displaySkillInvocation(text)
       dispatch({
         t: 'sendUser',
         sessionID,
         id,
-        text,
+        text: displayText,
         images,
         files: promptFileMetadata(files),
         startedAt: new Date().toISOString(),
@@ -630,7 +632,7 @@ export function useSession(secondarySessionID?: string): Session {
       dispatchSessionStore({
         t: 'sessionPromptStarted',
         sessionID,
-        text,
+        text: displayText,
         updatedAt: new Date().toISOString(),
       })
       void sessionCommands.sendPrompt(sessionID, { text, images, files }).catch((error: unknown) => {
@@ -705,7 +707,7 @@ export function useSession(secondarySessionID?: string): Session {
         t: 'sendUser',
         sessionID,
         id,
-        text: trimmed,
+        text: displaySkillInvocation(trimmed),
         images,
         files: promptFileMetadata(files),
         startedAt: new Date().toISOString(),

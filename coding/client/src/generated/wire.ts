@@ -59,6 +59,15 @@ export type DeliveryMode =
   | "steer"
   | "followup"
 
+export type InvocationKind = "prompt_template"
+
+export type MessageInvocation = {
+  kind: InvocationKind
+  name: string
+  source: string
+  path: string
+}
+
 export type BrowserDisposition =
   | "reuse_agent_tab"
   | "new_foreground_tab"
@@ -278,6 +287,7 @@ export type WireEvent = {
   text?: string
   images?: MessageImage[]
   files?: MessageFile[]
+  invocation?: MessageInvocation
   usage?: Usage
   finalResponse?: boolean
   provider?: string

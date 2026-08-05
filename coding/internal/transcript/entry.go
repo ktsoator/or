@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ktsoator/or/agent"
+	"github.com/ktsoator/or/coding/internal/invocation"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -39,6 +40,7 @@ type Entry struct {
 	Timestamp  time.Time
 	Type       EntryType
 	Message    agent.AgentMessage
+	Invocation *invocation.Record
 	Context    *ContextAttachment
 	Compaction *Compaction
 	Run        *Run
@@ -92,6 +94,18 @@ func NewMessage(message agent.AgentMessage) Entry {
 		Type:      MessageEntry,
 		Message:   message,
 	}
+}
+
+func NewMessageWithInvocation(
+	message agent.AgentMessage,
+	invoked *invocation.Record,
+) Entry {
+	entry := NewMessage(message)
+	if invoked != nil {
+		copy := *invoked
+		entry.Invocation = &copy
+	}
+	return entry
 }
 
 func NewContext(context ContextAttachment) Entry {
@@ -148,8 +162,17 @@ func (e Entry) Validate() error {
 		if _, ok := agent.ToLLM(e.Message); !ok {
 			return fmt.Errorf("transcript: cannot persist custom message %T", e.Message)
 		}
+		if e.Invocation != nil {
+			if err := e.Invocation.Validate(); err != nil {
+				return fmt.Errorf("transcript: message entry %s: %w", e.ID, err)
+			}
+			message, _ := agent.ToLLM(e.Message)
+			if _, ok := message.(*llm.UserMessage); !ok {
+				return fmt.Errorf("transcript: message entry %s attaches invocation to %T", e.ID, message)
+			}
+		}
 	case ContextEntry:
-		if e.Message != nil || e.Context == nil || e.Compaction != nil || e.Run != nil {
+		if e.Message != nil || e.Invocation != nil || e.Context == nil || e.Compaction != nil || e.Run != nil {
 			return fmt.Errorf("transcript: context entry %s has invalid payload", e.ID)
 		}
 		if e.Context.AttachmentID == "" ||
@@ -161,14 +184,14 @@ func (e Entry) Validate() error {
 			return fmt.Errorf("transcript: context entry %s is incomplete", e.ID)
 		}
 	case CompactionEntry:
-		if e.Message != nil || e.Context != nil || e.Compaction == nil || e.Run != nil {
+		if e.Message != nil || e.Invocation != nil || e.Context != nil || e.Compaction == nil || e.Run != nil {
 			return fmt.Errorf("transcript: compaction entry %s has invalid payload", e.ID)
 		}
 		if e.Compaction.Summary == "" || e.Compaction.FirstKeptEntryID == "" {
 			return fmt.Errorf("transcript: compaction entry %s is incomplete", e.ID)
 		}
 	case RunEntry:
-		if e.Message != nil || e.Context != nil || e.Compaction != nil || e.Run == nil {
+		if e.Message != nil || e.Invocation != nil || e.Context != nil || e.Compaction != nil || e.Run == nil {
 			return fmt.Errorf("transcript: run entry %s has invalid payload", e.ID)
 		}
 		if e.Run.StartedAt.IsZero() || e.Run.CompletedAt.IsZero() {
@@ -192,11 +215,12 @@ func (e Entry) MarshalJSON() ([]byte, error) {
 		Timestamp  time.Time          `json:"timestamp"`
 		Type       EntryType          `json:"type"`
 		Message    json.RawMessage    `json:"message,omitempty"`
+		Invocation *invocation.Record `json:"invocation,omitempty"`
 		Context    *ContextAttachment `json:"context,omitempty"`
 		Compaction *Compaction        `json:"compaction,omitempty"`
 		Run        *Run               `json:"run,omitempty"`
 	}{
-		ID: e.ID, Timestamp: e.Timestamp, Type: e.Type,
+		ID: e.ID, Timestamp: e.Timestamp, Type: e.Type, Invocation: e.Invocation,
 		Context: e.Context, Compaction: e.Compaction, Run: e.Run,
 	}
 	if e.Message != nil {
@@ -219,6 +243,7 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 		Timestamp  time.Time          `json:"timestamp"`
 		Type       EntryType          `json:"type"`
 		Message    json.RawMessage    `json:"message"`
+		Invocation *invocation.Record `json:"invocation"`
 		Context    *ContextAttachment `json:"context"`
 		Compaction *Compaction        `json:"compaction"`
 		Run        *Run               `json:"run"`
@@ -228,7 +253,8 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 	}
 	decoded := Entry{
 		ID: wire.ID, Timestamp: wire.Timestamp,
-		Type: wire.Type, Context: wire.Context, Compaction: wire.Compaction, Run: wire.Run,
+		Type: wire.Type, Invocation: wire.Invocation, Context: wire.Context,
+		Compaction: wire.Compaction, Run: wire.Run,
 	}
 	if len(wire.Message) > 0 && string(wire.Message) != "null" {
 		message, err := llm.UnmarshalMessage(wire.Message)
