@@ -112,7 +112,7 @@ Usage:
 }
 
 var openPreviewText = toolText{
-	description: `Open a web page, workspace HTML file, or local web application in Coding's built-in Browser view.
+	description: `Open a web page, workspace HTML file, or local web application in Or's built-in Browser view.
 
 Usage:
 - For a public website, pass its complete http or https URL. Public URLs open directly in the Browser view and are not fetched by the agent runtime.

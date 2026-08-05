@@ -41,10 +41,10 @@ for (const relativePath of manifestPaths) {
 }
 
 if (mismatches.length > 0) {
-  fail(`release tag and Coding versions differ:\n${mismatches.join('\n')}`)
+  fail(`release tag and Or versions differ:\n${mismatches.join('\n')}`)
 }
 if (check) {
-  console.log(`Coding manifests match ${version}`)
+  console.log(`Or manifests match ${version}`)
 }
 
 function normalizeVersion(value) {

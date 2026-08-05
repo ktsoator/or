@@ -18,7 +18,7 @@ import (
 )
 
 type openPreviewArgs struct {
-	URL         string             `json:"url" jsonschema:"description=An HTTP(S) URL or absolute workspace HTML path to open in Coding's Browser view,minLength=1"`
+	URL         string             `json:"url" jsonschema:"description=An HTTP(S) URL or absolute workspace HTML path to open in Or's Browser view,minLength=1"`
 	Title       string             `json:"title,omitempty" jsonschema:"description=A short title for the preview"`
 	Disposition BrowserDisposition `json:"disposition,omitempty" jsonschema:"description=Where to open the page. Reuse the selected Agent-controlled tab unless the user explicitly asks for a new or background tab,enum=reuse_agent_tab,enum=new_foreground_tab,enum=new_background_tab"`
 }
@@ -82,7 +82,7 @@ type BrowserController interface {
 	OpenBrowser(context.Context, BrowserRequest) (BrowserResult, error)
 }
 
-// OpenPreview returns a product tool that asks a connected Coding client to
+// OpenPreview returns a product tool that asks a connected Or client to
 // display a web page or workspace HTML document. The tool does not claim
 // success until the configured browser controller acknowledges the navigation.
 func OpenPreview(root string, controllers ...BrowserController) Tool {
