@@ -61,107 +61,113 @@ export function ResponseActions({
       data-testid="response-actions"
     >
       <Tooltip.Provider delayDuration={80} skipDelayDuration={100}>
-        <ActionButton
-          icon={copied ? Check : Copy}
-          label={copied ? t('actions.copied') : t('actions.copyResponse')}
-          disabled={!responseText}
-          onClick={() => void copyResponse()}
-        />
-        <ActionButton
-          icon={ThumbsUp}
-          label={t('actions.goodResponse')}
-          pressed={feedback === 'up'}
-          onClick={() => setFeedback((current) => (current === 'up' ? undefined : 'up'))}
-        />
-        <ActionButton
-          icon={ThumbsDown}
-          label={t('actions.badResponse')}
-          pressed={feedback === 'down'}
-          onClick={() => setFeedback((current) => (current === 'down' ? undefined : 'down'))}
-        />
+        <div
+          className="flex shrink-0 items-center gap-0.5"
+          data-testid="response-message-actions"
+        >
+          <ActionButton
+            icon={copied ? Check : Copy}
+            label={copied ? t('actions.copied') : t('actions.copyResponse')}
+            disabled={!responseText}
+            onClick={() => void copyResponse()}
+          />
+          <ActionButton
+            icon={ThumbsUp}
+            label={t('actions.goodResponse')}
+            pressed={feedback === 'up'}
+            onClick={() => setFeedback((current) => (current === 'up' ? undefined : 'up'))}
+          />
+          <ActionButton
+            icon={ThumbsDown}
+            label={t('actions.badResponse')}
+            pressed={feedback === 'down'}
+            onClick={() => setFeedback((current) => (current === 'down' ? undefined : 'down'))}
+          />
 
-        {completedTime && (
-          <time
-            className="ml-1.5 shrink-0 text-[0.75rem] leading-5 text-ink-faint tabular-nums"
-            dateTime={completedAt}
-          >
-            {completedTime}
-          </time>
-        )}
+          {completedTime && (
+            <time
+              className="ml-1.5 shrink-0 pr-1 text-[0.75rem] leading-5 text-ink-faint tabular-nums"
+              dateTime={completedAt}
+            >
+              {completedTime}
+            </time>
+          )}
+
+          {usage && hasUsage(usage) && (
+            <span className="mx-1 h-3 w-px shrink-0 bg-canvas-strong" aria-hidden="true" />
+          )}
+        </div>
 
         {usage && hasUsage(usage) && (
-          <>
-            <span className="mx-1 h-3 w-px shrink-0 bg-canvas-strong" aria-hidden="true" />
-            <Tooltip.Root>
-              <Tooltip.Trigger asChild>
-                <button
-                  className="group inline-flex h-7 min-w-0 max-w-full shrink cursor-pointer items-center rounded-lg px-2 text-[0.75rem] leading-5 text-ink-faint tabular-nums outline-none transition-colors hover:bg-surface-active hover:text-ink-muted focus-visible:bg-surface-active focus-visible:text-ink-muted data-[state=delayed-open]:bg-surface-active data-[state=delayed-open]:text-ink-muted"
-                  type="button"
-                  aria-label={t('actions.showUsage')}
-                  data-testid="response-usage-trigger"
+          <Tooltip.Root>
+            <Tooltip.Trigger asChild>
+              <button
+                className="group inline-flex h-7 min-w-0 max-w-full shrink cursor-pointer items-center rounded-lg px-2 text-[0.75rem] leading-5 text-ink-faint tabular-nums outline-none transition-colors hover:bg-surface-active hover:text-ink-muted focus-visible:bg-surface-active focus-visible:text-ink-muted data-[state=delayed-open]:bg-surface-active data-[state=delayed-open]:text-ink-muted"
+                type="button"
+                aria-label={t('actions.showUsage')}
+                data-testid="response-usage-trigger"
+              >
+                <span
+                  className="block min-w-0 truncate text-left whitespace-nowrap"
+                  data-testid="response-usage-summary"
                 >
-                  <span
-                    className="block min-w-0 truncate text-left whitespace-nowrap"
-                    data-testid="response-usage-summary"
-                  >
-                    <span className="font-medium text-ink-muted">{t('actions.usage')}</span>
-                    <span className="mx-1.5 text-ink-ghost">·</span>
-                    <span>
-                      {formatCompactNumber(totalTokens, formatNumber)} {t('actions.tokens')}
-                    </span>
-                    {usage.cost.total > 0 && (
-                      <>
-                        <span className="mx-1.5 text-ink-ghost">·</span>
-                        <span>{formatSummaryCost(usage.cost.total)}</span>
-                      </>
-                    )}
-                    {modelName && (
-                      <>
-                        <span className="mx-1.5 text-ink-ghost">·</span>
-                        <span>{modelName}</span>
-                      </>
-                    )}
+                  <span className="font-medium text-ink-muted">{t('actions.usage')}</span>
+                  <span className="mx-1.5 text-ink-ghost">·</span>
+                  <span>
+                    {formatCompactNumber(totalTokens, formatNumber)} {t('actions.tokens')}
                   </span>
-                </button>
-              </Tooltip.Trigger>
+                  {usage.cost.total > 0 && (
+                    <>
+                      <span className="mx-1.5 text-ink-ghost">·</span>
+                      <span>{formatSummaryCost(usage.cost.total)}</span>
+                    </>
+                  )}
+                  {modelName && (
+                    <>
+                      <span className="mx-1.5 text-ink-ghost">·</span>
+                      <span>{modelName}</span>
+                    </>
+                  )}
+                </span>
+              </button>
+            </Tooltip.Trigger>
 
-              <Tooltip.Portal>
-                <Tooltip.Content
-                  side="bottom"
-                  align="start"
-                  sideOffset={7}
-                  collisionPadding={10}
-                  className="z-[150] animate-[fade-in_110ms_ease-out] rounded-lg border border-edge/80 bg-canvas px-2.5 py-1.5 text-[0.6875rem] leading-4 text-ink-soft tabular-nums shadow-[0_10px_28px_-20px_rgba(28,25,23,0.4)] outline-none"
-                >
-                  <div className="flex items-center gap-2.5 whitespace-nowrap">
+            <Tooltip.Portal>
+              <Tooltip.Content
+                side="bottom"
+                align="start"
+                sideOffset={7}
+                collisionPadding={10}
+                className="z-[150] animate-[fade-in_110ms_ease-out] rounded-lg border border-edge/80 bg-canvas px-2.5 py-1.5 text-[0.6875rem] leading-4 text-ink-soft tabular-nums shadow-[0_10px_28px_-20px_rgba(28,25,23,0.4)] outline-none"
+              >
+                <div className="flex items-center gap-2.5 whitespace-nowrap">
+                  <Metric
+                    label={t('actions.input')}
+                    value={usage.inputUnknown ? '--' : formatNumber(usage.input)}
+                  />
+                  <Metric label={t('actions.output')} value={formatNumber(usage.output)} />
+                  {usage.cacheRead > 0 && (
+                    <Metric label={t('actions.cacheRead')} value={formatNumber(usage.cacheRead)} />
+                  )}
+                  {cacheHitRate !== undefined && (
                     <Metric
-                      label={t('actions.input')}
-                      value={usage.inputUnknown ? '--' : formatNumber(usage.input)}
+                      label={t('actions.cacheHitRate')}
+                      value={formatNumber(cacheHitRate, {
+                        style: 'percent',
+                        maximumFractionDigits: 1,
+                      })}
                     />
-                    <Metric label={t('actions.output')} value={formatNumber(usage.output)} />
-                    {usage.cacheRead > 0 && (
-                      <Metric label={t('actions.cacheRead')} value={formatNumber(usage.cacheRead)} />
-                    )}
-                    {cacheHitRate !== undefined && (
-                      <Metric
-                        label={t('actions.cacheHitRate')}
-                        value={formatNumber(cacheHitRate, {
-                          style: 'percent',
-                          maximumFractionDigits: 1,
-                        })}
-                      />
-                    )}
-                    {usage.cacheWrite > 0 && (
-                      <Metric label={t('actions.cacheWrite')} value={formatNumber(usage.cacheWrite)} />
-                    )}
-                    {usage.cost.total > 0 && (
-                      <Metric label={t('actions.cost')} value={formatExactCost(usage.cost.total)} />
-                    )}
-                  </div>
-                </Tooltip.Content>
-              </Tooltip.Portal>
-            </Tooltip.Root>
-          </>
+                  )}
+                  {usage.cacheWrite > 0 && (
+                    <Metric label={t('actions.cacheWrite')} value={formatNumber(usage.cacheWrite)} />
+                  )}
+                  {usage.cost.total > 0 && (
+                    <Metric label={t('actions.cost')} value={formatExactCost(usage.cost.total)} />
+                  )}
+                </div>
+              </Tooltip.Content>
+            </Tooltip.Portal>
+          </Tooltip.Root>
         )}
       </Tooltip.Provider>
     </div>

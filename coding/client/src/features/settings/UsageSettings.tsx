@@ -78,10 +78,10 @@ export function UsageSettings() {
   return (
     <div>
       {error ? (
-        <div className="flex items-center justify-between border-y border-edge py-5 text-[0.875rem] text-ink-muted">
+        <div className="flex items-center justify-between rounded-lg border border-danger-edge bg-danger-surface/60 px-4 py-3 text-[0.8125rem] text-danger">
           <span>{error}</span>
           <button
-            className="cursor-pointer font-medium text-ink underline decoration-ink-ghost underline-offset-4 hover:decoration-ink-soft"
+            className="cursor-pointer font-medium underline decoration-danger/40 underline-offset-4 hover:decoration-danger"
             type="button"
             onClick={() => void load()}
           >
@@ -89,18 +89,18 @@ export function UsageSettings() {
           </button>
         </div>
       ) : loading && !report ? (
-        <div className="h-24 animate-pulse border-y border-edge bg-canvas-raised/60" />
+        <div className="h-28 animate-pulse rounded-lg border border-edge/85 bg-canvas-raised/60" />
       ) : (
         <>
           <section aria-labelledby="usage-overview-title">
-            <div className="flex h-8 items-center justify-between">
-              <h2 id="usage-overview-title" className="text-[0.875rem] font-medium text-ink-soft">
+            <div className="mb-3 flex h-9 items-center justify-between gap-4">
+              <h2 id="usage-overview-title" className="text-[0.84375rem] font-medium text-ink-soft">
                 {t('usage.overview')}
               </h2>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
                 <UsageRangeSelect value={range} onChange={setRange} />
                 <button
-                  className="grid size-8 cursor-pointer place-items-center rounded-[9px] text-ink-faint outline-none transition-colors hover:bg-surface-hover hover:text-ink-soft focus-visible:bg-surface-hover focus-visible:text-ink-soft disabled:cursor-wait disabled:opacity-50"
+                  className="grid size-9 cursor-pointer place-items-center rounded-[10px] bg-surface-hover text-ink-muted outline-none transition-colors hover:bg-surface-active hover:text-ink focus-visible:bg-surface-active focus-visible:text-ink disabled:cursor-wait disabled:opacity-50"
                   type="button"
                   title={t('usage.refresh')}
                   aria-label={t('usage.refresh')}
@@ -115,7 +115,7 @@ export function UsageSettings() {
               </div>
             </div>
             {hasUsage ? (
-              <div className="mt-2 grid grid-cols-3 border-y border-edge max-sm:grid-cols-1">
+              <div className="grid grid-cols-3 overflow-hidden rounded-[12px] border border-edge/85 bg-canvas max-sm:grid-cols-1">
                 <Metric
                   label={t('usage.totalTokens')}
                   value={formatNumber(total?.totalTokens ?? 0)}
@@ -127,11 +127,10 @@ export function UsageSettings() {
                 <Metric
                   label={t('usage.estimatedCost')}
                   value={formatCost(total?.cost.total ?? 0)}
-                  last
                 />
               </div>
             ) : (
-              <div className="mt-2 border-y border-edge py-10">
+              <div className="rounded-[12px] border border-edge/85 bg-canvas px-5 py-9">
                 <div className="text-[0.9375rem] font-medium text-ink-soft">
                   {t('usage.emptyTitle')}
                 </div>
@@ -143,11 +142,11 @@ export function UsageSettings() {
           </section>
 
           {hasUsage && (
-            <section className="mt-10" aria-labelledby="usage-models-title">
-              <div className="flex h-9 items-center justify-between gap-5">
+            <section className="mt-9" aria-labelledby="usage-models-title">
+              <div className="mb-3 flex h-9 items-center justify-between gap-5">
                 <h2
                   id="usage-models-title"
-                  className="text-[0.875rem] font-medium text-ink-soft"
+                  className="text-[0.84375rem] font-medium text-ink-soft"
                 >
                   {t('usage.byModel')}
                 </h2>
@@ -165,10 +164,10 @@ export function UsageSettings() {
 
               {activeProvider && (
                 <>
-                  <div className="mt-4 min-w-0 overflow-hidden rounded-[14px] border border-edge bg-canvas">
+                  <div className="min-w-0 overflow-hidden rounded-[12px] border border-edge/85 bg-canvas">
                     <div className="overflow-x-auto">
                       <table className="w-full min-w-[38.75rem] border-collapse text-left text-[0.8125rem]">
-                        <thead className="border-b border-edge bg-canvas-raised text-[0.71875rem] font-medium text-ink-muted">
+                        <thead className="border-b border-edge/75 bg-canvas-raised/45 text-[0.71875rem] font-medium text-ink-muted">
                           <tr>
                             <th className="px-4 py-2.5">{t('usage.model')}</th>
                             <th className="px-3 py-2.5 text-right">{t('usage.requests')}</th>
@@ -198,7 +197,7 @@ export function UsageSettings() {
                   </div>
                   {selectedModel && (
                     <RequestDetails
-                      key={`${modelUsageKey(selectedModel)}\u0000${since}`}
+                      key={modelUsageKey(selectedModel)}
                       model={selectedModel}
                       locale={locale}
                       formatNumber={formatNumber}
@@ -234,7 +233,7 @@ function UsageRangeSelect({
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <button
-          className="group flex h-8 min-w-[5.75rem] cursor-pointer items-center justify-between gap-2 rounded-[9px] bg-surface-hover px-2.5 text-[0.78125rem] font-normal text-ink-soft outline-none transition-colors hover:bg-surface-active focus-visible:bg-surface-active data-[state=open]:bg-surface-selected"
+          className="group flex h-9 min-w-[6rem] cursor-pointer items-center justify-between gap-2 rounded-[10px] bg-surface-hover px-2.5 text-[0.8125rem] text-ink-soft outline-none transition-colors hover:bg-surface-active focus-visible:bg-surface-active data-[state=open]:bg-surface-selected"
           type="button"
           aria-label={t('usage.timeRange')}
         >
@@ -262,7 +261,7 @@ function UsageRangeSelect({
               <DropdownMenu.RadioItem
                 key={option.value}
                 value={option.value}
-                className="relative flex h-8 cursor-default select-none items-center rounded-[9px] px-2.5 pr-8 outline-none data-[highlighted]:bg-surface-active data-[state=checked]:bg-surface-selected"
+                className="relative flex h-9 cursor-default select-none items-center rounded-[9px] px-2.5 pr-8 outline-none data-[highlighted]:bg-surface-active data-[state=checked]:bg-surface-selected"
               >
                 <span>{option.label}</span>
                 <DropdownMenu.ItemIndicator className="absolute right-2 grid size-4 place-items-center text-ink-soft">
@@ -294,7 +293,7 @@ function ProviderSelect({
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <button
-          className="group flex h-9 min-w-[10.75rem] max-w-[14.375rem] shrink-0 cursor-pointer items-center gap-2 rounded-[10px] bg-surface-hover px-2.5 text-left text-[0.84375rem] outline-none transition-colors hover:bg-surface-active focus-visible:bg-surface-active data-[state=open]:bg-surface-selected max-sm:min-w-0"
+          className="group flex h-9 min-w-[10.5rem] max-w-[15rem] shrink-0 cursor-pointer items-center gap-2 rounded-[10px] bg-surface-hover px-2.5 text-left text-[0.8125rem] outline-none transition-colors hover:bg-surface-active focus-visible:bg-surface-active data-[state=open]:bg-surface-selected max-sm:min-w-0"
           type="button"
           aria-label={t('usage.providers')}
         >
@@ -315,7 +314,7 @@ function ProviderSelect({
           align="end"
           sideOffset={7}
           collisionPadding={10}
-          className="z-[100] min-w-[14.375rem] animate-[fade-in_110ms_ease-out] rounded-[14px] border border-edge bg-canvas p-1 text-[0.84375rem] text-ink shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+          className="z-[100] min-w-[15rem] animate-[fade-in_110ms_ease-out] rounded-[14px] border border-edge bg-canvas p-1 text-[0.8125rem] text-ink shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
         >
           <DropdownMenu.RadioGroup
             className="flex flex-col gap-0.5"
@@ -342,13 +341,11 @@ function ProviderSelect({
   )
 }
 
-function Metric({ label, value, last = false }: { label: string; value: string; last?: boolean }) {
+function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div
-      className={`px-6 py-5 first:pl-0 last:pr-0 ${last ? '' : 'border-r border-edge max-sm:border-r-0 max-sm:border-b'} max-sm:px-0`}
-    >
-      <div className="text-[0.8125rem] font-normal text-ink-muted">{label}</div>
-      <div className="mt-1 text-[1.375rem] leading-7 font-medium tracking-[-0.025em] text-ink tabular-nums">
+    <div className="border-r border-edge/75 px-5 py-4 last:border-r-0 max-sm:border-r-0 max-sm:border-b max-sm:last:border-b-0">
+      <div className="text-[0.78125rem] text-ink-muted">{label}</div>
+      <div className="mt-1 text-[1.375rem] leading-7 font-medium tracking-normal text-ink tabular-nums">
         {value}
       </div>
     </div>
@@ -367,7 +364,7 @@ function ModelRow({
   onToggle: () => void
 }) {
   return (
-    <tr className={`border-b border-edge-soft last:border-b-0 hover:bg-canvas-raised ${selected ? 'bg-canvas-raised' : ''}`}>
+    <tr className={`border-b border-edge-soft transition-colors last:border-b-0 hover:bg-surface-hover ${selected ? 'bg-canvas-raised' : ''}`}>
       <td className="px-4 py-3">
         <button
           className="group flex max-w-full cursor-pointer items-center gap-2 text-left outline-none focus-visible:underline focus-visible:decoration-ink-ghost focus-visible:underline-offset-4"
@@ -376,10 +373,10 @@ function ModelRow({
           onClick={onToggle}
         >
           <ChevronRight
-            className={`size-3.5 shrink-0 text-ink-faint transition-transform duration-150 ${selected ? 'rotate-90' : ''}`}
+            className={`size-3.5 shrink-0 transition-transform duration-150 ${selected ? 'rotate-90 text-ink-soft' : 'text-ink-faint'}`}
             aria-hidden="true"
           />
-          <span className="min-w-0 truncate font-medium text-ink-soft">
+          <span className={`min-w-0 truncate font-medium ${selected ? 'text-ink' : 'text-ink-soft'}`}>
             {model.name || model.model}
           </span>
         </button>
@@ -413,6 +410,10 @@ function RequestDetails({
   const [pageIndex, setPageIndex] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    setPageIndex(0)
+  }, [since])
 
   const load = useCallback(async (page: number, signal?: AbortSignal) => {
     setLoading(true)
@@ -454,92 +455,105 @@ function RequestDetails({
   const rangeEnd = Math.min(total, rangeStart + events.length - 1)
 
   return (
-    <div className="mt-3 min-w-0 overflow-hidden rounded-[14px] border border-edge bg-canvas">
-      <div className="flex min-h-11 items-center gap-2 px-4 py-2.5 text-[0.8125rem]">
-        <span className="font-medium text-ink-soft">{t('usage.requestDetails')}</span>
+    <div
+      className="mt-5 min-w-0 animate-[fade-in_120ms_ease-out]"
+      data-testid="usage-request-details"
+    >
+      <div className="mb-2.5 flex min-w-0 items-center gap-2 px-1 text-[0.8125rem]">
+        <h3 className="shrink-0 font-medium text-ink-soft">{t('usage.requestDetails')}</h3>
         <span className="min-w-0 truncate text-ink-faint">{model.name || model.model}</span>
       </div>
 
-      {loading && events.length === 0 ? (
-        <div className="mx-4 mb-4 h-16 animate-pulse rounded-[10px] bg-canvas-sunken" />
-      ) : error ? (
-        <div className="mx-4 mb-4 flex items-center justify-between rounded-[10px] border border-edge bg-canvas px-3 py-3 text-[0.78125rem] text-ink-muted">
-          <span>{error}</span>
-          <button
-            className="cursor-pointer font-medium text-ink-soft hover:underline"
-            type="button"
-            onClick={() => void load(pageIndex)}
-          >
-            {t('usage.tryAgain')}
-          </button>
-        </div>
-      ) : events.length === 0 ? (
-        <div className="px-4 pb-4 text-[0.78125rem] text-ink-faint">{t('usage.noRequests')}</div>
-      ) : (
-        <>
-          <div
-            className={`max-h-[25rem] overflow-auto border-t border-edge transition-opacity ${loading ? 'opacity-55' : 'opacity-100'}`}
-            aria-busy={loading}
-          >
-            <table className="w-full min-w-[38.125rem] border-collapse text-left text-[0.75rem]">
-              <thead className="sticky top-0 z-10 border-b border-edge-soft bg-canvas text-[0.71875rem] font-medium text-ink-muted">
-                <tr>
-                  <th className="px-4 py-2">{t('usage.time')}</th>
-                  <th className="px-3 py-2 text-right">{t('usage.input')}</th>
-                  <th className="px-3 py-2 text-right">{t('usage.cacheRead')}</th>
-                  <th className="px-3 py-2 text-right">{t('usage.output')}</th>
-                  <th className="px-3 py-2 text-right">{t('usage.total')}</th>
-                  <th className="px-4 py-2 text-right">{t('usage.cost')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {events.map((event) => (
-                  <RequestRow
-                    key={event.id}
-                    event={event}
-                    locale={locale}
-                    formatNumber={formatNumber}
-                  />
-                ))}
-              </tbody>
-            </table>
+      <div className="overflow-hidden rounded-[12px] border border-edge/85 bg-canvas shadow-[0_10px_28px_-28px_rgba(28,25,23,0.5)]">
+        {loading && events.length === 0 ? (
+          <div className="m-4 h-16 animate-pulse rounded-lg bg-canvas-sunken" />
+        ) : error ? (
+          <div className="m-4 flex items-center justify-between rounded-lg border border-danger-edge bg-danger-surface/60 px-3 py-3 text-[0.78125rem] text-danger">
+            <span>{error}</span>
+            <button
+              className="cursor-pointer font-medium text-danger hover:underline"
+              type="button"
+              onClick={() => void load(pageIndex)}
+            >
+              {t('usage.tryAgain')}
+            </button>
           </div>
-          {pageCount > 1 && (
-            <div className="flex h-10 items-center justify-between border-t border-edge-soft px-4 text-[0.71875rem] text-ink-faint tabular-nums">
-              <span>
-                {t('usage.pageRange', {
-                  start: rangeStart,
-                  end: rangeEnd,
-                  total,
-                })}
-              </span>
-              <div className="flex items-center gap-1">
-              <button
-                  className="grid size-7 cursor-pointer place-items-center rounded-[8px] text-ink-muted transition-colors hover:bg-surface-active hover:text-ink disabled:cursor-default disabled:opacity-25"
-                type="button"
-                  aria-label={t('usage.previousPage')}
-                  disabled={loading || pageIndex === 0}
-                  onClick={() => setPageIndex((current) => Math.max(0, current - 1))}
-              >
-                  <ChevronLeft className="size-3.5" aria-hidden="true" />
-              </button>
-                <span className="min-w-10 text-center text-ink-muted">
-                  {t('usage.pageStatus', { page: pageIndex + 1, pages: pageCount })}
-                </span>
-                <button
-                  className="grid size-7 cursor-pointer place-items-center rounded-[8px] text-ink-muted transition-colors hover:bg-surface-active hover:text-ink disabled:cursor-default disabled:opacity-25"
-                  type="button"
-                  aria-label={t('usage.nextPage')}
-                  disabled={loading || pageIndex + 1 >= pageCount}
-                  onClick={() => setPageIndex((current) => Math.min(pageCount - 1, current + 1))}
-                >
-                  <ChevronRight className="size-3.5" aria-hidden="true" />
-                </button>
-              </div>
+        ) : events.length === 0 ? (
+          <div className="px-4 py-4 text-[0.78125rem] text-ink-faint">{t('usage.noRequests')}</div>
+        ) : (
+          <>
+            <div
+              className={`max-h-[27rem] overflow-auto transition-opacity duration-150 [scrollbar-gutter:stable] ${loading ? 'opacity-70' : 'opacity-100'}`}
+              aria-busy={loading}
+            >
+              <table className="w-full min-w-[38.125rem] table-fixed border-collapse text-left text-[0.78125rem]">
+                <colgroup>
+                  <col className="w-[31%]" />
+                  <col className="w-[18%]" />
+                  <col className="w-[17%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[10%]" />
+                </colgroup>
+                <thead className="sticky top-0 z-10 border-b border-edge/75 bg-canvas-raised text-[0.71875rem] font-medium text-ink-muted">
+                  <tr>
+                    <th className="bg-canvas-raised px-4 py-2.5">{t('usage.time')}</th>
+                    <th className="bg-canvas-raised px-3 py-2.5 text-right">{t('usage.input')}</th>
+                    <th className="bg-canvas-raised px-3 py-2.5 text-right">{t('usage.cacheRead')}</th>
+                    <th className="bg-canvas-raised px-3 py-2.5 text-right">{t('usage.output')}</th>
+                    <th className="bg-canvas-raised px-3 py-2.5 text-right">{t('usage.total')}</th>
+                    <th className="bg-canvas-raised px-4 py-2.5 text-right">{t('usage.cost')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {events.map((event) => (
+                    <RequestRow
+                      key={event.id}
+                      event={event}
+                      locale={locale}
+                      formatNumber={formatNumber}
+                    />
+                  ))}
+                </tbody>
+              </table>
             </div>
-          )}
-        </>
-      )}
+            {pageCount > 1 && (
+              <div className="flex h-10 items-center justify-between border-t border-edge/75 px-4 text-[0.71875rem] text-ink-faint tabular-nums">
+                <span>
+                  {t('usage.pageRange', {
+                    start: rangeStart,
+                    end: rangeEnd,
+                    total,
+                  })}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    className="grid size-7 cursor-pointer place-items-center rounded-[8px] text-ink-muted transition-colors hover:bg-surface-active hover:text-ink disabled:cursor-default disabled:opacity-25"
+                    type="button"
+                    aria-label={t('usage.previousPage')}
+                    disabled={loading || pageIndex === 0}
+                    onClick={() => setPageIndex((current) => Math.max(0, current - 1))}
+                  >
+                    <ChevronLeft className="size-3.5" aria-hidden="true" />
+                  </button>
+                  <span className="min-w-10 text-center text-ink-muted">
+                    {t('usage.pageStatus', { page: pageIndex + 1, pages: pageCount })}
+                  </span>
+                  <button
+                    className="grid size-7 cursor-pointer place-items-center rounded-[8px] text-ink-muted transition-colors hover:bg-surface-active hover:text-ink disabled:cursor-default disabled:opacity-25"
+                    type="button"
+                    aria-label={t('usage.nextPage')}
+                    disabled={loading || pageIndex + 1 >= pageCount}
+                    onClick={() => setPageIndex((current) => Math.min(pageCount - 1, current + 1))}
+                  >
+                    <ChevronRight className="size-3.5" aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   )
 }
@@ -563,15 +577,15 @@ function RequestRow({
   const totalTokens = event.usage.totalTokens ||
     event.usage.input + event.usage.output + event.usage.cacheRead + event.usage.cacheWrite
   return (
-    <tr className="border-b border-edge-soft last:border-b-0 hover:bg-canvas-raised">
+    <tr className="border-b border-edge-soft transition-colors last:border-b-0 hover:bg-surface-hover">
       <td className="px-4 py-2.5">
-        <div className="text-ink-muted tabular-nums">{timestamp}</div>
+        <div className="text-[0.78125rem] text-ink-muted tabular-nums">{timestamp}</div>
       </td>
       <NumberCell value={event.usage.inputUnknown ? '--' : formatNumber(event.usage.input)} />
       <NumberCell value={formatNumber(event.usage.cacheRead)} />
       <NumberCell value={formatNumber(event.usage.output)} />
       <NumberCell value={formatNumber(totalTokens)} strong />
-      <td className="px-4 py-2.5 text-right text-[0.75rem] font-normal text-ink-muted tabular-nums">
+      <td className="px-4 py-2.5 text-right text-[0.78125rem] font-normal text-ink-muted tabular-nums">
         {formatCost(event.usage.cost.total)}
       </td>
     </tr>

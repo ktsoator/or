@@ -246,6 +246,8 @@ const en = {
   'settings.utilityModelSaveFailed': 'Could not save the utility model.',
   'settings.noResults': 'No matching settings',
   'settings.generalTitle': 'General',
+  'settings.theme': 'Theme',
+  'settings.themeDescription': 'Appearance used throughout the application.',
   'settings.language': 'Language',
   'settings.languageDescription': 'Language used by the application interface.',
 
@@ -850,6 +852,8 @@ const zh: Record<TranslationKey, string> = {
   'settings.utilityModelSaveFailed': '辅助模型保存失败。',
   'settings.noResults': '未找到匹配设置',
   'settings.generalTitle': '通用',
+  'settings.theme': '主题',
+  'settings.themeDescription': '设置应用界面的显示主题',
   'settings.language': '语言',
   'settings.languageDescription': '设置应用界面语言',
 

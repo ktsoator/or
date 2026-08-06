@@ -521,7 +521,6 @@ export default function App() {
           handleRename,
           onSelectWorkspace: setSelectedWorkspacePath,
           requestRemoveWorkspace,
-          onOpenUsage: () => setView({ type: 'settings', section: 'usage' }),
           onOpenSettings: () => setView({ type: 'settings', section: 'general' }),
           startSidebarResize,
           resizeSidebar,

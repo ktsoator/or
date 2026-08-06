@@ -321,8 +321,7 @@
 
 /* The desktop shell extends web content into the macOS title bar. Keep the
    native traffic lights while making the product header the window chrome. */
-.desktop-macos .window-titlebar,
-.desktop-macos .window-titlebar-drag-surface {
+.desktop-macos .window-titlebar {
   -webkit-app-region: drag;
 }
 
@@ -380,22 +379,6 @@
     z-index: 70;
     display: grid;
   }
-}
-
-.window-titlebar-drag-surface {
-  display: none;
-}
-
-.desktop-macos .window-titlebar-drag-surface {
-  position: absolute;
-  inset: 0 0 auto;
-  z-index: 30;
-  display: block;
-  height: 1.75rem;
-}
-
-.desktop-macos .settings-sidebar {
-  padding-top: 2.75rem;
 }
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }

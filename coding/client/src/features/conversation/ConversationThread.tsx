@@ -24,6 +24,7 @@ import type { Item } from '@/types'
 import { useI18n } from '@/i18n'
 import { formatMessageTime } from '@/lib/time'
 import { Markdown } from '@/shared/ui/Markdown'
+import { CopyButton } from './CopyButton'
 import { ResponseActions } from './ResponseActions'
 import { Thinking } from './Thinking'
 import { ToolCard } from './ToolCard'
@@ -67,7 +68,10 @@ export function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
   switch (item.kind) {
     case 'user':
       return (
-        <section className="my-3.5 flex animate-[fade-in_160ms_ease-out] justify-end">
+        <section
+          className="group/message my-3.5 flex animate-[fade-in_160ms_ease-out] justify-end"
+          data-testid="user-message"
+        >
           <div className="flex max-w-[78%] flex-col items-end gap-2 max-md:max-w-[88%]">
             {(item.files?.length ?? 0) > 0 && (
               <div className="flex max-w-full flex-wrap justify-end gap-1.5">
@@ -108,16 +112,27 @@ export function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
                 <UserMessageText text={item.text} invocation={item.invocation} />
               </div>
             )}
-            {(item.sentAt || item.deliveryStatus === 'failed') && (
-              <div className="-mt-0.5 flex items-center justify-end gap-2 px-1 text-[0.75rem] leading-4 tabular-nums">
+            {(item.text || item.sentAt || item.deliveryStatus === 'failed') && (
+              <div className="-mt-1 flex h-7 items-center justify-end gap-2 px-0.5 text-[0.75rem] leading-4 tabular-nums">
                 {item.deliveryStatus === 'failed' && (
                   <span className="text-danger-soft">{t('app.notSent')}</span>
                 )}
-                {item.sentAt && (
-                  <time className="text-ink-faint" dateTime={item.sentAt}>
-                    {formatMessageTime(item.sentAt, locale)}
-                  </time>
-                )}
+                <div
+                  className="pointer-events-none flex max-w-0 items-center gap-1 overflow-hidden opacity-0 transition-[max-width,opacity] duration-150 ease-out group-focus-within/message:pointer-events-auto group-focus-within/message:max-w-48 group-focus-within/message:opacity-100 group-hover/message:pointer-events-auto group-hover/message:max-w-48 group-hover/message:opacity-100 motion-reduce:transition-none max-md:pointer-events-auto max-md:max-w-48 max-md:opacity-100"
+                  data-testid="user-message-actions"
+                >
+                  {item.text && (
+                    <CopyButton
+                      value={item.text}
+                      className="size-7 rounded-lg hover:bg-surface-active focus-visible:bg-surface-active"
+                    />
+                  )}
+                  {item.sentAt && (
+                    <time className="shrink-0 text-ink-faint" dateTime={item.sentAt}>
+                      {formatMessageTime(item.sentAt, locale)}
+                    </time>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -125,7 +140,10 @@ export function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
       )
     case 'assistant':
       return (
-        <section className="my-3 animate-[fade-in_160ms_ease-out]">
+        <section
+          className="my-3 animate-[fade-in_160ms_ease-out]"
+          data-testid="assistant-message"
+        >
           <Markdown source={item.markdown} />
           {item.complete && (
             <ResponseActions

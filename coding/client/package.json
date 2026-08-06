@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "bun test tests/sessionReducer.test.ts tests/sessionConnection.test.ts tests/serviceConnection.test.ts tests/sessionCommands.test.ts tests/sessionResourceApi.test.ts tests/sessionStore.test.ts tests/workbenchLayout.test.ts tests/sidebarLayout.test.ts tests/browserTabs.test.ts tests/browserWorkspace.test.ts tests/browser.test.ts tests/webviewBrowser.test.ts tests/modelThinking.test.ts tests/skills.test.ts tests/promptTemplates.test.ts tests/attachments.test.ts tests/thinking.test.ts tests/highlight.test.ts",
+    "test": "bun test tests/sessionReducer.test.ts tests/sessionConnection.test.ts tests/serviceConnection.test.ts tests/sessionCommands.test.ts tests/sessionResourceApi.test.ts tests/sessionStore.test.ts tests/workbenchLayout.test.ts tests/sidebarLayout.test.ts tests/browserTabs.test.ts tests/browserWorkspace.test.ts tests/browser.test.ts tests/webviewBrowser.test.ts tests/modelThinking.test.ts tests/skills.test.ts tests/promptTemplates.test.ts tests/attachments.test.ts tests/thinking.test.ts tests/highlight.test.ts tests/time.test.ts",
     "test:ui": "playwright test",
     "test:electron": "bun run build && bun run --cwd ../desktop build:main && bun run --cwd ../desktop build:sidecar && playwright test --config playwright.electron.config.ts"
   },

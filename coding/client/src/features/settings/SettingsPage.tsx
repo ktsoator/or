@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
   ArrowLeft,
@@ -10,11 +10,15 @@ import {
   Settings2,
 } from 'lucide-react'
 import { DropdownMenu } from 'radix-ui'
+import { SidebarToggleButton } from '@/components/SidebarToggleButton'
 import { cn } from '@/lib/utils'
 import { useI18n, type Locale } from '@/i18n'
+import type { ThemePreference } from '@/theme'
+import { useTheme } from '@/useTheme'
 import { UsageSettings } from './UsageSettings'
 import { ProvidersSettings } from './ProvidersSettings'
 import type { SettingsSection } from './types'
+import { useSettingsSidebarLayout } from './useSettingsSidebarLayout'
 
 type NavItem = {
   id: SettingsSection
@@ -39,6 +43,19 @@ export function SettingsPage({
   const { t } = useI18n()
   const [active, setActive] = useState<SettingsSection>(initialSection)
   const [query, setQuery] = useState('')
+  const {
+    collapsed: sidebarCollapsed,
+    width: sidebarWidth,
+    resizing: sidebarResizing,
+    minimumWidth: sidebarMinimumWidth,
+    maximumWidth: sidebarMaximumWidth,
+    collapse: collapseSidebar,
+    expand: expandSidebar,
+    startResize: startSidebarResize,
+    resize: resizeSidebar,
+    stopResize: stopSidebarResize,
+    resizeWithKeyboard: resizeSidebarWithKeyboard,
+  } = useSettingsSidebarLayout()
 
   const groups = useMemo<NavGroup[]>(
     () => [
@@ -67,85 +84,163 @@ export function SettingsPage({
   const activeItem = groups.flatMap((group) => group.items).find((item) => item.id === active)
 
   return (
-    <div className="settings-page relative grid h-full min-h-0 grid-cols-[16rem_minmax(0,1fr)] overflow-hidden bg-canvas max-md:grid-cols-1 max-md:grid-rows-[auto_minmax(0,1fr)]">
-      <div className="window-titlebar-drag-surface" aria-hidden="true" />
-      <aside className="settings-sidebar flex min-h-0 flex-col border-r border-edge/80 bg-canvas-raised px-3 py-4 max-md:border-r-0 max-md:border-b max-md:px-3 max-md:py-2.5">
-        <button
-          className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-[10px] px-2.5 text-[0.84375rem] font-normal text-ink-muted outline-none transition-colors hover:bg-canvas-strong/65 hover:text-ink focus-visible:bg-canvas-strong/65 focus-visible:text-ink max-md:w-fit"
-          type="button"
-          onClick={onBack}
-        >
-          <ArrowLeft className="size-4" aria-hidden="true" />
-          <span>{t('settings.back')}</span>
-        </button>
-
-        <label className="relative mt-3 block max-md:absolute max-md:top-2.5 max-md:right-3 max-md:mt-0 max-md:w-[min(48vw,15rem)]">
-          <Search
-            className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-ink-faint"
-            aria-hidden="true"
-          />
-          <input
-            className="h-8 w-full rounded-[10px] border border-edge bg-canvas pr-2.5 pl-8 text-[0.8125rem] text-ink-soft outline-none transition-[border-color,box-shadow] placeholder:text-ink-faint focus:border-edge-stronger focus:ring-2 focus:ring-edge"
-            type="search"
-            value={query}
-            placeholder={t('settings.search')}
-            aria-label={t('settings.search')}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
-
-        <nav className="mt-4 min-h-0 flex-1 overflow-y-auto pb-3 max-md:mt-3 max-md:flex max-md:max-w-full max-md:gap-1 max-md:overflow-x-auto max-md:overflow-y-hidden max-md:pb-0">
-          {visibleGroups.map((group) => (
-            <div key={group.label} className="mt-4 first:mt-0 max-md:mt-0 max-md:flex max-md:gap-1">
-              <div className="mb-1 px-2 text-[0.71875rem] font-medium text-ink-faint max-md:hidden">
-                {group.label}
-              </div>
-              {group.items.map((item) => (
-                <SettingsNavItem
-                  key={item.id}
-                  item={item}
-                  active={item.id === active}
-                  onClick={() => {
-                    setActive(item.id)
-                    setQuery('')
-                  }}
-                />
-              ))}
-            </div>
-          ))}
-          {visibleGroups.length === 0 && (
-            <div className="px-2 py-4 text-[0.78125rem] text-ink-faint">
-              {t('settings.noResults')}
-            </div>
-          )}
-        </nav>
-      </aside>
-
-      <main className="min-h-0 overflow-y-auto bg-canvas">
-        <div className="mx-auto w-full max-w-[58.75rem] px-10 pt-14 pb-24 max-lg:px-7 max-md:px-4 max-md:pt-7">
-          <h1 className="text-[1.75rem] leading-9 font-semibold tracking-[-0.035em] text-ink max-md:text-[1.5rem]">
-            {activeItem?.label ?? t('settings.general')}
-          </h1>
-
+    <div
+      className={cn(
+        'settings-page relative grid h-full min-h-0 grid-cols-[var(--settings-sidebar-width)_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] overflow-hidden bg-canvas motion-reduce:transition-none max-md:grid-cols-1 max-md:grid-rows-[auto_minmax(0,1fr)]',
+        !sidebarResizing &&
+          'transition-[grid-template-columns] duration-[180ms] ease-[cubic-bezier(0.2,0,0,1)]',
+      )}
+      style={
+        {
+          '--settings-sidebar-expanded-width': `${sidebarWidth}px`,
+          '--settings-sidebar-width': sidebarCollapsed
+            ? '0px'
+            : 'var(--settings-sidebar-expanded-width)',
+        } as CSSProperties
+      }
+    >
+      <aside
+        className={cn(
+          'settings-sidebar relative min-h-0 min-w-0 overflow-hidden bg-canvas',
+          sidebarCollapsed ? 'max-md:hidden' : 'border-r border-edge/75',
+        )}
+        aria-hidden={sidebarCollapsed ? true : undefined}
+        inert={sidebarCollapsed}
+      >
+        <div className="flex h-full w-[var(--settings-sidebar-expanded-width)] min-h-0 flex-col max-md:w-full">
           <div
-            className={
-              active === 'usage'
-                ? 'mt-8 max-md:mt-6'
-                : active === 'models'
-                  ? 'mt-8 max-md:mt-6'
-                  : 'mt-11 max-md:mt-7'
-            }
+            className="settings-sidebar-header app-sidebar-header window-titlebar relative h-16 w-full shrink-0"
+            data-testid="settings-sidebar-titlebar"
           >
-            {active === 'general' ? (
-              <GeneralSettings />
-            ) : active === 'usage' ? (
-              <UsageSettings />
-            ) : (
-              <ProvidersSettings onChanged={onProvidersChanged} />
-            )}
+            <div className="window-titlebar-controls">
+              {!sidebarCollapsed && (
+                <SidebarToggleButton
+                  expanded
+                  className="sidebar-header-action sidebar-collapse-action absolute top-4 right-4 motion-reduce:transition-none max-md:top-2 max-md:right-auto max-md:left-3"
+                  onToggle={collapseSidebar}
+                />
+              )}
+            </div>
+          </div>
+
+          <div className="flex min-h-0 flex-1 flex-col px-3 pb-4 max-md:px-3 max-md:pb-2.5">
+            <button
+              className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-[10px] px-2.5 text-[0.84375rem] font-normal text-ink-muted outline-none transition-colors hover:bg-canvas-strong/65 hover:text-ink focus-visible:bg-canvas-strong/65 focus-visible:text-ink max-md:w-fit"
+              type="button"
+              onClick={onBack}
+            >
+              <ArrowLeft className="size-4" aria-hidden="true" />
+              <span>{t('settings.back')}</span>
+            </button>
+
+            <label className="relative mt-3 block max-md:absolute max-md:top-2.5 max-md:right-3 max-md:mt-0 max-md:w-[min(48vw,15rem)]">
+              <Search
+                className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-ink-faint"
+                aria-hidden="true"
+              />
+              <input
+                className="h-8 w-full rounded-[10px] border border-edge bg-canvas pr-2.5 pl-8 text-[0.8125rem] text-ink-soft outline-none transition-[border-color,box-shadow] placeholder:text-ink-faint focus:border-edge-stronger focus:ring-2 focus:ring-edge"
+                type="search"
+                value={query}
+                placeholder={t('settings.search')}
+                aria-label={t('settings.search')}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </label>
+
+            <nav className="mt-4 min-h-0 flex-1 overflow-y-auto pb-3 max-md:mt-3 max-md:flex max-md:max-w-full max-md:gap-1 max-md:overflow-x-auto max-md:overflow-y-hidden max-md:pb-0">
+              {visibleGroups.map((group) => (
+                <div key={group.label} className="mt-4 first:mt-0 max-md:mt-0 max-md:flex max-md:gap-1">
+                  <div className="mb-1 px-2 text-[0.71875rem] font-medium text-ink-faint max-md:hidden">
+                    {group.label}
+                  </div>
+                  {group.items.map((item) => (
+                    <SettingsNavItem
+                      key={item.id}
+                      item={item}
+                      active={item.id === active}
+                      onClick={() => {
+                        setActive(item.id)
+                        setQuery('')
+                      }}
+                    />
+                  ))}
+                </div>
+              ))}
+              {visibleGroups.length === 0 && (
+                <div className="px-2 py-4 text-[0.78125rem] text-ink-faint">
+                  {t('settings.noResults')}
+                </div>
+              )}
+            </nav>
           </div>
         </div>
-      </main>
+
+        {!sidebarCollapsed && (
+          <div
+            className="group absolute inset-y-0 right-0 z-[60] w-1.5 touch-none cursor-col-resize outline-none max-md:hidden"
+            data-testid="settings-sidebar-resize-handle"
+            role="separator"
+            aria-label={t('app.resizeSidebar')}
+            aria-orientation="vertical"
+            aria-valuemin={sidebarMinimumWidth}
+            aria-valuemax={sidebarMaximumWidth}
+            aria-valuenow={sidebarWidth}
+            tabIndex={0}
+            onPointerDown={startSidebarResize}
+            onPointerMove={resizeSidebar}
+            onPointerUp={stopSidebarResize}
+            onPointerCancel={stopSidebarResize}
+            onKeyDown={resizeSidebarWithKeyboard}
+          >
+            <span
+              className={cn(
+                'absolute inset-y-0 right-0 w-px transition-colors group-hover:bg-ink-faint/60 group-focus-visible:bg-ink-muted/70',
+                sidebarResizing && 'bg-ink-muted/70',
+              )}
+              data-testid="settings-sidebar-divider"
+              aria-hidden="true"
+            />
+          </div>
+        )}
+      </aside>
+
+      <div className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-canvas">
+        <header
+          className="settings-titlebar window-titlebar z-20 flex h-[45px] shrink-0 items-center bg-canvas px-3 max-md:h-12"
+          data-testid="settings-titlebar"
+        >
+          {sidebarCollapsed && (
+            <SidebarToggleButton
+              expanded={false}
+              className="desktop-sidebar-toggle"
+              onToggle={expandSidebar}
+            />
+          )}
+        </header>
+
+        <main className="min-h-0 overflow-y-auto bg-canvas" data-testid="settings-content">
+          <div className="mx-auto w-full max-w-[58.75rem] px-10 pt-14 pb-24 max-lg:px-7 max-md:px-4 max-md:pt-7">
+            <h1 className="text-[1.75rem] leading-9 font-semibold tracking-normal text-ink max-md:text-[1.5rem]">
+              {activeItem?.label ?? t('settings.general')}
+            </h1>
+
+            <div
+              className={
+                active === 'general' ? 'mt-11 max-md:mt-7' : 'mt-8 max-md:mt-6'
+              }
+            >
+              {active === 'general' ? (
+                <GeneralSettings />
+              ) : active === 'usage' ? (
+                <UsageSettings />
+              ) : (
+                <ProvidersSettings onChanged={onProvidersChanged} />
+              )}
+            </div>
+          </div>
+        </main>
+      </div>
     </div>
   )
 }
@@ -178,10 +273,27 @@ function SettingsNavItem({
 
 function GeneralSettings() {
   const { locale, setLocale, t } = useI18n()
+  const { preference: theme, setPreference: setTheme } = useTheme()
   return (
     <div>
       <SettingsSection title={t('settings.generalTitle')}>
         <SettingsCard>
+          <SettingsRow
+            label={t('settings.theme')}
+            description={t('settings.themeDescription')}
+            control={
+              <SelectControl
+                value={theme}
+                ariaLabel={t('settings.theme')}
+                onChange={(value) => setTheme(value as ThemePreference)}
+                options={[
+                  { value: 'system', label: t('profile.themeSystem') },
+                  { value: 'light', label: t('profile.themeLight') },
+                  { value: 'dark', label: t('profile.themeDark') },
+                ]}
+              />
+            }
+          />
           <SettingsRow
             label={t('settings.language')}
             description={t('settings.languageDescription')}
