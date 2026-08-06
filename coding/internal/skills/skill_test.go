@@ -310,7 +310,9 @@ func TestExplicitInvocationLoadsBodyWithoutSubstitution(t *testing.T) {
 		Name: "deploy", Description: "deploy the app",
 		Content: "target=$ARGUMENTS first=$1 root=${OR_SKILL_DIR}", Dir: "/skills/deploy",
 	}})
-	loaded, matched, err := reg.ResolveExplicitInvocation("$deploy staging")
+	loaded, matched, err := reg.ResolveExplicitInvocation(
+		"[$deploy](/skills/deploy/SKILL.md) staging",
+	)
 	if err != nil || !matched {
 		t.Fatalf("matched = %v error = %v", matched, err)
 	}
@@ -332,8 +334,10 @@ func TestExplicitInvocationLoadsBodyWithoutSubstitution(t *testing.T) {
 
 func TestLegacySkillCommandIsNotRecognized(t *testing.T) {
 	reg := NewRegistry([]Skill{{Name: "deploy", Description: "deploy", Content: "deploy"}})
-	if _, matched, err := reg.ResolveExplicitInvocation("/skill:deploy staging"); err != nil || matched {
-		t.Fatalf("legacy invocation matched = %v error = %v", matched, err)
+	for _, input := range []string{"/skill:deploy staging", "$deploy staging"} {
+		if _, matched, err := reg.ResolveExplicitInvocation(input); err != nil || matched {
+			t.Fatalf("legacy invocation %q matched = %v error = %v", input, matched, err)
+		}
 	}
 }
 
@@ -347,9 +351,8 @@ func TestDisplayExplicitInvocation(t *testing.T) {
 		input string
 		want  string
 	}{
-		{input: "$deploy staging", want: "[$deploy](/skills/deploy/SKILL.md) staging"},
-		{input: "  $review  ", want: "[$review](</skills/review path/SKILL.md>)"},
 		{input: "[$deploy](/old/SKILL.md) staging", want: "[$deploy](/skills/deploy/SKILL.md) staging"},
+		{input: "$deploy staging", want: "$deploy staging"},
 		{input: "/review staging", want: "/review staging"},
 	} {
 		if got := registry.DisplayExplicitInvocation(tt.input); got != tt.want {

@@ -38,26 +38,6 @@ export async function fetchSkills(
   return response.json() as Promise<SkillsResponse>
 }
 
-export type SkillMentionQuery = {
-  query: string
-  promptText: string
-}
-
-// parseSkillMentionQuery recognizes the composer search shorthand `$name prompt`.
-// Selection serializes the skill as a durable Markdown reference to SKILL.md.
-export function parseSkillMentionQuery(draft: string): SkillMentionQuery | undefined {
-  if (!draft.startsWith('$')) return undefined
-  const token = draft.slice(1).match(/^[^\s]*/)?.[0] ?? ''
-  return {
-    query: token,
-    promptText: draft.slice(token.length + 1).trimStart(),
-  }
-}
-
-export function skillPromptFromDraft(draft: string): string {
-  return parseSkillMentionQuery(draft)?.promptText ?? draft
-}
-
 export function buildSkillInvocation(
   skill: Pick<SkillEntry, 'name' | 'dir' | 'path'>,
   argumentsText: string,

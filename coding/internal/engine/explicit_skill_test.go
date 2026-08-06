@@ -44,36 +44,33 @@ func TestExplicitSkillReachesProviderWithoutChangingInstructions(t *testing.T) {
 		}
 	})
 
-	if err := session.Prompt(context.Background(), "$deploy staging"); err != nil {
+	if err := session.Prompt(
+		context.Background(),
+		"[$deploy](/skills/deploy/SKILL.md) staging",
+	); err != nil {
 		t.Fatal(err)
 	}
 	if len(captured.Messages) < 2 {
 		t.Fatalf("provider messages = %d, want context and explicit user message", len(captured.Messages))
 	}
-	user, ok := captured.Messages[len(captured.Messages)-1].(*llm.UserMessage)
+	user, ok := captured.Messages[len(captured.Messages)-2].(*llm.UserMessage)
 	if !ok {
-		t.Fatalf("provider message = %T, want user", captured.Messages[len(captured.Messages)-1])
+		t.Fatalf("provider message = %T, want user", captured.Messages[len(captured.Messages)-2])
 	}
-	if len(user.Content) != 2 {
-		t.Fatalf("user content blocks = %d, want visible mention and loaded instructions", len(user.Content))
+	if len(user.Content) != 1 {
+		t.Fatalf("user content blocks = %d, want only visible reference", len(user.Content))
 	}
 	visible, _ := user.Content[0].(*llm.TextContent)
-	loaded, _ := user.Content[1].(*llm.TextContent)
 	if visible == nil || visible.Text != "[$deploy](/skills/deploy/SKILL.md) staging" {
 		t.Fatalf("visible block = %#v", visible)
 	}
-	if loaded == nil ||
-		!strings.Contains(loaded.Text, "<agent-skill-invocation") ||
-		!strings.Contains(loaded.Text, `task details remain in the visible message: "staging"`) ||
-		!strings.Contains(loaded.Text, "Keep $ARGUMENTS and $1 literal.") {
-		t.Fatalf("loaded block = %#v", loaded)
-	}
 	var contextText string
-	for _, message := range captured.Messages[:len(captured.Messages)-1] {
+	for _, message := range captured.Messages {
 		contextText += llmUserText(t, message)
 	}
-	if !strings.Contains(contextText, "deploy") {
-		t.Fatal("skill missing from the model-visible skill listing")
+	if !strings.Contains(contextText, `kind="activated_skill"`) ||
+		!strings.Contains(contextText, "Keep $ARGUMENTS and $1 literal.") {
+		t.Fatalf("protected Skill context missing:\n%s", contextText)
 	}
 
 	history := session.History()
@@ -110,7 +107,10 @@ func TestUnknownExplicitSkillDoesNotReachProvider(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = session.Prompt(context.Background(), "$missing args")
+	err = session.Prompt(
+		context.Background(),
+		"[$missing](/skills/missing/SKILL.md) args",
+	)
 	if err == nil || !strings.Contains(err.Error(), `Unknown skill "missing"`) {
 		t.Fatalf("error = %v, want explicit unknown skill error", err)
 	}

@@ -42,7 +42,7 @@ func (m *mutableSkills) callCount() int {
 	return m.calls
 }
 
-func TestStableSkillToolExistsWithZeroSkills(t *testing.T) {
+func TestZeroSkillsOmitToolAndProtocol(t *testing.T) {
 	var captured llm.Context
 	session, err := New(context.Background(), Options{
 		Model: llm.Model{Provider: "test", ID: "model"},
@@ -62,24 +62,24 @@ func TestStableSkillToolExistsWithZeroSkills(t *testing.T) {
 	}
 
 	state := session.agent.Snapshot()
-	if len(state.Tools) != 1 || state.Tools[0].Definition.Name != skills.ToolName {
-		t.Fatalf("agent tools = %#v, want stable skill tool", state.Tools)
+	if len(state.Tools) != 0 {
+		t.Fatalf("agent tools = %#v, want no Skill tool", state.Tools)
 	}
-	if !strings.Contains(state.SystemPrompt, "## Skills") {
-		t.Fatalf("stable system prompt omitted skill protocol:\n%s", state.SystemPrompt)
+	if strings.Contains(state.SystemPrompt, "## Skills") {
+		t.Fatalf("zero-Skill system prompt advertised the Skill protocol:\n%s", state.SystemPrompt)
 	}
 	if err := session.Prompt(context.Background(), "question"); err != nil {
 		t.Fatal(err)
 	}
-	if len(captured.Tools) != 1 || captured.Tools[0].Name != skills.ToolName {
-		t.Fatalf("provider tools = %#v, want skill", captured.Tools)
+	if len(captured.Tools) != 0 {
+		t.Fatalf("provider tools = %#v, want none", captured.Tools)
 	}
 	// Base context, then the user message. No skill listing is attached when no
 	// skill is installed.
 	if len(captured.Messages) != 2 || llmUserText(t, captured.Messages[1]) != "question" {
 		t.Fatalf("zero-skill provider messages = %#v", captured.Messages)
 	}
-	if base := llmUserText(t, captured.Messages[0]); strings.Contains(base, "skill") {
+	if base := llmUserText(t, captured.Messages[0]); strings.Contains(base, `kind="skill_listing"`) || strings.Contains(base, "<available-skills") {
 		t.Fatalf("zero-skill session advertised a skill listing:\n%s", base)
 	}
 }
@@ -114,7 +114,9 @@ func TestDynamicSkillsAddUpdateAndRemoveAtTopLevelBoundary(t *testing.T) {
 	if len(inputs) != 1 || len(inputs[0].Messages) != 2 {
 		t.Fatalf("initial input = %#v, want base context and user message", inputs)
 	}
-	stableTools := append([]llm.ToolDefinition(nil), inputs[0].Tools...)
+	if len(inputs[0].Tools) != 0 {
+		t.Fatalf("initial tools = %#v, want no Skill tool", inputs[0].Tools)
+	}
 
 	loader.set(skills.Skill{
 		Name: "review", Description: "review changes", Content: "version one", Dir: "/skills/review",
@@ -135,6 +137,9 @@ func TestDynamicSkillsAddUpdateAndRemoveAtTopLevelBoundary(t *testing.T) {
 	}
 	if got := executeSkill(t, session, "review"); !strings.Contains(got, "version one") {
 		t.Fatalf("added skill tool result = %q", got)
+	}
+	if len(inputs[1].Tools) != 1 || inputs[1].Tools[0].Name != skills.ToolName {
+		t.Fatalf("tools after add = %#v, want Skill tool", inputs[1].Tools)
 	}
 
 	loader.set(skills.Skill{
@@ -159,7 +164,7 @@ func TestDynamicSkillsAddUpdateAndRemoveAtTopLevelBoundary(t *testing.T) {
 	removed := llmUserText(t, inputs[3].Messages[len(inputs[3].Messages)-1])
 	if !strings.Contains(removed, "<removed>") ||
 		!strings.Contains(removed, "<name>review</name>") ||
-		!strings.Contains(removed, `<available-skills none="true" />`) {
+		strings.Contains(removed, `<available-skills`) {
 		t.Fatalf("removal update is incomplete:\n%s", removed)
 	}
 	if _, err := executeSkillResult(session, "review"); err == nil {
@@ -169,10 +174,11 @@ func TestDynamicSkillsAddUpdateAndRemoveAtTopLevelBoundary(t *testing.T) {
 	if loader.callCount() != 5 {
 		t.Fatalf("loader calls = %d, want construction plus four top-level runs", loader.callCount())
 	}
-	for index, input := range inputs {
-		if !reflect.DeepEqual(input.Tools, stableTools) {
-			t.Fatalf("tool schema changed on request %d:\nfirst: %#v\nnext: %#v", index+1, stableTools, input.Tools)
-		}
+	if len(inputs[2].Tools) != 1 || inputs[2].Tools[0].Name != skills.ToolName {
+		t.Fatalf("tools after update = %#v, want Skill tool", inputs[2].Tools)
+	}
+	if len(inputs[3].Tools) != 0 {
+		t.Fatalf("tools after removal = %#v, want no Skill tool", inputs[3].Tools)
 	}
 
 	entries, _, _ := store.snapshot()

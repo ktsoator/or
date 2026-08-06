@@ -155,9 +155,8 @@ func truncatedAttr(truncated bool) string {
 	return " truncated=\"true\""
 }
 
-// RenderSkillListing renders the initial discovery snapshot. An empty skill set
-// needs no attachment because the stable skill tool already handles unknown
-// names safely.
+// RenderSkillListing renders the initial discovery snapshot. An empty Skill set
+// has neither a listing attachment nor a Skill tool.
 func RenderSkillListing(revision string, skills []SkillInfo) string {
 	skillList := usableSkills(skills)
 	if len(skillList) == 0 {
@@ -170,7 +169,7 @@ func RenderSkillListing(revision string, skills []SkillInfo) string {
 		"<or-context kind=\"skill_listing\" revision=\"%s\">\n",
 		html.EscapeString(revision),
 	)
-	b.WriteString("These are the skills currently available through the stable `skill` tool.\n")
+	b.WriteString("These are the skills currently available through the `skill` tool.\n")
 	renderAvailableSkills(&b, skillList)
 	b.WriteString("</or-context>")
 	return b.String()
@@ -208,7 +207,9 @@ func RenderSkillsUpdate(
 		b.WriteString("<none />\n")
 	}
 	b.WriteString("</changes>\n")
-	renderAvailableSkills(&b, usableSkills(current))
+	if current := usableSkills(current); len(current) > 0 {
+		renderAvailableSkills(&b, current)
+	}
 	b.WriteString("</or-context>")
 	return b.String()
 }
@@ -224,10 +225,6 @@ func renderSkillChange(b *strings.Builder, tag string, skills []SkillInfo) {
 }
 
 func renderAvailableSkills(b *strings.Builder, skills []SkillInfo) {
-	if len(skills) == 0 {
-		b.WriteString("<available-skills none=\"true\" />\n")
-		return
-	}
 	b.WriteString("<available-skills>\n")
 	renderSkillEntries(b, skills)
 	b.WriteString("</available-skills>\n")

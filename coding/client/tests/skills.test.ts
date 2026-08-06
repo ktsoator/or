@@ -2,10 +2,8 @@ import { describe, expect, test } from 'bun:test'
 import {
   buildSkillInvocation,
   filterSkills,
-  parseSkillMentionQuery,
   parseSkillReference,
   serializeSkillReferenceCopy,
-  skillPromptFromDraft,
   type SkillEntry,
 } from '../src/features/skills'
 import {
@@ -15,21 +13,6 @@ import {
 } from '../src/features/composer/panelStyles'
 
 describe('Skill composer mentions', () => {
-  test('recognizes dollar search and preserves the user prompt', () => {
-    expect(parseSkillMentionQuery('$pdf 类似这种的')).toEqual({
-      query: 'pdf',
-      promptText: '类似这种的',
-    })
-    expect(parseSkillMentionQuery('$')).toEqual({ query: '', promptText: '' })
-    expect(parseSkillMentionQuery('/pdf existing')).toBeUndefined()
-  })
-
-  test('extracts the prompt when replacing a skill mention', () => {
-    expect(skillPromptFromDraft('$pdf make slides')).toBe('make slides')
-    expect(skillPromptFromDraft('/pdf make slides')).toBe('/pdf make slides')
-    expect(skillPromptFromDraft('make slides')).toBe('make slides')
-  })
-
   test('builds the backend command only at submission time', () => {
     expect(
       buildSkillInvocation(

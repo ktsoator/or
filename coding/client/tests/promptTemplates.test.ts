@@ -43,7 +43,7 @@ describe('Prompt template composer commands', () => {
     expect(buildPromptTemplateInvocation('review', '  ')).toBe('/review')
   })
 
-  test('keeps slash template search separate from dollar skill search', () => {
+  test('uses slash as the shared resource catalog query', () => {
     expect(parsePromptTemplateQuery('/review security')).toEqual({
       query: 'review',
       argumentsText: 'security',

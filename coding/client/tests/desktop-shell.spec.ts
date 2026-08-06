@@ -4399,6 +4399,15 @@ test('skill invocations render and copy as file references', async ({
 }) => {
   const requests = await openDesktopClient(page, {
     existingSession: true,
+    promptTemplates: [
+      {
+        name: 'frontend-design',
+        description: 'Template with the same name',
+        argumentHint: '',
+        source: 'user',
+        path: '/tmp/prompts/frontend-design.md',
+      },
+    ],
     skills: [
       {
         name: 'frontend-design',
@@ -4412,14 +4421,17 @@ test('skill invocations render and copy as file references', async ({
   const composer = page.getByTestId('composer')
   const input = composer.locator('textarea')
 
-  await input.fill('$front')
+  await input.fill('/front hello')
   const suggestions = page.getByRole('listbox', { name: 'Commands and resources' })
-  const skill = suggestions.getByRole('option', { name: /frontend-design/ })
+  await expect(suggestions.getByRole('option', { name: /frontend-design/ })).toHaveCount(2)
+  const skill = suggestions
+    .getByRole('option', { name: /frontend-design/ })
+    .filter({ hasText: 'Build polished interfaces' })
   await expect(skill).toBeVisible()
   await skill.click()
 
   await expect(composer.getByText('frontend-design', { exact: true })).toBeVisible()
-  await input.fill('hello')
+  await expect(input).toHaveValue('hello')
   await input.press('Enter')
 
   const reference = page.getByTestId('conversation-transcript').getByTestId('skill-reference')
@@ -4453,10 +4465,10 @@ test('skill invocations render and copy as file references', async ({
   })
 })
 
-test('composer catalogs stay separated and menu scroll follows keyboard navigation', async ({
+test('composer slash catalog combines resources, refreshes, and follows keyboard navigation', async ({
   page,
 }) => {
-  await openDesktopClient(page, {
+  const requests = await openDesktopClient(page, {
     existingSession: true,
     promptTemplates: Array.from({ length: 8 }, (_, index) => ({
       name: `template-${index + 1}`,
@@ -4473,18 +4485,23 @@ test('composer catalogs stay separated and menu scroll follows keyboard navigati
     })),
   })
   const input = page.getByTestId('composer').locator('textarea')
-  await input.fill('$')
+  const skillRequests = () =>
+    requests.filter((request) => request.path === '/api/skills').length
+  const templateRequests = () =>
+    requests.filter((request) => request.path === '/api/prompt-templates').length
+  const skillsBeforeOpen = skillRequests()
+  const templatesBeforeOpen = templateRequests()
+  await input.fill('$skill')
+  await expect(page.getByRole('listbox', { name: 'Commands and resources' })).toBeHidden()
+  await input.fill('/')
 
   const suggestions = page.getByRole('listbox', { name: 'Commands and resources' })
   await expect(suggestions.getByRole('option', { name: /skill-1/ })).toBeVisible()
   const scrollArea = suggestions.locator(':scope > div').first()
-  await expect(suggestions.getByRole('option', { name: /Code review/ })).toHaveCount(0)
-  await expect(suggestions.getByRole('option', { name: /template-1/ })).toHaveCount(0)
-
-  await input.fill('/')
   await expect(suggestions.getByRole('option', { name: /Code review/ })).toBeVisible()
   await expect(suggestions.getByRole('option', { name: /template-1/ })).toBeVisible()
-  await expect(suggestions.getByRole('option', { name: /skill-1/ })).toHaveCount(0)
+  await expect.poll(skillRequests).toBe(skillsBeforeOpen + 1)
+  await expect.poll(templateRequests).toBe(templatesBeforeOpen + 1)
   await expect.poll(() => scrollArea.evaluate((element) => element.scrollHeight)).toBeGreaterThan(
     await scrollArea.evaluate((element) => element.clientHeight),
   )
@@ -4497,6 +4514,12 @@ test('composer catalogs stay separated and menu scroll follows keyboard navigati
   for (let index = 0; index < 11; index++) await input.press('ArrowUp')
 
   await expect.poll(() => scrollArea.evaluate((element) => element.scrollTop)).toBe(0)
+
+  await input.fill('ordinary text')
+  await expect(suggestions).toBeHidden()
+  await input.fill('/')
+  await expect.poll(skillRequests).toBe(skillsBeforeOpen + 2)
+  await expect.poll(templateRequests).toBe(templatesBeforeOpen + 2)
 })
 
 test('failed first send keeps the draft and shows the server error', async ({ page }) => {

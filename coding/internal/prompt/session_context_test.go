@@ -218,7 +218,7 @@ func TestRenderSkillsUpdateCanRemoveLastSkill(t *testing.T) {
 		nil,
 		SkillsDelta{Removed: []string{"last"}},
 	)
-	if !strings.Contains(out, `<available-skills none="true" />`) ||
+	if strings.Contains(out, "<available-skills") ||
 		!strings.Contains(out, "<name>last</name>") {
 		t.Fatalf("last-skill removal is not explicit:\n%s", out)
 	}

@@ -69,8 +69,11 @@ Or validates the standard `name`, `description`, `license`, `compatibility`,
 The Markdown body is loaded unchanged; Skill files do not support prompt-template
 argument substitution. Relative file references resolve from the skill directory.
 
-Type `$skill-name` in the composer to select a Skill explicitly. Or can also
-activate a Skill automatically when its description matches the task. The
+Type `/` in the composer to search built-in commands, Prompt Templates, and
+Skills in one catalog. Selecting a Skill creates a typed Skill reference, so it
+remains distinct from a same-named Prompt Template. Or can also activate a Skill
+automatically when its description matches the task. Activated instructions are
+kept as protected session context across compaction. The
 experimental `allowed-tools` field is preserved but never bypasses Or's normal
 permission policy.
 

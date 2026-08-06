@@ -6,10 +6,9 @@ import (
 	"github.com/ktsoator/or/agent"
 )
 
-// DynamicRegistry exposes one stable skill tool while atomically replacing the
-// immutable Registry snapshot consulted by tool calls. Provider-visible tool
-// definitions therefore stay byte-stable across skill additions, updates, and
-// removals.
+// DynamicRegistry exposes one snapshot-aware Skill tool while atomically
+// replacing the immutable Registry consulted by tool calls. The engine controls
+// whether that tool is advertised for the current snapshot.
 type DynamicRegistry struct {
 	current atomic.Pointer[Registry]
 }

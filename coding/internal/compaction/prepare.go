@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/ktsoator/or/agent"
+	"github.com/ktsoator/or/coding/internal/skills"
 	"github.com/ktsoator/or/coding/internal/transcript"
 	"github.com/ktsoator/or/llm"
 )
@@ -67,7 +68,7 @@ func Prepare(entries []transcript.Entry, keepRecentTokens int64) (Prepared, erro
 
 	toSummarize := make([]agent.AgentMessage, 0, boundary)
 	for _, entry := range active[:boundary] {
-		toSummarize = append(toSummarize, entry.Message)
+		toSummarize = append(toSummarize, withoutSkillInstructions(entry.Message))
 	}
 	contextMessages, err := transcript.BuildContext(entries)
 	if err != nil {
@@ -80,6 +81,40 @@ func Prepare(entries []transcript.Entry, keepRecentTokens int64) (Prepared, erro
 		TokensBefore:    EstimateMessages(contextMessages),
 		KeptTokens:      EstimateEntries(active[boundary:]),
 	}, nil
+}
+
+// withoutSkillInstructions keeps activation facts in the compaction prompt but
+// removes full Skill bodies. Those exact instructions are persisted separately
+// as protected model context and must never depend on a lossy summary.
+func withoutSkillInstructions(message agent.AgentMessage) agent.AgentMessage {
+	value, ok := agent.ToLLM(message)
+	if !ok {
+		return message
+	}
+	switch typed := value.(type) {
+	case *llm.UserMessage:
+		copy := *typed
+		copy.Content = make([]llm.UserContent, 0, len(typed.Content))
+		for _, content := range typed.Content {
+			if text, ok := content.(*llm.TextContent); ok && text != nil &&
+				skills.IsExplicitInvocationText(text.Text) {
+				continue
+			}
+			copy.Content = append(copy.Content, content)
+		}
+		return agent.FromLLM(&copy)
+	case *llm.ToolResultMessage:
+		if typed.ToolName != skills.ToolName {
+			return message
+		}
+		copy := *typed
+		copy.Content = []llm.ToolResultContent{&llm.TextContent{
+			Text: "Skill instructions retained as protected session context.",
+		}}
+		return agent.FromLLM(&copy)
+	default:
+		return message
+	}
 }
 
 func activeMessageEntries(path []transcript.Entry) ([]transcript.Entry, string, error) {
