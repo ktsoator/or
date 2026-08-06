@@ -124,8 +124,9 @@ Phase 1 fixes repeated navigation without changing the Go tool contract.
 
 ### Renderer tab state
 
-Extract the tab model and reducer from `BrowserView.tsx` into
-`browserTabs.ts`.
+Extract the tab model and reducer from
+`client/src/features/workbench/WorkbenchView.tsx` into
+`client/src/features/browser/tabs.ts`.
 
 ```ts
 type BrowserTargetKind = 'web' | 'workspace-preview'
@@ -269,8 +270,9 @@ both requested and committed URLs.
 
 ### Browser controller hook
 
-Extract browser synchronization from `BrowserSurface.tsx` into
-`useBrowserController.ts`.
+Extract browser synchronization from
+`client/src/features/browser/BrowserSurface.tsx` into
+`client/src/features/browser/useController.ts`.
 
 The hook separates registration, target resolution, navigation, and observation:
 
@@ -507,11 +509,13 @@ none can overwrite the current tab.
 
 ## Delivery Order
 
-1. Add `browserTabs.ts` and reducer sequence tests. Completed.
+1. Add `client/src/features/browser/tabs.ts` and reducer sequence tests.
+   Completed.
 2. Separate navigation operations from DOM layout and visibility. Completed.
 3. Add applied revision to browser runtime state and reject stale operations.
    Completed.
-4. Add `useBrowserController.ts` and simplify `BrowserSurface`. Completed.
+4. Add `client/src/features/browser/useController.ts` and simplify
+   `client/src/features/browser/BrowserSurface.tsx`. Completed.
 5. Add repeated-navigation Playwright coverage and package the desktop app.
    Completed.
 6. Add the disposition enum and generated wire DTOs, using
