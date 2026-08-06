@@ -32,15 +32,20 @@ type Skill struct {
 	Name string
 	// Description is the model-visible note on when to use the skill. Required.
 	Description string
-	// DisableModelInvocation keeps the skill out of the model-visible listing
-	// and prevents the skill tool from loading it. The product may still list
-	// and explicitly invoke the skill on behalf of the user.
-	DisableModelInvocation bool
-	// Content is the SKILL.md body, injected verbatim (after placeholder
-	// expansion) when the skill is invoked. It is not part of the initial context.
+	// License identifies the license applied to the skill when provided.
+	License string
+	// Compatibility describes environment requirements when provided.
+	Compatibility string
+	// Metadata contains standard extension metadata from the SKILL.md frontmatter.
+	Metadata map[string]string
+	// AllowedTools is the experimental, space-separated standard field. Or
+	// preserves it but does not use it to bypass the normal permission policy.
+	AllowedTools string
+	// Content is the SKILL.md body, injected verbatim when the skill is invoked.
+	// It is not part of the initial context.
 	Content string
-	// Dir is the absolute path to the skill's directory, exposed to Content via
-	// the ${OR_SKILL_DIR} placeholder so bundled scripts and references resolve.
+	// Dir is the absolute path to the skill's directory. Relative references in
+	// Content resolve from this directory.
 	Dir string
 	// Path is the absolute path to the SKILL.md file, for diagnostics.
 	Path string

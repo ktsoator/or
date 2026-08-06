@@ -1,12 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 import {
   buildSkillInvocation,
-  displaySkillInvocation,
   filterSkills,
-  parseSkillSlashQuery,
+  parseSkillMentionQuery,
   parseSkillReference,
   serializeSkillReferenceCopy,
-  skillArgumentsFromDraft,
+  skillPromptFromDraft,
   type SkillEntry,
 } from '../src/features/skills'
 import {
@@ -15,20 +14,20 @@ import {
   previewSkillCommandCount,
 } from '../src/features/composer/panelStyles'
 
-describe('Skill composer commands', () => {
-  test('recognizes slash search and preserves arguments', () => {
-    expect(parseSkillSlashQuery('/pdf 类似这种的')).toEqual({
+describe('Skill composer mentions', () => {
+  test('recognizes dollar search and preserves the user prompt', () => {
+    expect(parseSkillMentionQuery('$pdf 类似这种的')).toEqual({
       query: 'pdf',
-      argumentsText: '类似这种的',
+      promptText: '类似这种的',
     })
-    expect(parseSkillSlashQuery('/')).toEqual({ query: '', argumentsText: '' })
-    expect(parseSkillSlashQuery('/skill:pdf existing')).toBeUndefined()
+    expect(parseSkillMentionQuery('$')).toEqual({ query: '', promptText: '' })
+    expect(parseSkillMentionQuery('/pdf existing')).toBeUndefined()
   })
 
-  test('extracts arguments when replacing slash or explicit commands', () => {
-    expect(skillArgumentsFromDraft('/pdf make slides')).toBe('make slides')
-    expect(skillArgumentsFromDraft('/skill:old make slides')).toBe('make slides')
-    expect(skillArgumentsFromDraft('make slides')).toBe('make slides')
+  test('extracts the prompt when replacing a skill mention', () => {
+    expect(skillPromptFromDraft('$pdf make slides')).toBe('make slides')
+    expect(skillPromptFromDraft('/pdf make slides')).toBe('/pdf make slides')
+    expect(skillPromptFromDraft('make slides')).toBe('make slides')
   })
 
   test('builds the backend command only at submission time', () => {
@@ -41,12 +40,6 @@ describe('Skill composer commands', () => {
     expect(
       buildSkillInvocation({ name: 'review', dir: '/skills/review path' }, '  '),
     ).toBe('[$review](</skills/review path/SKILL.md>)')
-  })
-
-  test('upgrades legacy backend commands into skill references', () => {
-    expect(displaySkillInvocation('/skill:pptx make slides')).toBe('[$pptx]() make slides')
-    expect(displaySkillInvocation('/skill:review')).toBe('[$review]()')
-    expect(displaySkillInvocation('/review existing')).toBe('/review existing')
   })
 
   test('parses and serializes rich skill references', () => {
@@ -73,14 +66,12 @@ describe('filterSkills', () => {
       description: 'Read and create PDF documents',
       source: 'user',
       dir: '/skills/pdf',
-      disableModelInvocation: false,
     },
     {
       name: 'frontend-design',
       description: 'Build polished interfaces',
       source: 'project',
       dir: '/skills/frontend-design',
-      disableModelInvocation: false,
     },
   ]
 

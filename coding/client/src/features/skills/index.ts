@@ -1,17 +1,16 @@
 export {
   buildSkillInvocation,
-  displaySkillInvocation,
   fetchSkills,
   filterSkills,
+  parseSkillMentionQuery,
   parseSkillReference,
-  parseSkillSlashQuery,
   serializeSkillReferenceCopy,
-  skillArgumentsFromDraft,
+  skillPromptFromDraft,
 } from './catalog'
 export type {
   SkillDiagnostic,
   SkillEntry,
   SkillReference,
   SkillsResponse,
-  SkillSlashQuery,
+  SkillMentionQuery,
 } from './catalog'

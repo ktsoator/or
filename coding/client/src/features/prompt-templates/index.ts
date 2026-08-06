@@ -5,6 +5,7 @@ export {
   filterPromptTemplates,
   localizePromptTemplate,
   parsePromptTemplateInvocation,
+  parsePromptTemplateQuery,
   promptTemplateArgumentsText,
   serializePromptTemplateInvocationCopy,
 } from './catalog'
@@ -13,5 +14,6 @@ export type {
   PromptTemplateDiagnostic,
   PromptTemplateEntry,
   PromptTemplateInvocation,
+  PromptTemplateQuery,
   PromptTemplatesResponse,
 } from './catalog'

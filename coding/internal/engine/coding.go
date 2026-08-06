@@ -265,7 +265,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		promptSections:       registry.PromptSections(),
 		skillRegistry:        dynamicSkills,
 		skillLoader:          opts.SkillLoader,
-		skillRevision:        initialRegistry.ModelRevision(),
+		skillRevision:        initialRegistry.Revision(),
 		promptTemplates:      prompttemplate.NewRegistry(initialPromptTemplates),
 		promptTemplateLoader: opts.PromptTemplateLoader,
 		maxRetries:           maxRetries,
@@ -420,7 +420,7 @@ func (s *Session) promptMessage(
 	if s.pendingSkills != nil {
 		registry = s.pendingSkills
 	}
-	expanded, matched, err := registry.ExpandExplicitInvocation(text)
+	loaded, matched, err := registry.ResolveExplicitInvocation(text)
 	if err != nil {
 		return nil, err
 	}
@@ -429,7 +429,7 @@ func (s *Session) promptMessage(
 			registry.DisplayExplicitInvocation(text),
 			files,
 			images,
-			expanded,
+			loaded,
 		), nil
 	}
 	templates := s.promptTemplates
@@ -437,7 +437,7 @@ func (s *Session) promptMessage(
 		templates = prompttemplate.NewRegistry(s.promptTemplateLoader())
 		s.promptTemplates = templates
 	}
-	expanded, matched = templates.ExpandExplicitInvocation(text)
+	expanded, matched := templates.ExpandExplicitInvocation(text)
 	if !matched {
 		return userMessage(text, files, images), nil
 	}
@@ -893,7 +893,7 @@ func (s *Session) buildBaseContext() (rendered, revision string) {
 func (s *Session) buildSkillListing() string {
 	return prompt.RenderSkillListing(
 		s.skillRevision,
-		skillInfos(s.skillRegistry.ModelList()),
+		skillInfos(s.skillRegistry.List()),
 	)
 }
 
@@ -905,13 +905,11 @@ func (s *Session) prepareSkillRefresh() {
 		return
 	}
 	next := skills.NewRegistry(s.skillLoader())
-	nextRevision := next.ModelRevision()
+	nextRevision := next.Revision()
 
 	if s.pendingSkills != nil {
 		switch nextRevision {
 		case s.pendingSkillRevision:
-			// The model-visible snapshot is unchanged, but a manual-only skill
-			// may have changed while the update was staged.
 			s.pendingSkills = next
 			return
 		case s.skillRevision:
@@ -922,19 +920,14 @@ func (s *Session) prepareSkillRefresh() {
 			return
 		}
 	} else if nextRevision == s.skillRevision {
-		// Manual-only changes require no model-context update, but become
-		// available to explicit user invocation at this top-level boundary.
 		s.skillRegistry.Replace(next)
 		return
 	}
 
-	delta := skills.Diff(
-		s.skillRegistry.Snapshot().ModelRegistry(),
-		next.ModelRegistry(),
-	)
+	delta := skills.Diff(s.skillRegistry.Snapshot(), next)
 	rendered := prompt.RenderSkillsUpdate(
 		nextRevision,
-		skillInfos(next.ModelList()),
+		skillInfos(next.List()),
 		promptSkillDelta(delta),
 	)
 	s.pendingSkills = next

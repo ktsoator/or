@@ -26,13 +26,14 @@ import { cn } from '@/lib/utils'
 import {
   buildSkillInvocation,
   filterSkills,
-  parseSkillSlashQuery,
-  skillArgumentsFromDraft,
+  parseSkillMentionQuery,
+  skillPromptFromDraft,
   type SkillEntry,
 } from '@/features/skills'
 import {
   buildPromptTemplateInvocation,
   filterPromptTemplates,
+  parsePromptTemplateQuery,
   type PromptTemplateEntry,
 } from '@/features/prompt-templates'
 import { useComposerAttachments } from './useAttachments'
@@ -172,14 +173,18 @@ export function Composer({
     clear: clearAttachments,
     reportUnsupportedImages,
   } = useComposerAttachments(supportsImages)
-  const slashQuery =
+  const catalogQueryEnabled =
     !running &&
     !selectedSkill &&
     !selectedPromptTemplate &&
     !addPanelOpen &&
     !skillSuggestionsDismissed
-      ? parseSkillSlashQuery(draftValue)
-      : undefined
+  const slashQuery = catalogQueryEnabled
+    ? parsePromptTemplateQuery(draftValue)
+    : undefined
+  const skillQuery = catalogQueryEnabled
+    ? parseSkillMentionQuery(draftValue)
+    : undefined
   const {
     skills: availableSkills,
     promptTemplates: availablePromptTemplates,
@@ -205,17 +210,15 @@ export function Composer({
         maxPromptTemplateSuggestions,
       )
     : []
-  const suggestedSkills = slashQuery
-    ? filterSkills(availableSkills, slashQuery.query).slice(0, maxSkillSuggestions)
+  const suggestedSkills = skillQuery
+    ? filterSkills(availableSkills, skillQuery.query).slice(0, maxSkillSuggestions)
     : []
   const previewCommandCount = slashQuery
     ? previewSkillCommandCount(slashQuery.query)
     : 0
   const suggestionCount =
     previewCommandCount + suggestedPromptTemplates.length + suggestedSkills.length
-  const skillSuggestionsVisible = Boolean(
-    slashQuery && !editorDisabled,
-  )
+  const skillSuggestionsVisible = Boolean((slashQuery || skillQuery) && !editorDisabled)
 
   const autosize = () => {
     const el = ref.current
@@ -238,7 +241,7 @@ export function Composer({
   useEffect(() => {
     setActiveSuggestionIndex(0)
     setSkillKeyboardNavigating(false)
-  }, [slashQuery?.query])
+  }, [skillQuery?.query, slashQuery?.query])
 
   useEffect(() => {
     if (!addPanelOpen && !skillSuggestionsVisible) return
@@ -342,18 +345,18 @@ export function Composer({
   const selectSkill = (skill: SkillEntry) => {
     const el = ref.current
     if (!el) return
-    const argumentsText = selectedSkill || selectedPromptTemplate
+    const promptText = selectedSkill || selectedPromptTemplate
       ? draftValue
-      : skillArgumentsFromDraft(draftValue)
+      : skillPromptFromDraft(draftValue)
     setSelectedSkill(skill)
     setSelectedPromptTemplate(undefined)
-    setDraftValue(argumentsText)
+    setDraftValue(promptText)
     setAddPanelOpen(false)
     setSkillSuggestionsDismissed(true)
     requestAnimationFrame(() => {
       autosize()
       el.focus()
-      el.setSelectionRange(argumentsText.length, argumentsText.length)
+      el.setSelectionRange(promptText.length, promptText.length)
     })
   }
 
@@ -368,7 +371,7 @@ export function Composer({
     if (!el) return
     const argumentsText = selectedSkill || selectedPromptTemplate
       ? draftValue
-      : skillArgumentsFromDraft(draftValue)
+      : slashQuery?.argumentsText ?? draftValue
     setSelectedPromptTemplate(template)
     setSelectedSkill(undefined)
     setDraftValue(argumentsText)
@@ -450,15 +453,17 @@ export function Composer({
         >
           <ComposerSkillSuggestions
             visible={skillSuggestionsVisible}
-            query={slashQuery?.query ?? ''}
+            query={skillQuery?.query ?? slashQuery?.query ?? ''}
+            commandsEnabled={Boolean(slashQuery)}
+            skillsEnabled={Boolean(skillQuery)}
             templates={suggestedPromptTemplates}
             skills={suggestedSkills}
             activeIndex={activeSuggestionIndex}
             keyboardNavigating={skillKeyboardNavigating}
-            loading={skillsLoading}
-            failed={skillsFailed}
-            templatesLoading={promptTemplatesLoading}
-            templatesFailed={promptTemplatesFailed}
+            loading={Boolean(skillQuery && skillsLoading)}
+            failed={Boolean(skillQuery && skillsFailed)}
+            templatesLoading={Boolean(slashQuery && promptTemplatesLoading)}
+            templatesFailed={Boolean(slashQuery && promptTemplatesFailed)}
             onActiveIndexChange={setActiveSuggestionIndex}
             onPointerNavigation={() => setSkillKeyboardNavigating(false)}
             onCommandSelect={(command) => void runPreviewCommand(command)}
@@ -628,7 +633,7 @@ export function Composer({
                       event.preventDefault()
                       setSkillKeyboardNavigating(true)
                       setActiveSuggestionIndex(
-                        (activeSuggestionIndex + 1) % suggestionCount,
+                        (index) => (index + 1) % suggestionCount,
                       )
                       return
                     }
@@ -640,8 +645,8 @@ export function Composer({
                       event.preventDefault()
                       setSkillKeyboardNavigating(true)
                       setActiveSuggestionIndex(
-                        (activeSuggestionIndex - 1 + suggestionCount) %
-                          suggestionCount,
+                        (index) =>
+                          (index - 1 + suggestionCount) % suggestionCount,
                       )
                       return
                     }

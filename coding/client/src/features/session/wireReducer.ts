@@ -15,7 +15,6 @@ import type {
 } from '@/types'
 import type { ThreadState } from './threadState'
 import { emptyUsage } from './threadState'
-import { displaySkillInvocation } from '@/features/skills'
 
 function recordOf(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null
@@ -147,7 +146,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
 
     case 'user_message':
       {
-        const text = displaySkillInvocation(ev.text ?? '')
+        const text = ev.text ?? ''
         const images = ev.images ?? []
         const files = ev.files ?? []
         if (ev.queued && ev.delivery) {

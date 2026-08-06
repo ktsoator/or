@@ -3,10 +3,13 @@ import { apiURL } from '@/api'
 export type SkillEntry = {
   name: string
   description: string
+  license?: string
+  compatibility?: string
+  metadata?: Record<string, string>
+  allowedTools?: string
   source: 'user' | 'project'
   dir: string
   path?: string
-  disableModelInvocation: boolean
 }
 
 export type SkillDiagnostic = {
@@ -35,28 +38,24 @@ export async function fetchSkills(
   return response.json() as Promise<SkillsResponse>
 }
 
-export type SkillSlashQuery = {
+export type SkillMentionQuery = {
   query: string
-  argumentsText: string
+  promptText: string
 }
 
-// parseSkillSlashQuery recognizes the composer search shorthand `/name arguments`.
+// parseSkillMentionQuery recognizes the composer search shorthand `$name prompt`.
 // Selection serializes the skill as a durable Markdown reference to SKILL.md.
-export function parseSkillSlashQuery(draft: string): SkillSlashQuery | undefined {
-  if (!draft.startsWith('/')) return undefined
+export function parseSkillMentionQuery(draft: string): SkillMentionQuery | undefined {
+  if (!draft.startsWith('$')) return undefined
   const token = draft.slice(1).match(/^[^\s]*/)?.[0] ?? ''
-  if (token.includes(':')) return undefined
   return {
     query: token,
-    argumentsText: draft.slice(token.length + 1).trimStart(),
+    promptText: draft.slice(token.length + 1).trimStart(),
   }
 }
 
-export function skillArgumentsFromDraft(draft: string): string {
-  const slash = parseSkillSlashQuery(draft)
-  if (slash) return slash.argumentsText
-  const explicit = draft.trimStart().match(/^\/skill:\S+/)?.[0]
-  return explicit ? draft.trimStart().slice(explicit.length).trimStart() : draft
+export function skillPromptFromDraft(draft: string): string {
+  return parseSkillMentionQuery(draft)?.promptText ?? draft
 }
 
 export function buildSkillInvocation(
@@ -70,15 +69,6 @@ export function buildSkillInvocation(
   const command = `[$${skill.name}](${destination})`
   const trimmed = argumentsText.trim()
   return trimmed ? `${command} ${trimmed}` : command
-}
-
-export function displaySkillInvocation(text: string): string {
-  const trimmed = text.trim()
-  const match = trimmed.match(/^\/skill:([^\s]+)(?:\s+([\s\S]*))?$/)
-  if (!match) return text
-  const argumentsText = match[2]?.trim()
-  const reference = `[$${match[1]}]()`
-  return argumentsText ? `${reference} ${argumentsText}` : reference
 }
 
 export type SkillReference = {

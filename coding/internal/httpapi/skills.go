@@ -11,12 +11,15 @@ import (
 // skillDTO is a skill as the browser lists it. The instructions body is
 // intentionally omitted; the page only shows discovery metadata.
 type skillDTO struct {
-	Name                   string `json:"name"`
-	Description            string `json:"description"`
-	Source                 string `json:"source"`
-	Dir                    string `json:"dir"`
-	Path                   string `json:"path"`
-	DisableModelInvocation bool   `json:"disableModelInvocation"`
+	Name          string            `json:"name"`
+	Description   string            `json:"description"`
+	License       string            `json:"license,omitempty"`
+	Compatibility string            `json:"compatibility,omitempty"`
+	Metadata      map[string]string `json:"metadata,omitempty"`
+	AllowedTools  string            `json:"allowedTools,omitempty"`
+	Source        string            `json:"source"`
+	Dir           string            `json:"dir"`
+	Path          string            `json:"path"`
 }
 
 // skillDiagnosticDTO reports a skill that could not be loaded, so the page can
@@ -34,7 +37,8 @@ type skillDetailDTO struct {
 }
 
 // handleSkills lists the skills visible to a workspace: system-level skills from
-// ~/.or/skills always, and project-level skills from <workspace>/.or/skills when
+// ~/.agents/skills always, and project-level skills from
+// <workspace>/.agents/skills when
 // a workspace query parameter is supplied. A project skill overrides a
 // system skill of the same name, so it appears once, under its effective source.
 func (s *Server) handleSkills(c *gin.Context) {
@@ -43,14 +47,7 @@ func (s *Server) handleSkills(c *gin.Context) {
 	user := make([]skillDTO, 0)
 	project := make([]skillDTO, 0)
 	for _, sk := range reg.List() {
-		dto := skillDTO{
-			Name:                   sk.Name,
-			Description:            sk.Description,
-			Source:                 string(sk.Source),
-			Dir:                    sk.Dir,
-			Path:                   sk.Path,
-			DisableModelInvocation: sk.DisableModelInvocation,
-		}
+		dto := skillDTOFrom(sk)
 		if sk.Source == skills.SourceProject {
 			project = append(project, dto)
 		} else {
@@ -86,16 +83,23 @@ func (s *Server) handleSkillContent(c *gin.Context) {
 
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, skillDetailDTO{
-		skillDTO: skillDTO{
-			Name:                   sk.Name,
-			Description:            sk.Description,
-			Source:                 string(sk.Source),
-			Dir:                    sk.Dir,
-			Path:                   sk.Path,
-			DisableModelInvocation: sk.DisableModelInvocation,
-		},
-		Content: sk.Content,
+		skillDTO: skillDTOFrom(sk),
+		Content:  sk.Content,
 	})
+}
+
+func skillDTOFrom(sk skills.Skill) skillDTO {
+	return skillDTO{
+		Name:          sk.Name,
+		Description:   sk.Description,
+		License:       sk.License,
+		Compatibility: sk.Compatibility,
+		Metadata:      sk.Metadata,
+		AllowedTools:  sk.AllowedTools,
+		Source:        string(sk.Source),
+		Dir:           sk.Dir,
+		Path:          sk.Path,
+	}
 }
 
 // mountSkills serves the skills visible to a workspace.

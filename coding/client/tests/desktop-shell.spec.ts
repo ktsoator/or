@@ -179,7 +179,6 @@ async function openDesktopClient(
       source: 'user' | 'project'
       dir: string
       path?: string
-      disableModelInvocation: boolean
     }>
   } = {},
 ) {
@@ -4407,14 +4406,13 @@ test('skill invocations render and copy as file references', async ({
         source: 'user',
         dir: '/tmp/skills/frontend-design',
         path: '/tmp/skills/frontend-design/SKILL.md',
-        disableModelInvocation: false,
       },
     ],
   })
   const composer = page.getByTestId('composer')
   const input = composer.locator('textarea')
 
-  await input.fill('/front')
+  await input.fill('$front')
   const suggestions = page.getByRole('listbox', { name: 'Commands and resources' })
   const skill = suggestions.getByRole('option', { name: /frontend-design/ })
   await expect(skill).toBeVisible()
@@ -4446,7 +4444,6 @@ test('skill invocations render and copy as file references', async ({
   expect(copied).toBe(
     '[$frontend-design](/tmp/skills/frontend-design/SKILL.md)',
   )
-  await expect(page.getByText('/skill:frontend-design hello', { exact: true })).toHaveCount(0)
   await expect.poll(() =>
     requests.find((request) => request.path === '/api/sessions/test-session/prompt')
       ?.body,
@@ -4456,29 +4453,38 @@ test('skill invocations render and copy as file references', async ({
   })
 })
 
-test('slash menu scroll follows keyboard navigation', async ({ page }) => {
+test('composer catalogs stay separated and menu scroll follows keyboard navigation', async ({
+  page,
+}) => {
   await openDesktopClient(page, {
     existingSession: true,
-    promptTemplates: ['commit', 'review', 'test'].map((name) => ({
-      name,
-      description: `${name} workspace changes`,
+    promptTemplates: Array.from({ length: 8 }, (_, index) => ({
+      name: `template-${index + 1}`,
+      description: `Template ${index + 1} description`,
       argumentHint: '',
       source: 'user' as const,
-      path: `/tmp/prompts/${name}.md`,
+      path: `/tmp/prompts/template-${index + 1}.md`,
     })),
-    skills: Array.from({ length: 8 }, (_, index) => ({
+    skills: Array.from({ length: 18 }, (_, index) => ({
       name: `skill-${index + 1}`,
       description: `Skill ${index + 1} description`,
       source: 'user' as const,
       dir: `/tmp/skills/skill-${index + 1}`,
-      disableModelInvocation: false,
     })),
   })
   const input = page.getByTestId('composer').locator('textarea')
-  await input.fill('/')
+  await input.fill('$')
 
   const suggestions = page.getByRole('listbox', { name: 'Commands and resources' })
+  await expect(suggestions.getByRole('option', { name: /skill-1/ })).toBeVisible()
   const scrollArea = suggestions.locator(':scope > div').first()
+  await expect(suggestions.getByRole('option', { name: /Code review/ })).toHaveCount(0)
+  await expect(suggestions.getByRole('option', { name: /template-1/ })).toHaveCount(0)
+
+  await input.fill('/')
+  await expect(suggestions.getByRole('option', { name: /Code review/ })).toBeVisible()
+  await expect(suggestions.getByRole('option', { name: /template-1/ })).toBeVisible()
+  await expect(suggestions.getByRole('option', { name: /skill-1/ })).toHaveCount(0)
   await expect.poll(() => scrollArea.evaluate((element) => element.scrollHeight)).toBeGreaterThan(
     await scrollArea.evaluate((element) => element.clientHeight),
   )

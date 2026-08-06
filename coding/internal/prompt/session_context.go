@@ -44,10 +44,6 @@ type SkillsDelta struct {
 	Removed []string
 }
 
-// maxSkillDescChars caps each skill description in the discovery listing. The
-// skill tool loads complete instructions on demand.
-const maxSkillDescChars = 240
-
 // maxContextFileChars caps each instruction file. An instruction file is
 // projected into every request of the session and sits outside the compactable
 // transcript, so one oversized file would permanently occupy context. The cut is
@@ -244,7 +240,7 @@ func renderSkillEntries(b *strings.Builder, skills []SkillInfo) {
 		fmt.Fprintf(
 			b,
 			"<description>%s</description>\n",
-			html.EscapeString(truncateChars(skill.Description, maxSkillDescChars)),
+			html.EscapeString(skill.Description),
 		)
 		b.WriteString("</skill>\n")
 	}

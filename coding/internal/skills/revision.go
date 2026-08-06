@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"reflect"
 )
 
 // Delta describes the semantic change between two resolved registries. Added
@@ -28,20 +29,6 @@ func (r *Registry) Revision() string {
 	return hex.EncodeToString(sum[:])
 }
 
-// ModelRevision fingerprints only the skills visible to the model. Changes to
-// manual-only skills do not create a model-context update.
-func (r *Registry) ModelRevision() string {
-	encoded, _ := json.Marshal(r.ModelList())
-	sum := sha256.Sum256(encoded)
-	return hex.EncodeToString(sum[:])
-}
-
-// ModelRegistry returns an immutable registry containing only model-invocable
-// skills. It is primarily useful when computing model-visible deltas.
-func (r *Registry) ModelRegistry() *Registry {
-	return NewRegistry(r.ModelList())
-}
-
 // Diff compares immutable registry snapshots in stable name order.
 func Diff(before, after *Registry) Delta {
 	if before == nil {
@@ -57,7 +44,7 @@ func Diff(before, after *Registry) Delta {
 		switch {
 		case !ok:
 			delta.Added = append(delta.Added, next)
-		case previous != next:
+		case !reflect.DeepEqual(previous, next):
 			delta.Updated = append(delta.Updated, next)
 		}
 	}

@@ -24,6 +24,8 @@ import {
 export function ComposerSkillSuggestions({
   visible,
   query,
+  commandsEnabled,
+  skillsEnabled,
   templates,
   skills,
   activeIndex,
@@ -40,6 +42,8 @@ export function ComposerSkillSuggestions({
 }: {
   visible: boolean
   query: string
+  commandsEnabled: boolean
+  skillsEnabled: boolean
   templates: PromptTemplateEntry[]
   skills: SkillEntry[]
   activeIndex: number
@@ -75,7 +79,7 @@ export function ComposerSkillSuggestions({
   if (!visible) return null
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const showSkills =
-    !normalizedQuery || loading || failed || skills.length > 0
+    skillsEnabled && (!normalizedQuery || loading || failed || skills.length > 0)
   const noMatchingSuggestions = Boolean(
     normalizedQuery &&
       !templatesLoading &&
@@ -90,7 +94,7 @@ export function ComposerSkillSuggestions({
     icon: LucideIcon
     label: string
     description: string
-  }> = normalizedQuery
+  }> = !commandsEnabled || normalizedQuery
     ? []
     : composerPreviewCommands.map((command) => {
         switch (command) {
@@ -315,11 +319,6 @@ export function ComposerSkillSuggestions({
                   {skill.description}
                 </span>
                 <span className="flex items-center gap-1.5 pl-1">
-                  {skill.disableModelInvocation && (
-                    <span className="rounded-md bg-canvas/80 px-1.5 py-0.5 text-[0.625rem] font-medium text-ink-muted">
-                      {t('skills.manual')}
-                    </span>
-                  )}
                   <span className="text-[0.6875rem] text-ink-faint">
                     {skill.source === 'project'
                       ? t('skills.systemSourceProject')

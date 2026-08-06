@@ -24,11 +24,13 @@ func NewRegistry(skills []Skill) *Registry {
 // deterministically so listings are stable across loads.
 func newRegistry(byName map[string]Skill) *Registry {
 	order := make([]string, 0, len(byName))
-	for name := range byName {
+	stored := make(map[string]Skill, len(byName))
+	for name, skill := range byName {
 		order = append(order, name)
+		stored[name] = cloneSkill(skill)
 	}
 	sort.Strings(order)
-	return &Registry{order: order, byName: byName}
+	return &Registry{order: order, byName: stored}
 }
 
 // List returns the skills in stable name order.
@@ -38,22 +40,7 @@ func (r *Registry) List() []Skill {
 	}
 	out := make([]Skill, len(r.order))
 	for i, name := range r.order {
-		out[i] = r.byName[name]
-	}
-	return out
-}
-
-// ModelList returns only skills the model may discover and invoke.
-func (r *Registry) ModelList() []Skill {
-	if r == nil {
-		return nil
-	}
-	out := make([]Skill, 0, len(r.order))
-	for _, name := range r.order {
-		s := r.byName[name]
-		if !s.DisableModelInvocation {
-			out = append(out, s)
-		}
+		out[i] = cloneSkill(r.byName[name])
 	}
 	return out
 }
@@ -64,16 +51,7 @@ func (r *Registry) Lookup(name string) (Skill, bool) {
 		return Skill{}, false
 	}
 	s, ok := r.byName[name]
-	return s, ok
-}
-
-// ModelLookup returns a skill only when model invocation is allowed.
-func (r *Registry) ModelLookup(name string) (Skill, bool) {
-	s, ok := r.Lookup(name)
-	if !ok || s.DisableModelInvocation {
-		return Skill{}, false
-	}
-	return s, true
+	return cloneSkill(s), ok
 }
 
 // Len reports how many skills are registered.
@@ -92,12 +70,14 @@ func (r *Registry) names() []string {
 	return append([]string(nil), r.order...)
 }
 
-// modelNames returns the names the model may pass to the skill tool.
-func (r *Registry) modelNames() []string {
-	list := r.ModelList()
-	names := make([]string, len(list))
-	for i, skill := range list {
-		names[i] = skill.Name
+func cloneSkill(skill Skill) Skill {
+	if skill.Metadata == nil {
+		return skill
 	}
-	return names
+	metadata := make(map[string]string, len(skill.Metadata))
+	for key, value := range skill.Metadata {
+		metadata[key] = value
+	}
+	skill.Metadata = metadata
+	return skill
 }
