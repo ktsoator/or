@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -22,6 +23,29 @@ func writeSkill(t *testing.T, root, dir, contents string) string {
 		t.Fatal(err)
 	}
 	return skillDir
+}
+
+func TestRepositorySkillCollectionIsValid(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve test file path")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", "..", "skills"))
+	reg, diags := Load(LoadOptions{UserDir: root})
+	if len(diags) != 0 {
+		t.Fatalf("collection diagnostics: %+v", diags)
+	}
+
+	want := []string{"find-skills", "officecli"}
+	listed := reg.List()
+	if len(listed) != len(want) {
+		t.Fatalf("collection has %d skills, want %d", len(listed), len(want))
+	}
+	for i, skill := range listed {
+		if skill.Name != want[i] {
+			t.Errorf("skill %d = %q, want %q", i, skill.Name, want[i])
+		}
+	}
 }
 
 const commitSkill = `---

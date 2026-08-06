@@ -4,6 +4,15 @@ This directory contains Agent Skills curated and distributed by the Or project.
 Every child directory is a self-contained Skill package that follows the open
 [Agent Skills specification](https://agentskills.io/specification).
 
+## Included Skills
+
+| Skill | Upstream revision | License |
+|---|---|---|
+| [`find-skills`](find-skills/SKILL.md) | [`vercel-labs/skills@a4d243c`](https://github.com/vercel-labs/skills/tree/a4d243c3d4f86cdf9385dd1b6a0733f6937e70b5/skills/find-skills) | [MIT](find-skills/LICENSE) |
+| [`officecli`](officecli/SKILL.md) | [`iOfficeAI/OfficeCLI@459b1a4`](https://github.com/iOfficeAI/OfficeCLI/blob/459b1a473faf33f2f52e697ac6d265a3f67b176a/SKILL.md) | [Apache-2.0](officecli/LICENSE) |
+
+The Skill files match the recorded upstream revisions without modification.
+
 This is a source collection, not a runtime discovery directory. Or only loads
 installed Skills from the standard locations:
 

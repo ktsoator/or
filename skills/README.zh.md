@@ -4,6 +4,15 @@
 Skill 包，并遵循开放的
 [Agent Skills 规范](https://agentskills.io/specification)。
 
+## 已收录 Skill
+
+| Skill | 上游版本 | 许可证 |
+|---|---|---|
+| [`find-skills`](find-skills/SKILL.md) | [`vercel-labs/skills@a4d243c`](https://github.com/vercel-labs/skills/tree/a4d243c3d4f86cdf9385dd1b6a0733f6937e70b5/skills/find-skills) | [MIT](find-skills/LICENSE) |
+| [`officecli`](officecli/SKILL.md) | [`iOfficeAI/OfficeCLI@459b1a4`](https://github.com/iOfficeAI/OfficeCLI/blob/459b1a473faf33f2f52e697ac6d265a3f67b176a/SKILL.md) | [Apache-2.0](officecli/LICENSE) |
+
+当前收录的 Skill 文件与所记录的上游版本完全一致，没有修改。
+
 这里是 Skill 源码集合，不是运行时发现目录。Or 只会从以下标准位置加载已安装的
 Skill：
 
