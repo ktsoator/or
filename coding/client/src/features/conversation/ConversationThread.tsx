@@ -23,7 +23,7 @@ import {
 import type { Item } from '@/types'
 import { useI18n } from '@/i18n'
 import { formatMessageTime } from '@/lib/time'
-import { Markdown } from './Markdown'
+import { Markdown } from '@/shared/ui/Markdown'
 import { ResponseActions } from './ResponseActions'
 import { Thinking } from './Thinking'
 import { ToolCard } from './ToolCard'

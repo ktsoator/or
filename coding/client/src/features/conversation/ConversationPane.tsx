@@ -14,16 +14,16 @@ import type {
 import type { SessionDraft } from '@/features/session'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { groupItems } from '@/lib/steps'
-import { ConversationActionsMenu } from '@/components/ConversationActionsMenu'
-import { ScrollToLatestButton } from '@/components/ConversationScrollControl'
+import { groupItems } from './groupItems'
+import { ConversationActionsMenu } from './ConversationActionsMenu'
+import { ScrollToLatestButton } from './ConversationScrollControl'
 import {
   AutoCompactionStatus,
   AwaitingResponse,
   ThreadItem,
-} from '@/components/ConversationThread'
+} from './ConversationThread'
 import { SidebarToggleButton } from '@/components/SidebarToggleButton'
-import { StepGroup } from '@/components/StepGroup'
+import { StepGroup } from './StepGroup'
 
 type ConversationPaneProps = {
   thread: {

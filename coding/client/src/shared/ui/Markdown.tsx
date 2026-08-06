@@ -1,55 +1,59 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { Marked } from 'marked'
-import hljs from 'highlight.js/lib/common'
 import DOMPurify from 'dompurify'
-import 'highlight.js/styles/github.css'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
+import {
+  containsHighlightableCode,
+  escapeHTML,
+  highlightCode,
+  highlightLanguage,
+  type SyntaxHighlighter,
+} from '@/shared/lib/highlight'
+import { useSyntaxHighlighter } from '@/shared/hooks/useSyntaxHighlighter'
 
 const COPY_ICON =
   '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>'
 const CHECK_ICON =
   '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>'
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
-
 // One Marked instance whose fenced code blocks render inside a titled frame with
 // a copy button, mirroring the chrome of the tool-output cards. The button is
 // left empty here and given its icon and localized labels after render, so the
 // sanitizer never has to allow inline SVG.
-const marked = new Marked({
-  renderer: {
-    code({ text, lang }) {
-      const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext'
-      const highlighted = hljs.highlight(text, { language }).value
-      const label = language === 'plaintext' ? '' : language
-      return (
-        `<div class="or-codeblock not-prose">` +
-        `<div class="or-codeblock-head">` +
-        `<span class="or-codeblock-lang">${escapeHtml(label)}</span>` +
-        `<button class="or-md-copy" type="button"></button>` +
-        `</div>` +
-        `<pre><code class="hljs language-${escapeHtml(language)}">${highlighted}</code></pre>` +
-        `</div>`
-      )
+function createMarkdownParser(highlighter?: SyntaxHighlighter): Marked {
+  return new Marked({
+    renderer: {
+      code({ text, lang }) {
+        const language = highlightLanguage(lang, highlighter)
+        const highlighted = highlightCode(text, language, highlighter)
+        const label = language === 'plaintext' ? '' : language
+        return (
+          `<div class="or-codeblock not-prose">` +
+          `<div class="or-codeblock-head">` +
+          `<span class="or-codeblock-lang">${escapeHTML(label)}</span>` +
+          `<button class="or-md-copy" type="button"></button>` +
+          `</div>` +
+          `<pre><code class="hljs language-${escapeHTML(language)}">${highlighted}</code></pre>` +
+          `</div>`
+        )
+      },
     },
-  },
-})
+  })
+}
 
 // Model output is untrusted, so every render is sanitized before it reaches the
 // DOM. Rendered inside Tailwind Typography for polished prose defaults.
 export function Markdown({ source, className }: { source: string; className?: string }) {
   const { t } = useI18n()
   const ref = useRef<HTMLDivElement>(null)
+  const highlighter = useSyntaxHighlighter(containsHighlightableCode(source))
   const html = useMemo(
-    () => DOMPurify.sanitize(marked.parse(source, { async: false }) as string),
-    [source],
+    () => {
+      const parser = createMarkdownParser(highlighter)
+      return DOMPurify.sanitize(parser.parse(source, { async: false }) as string)
+    },
+    [highlighter, source],
   )
 
   const copyLabel = t('code.copy')

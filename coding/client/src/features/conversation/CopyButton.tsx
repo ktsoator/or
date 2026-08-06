@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Check, Copy } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
+import { cn } from '@/lib/utils'
 
 // CopyButton copies value to the clipboard and shows a brief confirmation. It
 // matches the copy control used by the diff view, so copy affordances read the

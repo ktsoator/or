@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, Copy, ThumbsDown, ThumbsUp, type LucideIcon } from 'lucide-react'
+import {
+  Check,
+  Copy,
+  ThumbsDown,
+  ThumbsUp,
+  type LucideIcon,
+} from 'lucide-react'
 import { Tooltip } from 'radix-ui'
 import type { Usage } from '@/types'
 import { formatMessageTime } from '@/lib/time'

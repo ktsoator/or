@@ -17,7 +17,7 @@ import {
   type PromptTemplatesResponse,
 } from './catalog'
 import { cn } from '@/lib/utils'
-import { Markdown } from '@/components/Markdown'
+import { Markdown } from '@/shared/ui/Markdown'
 import { SidebarToggleButton } from '@/components/SidebarToggleButton'
 
 function relativizeHome(path: string): string {

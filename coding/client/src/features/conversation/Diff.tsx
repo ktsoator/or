@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { Check, Copy } from 'lucide-react'
 import type { Change, Hunk as HunkType } from '@/types'
-import { highlightCode, languageForPath } from '@/lib/highlight'
-import { cn } from '@/lib/utils'
+import { highlightCode, languageForPath } from '@/shared/lib/highlight'
+import { useSyntaxHighlighter } from '@/shared/hooks/useSyntaxHighlighter'
 import { useI18n } from '@/i18n'
+import { cn } from '@/lib/utils'
 
 export function FileChange({ change }: { change: Change }) {
   const { t } = useI18n()
@@ -76,6 +77,7 @@ export function FileChange({ change }: { change: Change }) {
 }
 
 function Hunk({ hunk, language }: { hunk: HunkType; language: string }) {
+  const highlighter = useSyntaxHighlighter((hunk.lines?.length ?? 0) > 0)
   let oldLine = hunk.oldStart
   let newLine = hunk.newStart
 
@@ -92,7 +94,7 @@ function Hunk({ hunk, language }: { hunk: HunkType; language: string }) {
         if (!isAdd) oldLine += 1
         if (!isDelete) newLine += 1
         const code = isAdd || isDelete || mark === ' ' ? line.slice(1) : line
-        const html = highlightCode(code, language) || ' '
+        const html = highlightCode(code, language, highlighter) || ' '
 
         return (
           <div

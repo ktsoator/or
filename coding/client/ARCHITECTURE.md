@@ -38,6 +38,8 @@ app -> features -> shared
   reducers, and the `useSession` facade.
 - `features/composer` owns message composition, attachments UI, catalogs,
   compaction feedback, and composer-only controls.
+- `features/conversation` owns transcript rendering, message and tool grouping,
+  response actions, diffs, thinking blocks, and conversation scroll behavior.
 - `features/browser` owns browser tabs, workspace state, webview runtime,
   navigation coordination, and browser command reporting.
 - `features/workbench` owns the secondary panel, task view, conversation/browser
@@ -51,7 +53,11 @@ app -> features -> shared
 - `shared/attachments.ts` is shared because attachment metadata is rendered by
   both the composer and the conversation transcript.
 - `shared/ui` contains provider identity and thinking controls reused by
-  Settings and Composer.
+  Settings and Composer, plus Markdown rendering shared by Conversation,
+  Skills, and Prompt Templates.
+- `shared/lib/highlightRuntime.ts` owns the syntax-highlighting dependency and
+  theme. It is loaded dynamically only when rendered content contains a code
+  block, tool read preview, or diff.
 
 The generic `lib/desktop.ts` module only exposes platform, directory picker,
 and external-link capabilities. Electron webview registration and browser

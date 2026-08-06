@@ -2,13 +2,13 @@ import { LoaderCircle } from 'lucide-react'
 import type { ModelOption, WorkspaceSummary } from '@/types'
 import type { SessionThread } from '@/features/session'
 import { useI18n } from '@/i18n'
-import { groupItems } from '@/lib/steps'
+import { groupItems } from './groupItems'
 import { cn } from '@/lib/utils'
 import { Composer } from '@/features/composer'
 import { StepGroup } from './StepGroup'
 import { AutoCompactionStatus, AwaitingResponse, ThreadItem } from './ConversationThread'
 import { ScrollToLatestButton } from './ConversationScrollControl'
-import { useConversationScroll } from '@/useConversationScroll'
+import { useConversationScroll } from './useScroll'
 
 export function ConversationView({
   thread,

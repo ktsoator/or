@@ -21,16 +21,17 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { ToolItem } from '@/types'
-import { highlightCode, languageForPath } from '@/lib/highlight'
+import { highlightCode, languageForPath } from '@/shared/lib/highlight'
+import { useSyntaxHighlighter } from '@/shared/hooks/useSyntaxHighlighter'
 import { cn } from '@/lib/utils'
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-import { FileChange } from './Diff'
-import { CopyButton } from './CopyButton'
 import { useI18n } from '@/i18n'
+import { CopyButton } from './CopyButton'
+import { FileChange } from './Diff'
 
 function prettyArgs(args: unknown): string {
   if (args === undefined || args === null) return ''
@@ -283,8 +284,9 @@ function parseReadContent(output: string): ReadContent {
 function ReadPreview({ output, path, failed }: { output: string; path: string; failed: boolean }) {
   const { t } = useI18n()
   const content = parseReadContent(output)
+  const highlighter = useSyntaxHighlighter(content.hasLineNumbers && !failed)
   const html = content.hasLineNumbers
-    ? highlightCode(content.code, languageForPath(path))
+    ? highlightCode(content.code, languageForPath(path), highlighter)
     : ''
 
   return (

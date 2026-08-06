@@ -8,8 +8,8 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
 import { useI18n } from '@/i18n'
-import { parseThinkingContent } from '@/thinking'
-import { Markdown } from './Markdown'
+import { Markdown } from '@/shared/ui/Markdown'
+import { parseThinkingContent } from './thinkingContent'
 
 export function Thinking({ item }: { item: ThinkingItem }) {
   const { t } = useI18n()

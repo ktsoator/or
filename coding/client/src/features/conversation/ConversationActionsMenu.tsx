@@ -9,8 +9,8 @@ import {
   LoaderCircle,
 } from 'lucide-react'
 import { DropdownMenu } from 'radix-ui'
-import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/i18n'
 import type { BackgroundTask } from '@/types'
 
 const visibleTaskLimit = 20

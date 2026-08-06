@@ -7,9 +7,9 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-import { ToolCard } from './ToolCard'
-import { Thinking } from './Thinking'
 import { useI18n } from '@/i18n'
+import { Thinking } from './Thinking'
+import { ToolCard } from './ToolCard'
 
 // stepCategory maps a tool name to a summary bucket, mirroring the icon buckets
 // in ToolCard's toolPresentation so the summary reads consistently.

@@ -32,8 +32,10 @@ import {
   BackgroundTasksView,
   type WorkbenchTaskSource,
 } from './BackgroundTasksView'
-import { ConversationActionsMenu } from '@/components/ConversationActionsMenu'
-import { ConversationView } from '@/components/ConversationView'
+import {
+  ConversationActionsMenu,
+  ConversationView,
+} from '@/features/conversation'
 
 function addressTitle(url: string): string {
   try {

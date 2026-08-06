@@ -7,7 +7,7 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from 'react'
 
-const latestThreshold = 2
+const LATEST_THRESHOLD = 2
 
 export function useConversationScroll(
   resetKey: string | undefined,
@@ -46,7 +46,7 @@ export function useConversationScroll(
   const onScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
     const element = event.currentTarget
     const atLatest =
-      element.scrollHeight - element.scrollTop - element.clientHeight < latestThreshold
+      element.scrollHeight - element.scrollTop - element.clientHeight < LATEST_THRESHOLD
 
     followLatestRef.current = atLatest
     setAwayFromLatest(!atLatest)

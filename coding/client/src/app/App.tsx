@@ -22,13 +22,15 @@ import {
   type WorkbenchTaskSource,
 } from '@/features/workbench'
 import { AppSidebar } from './AppSidebar'
-import { ConversationPane } from './ConversationPane'
+import {
+  ConversationPane,
+  useConversationScroll,
+} from '@/features/conversation'
 import {
   DeleteSessionDialog,
   RemoveWorkspaceDialog,
 } from './SessionDialogs'
 import { useI18n } from '@/i18n'
-import { useConversationScroll } from '@/useConversationScroll'
 import { useSidebarLayout } from '@/useSidebarLayout'
 
 const SettingsPage = lazy(() =>

@@ -8,7 +8,7 @@ import {
   type SkillEntry,
   type SkillsResponse,
 } from './catalog'
-import { Markdown } from '@/components/Markdown'
+import { Markdown } from '@/shared/ui/Markdown'
 import { SidebarToggleButton } from '@/components/SidebarToggleButton'
 
 // relativizeHome trims the user's home prefix off an absolute path so directory
