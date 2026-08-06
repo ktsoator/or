@@ -5,7 +5,7 @@ import {
   keyboardWorkbenchWidth,
   resizedWorkbenchWidth,
   workbenchWidthBounds,
-} from '../src/workbenchLayout'
+} from '../src/features/workbench/layout'
 
 describe('workbench layout', () => {
   test('keeps the workbench and Chat within their width constraints', () => {

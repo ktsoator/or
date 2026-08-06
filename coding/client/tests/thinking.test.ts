@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { parseThinkingContent } from '../src/thinking'
+import { parseThinkingContent } from '../src/features/conversation/thinkingContent'
 
 describe('parseThinkingContent', () => {
   test('promotes a complete leading bold line and removes it from the body', () => {

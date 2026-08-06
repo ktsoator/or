@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { workspacePreviewURL } from '../src/lib/browser'
+import { workspacePreviewURL } from '../src/features/browser/urls'
 
 describe('workspacePreviewURL', () => {
   test('uses the session grant route and encodes each component', () => {

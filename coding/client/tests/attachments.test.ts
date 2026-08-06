@@ -2,10 +2,41 @@ import { describe, expect, test } from 'bun:test'
 import {
   formatFileSize,
   isSupportedTextFile,
+  maxImageBytes,
+  maxImages,
+  maxImagesBytes,
   maxTextFileBytes,
   maxTextFiles,
+  validateImageFiles,
   validateTextFiles,
-} from '../src/attachments'
+} from '../src/shared/attachments'
+
+describe('image attachments', () => {
+  test('accepts the supported image MIME types', () => {
+    for (const type of ['image/gif', 'image/jpeg', 'image/png', 'image/webp']) {
+      expect(validateImageFiles([], [{ type, size: 1 }])).toBeUndefined()
+    }
+    expect(validateImageFiles([], [{ type: 'image/svg+xml', size: 1 }])).toBe('type')
+  })
+
+  test('enforces count, per-file, and aggregate limits', () => {
+    expect(
+      validateImageFiles(
+        Array.from({ length: maxImages }, () => ({ size: 1 })),
+        [{ type: 'image/png', size: 1 }],
+      ),
+    ).toBe('count')
+    expect(
+      validateImageFiles([], [{ type: 'image/png', size: maxImageBytes + 1 }]),
+    ).toBe('file_size')
+    expect(
+      validateImageFiles(
+        [{ size: maxImagesBytes }],
+        [{ type: 'image/png', size: 1 }],
+      ),
+    ).toBe('total_size')
+  })
+})
 
 describe('text attachments', () => {
   test('recognizes source files even when the browser omits a MIME type', () => {

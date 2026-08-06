@@ -1,0 +1,861 @@
+import { useEffect, useRef, useState } from 'react'
+import {
+  ArrowUp,
+  BookOpen,
+  FileText,
+  Info,
+  Square,
+  X,
+} from 'lucide-react'
+import type {
+  ApprovalChoice,
+  ApprovalItem,
+  QuestionAnswer,
+  QuestionItem,
+  ContextUsage,
+  DeliveryMode,
+  MessageImage,
+  ModelOption,
+  PermissionMode,
+  PromptFile,
+  QueuedMessage,
+  ThinkingLevel,
+  WorkspaceSummary,
+} from '@/types'
+import { cn } from '@/lib/utils'
+import {
+  buildSkillInvocation,
+  filterSkills,
+  parseSkillSlashQuery,
+  skillArgumentsFromDraft,
+  type SkillEntry,
+} from '@/features/skills'
+import {
+  buildPromptTemplateInvocation,
+  filterPromptTemplates,
+  type PromptTemplateEntry,
+} from '@/features/prompt-templates'
+import { useComposerAttachments } from './useAttachments'
+import { useComposerCatalogs } from './useCatalogs'
+import { useComposerCompaction } from './useCompaction'
+import { Approval } from './Approval'
+import { ComposerAddMenu } from './ComposerAddMenu'
+import { ComposerAttachments } from './ComposerAttachments'
+import { ComposerSkillSuggestions } from './ComposerSkillSuggestions'
+import {
+  composerPreviewCommands,
+  type ComposerPreviewCommand,
+  parseExecutableComposerCommand,
+  previewSkillCommandCount,
+  skillSuggestionOptionID,
+  skillSuggestionsID,
+} from './panelStyles'
+import { Question } from './Question'
+import { ModelSettingsMenu } from './ModelSettingsMenu'
+import { PermissionModeMenu } from './PermissionModeMenu'
+import { ProjectPicker } from './ProjectPicker'
+import { PendingQueue } from './PendingQueue'
+import { RunDeliveryMenu } from './RunDeliveryMenu'
+import { useI18n } from '@/i18n'
+
+export function Composer({
+  connected,
+  running,
+  approval,
+  question,
+  queuedMessages,
+  contextUsage,
+  centered = false,
+  projectPickerVisible = false,
+  workspaces,
+  workspacePath,
+  models,
+  modelProvider,
+  modelID,
+  thinkingLevel,
+  permissionMode,
+  updatingSettings,
+  compacting,
+  onSend,
+  onRemoveQueued,
+  onStop,
+  onResolve,
+  onResolveQuestion,
+  onSelectProject,
+  onBrowseProjects,
+  onConfigureModel,
+  onSettingsChange,
+  onPermissionModeChange,
+  onCompact,
+}: {
+  connected: boolean
+  running: boolean
+  approval?: ApprovalItem
+  question?: QuestionItem
+  queuedMessages: QueuedMessage[]
+  contextUsage?: ContextUsage
+  centered?: boolean
+  projectPickerVisible?: boolean
+  workspaces: WorkspaceSummary[]
+  workspacePath?: string
+  models: ModelOption[]
+  modelProvider?: string
+  modelID?: string
+  thinkingLevel?: ThinkingLevel
+  permissionMode: PermissionMode
+  updatingSettings: boolean
+  compacting: boolean
+  onSend: (
+    text: string,
+    images: MessageImage[],
+    files: PromptFile[],
+    delivery?: DeliveryMode,
+  ) => Promise<boolean>
+  onRemoveQueued: (id: string) => Promise<void>
+  onStop: () => void
+  onResolve: (id: string, choice: ApprovalChoice) => Promise<void>
+  onResolveQuestion: (id: string, answers: QuestionAnswer[]) => Promise<void>
+  onSelectProject: (path?: string) => void
+  onBrowseProjects: () => void
+  onConfigureModel: () => void
+  onSettingsChange: (
+    provider: string,
+    model: string,
+    thinkingLevel: ThinkingLevel,
+  ) => Promise<void>
+  onPermissionModeChange: (mode: PermissionMode) => Promise<void>
+  onCompact?: () => Promise<unknown>
+}) {
+  const { locale, t } = useI18n()
+  const ref = useRef<HTMLTextAreaElement>(null)
+  const surfaceRef = useRef<HTMLDivElement>(null)
+  const composingRef = useRef(false)
+  const submittingRef = useRef(false)
+  const [settingsError, setSettingsError] = useState('')
+  const [queueError, setQueueError] = useState('')
+  const [sendError, setSendError] = useState('')
+  const [delivery, setDelivery] = useState<DeliveryMode>('steer')
+  const [draftValue, setDraftValue] = useState('')
+  const [selectedSkill, setSelectedSkill] = useState<SkillEntry>()
+  const [selectedPromptTemplate, setSelectedPromptTemplate] =
+    useState<PromptTemplateEntry>()
+  const [skillSuggestionsDismissed, setSkillSuggestionsDismissed] = useState(false)
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0)
+  const [skillKeyboardNavigating, setSkillKeyboardNavigating] = useState(false)
+  const [addPanelOpen, setAddPanelOpen] = useState(false)
+  const awaitingApproval = Boolean(approval)
+  const awaitingQuestion = Boolean(question)
+  // A question blocks the composer exactly as an approval does: the run is
+  // parked inside a tool call until the user answers it.
+  const awaitingUser = awaitingApproval || awaitingQuestion
+  const modelConfigured = Boolean(modelProvider && modelID && thinkingLevel)
+  const editorDisabled = awaitingUser || !connected || compacting || !modelConfigured
+  const settingsLocked = running || editorDisabled
+  const settingsDisabled = settingsLocked || updatingSettings
+  const sendDisabled = editorDisabled || updatingSettings
+  const supportsImages = Boolean(
+    models.find((model) => model.provider === modelProvider && model.id === modelID)
+      ?.supportsImages,
+  )
+  const {
+    imageFileRef,
+    textFileRef,
+    images,
+    files,
+    error: attachmentError,
+    imageLimitReached,
+    fileLimitReached,
+    addImages,
+    addTextFiles,
+    removeImage,
+    removeFile,
+    clear: clearAttachments,
+    reportUnsupportedImages,
+  } = useComposerAttachments(supportsImages)
+  const slashQuery =
+    !running &&
+    !selectedSkill &&
+    !selectedPromptTemplate &&
+    !addPanelOpen &&
+    !skillSuggestionsDismissed
+      ? parseSkillSlashQuery(draftValue)
+      : undefined
+  const {
+    skills: availableSkills,
+    promptTemplates: availablePromptTemplates,
+    skillsLoaded,
+    promptTemplatesLoaded,
+    skillsLoading,
+    skillsFailed,
+    promptTemplatesLoading,
+    promptTemplatesFailed,
+  } = useComposerCatalogs({
+    workspacePath,
+    locale,
+    refreshPromptTemplates: Boolean(slashQuery),
+  })
+  const {
+    feedback: compactFeedback,
+    dismiss: dismissCompactFeedback,
+    compact: compactContext,
+  } = useComposerCompaction(onCompact)
+  const suggestedPromptTemplates = slashQuery
+    ? filterPromptTemplates(availablePromptTemplates, slashQuery.query).slice(
+        0,
+        maxPromptTemplateSuggestions,
+      )
+    : []
+  const suggestedSkills = slashQuery
+    ? filterSkills(availableSkills, slashQuery.query).slice(0, maxSkillSuggestions)
+    : []
+  const previewCommandCount = slashQuery
+    ? previewSkillCommandCount(slashQuery.query)
+    : 0
+  const suggestionCount =
+    previewCommandCount + suggestedPromptTemplates.length + suggestedSkills.length
+  const skillSuggestionsVisible = Boolean(
+    slashQuery && !editorDisabled,
+  )
+
+  const autosize = () => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = '0px'
+    const contentHeight = el.scrollHeight
+    el.style.height = Math.min(contentHeight, 240) + 'px'
+  }
+
+  useEffect(() => {
+    if (!editorDisabled) ref.current?.focus()
+  }, [editorDisabled])
+
+  useEffect(() => {
+    if (!running) setDelivery('steer')
+  }, [running])
+
+  useEffect(() => setSettingsError(''), [modelProvider, modelID, thinkingLevel, permissionMode])
+
+  useEffect(() => {
+    setActiveSuggestionIndex(0)
+    setSkillKeyboardNavigating(false)
+  }, [slashQuery?.query])
+
+  useEffect(() => {
+    if (!addPanelOpen && !skillSuggestionsVisible) return
+    const closeOutside = (event: PointerEvent) => {
+      const target = event.target
+      if (target instanceof Node && !surfaceRef.current?.contains(target)) {
+        setAddPanelOpen(false)
+        setSkillSuggestionsDismissed(true)
+      }
+    }
+    document.addEventListener('pointerdown', closeOutside, true)
+    return () => document.removeEventListener('pointerdown', closeOutside, true)
+  }, [addPanelOpen, skillSuggestionsVisible])
+
+  useEffect(() => {
+    if (!selectedSkill || !skillsLoaded) return
+    const stillAvailable = availableSkills.some(
+      (skill) =>
+        skill.name === selectedSkill.name && skill.source === selectedSkill.source,
+    )
+    if (!stillAvailable) setSelectedSkill(undefined)
+  }, [availableSkills, selectedSkill, skillsLoaded])
+
+  useEffect(() => {
+    if (!selectedPromptTemplate || !promptTemplatesLoaded) return
+    const stillAvailable = availablePromptTemplates.some(
+      (template) =>
+        template.name === selectedPromptTemplate.name &&
+        template.source === selectedPromptTemplate.source,
+    )
+    if (!stillAvailable) {
+      setSelectedPromptTemplate(undefined)
+      return
+    }
+    const current = availablePromptTemplates.find(
+      (template) =>
+        template.name === selectedPromptTemplate.name &&
+        template.source === selectedPromptTemplate.source,
+    )
+    if (current && current !== selectedPromptTemplate) {
+      setSelectedPromptTemplate(current)
+    }
+  }, [availablePromptTemplates, promptTemplatesLoaded, selectedPromptTemplate])
+
+  const runPreviewCommand = async (command: ComposerPreviewCommand) => {
+    if (command !== 'compact' || sendDisabled) return
+    setDraftValue('')
+    setAddPanelOpen(false)
+    setSkillSuggestionsDismissed(true)
+    requestAnimationFrame(autosize)
+    await compactContext()
+  }
+
+  const submit = async () => {
+    const el = ref.current
+    if (!el || submittingRef.current || sendDisabled) return
+    const command = parseExecutableComposerCommand(draftValue)
+    if (command) {
+      await runPreviewCommand(command)
+      return
+    }
+    const argumentsText = draftValue.trim()
+    const text = selectedPromptTemplate
+      ? buildPromptTemplateInvocation(selectedPromptTemplate.name, argumentsText)
+      : selectedSkill
+        ? buildSkillInvocation(selectedSkill, argumentsText)
+        : argumentsText
+    if (!text && images.length === 0 && files.length === 0) return
+    if (images.length > 0 && !supportsImages) {
+      reportUnsupportedImages()
+      return
+    }
+    submittingRef.current = true
+    setSendError('')
+    try {
+      const accepted = await onSend(
+        text,
+        images.map(({ data, mimeType }) => ({ data, mimeType })),
+        files.map(({ name, mimeType, size, file }) => ({
+          name,
+          mimeType,
+          size,
+          file,
+        })),
+        running ? delivery : undefined,
+      )
+      if (!accepted) return
+      setDraftValue('')
+      setSelectedSkill(undefined)
+      setSelectedPromptTemplate(undefined)
+      setSkillSuggestionsDismissed(false)
+      clearAttachments()
+      requestAnimationFrame(autosize)
+    } catch (error) {
+      setSendError(error instanceof Error ? error.message : t('composer.couldNotSend'))
+    } finally {
+      submittingRef.current = false
+    }
+  }
+
+  const selectSkill = (skill: SkillEntry) => {
+    const el = ref.current
+    if (!el) return
+    const argumentsText = selectedSkill || selectedPromptTemplate
+      ? draftValue
+      : skillArgumentsFromDraft(draftValue)
+    setSelectedSkill(skill)
+    setSelectedPromptTemplate(undefined)
+    setDraftValue(argumentsText)
+    setAddPanelOpen(false)
+    setSkillSuggestionsDismissed(true)
+    requestAnimationFrame(() => {
+      autosize()
+      el.focus()
+      el.setSelectionRange(argumentsText.length, argumentsText.length)
+    })
+  }
+
+  const clearSelectedSkill = () => {
+    setSelectedSkill(undefined)
+    setSkillSuggestionsDismissed(false)
+    requestAnimationFrame(() => ref.current?.focus())
+  }
+
+  const selectPromptTemplate = (template: PromptTemplateEntry) => {
+    const el = ref.current
+    if (!el) return
+    const argumentsText = selectedSkill || selectedPromptTemplate
+      ? draftValue
+      : skillArgumentsFromDraft(draftValue)
+    setSelectedPromptTemplate(template)
+    setSelectedSkill(undefined)
+    setDraftValue(argumentsText)
+    setAddPanelOpen(false)
+    setSkillSuggestionsDismissed(true)
+    requestAnimationFrame(() => {
+      autosize()
+      el.focus()
+      el.setSelectionRange(argumentsText.length, argumentsText.length)
+    })
+  }
+
+  const clearSelectedPromptTemplate = () => {
+    setSelectedPromptTemplate(undefined)
+    setSkillSuggestionsDismissed(false)
+    requestAnimationFrame(() => ref.current?.focus())
+  }
+
+  const changeSettings = async (
+    provider: string,
+    model: string,
+    nextThinking: ThinkingLevel,
+  ) => {
+    setSettingsError('')
+    try {
+      await onSettingsChange(provider, model, nextThinking)
+    } catch (error) {
+      setSettingsError(error instanceof Error ? error.message : t('composer.couldNotUpdateSettings'))
+    }
+  }
+
+  const changePermissionMode = async (mode: PermissionMode) => {
+    setSettingsError('')
+    try {
+      await onPermissionModeChange(mode)
+    } catch (error) {
+      const failure = error instanceof Error ? error : new Error(t('permission.couldNotUpdate'))
+      setSettingsError(failure.message)
+      throw failure
+    }
+  }
+
+  const removeQueued = async (id: string) => {
+    setQueueError('')
+    try {
+      await onRemoveQueued(id)
+    } catch (error) {
+      setQueueError(error instanceof Error ? error.message : t('composer.couldNotRemoveQueued'))
+    }
+  }
+
+  return (
+    <footer
+      data-testid="composer"
+      className={cn(
+        'z-30 w-full',
+        centered
+          ? 'bg-transparent p-0'
+          : 'shrink-0 bg-canvas px-3 pt-3 pb-4 md:px-8 max-md:pt-2',
+      )}
+    >
+      <div className="relative mx-auto flex w-full max-w-[750px] flex-col gap-2">
+        {queuedMessages.length > 0 && (
+          <PendingQueue messages={queuedMessages} onRemove={(id) => void removeQueued(id)} />
+        )}
+        {approval && <Approval key={approval.id} item={approval} onResolve={onResolve} />}
+        {question && (
+          <Question key={question.id} item={question} onResolve={onResolveQuestion} />
+        )}
+
+        <div
+          ref={surfaceRef}
+          hidden={awaitingUser}
+          className={cn(
+            'relative rounded-[28px] border border-edge bg-canvas [container-type:inline-size]',
+            !centered &&
+              'transition-colors focus-within:border-edge-strong',
+          )}
+        >
+          <ComposerSkillSuggestions
+            visible={skillSuggestionsVisible}
+            query={slashQuery?.query ?? ''}
+            templates={suggestedPromptTemplates}
+            skills={suggestedSkills}
+            activeIndex={activeSuggestionIndex}
+            keyboardNavigating={skillKeyboardNavigating}
+            loading={skillsLoading}
+            failed={skillsFailed}
+            templatesLoading={promptTemplatesLoading}
+            templatesFailed={promptTemplatesFailed}
+            onActiveIndexChange={setActiveSuggestionIndex}
+            onPointerNavigation={() => setSkillKeyboardNavigating(false)}
+            onCommandSelect={(command) => void runPreviewCommand(command)}
+            onTemplateSelect={selectPromptTemplate}
+            onSelect={selectSkill}
+          />
+          <div
+            className="grid min-h-24 grid-cols-[2.5rem_minmax(0,1fr)] grid-rows-[auto_2.5rem] items-center gap-x-3 gap-y-1 px-3 py-2.5 max-sm:gap-x-2"
+          >
+            <ComposerAddMenu
+              disabled={editorDisabled}
+              open={addPanelOpen}
+              imageAttachmentAvailable={supportsImages}
+              imageLimitReached={imageLimitReached}
+              fileLimitReached={fileLimitReached}
+              onOpenChange={(open) => {
+                setAddPanelOpen(open)
+                if (open) setSkillSuggestionsDismissed(true)
+              }}
+              onAttachImages={() => imageFileRef.current?.click()}
+              onAttachFiles={() => textFileRef.current?.click()}
+            />
+            <input
+              ref={imageFileRef}
+              className="sr-only"
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              multiple
+              tabIndex={-1}
+              onChange={(event) => {
+                void addImages(event.target.files)
+                event.target.value = ''
+              }}
+            />
+            <input
+              ref={textFileRef}
+              className="sr-only"
+              type="file"
+              multiple
+              tabIndex={-1}
+              onChange={(event) => {
+                void addTextFiles(event.target.files)
+                event.target.value = ''
+              }}
+            />
+            <div className="col-span-2 col-start-1 row-start-1 flex min-w-0 flex-col gap-2">
+              <ComposerAttachments
+                files={files}
+                images={images}
+                onRemoveFile={removeFile}
+                onRemoveImage={removeImage}
+              />
+              <div className="flex min-w-0 items-start px-1">
+                {selectedPromptTemplate && (
+                  <button
+                    type="button"
+                    className="mt-1.5 flex h-6 max-w-[45%] shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-1.5 font-mono text-[14px] font-medium text-ink-soft outline-none transition-colors hover:bg-surface-active focus-visible:bg-surface-active"
+                    aria-label={t('composer.removeSelectedPromptTemplate', {
+                      name: selectedPromptTemplate.name,
+                    })}
+                    title={t('composer.removeSelectedPromptTemplate', {
+                      name: selectedPromptTemplate.name,
+                    })}
+                    onClick={clearSelectedPromptTemplate}
+                  >
+                    <FileText
+                      className="size-4 shrink-0 text-ink-muted"
+                      strokeWidth={1.8}
+                      aria-hidden="true"
+                    />
+                    <span className="truncate">{selectedPromptTemplate.name}</span>
+                  </button>
+                )}
+                {selectedSkill && (
+                  <button
+                    type="button"
+                    className="mt-1.5 flex h-6 max-w-[45%] shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-1.5 font-mono text-[14px] font-medium text-info outline-none transition-colors hover:bg-info-surface focus-visible:bg-info-surface"
+                    aria-label={t('composer.removeSelectedSkill', {
+                      name: selectedSkill.name,
+                    })}
+                    title={t('composer.removeSelectedSkill', {
+                      name: selectedSkill.name,
+                    })}
+                    onClick={clearSelectedSkill}
+                  >
+                    <BookOpen
+                      className="size-4 shrink-0"
+                      strokeWidth={1.9}
+                      aria-hidden="true"
+                    />
+                    <span className="truncate">{selectedSkill.name}</span>
+                  </button>
+                )}
+                <textarea
+                  ref={ref}
+                  rows={1}
+                  value={draftValue}
+                  disabled={editorDisabled}
+                  aria-autocomplete={
+                    !selectedSkill && !selectedPromptTemplate ? 'list' : undefined
+                  }
+                  aria-controls={skillSuggestionsVisible ? skillSuggestionsID : undefined}
+                  aria-expanded={
+                    !selectedSkill && !selectedPromptTemplate
+                      ? skillSuggestionsVisible
+                      : undefined
+                  }
+                  aria-activedescendant={
+                    skillSuggestionsVisible && suggestionCount > 0
+                      ? skillSuggestionOptionID(
+                          Math.min(activeSuggestionIndex, suggestionCount - 1),
+                        )
+                      : undefined
+                  }
+                  className="block max-h-[15rem] min-h-8 min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-1 py-1.5 text-[14px] leading-6 text-ink outline-none placeholder:text-ink-faint disabled:cursor-not-allowed disabled:bg-transparent"
+                  placeholder={
+                    awaitingQuestion
+                      ? t('composer.answerQuestionPlaceholder')
+                      : awaitingApproval
+                      ? t('composer.resolveApprovalPlaceholder')
+                      : compacting
+                        ? t('composer.compactingContext')
+                      : !modelConfigured
+                        ? t('composer.configureModelPlaceholder')
+                      : connected
+                        ? running
+                          ? delivery === 'steer'
+                            ? t('composer.guideRun')
+                            : t('composer.queueFollowUpPlaceholder')
+                          : selectedPromptTemplate?.argumentHint
+                            ? t('composer.promptTemplateArguments', {
+                                hint: selectedPromptTemplate.argumentHint,
+                              })
+                            : t('composer.askAnything')
+                        : t('composer.waitingForAPI')
+                  }
+                  onChange={(event) => {
+                    setDraftValue(event.target.value)
+                    setAddPanelOpen(false)
+                    setSkillSuggestionsDismissed(false)
+                    autosize()
+                  }}
+                  onFocus={() => {
+                    if (!addPanelOpen) return
+                    setAddPanelOpen(false)
+                    setSkillSuggestionsDismissed(false)
+                  }}
+                  onCompositionStart={() => {
+                    composingRef.current = true
+                  }}
+                  onCompositionEnd={() => {
+                    composingRef.current = false
+                  }}
+                  onKeyDown={(event) => {
+                    if (
+                      composingRef.current ||
+                      event.nativeEvent.isComposing ||
+                      event.nativeEvent.keyCode === 229
+                    ) {
+                      return
+                    }
+                    if (
+                      skillSuggestionsVisible &&
+                      suggestionCount > 0 &&
+                      event.key === 'ArrowDown'
+                    ) {
+                      event.preventDefault()
+                      setSkillKeyboardNavigating(true)
+                      setActiveSuggestionIndex(
+                        (activeSuggestionIndex + 1) % suggestionCount,
+                      )
+                      return
+                    }
+                    if (
+                      skillSuggestionsVisible &&
+                      suggestionCount > 0 &&
+                      event.key === 'ArrowUp'
+                    ) {
+                      event.preventDefault()
+                      setSkillKeyboardNavigating(true)
+                      setActiveSuggestionIndex(
+                        (activeSuggestionIndex - 1 + suggestionCount) %
+                          suggestionCount,
+                      )
+                      return
+                    }
+                    if (skillSuggestionsVisible && event.key === 'Escape') {
+                      event.preventDefault()
+                      setSkillSuggestionsDismissed(true)
+                      return
+                    }
+                    const directCommand =
+                      event.key === 'Enter' && !event.shiftKey
+                        ? parseExecutableComposerCommand(draftValue)
+                        : undefined
+                    if (directCommand) {
+                      event.preventDefault()
+                      void runPreviewCommand(directCommand)
+                      return
+                    }
+                    if (
+                      skillSuggestionsVisible &&
+                      suggestionCount > 0 &&
+                      event.key === 'Enter' &&
+                      !event.shiftKey
+                    ) {
+                      event.preventDefault()
+                      if (activeSuggestionIndex < previewCommandCount) {
+                        const command =
+                          composerPreviewCommands[activeSuggestionIndex]
+                        if (command) void runPreviewCommand(command)
+                        return
+                      }
+                      const templateIndex =
+                        activeSuggestionIndex - previewCommandCount
+                      if (templateIndex < suggestedPromptTemplates.length) {
+                        const template = suggestedPromptTemplates[templateIndex]
+                        if (template) selectPromptTemplate(template)
+                        return
+                      }
+                      const skill = suggestedSkills[
+                        Math.min(
+                          activeSuggestionIndex -
+                            previewCommandCount -
+                            suggestedPromptTemplates.length,
+                          suggestedSkills.length - 1,
+                        )
+                      ]
+                      if (skill) selectSkill(skill)
+                      return
+                    }
+                    if (
+                      (selectedSkill || selectedPromptTemplate) &&
+                      event.key === 'Backspace' &&
+                      event.currentTarget.selectionStart === 0 &&
+                      event.currentTarget.selectionEnd === 0
+                    ) {
+                      event.preventDefault()
+                      if (selectedPromptTemplate) clearSelectedPromptTemplate()
+                      else clearSelectedSkill()
+                      return
+                    }
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault()
+                      void submit()
+                    }
+                  }}
+                />
+              </div>
+            </div>
+            <div className="col-start-2 row-start-2 flex min-w-0 items-center gap-2.5 max-sm:gap-1.5">
+              <div
+                data-testid="composer-permission-controls"
+                className="flex min-w-0 shrink items-center gap-1"
+              >
+                <PermissionModeMenu
+                  value={permissionMode}
+                  disabled={settingsDisabled}
+                  confirmationBlocked={settingsLocked}
+                  onChange={changePermissionMode}
+                />
+                {projectPickerVisible && (
+                  <ProjectPicker
+                    workspaces={workspaces}
+                    selectedPath={workspacePath}
+                    disabled={settingsDisabled}
+                    onSelect={onSelectProject}
+                    onBrowse={onBrowseProjects}
+                  />
+                )}
+              </div>
+              <div
+                data-testid="composer-model-controls"
+                className="ml-auto flex min-w-0 items-center gap-2.5 max-sm:gap-1.5"
+              >
+                {modelConfigured ? (
+                  <ModelSettingsMenu
+                    models={models}
+                    modelProvider={modelProvider}
+                    modelID={modelID}
+                    thinkingLevel={thinkingLevel}
+                    contextUsage={contextUsage}
+                    disabled={settingsLocked}
+                    updating={updatingSettings}
+                    onChange={changeSettings}
+                    compacting={compacting}
+                    onCompact={onCompact ? compactContext : undefined}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={onConfigureModel}
+                    className="inline-flex h-[30px] min-w-0 cursor-pointer items-center truncate rounded-[10px] px-3 text-[0.8125rem] font-medium text-ink-muted outline-none transition-colors hover:bg-surface-active hover:text-ink focus-visible:bg-surface-active"
+                  >
+                    {t('composer.configureModel')}
+                  </button>
+                )}
+                {running && !awaitingApproval && (
+                  <RunDeliveryMenu value={delivery} onValueChange={setDelivery} />
+                )}
+                {running && !awaitingApproval && (
+                  <button
+                    className="group relative grid size-[30px] shrink-0 cursor-pointer place-items-center rounded-full bg-canvas-strong text-ink-soft outline-none transition-colors hover:bg-ink-ghost focus-visible:bg-ink-ghost"
+                    type="button"
+                    aria-label={t('composer.stopGenerating')}
+                    onClick={onStop}
+                  >
+                    <Square className="size-3 fill-current" aria-hidden="true" />
+                    <span
+                      className="pointer-events-none absolute right-0 bottom-[calc(100%+0.5625rem)] z-50 translate-y-1 whitespace-nowrap rounded-md bg-canvas-inverse px-2.5 py-1.5 text-[0.75rem] leading-4 font-medium text-ink-inverse opacity-0 shadow-lg transition-[opacity,transform] duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
+                      aria-hidden="true"
+                    >
+                      {t('composer.stopGenerating')}
+                    </span>
+                  </button>
+                )}
+                <button
+                  data-testid="composer-send"
+                  className="group relative grid size-[30px] shrink-0 cursor-pointer place-items-center rounded-full bg-canvas-inverse text-ink-inverse outline-none transition-colors hover:bg-canvas-inverse focus-visible:bg-canvas-inverse disabled:cursor-not-allowed disabled:opacity-25"
+                  type="button"
+                  aria-label={
+                    awaitingApproval
+                      ? t('composer.resolveApprovalFirst')
+                      : connected
+                        ? running
+                          ? delivery === 'steer'
+                            ? t('composer.steerRun')
+                            : t('composer.queueFollowUp')
+                          : t('composer.sendPrompt')
+                        : t('composer.waitingForCodingAPI')
+                  }
+                  disabled={sendDisabled}
+                  onClick={() => void submit()}
+                >
+                  <ArrowUp className="size-4" aria-hidden="true" />
+                  <span
+                    className="pointer-events-none absolute right-0 bottom-[calc(100%+0.5625rem)] z-50 flex translate-y-1 items-center gap-2 whitespace-nowrap rounded-md bg-canvas-inverse px-2.5 py-1.5 text-[0.75rem] leading-4 font-medium text-ink-inverse opacity-0 shadow-lg transition-[opacity,transform] duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
+                    aria-hidden="true"
+                  >
+                    <span>
+                      {awaitingApproval
+                        ? t('composer.resolveApprovalFirst')
+                        : connected
+                          ? running
+                            ? delivery === 'steer'
+                              ? t('composer.steerRun')
+                              : t('composer.queueFollowUp')
+                            : t('composer.sendPrompt')
+                          : t('composer.waitingForAPIShort')}
+                    </span>
+                    {connected && !awaitingApproval && (
+                      <kbd className="font-mono text-[0.6875rem] font-normal text-ink-faint">↵</kbd>
+                    )}
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        {compactFeedback && (
+          <div
+            className={cn(
+              'absolute right-2 bottom-[calc(100%+0.625rem)] z-50 flex max-w-[calc(100vw-2rem)] animate-[fade-in_140ms_ease-out] items-center gap-2 border px-2.5 py-2 text-[0.8125rem] leading-5 shadow-[0_12px_32px_-18px_rgba(28,25,23,0.45)]',
+              compactFeedback.kind === 'notice'
+                ? 'rounded-lg border-edge bg-canvas text-ink-soft'
+                : 'rounded-lg border-danger-edge bg-danger-surface text-danger',
+            )}
+            role={compactFeedback.kind === 'error' ? 'alert' : 'status'}
+          >
+            <Info
+              className={cn(
+                'size-4 shrink-0',
+                compactFeedback.kind === 'notice' ? 'text-ink-muted' : 'text-danger-soft',
+              )}
+              aria-hidden="true"
+            />
+            <span>{compactFeedback.message}</span>
+            <button
+              type="button"
+              className="grid size-6 shrink-0 cursor-pointer place-items-center rounded-md text-current opacity-55 outline-none transition-[background-color,opacity] hover:bg-scrim/5 hover:opacity-100 focus-visible:bg-scrim/5 focus-visible:opacity-100"
+              aria-label={t('model.dismissCompactFeedback')}
+              title={t('model.dismissCompactFeedback')}
+              onClick={dismissCompactFeedback}
+            >
+              <X className="size-3.5" aria-hidden="true" />
+            </button>
+          </div>
+        )}
+        {(settingsError || attachmentError || queueError || sendError) && (
+          <p className="px-4 text-[0.75rem] leading-5 text-danger" role="alert">
+            {settingsError || attachmentError || queueError || sendError}
+          </p>
+        )}
+      </div>
+    </footer>
+  )
+}
+
+const maxSkillSuggestions = 8
+const maxPromptTemplateSuggestions = 8

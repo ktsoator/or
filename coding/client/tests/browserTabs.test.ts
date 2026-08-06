@@ -5,7 +5,7 @@ import {
   createBrowserTab,
   type BrowserNavigationTarget,
   type BrowserTab,
-} from '../src/browserTabs'
+} from '../src/features/browser/tabs'
 
 const webTarget = (requestedURL: string): BrowserNavigationTarget => ({
   requestedURL,

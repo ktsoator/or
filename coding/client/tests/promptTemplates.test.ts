@@ -7,7 +7,7 @@ import {
   promptTemplateArgumentsText,
   serializePromptTemplateInvocationCopy,
   type PromptTemplateEntry,
-} from '../src/promptTemplates'
+} from '../src/features/prompt-templates'
 
 describe('Prompt template composer commands', () => {
   const templates: PromptTemplateEntry[] = [

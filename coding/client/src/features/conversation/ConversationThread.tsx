@@ -1,0 +1,334 @@
+import { type ClipboardEvent, useEffect, useState } from 'react'
+import {
+  BookOpen,
+  CircleAlert,
+  CircleCheck,
+  CircleStop,
+  CircleX,
+  FileCode2,
+  FileText,
+  LoaderCircle,
+} from 'lucide-react'
+import { formatFileSize } from '@/shared/attachments'
+import {
+  parseSkillReference,
+  serializeSkillReferenceCopy,
+  type SkillReference,
+} from '@/features/skills'
+import {
+  promptTemplateArgumentsText,
+  serializePromptTemplateInvocationCopy,
+  type PromptTemplateInvocation,
+} from '@/features/prompt-templates'
+import type { Item } from '@/types'
+import { useI18n } from '@/i18n'
+import { formatMessageTime } from '@/lib/time'
+import { Markdown } from '@/shared/ui/Markdown'
+import { CopyButton } from './CopyButton'
+import { ResponseActions } from './ResponseActions'
+import { Thinking } from './Thinking'
+import { ToolCard } from './ToolCard'
+
+export function AwaitingResponse() {
+  const { t } = useI18n()
+  return (
+    <div
+      className="my-1 flex animate-[fade-in_160ms_ease-out] items-center gap-1.5 py-0.5 text-[0.8125rem] text-ink-faint"
+      role="status"
+    >
+      <span className="size-1 animate-pulse rounded-full bg-info" />
+      <span className="streaming-sheen">{t('thinking.working')}</span>
+    </div>
+  )
+}
+
+export function AutoCompactionStatus() {
+  const { t } = useI18n()
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setVisible(true), 350)
+    return () => window.clearTimeout(timer)
+  }, [])
+
+  if (!visible) return null
+  return (
+    <div
+      className="my-1 flex animate-[fade-in_160ms_ease-out] items-center gap-1.5 py-0.5 text-[0.8125rem] text-ink-faint"
+      role="status"
+    >
+      <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
+      <span>{t('compaction.automatic')}</span>
+    </div>
+  )
+}
+
+export function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
+  const { locale, t } = useI18n()
+  switch (item.kind) {
+    case 'user':
+      return (
+        <section
+          className="group/message my-3.5 flex animate-[fade-in_160ms_ease-out] justify-end"
+          data-testid="user-message"
+        >
+          <div className="flex max-w-[78%] flex-col items-end gap-2 max-md:max-w-[88%]">
+            {(item.files?.length ?? 0) > 0 && (
+              <div className="flex max-w-full flex-wrap justify-end gap-1.5">
+                {item.files?.map((file, index) => (
+                  <div
+                    key={`${file.name}-${file.size}-${index}`}
+                    className="flex h-9 max-w-[15rem] items-center gap-1.5 rounded-lg border border-edge bg-canvas-raised px-2.5 text-[0.75rem] text-ink-muted"
+                    title={file.name}
+                  >
+                    <FileCode2
+                      className="size-3.5 shrink-0 text-ink-muted"
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0 truncate font-medium text-ink-soft">
+                      {file.name}
+                    </span>
+                    <span className="shrink-0 text-[0.6875rem] text-ink-faint">
+                      {formatFileSize(file.size)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {item.images.length > 0 && (
+              <div className="flex max-w-full flex-wrap justify-end gap-2">
+                {item.images.map((image, index) => (
+                  <img
+                    key={`${image.mimeType}-${index}`}
+                    className="size-[8.5rem] shrink-0 rounded-2xl border border-edge bg-canvas object-cover shadow-[0_7px_18px_-15px_rgba(28,25,23,0.55)] max-sm:size-28"
+                    src={`data:${image.mimeType};base64,${image.data}`}
+                    alt={t('app.uploadedImage', { index: index + 1 })}
+                  />
+                ))}
+              </div>
+            )}
+            {item.text && (
+              <div className="rounded-[10px] bg-canvas-sunken px-3 py-2 text-[14px] leading-[22px] whitespace-pre-wrap">
+                <UserMessageText text={item.text} invocation={item.invocation} />
+              </div>
+            )}
+            {(item.text || item.sentAt || item.deliveryStatus === 'failed') && (
+              <div className="-mt-1 flex h-7 items-center justify-end gap-2 px-0.5 text-[0.75rem] leading-4 tabular-nums">
+                {item.deliveryStatus === 'failed' && (
+                  <span className="text-danger-soft">{t('app.notSent')}</span>
+                )}
+                <div
+                  className="pointer-events-none flex max-w-0 items-center gap-1 overflow-hidden opacity-0 transition-[max-width,opacity] duration-150 ease-out group-focus-within/message:pointer-events-auto group-focus-within/message:max-w-48 group-focus-within/message:opacity-100 group-hover/message:pointer-events-auto group-hover/message:max-w-48 group-hover/message:opacity-100 motion-reduce:transition-none max-md:pointer-events-auto max-md:max-w-48 max-md:opacity-100"
+                  data-testid="user-message-actions"
+                >
+                  {item.text && (
+                    <CopyButton
+                      value={item.text}
+                      className="size-7 rounded-lg hover:bg-surface-active focus-visible:bg-surface-active"
+                    />
+                  )}
+                  {item.sentAt && (
+                    <time className="shrink-0 text-ink-faint" dateTime={item.sentAt}>
+                      {formatMessageTime(item.sentAt, locale)}
+                    </time>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      )
+    case 'assistant':
+      return (
+        <section
+          className="my-3 animate-[fade-in_160ms_ease-out]"
+          data-testid="assistant-message"
+        >
+          <Markdown source={item.markdown} />
+          {item.complete && (
+            <ResponseActions
+              usage={item.usage}
+              modelName={item.modelName || item.model}
+              responseText={item.markdown}
+              completedAt={item.completedAt}
+            />
+          )}
+        </section>
+      )
+    case 'run':
+      return <RunDuration item={item} />
+    case 'thinking':
+      return <Thinking item={item} />
+    case 'tool':
+      return <ToolCard item={item} cwd={cwd} />
+    case 'task':
+      return <TaskCompletion item={item} />
+    case 'error':
+      return (
+        <div
+          className="my-3 flex animate-[fade-in_160ms_ease-out] gap-2.5 border-l-2 border-danger-edge py-1 pl-3 text-danger"
+          role="alert"
+        >
+          <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <div className="flex flex-col gap-0.5">
+            <strong className="text-[0.8125rem] font-semibold">{t('app.somethingWentWrong')}</strong>
+            <span className="text-[0.8125rem]">{item.text}</span>
+          </div>
+        </div>
+      )
+  }
+}
+
+function UserMessageText({
+  text,
+  invocation,
+}: Pick<Extract<Item, { kind: 'user' }>, 'text' | 'invocation'>) {
+  if (invocation?.kind === 'prompt_template') {
+    const template: PromptTemplateInvocation = {
+      name: invocation.name,
+      argumentsText: promptTemplateArgumentsText(text, invocation.name),
+    }
+    return (
+      <span
+        className="flex min-w-0 items-center gap-1.5"
+        onCopy={(event) => copyPromptTemplateInvocation(event, template)}
+      >
+        <span
+          className="inline-flex h-6 max-w-[16rem] shrink-0 items-center gap-1.5 rounded-md bg-surface-active px-1.5 font-mono text-[13px] font-medium text-ink-soft"
+          data-testid="prompt-template-reference"
+          title={invocation.path}
+        >
+          <FileText
+            className="size-3.5 shrink-0 text-ink-muted"
+            strokeWidth={1.8}
+            aria-hidden="true"
+          />
+          <span className="truncate">{invocation.name}</span>
+        </span>
+        {template.argumentsText && (
+          <span className="min-w-0 whitespace-pre-wrap break-words">
+            {template.argumentsText}
+          </span>
+        )}
+      </span>
+    )
+  }
+
+  const reference = parseSkillReference(text)
+  if (!reference) return text
+
+  return (
+    <span
+      className="flex min-w-0 items-center gap-1.5"
+      onCopy={(event) => copySkillReference(event, reference)}
+    >
+      <span
+        className="inline-flex h-6 max-w-[16rem] shrink-0 items-center gap-1.5 rounded-md bg-info-surface px-1.5 font-mono text-[13px] font-medium text-info"
+        data-testid="skill-reference"
+        title={reference.path}
+      >
+        <BookOpen className="size-3.5 shrink-0" strokeWidth={1.9} aria-hidden="true" />
+        <span className="truncate">{reference.name}</span>
+      </span>
+      {reference.argumentsText && (
+        <span className="min-w-0 whitespace-pre-wrap break-words">
+          {reference.argumentsText}
+        </span>
+      )}
+    </span>
+  )
+}
+
+function copyPromptTemplateInvocation(
+  event: ClipboardEvent<HTMLSpanElement>,
+  invocation: PromptTemplateInvocation,
+) {
+  const selectedText = window.getSelection()?.toString() ?? ''
+  const serialized = serializePromptTemplateInvocationCopy(invocation, selectedText)
+  if (!selectedText || serialized === selectedText) return
+  event.preventDefault()
+  event.clipboardData.setData('text/plain', serialized)
+}
+
+function copySkillReference(
+  event: ClipboardEvent<HTMLSpanElement>,
+  reference: SkillReference,
+) {
+  const selectedText = window.getSelection()?.toString() ?? ''
+  const serialized = serializeSkillReferenceCopy(reference, selectedText)
+  if (!selectedText || serialized === selectedText) return
+  event.preventDefault()
+  event.clipboardData.setData('text/plain', serialized)
+}
+
+function TaskCompletion({ item }: { item: Extract<Item, { kind: 'task' }> }) {
+  const { t } = useI18n()
+  const Icon =
+    item.status === 'succeeded' ? CircleCheck : item.status === 'stopped' ? CircleStop : CircleX
+  const label =
+    item.status === 'succeeded'
+      ? t('task.succeeded')
+      : item.status === 'stopped'
+        ? t('task.stopped')
+        : t('task.failed', { code: item.exitCode })
+
+  return (
+    <div
+      className="my-1 flex min-w-0 animate-[fade-in_160ms_ease-out] items-center gap-2 py-0.5 text-[0.8125rem] leading-5 text-ink-muted"
+      title={item.outputPath}
+    >
+      <Icon
+        className={
+          item.status === 'failed' ? 'size-3.5 shrink-0 text-danger-soft' : 'size-3.5 shrink-0 text-ink-faint'
+        }
+        aria-hidden="true"
+      />
+      <span className="shrink-0">{label}</span>
+      <code className="min-w-0 overflow-hidden font-mono text-[0.75rem] text-ink-faint text-ellipsis whitespace-nowrap">
+    {item.description || item.command || item.taskID}
+      </code>
+    </div>
+  )
+}
+
+function RunDuration({ item }: { item: Extract<Item, { kind: 'run' }> }) {
+  const { locale, t } = useI18n()
+  const [now, setNow] = useState(() => Date.now())
+  const running = item.durationMs === undefined
+
+  useEffect(() => {
+    if (!running) return
+    setNow(Date.now())
+    const interval = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(interval)
+  }, [item.startedAt, running])
+
+  const startedAt = new Date(item.startedAt).getTime()
+  const durationMs =
+    item.durationMs ?? (Number.isFinite(startedAt) ? Math.max(0, now - startedAt) : 0)
+  const duration = formatRunDuration(durationMs, locale)
+
+  return (
+    <div className="mt-3.5 mb-2.5 animate-[fade-in_160ms_ease-out]">
+      <div className="text-[0.8125rem] leading-5 text-ink-faint tabular-nums">
+        {t(running ? 'run.working' : 'run.completed', { duration })}
+      </div>
+    </div>
+  )
+}
+
+function formatRunDuration(durationMs: number, locale: 'en' | 'zh-CN'): string {
+  const totalSeconds = Math.max(0, Math.floor(durationMs / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+
+  if (locale === 'zh-CN') {
+    if (hours > 0) return `${hours} 小时 ${minutes} 分 ${seconds} 秒`
+    if (minutes > 0) return `${minutes} 分 ${seconds} 秒`
+    return `${seconds} 秒`
+  }
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`
+  if (minutes > 0) return `${minutes}m ${seconds}s`
+  return `${seconds}s`
+}

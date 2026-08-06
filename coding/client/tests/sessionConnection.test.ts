@@ -4,16 +4,16 @@ import {
   type SessionConnectionDependencies,
   type SessionConnectionHandlers,
   type SessionEventSource,
-} from '../src/sessionConnection'
+} from '../src/features/session/connection'
 import {
   createSessionStoreState,
   sessionStoreReducer,
   type SessionStoreState,
-} from '../src/sessionStore'
+} from '../src/features/session/store'
 import {
   threadsReducer,
   type ThreadsState,
-} from '../src/sessionReducer'
+} from '../src/features/session/reducer'
 import type {
   ConnectionStatus,
   HistoryResponse,

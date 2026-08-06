@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import type { UsageEventPage, UsageReport } from '../src/types'
 
 type BrowserRuntimeRecord = {
   tabID: string
@@ -168,6 +169,10 @@ async function openDesktopClient(
       message: string
     }>
     promptTemplateContents?: Record<string, string>
+    usageReport?: UsageReport
+    usageEventPages?: UsageEventPage[]
+    usageEventPagesByOffset?: Record<number, UsageEventPage>
+    usageEventDelayMs?: number
     skills?: Array<{
       name: string
       description: string
@@ -219,6 +224,7 @@ async function openDesktopClient(
   let workbenchSessionCreated = false
   let remainingHealthFailures = options.healthFailures ?? 0
   let remainingBrowserResultFailures = options.browserResultFailures ?? 0
+  const usageEventRangeKeys: string[] = []
 
   await page.addInitScript(({ nativeDirectory }) => {
     // A stand-in for Electron's <webview>: it attaches asynchronously and
@@ -591,6 +597,22 @@ async function openDesktopClient(
         diagnostics: options.promptTemplateDiagnostics ?? [],
       }
     }
+    if (path === '/api/usage' && options.usageReport) {
+      body = options.usageReport
+    }
+    if (path === '/api/usage/events' && options.usageEventPages) {
+      const rangeKey = new URL(request.url()).searchParams.get('since') ?? ''
+      if (!usageEventRangeKeys.includes(rangeKey)) usageEventRangeKeys.push(rangeKey)
+      const index = Math.min(usageEventRangeKeys.indexOf(rangeKey), options.usageEventPages.length - 1)
+      if (index > 0 && options.usageEventDelayMs) {
+        await new Promise((resolve) => setTimeout(resolve, options.usageEventDelayMs))
+      }
+      body = options.usageEventPages[index]
+    }
+    if (path === '/api/usage/events' && options.usageEventPagesByOffset) {
+      const offset = Number(new URL(request.url()).searchParams.get('offset') ?? 0)
+      body = options.usageEventPagesByOffset[offset] ?? options.usageEventPagesByOffset[0]
+    }
     if (path.startsWith('/api/prompt-templates/')) {
       const name = decodeURIComponent(path.slice('/api/prompt-templates/'.length))
       const template = options.promptTemplates?.find((item) => item.name === name)
@@ -785,6 +807,173 @@ test('dark theme uses the cool neutral canvas', async ({ page }) => {
 
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
   await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(31, 33, 36)')
+})
+
+test('theme and language live in General settings without duplicate profile entries', async ({
+  page,
+}) => {
+  await openDesktopClient(page)
+  await page.getByRole('button', { name: 'Open profile menu' }).click()
+
+  const profileMenu = page.getByRole('menu')
+  await expect(profileMenu.getByRole('menuitem', { name: 'Usage' })).toHaveCount(0)
+  await expect(profileMenu.getByText('Theme', { exact: true })).toHaveCount(0)
+  await expect(profileMenu.getByText('Language', { exact: true })).toHaveCount(0)
+  await profileMenu.getByRole('menuitem', { name: 'Settings' }).click()
+
+  const theme = page.getByRole('button', { name: 'Theme', exact: true })
+  const language = page.getByRole('button', { name: 'Language', exact: true })
+  await expect(theme).toBeVisible()
+  await expect(language).toBeVisible()
+
+  await theme.click()
+  await page.getByRole('menuitemradio', { name: 'Dark', exact: true }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('or.theme'))).toBe('dark')
+})
+
+test('settings keep an opaque native titlebar above scrolling content', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('or.theme', 'light'))
+  await openDesktopClient(page)
+  const appTitlebarHeight = await page
+    .getByTestId('conversation-header')
+    .evaluate((element) => element.getBoundingClientRect().height)
+  const appSidebarBackground = await page.locator('.app-sidebar').evaluate(
+    (element) => getComputedStyle(element).backgroundColor,
+  )
+  const appSidebarTitlebarBox = await page.locator('.app-sidebar-header').boundingBox()
+  const appSidebarToggleBox = await page.getByTestId('sidebar-panel-toggle').boundingBox()
+  await page.getByRole('button', { name: 'Open profile menu' }).click()
+  await page.getByRole('menuitem', { name: 'Settings' }).click()
+
+  const titlebar = page.getByTestId('settings-titlebar')
+  const sidebarTitlebar = page.getByTestId('settings-sidebar-titlebar')
+  const settingsSidebarToggle = page.getByTestId('sidebar-panel-toggle')
+  await expect(titlebar).toHaveCSS('-webkit-app-region', 'drag')
+  await expect(sidebarTitlebar).toHaveCSS('-webkit-app-region', 'drag')
+  await expect(titlebar).toHaveCSS('background-color', 'rgb(255, 255, 255)')
+  await expect(titlebar).toHaveCSS('border-bottom-width', '0px')
+  const [titlebarBox, sidebarTitlebarBox, settingsSidebarToggleBox, backBox, headingBox] = await Promise.all([
+    titlebar.boundingBox(),
+    sidebarTitlebar.boundingBox(),
+    settingsSidebarToggle.boundingBox(),
+    page.getByRole('button', { name: 'Back to app' }).boundingBox(),
+    page.getByRole('heading', { name: 'General', level: 1 }).boundingBox(),
+  ])
+  expect(appSidebarTitlebarBox).not.toBeNull()
+  expect(appSidebarToggleBox).not.toBeNull()
+  expect(titlebarBox).not.toBeNull()
+  expect(sidebarTitlebarBox).not.toBeNull()
+  expect(settingsSidebarToggleBox).not.toBeNull()
+  expect(backBox).not.toBeNull()
+  expect(headingBox).not.toBeNull()
+  expect(titlebarBox!.height).toBe(appTitlebarHeight)
+  expect(sidebarTitlebarBox!.height).toBe(appSidebarTitlebarBox!.height)
+  expect(settingsSidebarToggleBox!.x).toBe(appSidebarToggleBox!.x)
+  expect(settingsSidebarToggleBox!.y).toBe(appSidebarToggleBox!.y)
+  expect(settingsSidebarToggleBox!.width).toBe(appSidebarToggleBox!.width)
+  expect(settingsSidebarToggleBox!.height).toBe(appSidebarToggleBox!.height)
+  await expect(page.locator('.settings-sidebar')).toHaveCSS(
+    'background-color',
+    appSidebarBackground,
+  )
+  await expect(page.locator('.settings-sidebar')).toHaveCSS('border-right-width', '1px')
+  expect(backBox!.y).toBeGreaterThanOrEqual(sidebarTitlebarBox!.y + sidebarTitlebarBox!.height)
+  expect(headingBox!.y).toBeGreaterThanOrEqual(titlebarBox!.y + titlebarBox!.height)
+  await expect.poll(() =>
+    titlebar.evaluate((element) => {
+      const box = element.getBoundingClientRect()
+      return document.elementFromPoint(box.right - 12, box.top + box.height / 2) === element
+    }),
+  ).toBe(true)
+})
+
+test('settings sidebar collapses without moving its titlebar control', async ({ page }) => {
+  await openDesktopClient(page)
+  await page.getByRole('button', { name: 'Open profile menu' }).click()
+  await page.getByRole('menuitem', { name: 'Settings' }).click()
+
+  const toggle = page.getByTestId('sidebar-panel-toggle')
+  const sidebar = page.locator('.settings-sidebar')
+  const content = page.getByTestId('settings-content')
+
+  await expect(toggle).toBeVisible()
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  await expect.poll(() => sidebar.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(200)
+
+  const [toggleBefore, contentBefore] = await Promise.all([
+    toggle.boundingBox(),
+    content.boundingBox(),
+  ])
+  expect(toggleBefore).not.toBeNull()
+  expect(contentBefore).not.toBeNull()
+
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  await expect.poll(() => sidebar.evaluate((element) => element.getBoundingClientRect().width)).toBeLessThan(1)
+
+  const [toggleAfter, contentAfter] = await Promise.all([
+    toggle.boundingBox(),
+    content.boundingBox(),
+  ])
+  expect(toggleAfter).not.toBeNull()
+  expect(contentAfter).not.toBeNull()
+  expect(toggleAfter!.x).toBeCloseTo(toggleBefore!.x, 1)
+  expect(toggleAfter!.y).toBeCloseTo(toggleBefore!.y, 1)
+  expect(contentAfter!.width).toBeGreaterThan(contentBefore!.width + 200)
+
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  await expect.poll(() => sidebar.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(200)
+})
+
+test('settings sidebar divider supports pointer and keyboard resizing', async ({ page }) => {
+  await openDesktopClient(page)
+  await page.getByRole('button', { name: 'Open profile menu' }).click()
+  await page.getByRole('menuitem', { name: 'Settings' }).click()
+
+  const sidebar = page.locator('.settings-sidebar')
+  const handle = page.getByTestId('settings-sidebar-resize-handle')
+  const divider = page.getByTestId('settings-sidebar-divider')
+  await expect(handle).toBeVisible()
+  await expect(handle).toHaveAttribute('aria-valuemin', '206')
+  await expect(handle).toHaveAttribute('aria-valuemax', '338')
+  await expect(handle).toHaveAttribute('aria-valuenow', '240')
+  await expect(sidebar).toHaveCSS('border-right-width', '1px')
+
+  const [sidebarBefore, handleBefore, dividerBefore] = await Promise.all([
+    sidebar.boundingBox(),
+    handle.boundingBox(),
+    divider.boundingBox(),
+  ])
+  expect(sidebarBefore).not.toBeNull()
+  expect(handleBefore).not.toBeNull()
+  expect(dividerBefore).not.toBeNull()
+  expect(sidebarBefore!.width).toBeCloseTo(240, 0)
+  expect(Math.abs(
+    dividerBefore!.x + dividerBefore!.width -
+      (sidebarBefore!.x + sidebarBefore!.width),
+  )).toBeLessThanOrEqual(1)
+
+  await page.mouse.move(
+    handleBefore!.x + handleBefore!.width - 2,
+    handleBefore!.y + handleBefore!.height / 2,
+  )
+  await page.mouse.down()
+  await page.mouse.move(
+    handleBefore!.x + handleBefore!.width + 38,
+    handleBefore!.y + handleBefore!.height / 2,
+    { steps: 8 },
+  )
+  await page.mouse.up()
+
+  await expect(handle).toHaveAttribute('aria-valuenow', '280')
+  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBeCloseTo(280, 0)
+
+  await handle.focus()
+  await handle.press('ArrowRight')
+  await expect(handle).toHaveAttribute('aria-valuenow', '288')
+  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBeCloseTo(288, 0)
 })
 
 test('desktop external links open in the system browser without leaving Or', async ({ page }) => {
@@ -3418,6 +3607,105 @@ test('right-panel conversations can return to new content in long threads', asyn
   await expect(jumpToLatest).toHaveCount(0)
 })
 
+test('user actions appear on hover while assistant actions stay visible', async ({ page }) => {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 10, 52)
+  const earlier = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 8, 15)
+  const expectedToday = new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(today)
+  const expectedEarlier = new Intl.DateTimeFormat('en-US', {
+    ...(earlier.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' as const }),
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(earlier)
+
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (value: string) => {
+          localStorage.setItem('test.clipboard', value)
+        },
+      },
+    })
+  })
+  await openDesktopClient(page, {
+    existingSession: true,
+    historyEvents: [
+      {
+        type: 'user_message',
+        id: 'earlier-user',
+        text: 'Earlier user message',
+        images: [],
+      },
+      {
+        type: 'run_start',
+        id: 'earlier-run',
+        startedAt: earlier.toISOString(),
+        durationMs: 1000,
+      },
+      {
+        type: 'message_end',
+        text: 'Earlier assistant response',
+        finalResponse: true,
+        completedAt: new Date(earlier.getTime() + 1000).toISOString(),
+      },
+      {
+        type: 'user_message',
+        id: 'today-user',
+        text: 'Copy this user message',
+        images: [],
+      },
+      {
+        type: 'run_start',
+        id: 'today-run',
+        startedAt: today.toISOString(),
+        durationMs: 1000,
+      },
+      {
+        type: 'message_end',
+        text: 'Today assistant response',
+        finalResponse: true,
+        completedAt: new Date(today.getTime() + 1000).toISOString(),
+      },
+    ],
+  })
+
+  const earlierUser = page
+    .getByTestId('user-message')
+    .filter({ hasText: 'Earlier user message' })
+  const todayUser = page
+    .getByTestId('user-message')
+    .filter({ hasText: 'Copy this user message' })
+  const userActions = todayUser.getByTestId('user-message-actions')
+
+  await expect(userActions).toHaveCSS('opacity', '0')
+  await todayUser.hover()
+  await expect(userActions).toHaveCSS('opacity', '1')
+  await expect(userActions.locator('time')).toHaveText(expectedToday)
+  await todayUser.getByRole('button', { name: 'Copy', exact: true }).click()
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('test.clipboard'))).toBe(
+    'Copy this user message',
+  )
+
+  await earlierUser.hover()
+  await expect(earlierUser.getByTestId('user-message-actions').locator('time')).toHaveText(
+    expectedEarlier,
+  )
+
+  const assistant = page
+    .getByTestId('assistant-message')
+    .filter({ hasText: 'Today assistant response' })
+  const assistantActions = assistant.getByTestId('response-message-actions')
+  await expect(assistantActions).toHaveCSS('opacity', '1')
+  await expect(assistantActions.locator('time')).toHaveText(expectedToday)
+  await expect(assistant.getByRole('button', { name: 'Copy response' })).toBeVisible()
+})
+
 test('response usage stays on one line and truncates when Chat is narrow', async ({ page }) => {
   await page.setViewportSize({ width: 960, height: 700 })
   await openDesktopClient(page, {
@@ -3726,6 +4014,184 @@ test('binary thinking capability is presented as an off/on switch', async ({ pag
   await expect(page.getByRole('menu')).toBeVisible()
 })
 
+test('usage range refresh keeps request details mounted while new data loads', async ({ page }) => {
+  const cost = { input: 0.001, output: 0.001, cacheRead: 0, cacheWrite: 0, total: 0.002 }
+  const usageReport: UsageReport = {
+    total: {
+      requests: 2,
+      input: 3000,
+      output: 30,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 3030,
+      cost,
+    },
+    models: [
+      {
+        provider: 'openai',
+        model: 'test-model',
+        name: 'Test model',
+        lastUsedAt: '2026-07-22T10:00:00Z',
+        requests: 2,
+        input: 3000,
+        output: 30,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 3030,
+        cost,
+      },
+    ],
+    generatedAt: '2026-07-22T10:00:00Z',
+  }
+  const usageEventPage = (id: string, input: number): UsageEventPage => ({
+    events: [
+      {
+        id,
+        sessionId: 'test-session',
+        provider: 'openai',
+        model: 'test-model',
+        timestamp: '2026-07-22T10:00:00Z',
+        usage: {
+          input,
+          output: 10,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: input + 10,
+          cost,
+        },
+      },
+    ],
+    total: 1,
+    limit: 10,
+    offset: 0,
+  })
+
+  await openDesktopClient(page, {
+    existingSession: true,
+    usageReport,
+    usageEventPages: [usageEventPage('30-day-event', 1111), usageEventPage('7-day-event', 2222)],
+    usageEventDelayMs: 500,
+  })
+  await page.getByRole('button', { name: 'Open profile menu' }).click()
+  await page.getByRole('menuitem', { name: 'Settings' }).click()
+  await page.getByRole('button', { name: 'Usage', exact: true }).click()
+  await page.getByRole('button', { name: 'Test model', exact: true }).click()
+
+  const previousRow = page.getByRole('cell', { name: '1,111', exact: true })
+  await expect(previousRow).toBeVisible()
+  await page.getByRole('button', { name: 'Usage time range' }).click()
+  await page.getByRole('menuitemradio', { name: '7 days' }).click()
+
+  expect(await previousRow.isVisible()).toBe(true)
+  await expect(page.getByRole('cell', { name: '2,222', exact: true })).toBeVisible()
+  await expect(previousRow).toBeHidden()
+})
+
+test('usage request column headers stay fixed while paging', async ({ page }) => {
+  const cost = { input: 0.001, output: 0.001, cacheRead: 0, cacheWrite: 0, total: 0.002 }
+  const usageReport: UsageReport = {
+    total: {
+      requests: 11,
+      input: 10_900_017,
+      output: 319,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 10_900_336,
+      cost,
+    },
+    models: [
+      {
+        provider: 'openai',
+        model: 'test-model',
+        name: 'Test model',
+        lastUsedAt: '2026-07-22T10:00:00Z',
+        requests: 11,
+        input: 10_900_017,
+        output: 319,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 10_900_336,
+        cost,
+      },
+    ],
+    generatedAt: '2026-07-22T10:00:00Z',
+  }
+  const usageEventPage = (offset: number, inputs: number[]): UsageEventPage => ({
+    events: inputs.map((input, index) => ({
+      id: `event-${offset + index}`,
+      sessionId: 'test-session',
+      provider: 'openai',
+      model: 'test-model',
+      timestamp: new Date(Date.UTC(2026, 6, 22, 10, offset + index)).toISOString(),
+      usage: {
+        input,
+        output: 29,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: input + 29,
+        cost,
+      },
+    })),
+    total: 11,
+    limit: 10,
+    offset,
+  })
+
+  await openDesktopClient(page, {
+    existingSession: true,
+    usageReport,
+    usageEventPagesByOffset: {
+      0: usageEventPage(0, [9_999_999, 100_001, 100_002, 100_003, 100_004, 100_005, 100_006, 100_007, 100_008, 100_009]),
+      10: usageEventPage(10, [17]),
+    },
+  })
+  await page.getByRole('button', { name: 'Open profile menu' }).click()
+  await page.getByRole('menuitem', { name: 'Settings' }).click()
+  await page.getByRole('button', { name: 'Usage', exact: true }).click()
+  await page.getByRole('button', { name: 'Test model', exact: true }).click()
+
+  const details = page.getByTestId('usage-request-details')
+  await expect(details.getByRole('cell', { name: '9,999,999', exact: true })).toBeVisible()
+  const headerGeometry = () => details.getByRole('columnheader').evaluateAll((headers) =>
+    headers.map((header) => {
+      const box = header.getBoundingClientRect()
+      return { x: box.x, y: box.y, width: box.width }
+    }),
+  )
+  const scrollRegion = details.locator('[aria-busy]')
+  await expect(scrollRegion).toHaveAttribute('aria-busy', 'false')
+  const before = await headerGeometry()
+
+  await scrollRegion.evaluate((element) => {
+    element.scrollTop = element.scrollHeight
+  })
+  await expect.poll(() => scrollRegion.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+  const afterScroll = await headerGeometry()
+  afterScroll.forEach((header, index) => {
+    expect(header.x).toBe(before[index]?.x)
+    expect(header.width).toBe(before[index]?.width)
+    expect(Math.abs(header.y - (before[index]?.y ?? header.y))).toBeLessThan(1)
+  })
+  const headerAlphas = await details.getByRole('columnheader').evaluateAll((headers) =>
+    headers.map((header) => {
+      const background = getComputedStyle(header).backgroundColor
+      if (background === 'transparent') return 0
+      const rgbaAlpha = background.match(/^rgba\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\)$/)?.[1]
+      return rgbaAlpha ? Number(rgbaAlpha) : 1
+    }),
+  )
+  expect(headerAlphas.every((alpha) => alpha === 1)).toBe(true)
+
+  await details.getByRole('button', { name: 'Next page' }).click()
+  await expect(details.getByRole('cell', { name: '17', exact: true })).toBeVisible()
+
+  const afterPaging = await headerGeometry()
+  afterPaging.forEach((header, index) => {
+    expect(header.x).toBe(before[index]?.x)
+    expect(header.width).toBe(before[index]?.width)
+  })
+})
+
 test('first send creates a session and renders the user message', async ({ page }) => {
   const requests = await openDesktopClient(page)
   const message = 'Desktop first-send regression'
@@ -3817,6 +4283,31 @@ test('prompt templates page groups resources, reports diagnostics, and opens det
   const beforeRefresh = listRequests()
   await page.getByRole('button', { name: 'Refresh prompt templates' }).click()
   await expect.poll(listRequests).toBe(beforeRefresh + 1)
+})
+
+test('sidebar session actions leave catalog pages for the conversation', async ({ page }) => {
+  await openDesktopClient(page, { existingSession: true })
+  const conversation = page.getByTestId('conversation-pane')
+  const sidebar = page.locator('aside')
+
+  await sidebar.getByRole('button', { name: 'Skills', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Skills', exact: true })).toBeVisible()
+  await page
+    .getByRole('navigation', { name: 'Chats' })
+    .getByRole('button', { name: 'New session', exact: true })
+    .click()
+  await expect(conversation).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Skills', exact: true })).toBeHidden()
+
+  await sidebar.getByRole('button', { name: 'Prompt templates', exact: true }).click()
+  await expect(
+    page.getByRole('heading', { name: 'Prompt templates', exact: true }),
+  ).toBeVisible()
+  await sidebar.getByRole('button', { name: 'New session', exact: true }).first().click()
+  await expect(conversation).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Prompt templates', exact: true }),
+  ).toBeHidden()
 })
 
 test('prompt templates share the slash menu and send a compact invocation', async ({
