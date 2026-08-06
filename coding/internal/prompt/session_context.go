@@ -283,15 +283,6 @@ func usableSkills(skills []SkillInfo) []SkillInfo {
 	return result
 }
 
-// truncateChars shortens s to at most n runes, appending an ellipsis when cut.
-func truncateChars(s string, n int) string {
-	runes := []rune(s)
-	if len(runes) <= n {
-		return s
-	}
-	return string(runes[:n-1]) + "…"
-}
-
 // truncateContent caps an instruction file at n runes, keeping the head and
 // appending a notice the model can act on. It reports whether it cut.
 func truncateContent(s string, n int) (string, bool) {
