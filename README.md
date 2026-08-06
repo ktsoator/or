@@ -46,6 +46,13 @@ these packages.
 Future packages can build higher-level orchestration on the same foundations
 without turning the root package into a single large API.
 
+## Skills
+
+Agent Skills curated and distributed by the project live in the
+[`skills/`](skills/README.md) collection. This is a source collection rather
+than a runtime discovery directory; install selected Skills into the standard
+user or workspace locations before using them with Or.
+
 ## Requirements
 
 - Go 1.25 or later
