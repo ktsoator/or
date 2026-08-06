@@ -144,6 +144,58 @@ func TestCancelStagedSkillsUpdateKeepsCommittedSnapshot(t *testing.T) {
 	}
 }
 
+func TestActivatedSkillsRemainProjectedAndDeduplicateByName(t *testing.T) {
+	manager := New(5, "", "", "", "")
+	manager.StageActivatedSkill("review", "v1", "review body v1")
+	manager.StageActivatedSkill("review", "v2", "review body v2")
+	manager.StageActivatedSkill("build", "v1", "build body")
+
+	first := manager.PrepareStep(llm.Context{Messages: []llm.Message{llm.UserText("task")}})
+	if got := messageTexts(t, first.Input.Messages); !equalStrings(
+		got,
+		[]string{"task", "build body", "review body v1"},
+	) {
+		t.Fatalf("activated Skill projection = %v", got)
+	}
+	if len(first.Pending) != 2 || first.Pending[0].Kind != ActivatedSkill ||
+		first.Pending[0].Path != "build" || first.Pending[1].Path != "review" {
+		t.Fatalf("pending activated Skills = %#v", first.Pending)
+	}
+	manager.Commit(first)
+
+	retry := manager.PrepareStep(llm.Context{Messages: []llm.Message{llm.UserText("next")}})
+	if len(retry.Pending) != 0 {
+		t.Fatalf("committed activated Skills became pending again: %#v", retry.Pending)
+	}
+	if got := messageTexts(t, retry.Input.Messages); !equalStrings(
+		got,
+		[]string{"next", "build body", "review body v1"},
+	) {
+		t.Fatalf("activated Skills stopped projecting = %v", got)
+	}
+	state := manager.State()
+	if state.ActivatedSkillCount != 2 || state.PendingSkillCount != 0 {
+		t.Fatalf("state = %#v", state)
+	}
+}
+
+func TestRestoreActivatedSkillsKeepsDurableSnapshot(t *testing.T) {
+	manager := New(8, "", "", "", "")
+	manager.RestoreActivatedSkills([]Attachment{{
+		ID: "activated_skill:3:v1", Epoch: 3, Kind: ActivatedSkill,
+		Placement: AfterCurrent, Path: "review", Revision: "v1", Rendered: "saved body",
+	}})
+	manager.StageActivatedSkill("review", "v2", "new body")
+
+	prepared := manager.PrepareStep(llm.Context{})
+	if len(prepared.Pending) != 0 {
+		t.Fatalf("restored activation was not durable: %#v", prepared.Pending)
+	}
+	if got := messageTexts(t, prepared.Input.Messages); !equalStrings(got, []string{"saved body"}) {
+		t.Fatalf("restored activated Skill = %v", got)
+	}
+}
+
 func TestContextUpdateSupersedesBaseWithoutDisturbingThePrefix(t *testing.T) {
 	manager := New(7, "base-v1", "base", "", "")
 	canonical := llm.Context{Messages: []llm.Message{llm.UserText("question")}}

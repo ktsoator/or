@@ -17,16 +17,15 @@ const ToolName = "skill"
 const toolDescription = "Load a skill's full instructions on demand. Product context announces the " +
 	"available skills by name and description; when the current task matches one, call this tool " +
 	"with that skill's name BEFORE acting, then follow the instructions it returns. Only names from " +
-	"the listing are valid — never guess. Pass any extra task detail via the optional arguments field."
+	"the listing are valid — never guess."
 
 const relativePathProtocol = "Resolve every relative path in this skill against the skill root above. " +
 	"Use the resolved absolute path when calling tools."
 
-const explicitInvocationPrefix = "<or-explicit-skill-invocation "
+const explicitInvocationPrefix = "<agent-skill-invocation "
 
 type skillCallArgs struct {
-	Name      string `json:"name" jsonschema:"description=Name of the skill to load, exactly as shown in the available skills listing,minLength=1"`
-	Arguments string `json:"arguments,omitempty" jsonschema:"description=Optional free-form detail for the skill, substituted into its $ARGUMENTS placeholder"`
+	Name string `json:"name" jsonschema:"description=Name of the skill to load, exactly as shown in the available skills listing,minLength=1"`
 }
 
 // Tool returns the agent tool that loads a skill's body on demand. The returned
@@ -34,12 +33,12 @@ type skillCallArgs struct {
 // should advertise it as read-only. On an unknown name it returns an error
 // naming the valid skills, so the model corrects rather than guesses.
 func (r *Registry) Tool() agent.AgentTool {
-	return newTool(r.ModelLookup, r.modelNames)
+	return newTool(r.Lookup, r.names)
 }
 
-// newTool builds the stable skill-tool schema around snapshot-aware lookup
-// functions. Registry and DynamicRegistry share this implementation so changing
-// the active registry never changes the provider-visible tool definition.
+// newTool builds the Skill tool schema around snapshot-aware lookup functions.
+// Registry and DynamicRegistry share this implementation; the engine controls
+// whether the tool is advertised when the active catalog changes.
 func newTool(
 	lookup func(string) (Skill, bool),
 	names func() []string,
@@ -58,29 +57,41 @@ func newTool(
 				msg := unknownSkillMessage(name, names())
 				return failedTextResult("skill_not_found", msg), fmt.Errorf("%s", msg)
 			}
-			return textResult(formatLoadedSkill(s, in.Arguments)), nil
+			return textResult(formatLoadedSkill(s)), nil
 		},
 	}
 }
 
-// formatLoadedSkill renders a skill's expanded body as the tool result the model
-// reads, wrapped so the boundary of the injected instructions is explicit.
-func formatLoadedSkill(s Skill, arguments string) string {
-	body := Expand(s.Content, s.Dir, arguments)
+// formatLoadedSkill renders a skill's body unchanged as the tool result the
+// model reads, wrapped so the instruction boundary and skill root are explicit.
+func formatLoadedSkill(s Skill) string {
 	return fmt.Sprintf(
 		"<loaded_skill name=%q root=%q>\n%s\n\n%s\n</loaded_skill>\n\nFollow the loaded skill instructions for the current task.",
 		s.Name,
 		s.Dir,
 		relativePathProtocol,
-		body,
+		s.Content,
 	)
 }
 
-// ExpandExplicitInvocation recognizes a leading /skill:name command and
-// resolves it against the complete registry, including manual-only skills. The
-// returned block is product-generated context intended to follow the original
-// user text in the same message.
-func (r *Registry) ExpandExplicitInvocation(text string) (expanded string, matched bool, err error) {
+// FormatActivatedContext renders the immutable Skill snapshot that remains in
+// model context after activation, even when the tool result or explicit
+// invocation that loaded it is later compacted out of conversation history.
+func FormatActivatedContext(s Skill) string {
+	return fmt.Sprintf(
+		"<or-context kind=\"activated_skill\" name=%q>\n"+
+			"This Skill was activated earlier in the conversation. Its exact instructions remain in force.\n"+
+			"%s\n"+
+			"</or-context>",
+		s.Name,
+		formatLoadedSkill(s),
+	)
+}
+
+// ResolveExplicitInvocation recognizes a product-generated SKILL.md reference
+// and resolves it against the registry.
+// The returned block follows the visible user text in the same message.
+func (r *Registry) ResolveExplicitInvocation(text string) (loaded string, matched bool, err error) {
 	name, arguments, matched := parseExplicitInvocation(text)
 	if !matched {
 		return "", false, nil
@@ -90,22 +101,33 @@ func (r *Registry) ExpandExplicitInvocation(text string) (expanded string, match
 		msg := unknownSkillMessage(name, r.names())
 		return "", true, fmt.Errorf("%s", msg)
 	}
-	body := Expand(s.Content, s.Dir, arguments)
 	return fmt.Sprintf(
 		"%sname=%q root=%q>\n"+
 			"The user explicitly invoked this skill. It is already loaded; do not call the skill tool again.\n"+
+			"The user's task details remain in the visible message: %q.\n"+
 			"%s\n\n%s\n"+
-			"</or-explicit-skill-invocation>",
+			"</agent-skill-invocation>",
 		explicitInvocationPrefix,
 		s.Name,
 		s.Dir,
+		arguments,
 		relativePathProtocol,
-		body,
+		s.Content,
 	), true, nil
 }
 
+// ExplicitInvocationSkill returns the exact Skill snapshot selected by a
+// durable product-generated reference.
+func (r *Registry) ExplicitInvocationSkill(text string) (Skill, bool) {
+	name, _, matched := parseExplicitInvocation(text)
+	if !matched {
+		return Skill{}, false
+	}
+	return r.Lookup(name)
+}
+
 // IsExplicitInvocationText reports whether a text block was generated by
-// ExpandExplicitInvocation. UI/history projections omit these blocks.
+// ResolveExplicitInvocation. UI/history projections omit these blocks.
 func IsExplicitInvocationText(text string) bool {
 	return strings.HasPrefix(text, explicitInvocationPrefix)
 }
@@ -138,21 +160,8 @@ func (r *Registry) DisplayExplicitInvocation(text string) string {
 }
 
 func parseExplicitInvocation(text string) (name, arguments string, matched bool) {
-	const prefix = "/skill:"
 	trimmed := strings.TrimSpace(text)
-	if name, arguments, matched := parseSkillReference(trimmed); matched {
-		return name, arguments, true
-	}
-	if !strings.HasPrefix(trimmed, prefix) {
-		return "", "", false
-	}
-	rest := strings.TrimPrefix(trimmed, prefix)
-	if split := strings.IndexFunc(rest, func(r rune) bool {
-		return r == ' ' || r == '\t' || r == '\r' || r == '\n'
-	}); split >= 0 {
-		return rest[:split], strings.TrimSpace(rest[split:]), true
-	}
-	return rest, "", true
+	return parseSkillReference(trimmed)
 }
 
 func parseSkillReference(text string) (name, arguments string, matched bool) {

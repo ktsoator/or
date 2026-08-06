@@ -26,13 +26,12 @@ import { cn } from '@/lib/utils'
 import {
   buildSkillInvocation,
   filterSkills,
-  parseSkillSlashQuery,
-  skillArgumentsFromDraft,
   type SkillEntry,
 } from '@/features/skills'
 import {
   buildPromptTemplateInvocation,
   filterPromptTemplates,
+  parsePromptTemplateQuery,
   type PromptTemplateEntry,
 } from '@/features/prompt-templates'
 import { useComposerAttachments } from './useAttachments'
@@ -172,14 +171,15 @@ export function Composer({
     clear: clearAttachments,
     reportUnsupportedImages,
   } = useComposerAttachments(supportsImages)
-  const slashQuery =
+  const catalogQueryEnabled =
     !running &&
     !selectedSkill &&
     !selectedPromptTemplate &&
     !addPanelOpen &&
     !skillSuggestionsDismissed
-      ? parseSkillSlashQuery(draftValue)
-      : undefined
+  const slashQuery = catalogQueryEnabled
+    ? parsePromptTemplateQuery(draftValue)
+    : undefined
   const {
     skills: availableSkills,
     promptTemplates: availablePromptTemplates,
@@ -192,7 +192,7 @@ export function Composer({
   } = useComposerCatalogs({
     workspacePath,
     locale,
-    refreshPromptTemplates: Boolean(slashQuery),
+    catalogOpen: Boolean(slashQuery),
   })
   const {
     feedback: compactFeedback,
@@ -213,9 +213,7 @@ export function Composer({
     : 0
   const suggestionCount =
     previewCommandCount + suggestedPromptTemplates.length + suggestedSkills.length
-  const skillSuggestionsVisible = Boolean(
-    slashQuery && !editorDisabled,
-  )
+  const skillSuggestionsVisible = Boolean(slashQuery && !editorDisabled)
 
   const autosize = () => {
     const el = ref.current
@@ -344,7 +342,7 @@ export function Composer({
     if (!el) return
     const argumentsText = selectedSkill || selectedPromptTemplate
       ? draftValue
-      : skillArgumentsFromDraft(draftValue)
+      : slashQuery?.argumentsText ?? draftValue
     setSelectedSkill(skill)
     setSelectedPromptTemplate(undefined)
     setDraftValue(argumentsText)
@@ -368,7 +366,7 @@ export function Composer({
     if (!el) return
     const argumentsText = selectedSkill || selectedPromptTemplate
       ? draftValue
-      : skillArgumentsFromDraft(draftValue)
+      : slashQuery?.argumentsText ?? draftValue
     setSelectedPromptTemplate(template)
     setSelectedSkill(undefined)
     setDraftValue(argumentsText)
@@ -451,14 +449,16 @@ export function Composer({
           <ComposerSkillSuggestions
             visible={skillSuggestionsVisible}
             query={slashQuery?.query ?? ''}
+            commandsEnabled={Boolean(slashQuery)}
+            skillsEnabled={Boolean(slashQuery)}
             templates={suggestedPromptTemplates}
             skills={suggestedSkills}
             activeIndex={activeSuggestionIndex}
             keyboardNavigating={skillKeyboardNavigating}
-            loading={skillsLoading}
-            failed={skillsFailed}
-            templatesLoading={promptTemplatesLoading}
-            templatesFailed={promptTemplatesFailed}
+            loading={Boolean(slashQuery && skillsLoading)}
+            failed={Boolean(slashQuery && skillsFailed)}
+            templatesLoading={Boolean(slashQuery && promptTemplatesLoading)}
+            templatesFailed={Boolean(slashQuery && promptTemplatesFailed)}
             onActiveIndexChange={setActiveSuggestionIndex}
             onPointerNavigation={() => setSkillKeyboardNavigating(false)}
             onCommandSelect={(command) => void runPreviewCommand(command)}
@@ -628,7 +628,7 @@ export function Composer({
                       event.preventDefault()
                       setSkillKeyboardNavigating(true)
                       setActiveSuggestionIndex(
-                        (activeSuggestionIndex + 1) % suggestionCount,
+                        (index) => (index + 1) % suggestionCount,
                       )
                       return
                     }
@@ -640,8 +640,8 @@ export function Composer({
                       event.preventDefault()
                       setSkillKeyboardNavigating(true)
                       setActiveSuggestionIndex(
-                        (activeSuggestionIndex - 1 + suggestionCount) %
-                          suggestionCount,
+                        (index) =>
+                          (index - 1 + suggestionCount) % suggestionCount,
                       )
                       return
                     }

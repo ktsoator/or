@@ -6,10 +6,9 @@ import (
 	"github.com/ktsoator/or/agent"
 )
 
-// DynamicRegistry exposes one stable skill tool while atomically replacing the
-// immutable Registry snapshot consulted by tool calls. Provider-visible tool
-// definitions therefore stay byte-stable across skill additions, updates, and
-// removals.
+// DynamicRegistry exposes one snapshot-aware Skill tool while atomically
+// replacing the immutable Registry consulted by tool calls. The engine controls
+// whether that tool is advertised for the current snapshot.
 type DynamicRegistry struct {
 	current atomic.Pointer[Registry]
 }
@@ -50,20 +49,12 @@ func (d *DynamicRegistry) Lookup(name string) (Skill, bool) {
 	return d.Snapshot().Lookup(name)
 }
 
-func (d *DynamicRegistry) ModelList() []Skill {
-	return d.Snapshot().ModelList()
-}
-
-func (d *DynamicRegistry) ModelLookup(name string) (Skill, bool) {
-	return d.Snapshot().ModelLookup(name)
-}
-
-func (d *DynamicRegistry) modelNames() []string {
-	return d.Snapshot().modelNames()
+func (d *DynamicRegistry) names() []string {
+	return d.Snapshot().names()
 }
 
 // Tool returns a stable tool whose execution reads the registry snapshot that
 // is current at call time.
 func (d *DynamicRegistry) Tool() agent.AgentTool {
-	return newTool(d.ModelLookup, d.modelNames)
+	return newTool(d.Lookup, d.names)
 }

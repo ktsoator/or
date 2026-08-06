@@ -10,9 +10,9 @@ import (
 // skillFile is the required filename inside each skill directory.
 const skillFile = "SKILL.md"
 
-// skillsDir is the conventional location of a skills root, relative to the
-// user's home directory and to a workspace.
-var skillsDir = []string{".or", "skills"}
+// skillsDir is the ecosystem-standard skills root relative to a user's home
+// directory or a workspace.
+var skillsDir = []string{".agents", "skills"}
 
 // Roots returns the two roots skills are discovered from: the user-level root
 // that applies everywhere, and the workspace root that overrides it. Either is
@@ -42,7 +42,7 @@ func LoadFor(workspace string) (*Registry, []Diagnostic) {
 
 // LoadOptions names the two roots skills are discovered from. Either may be
 // empty to skip that root. Both should be absolute paths to a skills directory,
-// e.g. ~/.or/skills and <workspace>/.or/skills.
+// e.g. ~/.agents/skills and <workspace>/.agents/skills.
 type LoadOptions struct {
 	// UserDir is the user-level skills root, applied to every workspace.
 	UserDir string
@@ -132,23 +132,20 @@ func loadSkill(dir, dirName string, source Source) (Skill, *Diagnostic, bool) {
 	if err != nil {
 		return Skill{}, &Diagnostic{Path: path, Message: err.Error()}, false
 	}
-	if strings.TrimSpace(fm.Name) == "" {
-		return Skill{}, &Diagnostic{Path: path, Message: "frontmatter is missing required field: name"}, false
-	}
 	if fm.Name != dirName {
 		return Skill{}, &Diagnostic{Path: path, Message: fmt.Sprintf("frontmatter name %q must match directory name %q", fm.Name, dirName)}, false
 	}
-	if strings.TrimSpace(fm.Description) == "" {
-		return Skill{}, &Diagnostic{Path: path, Message: "frontmatter is missing required field: description"}, false
-	}
 
 	return Skill{
-		Name:                   fm.Name,
-		Description:            fm.Description,
-		DisableModelInvocation: fm.DisableModelInvocation,
-		Content:                body,
-		Dir:                    dir,
-		Path:                   path,
-		Source:                 source,
+		Name:          fm.Name,
+		Description:   fm.Description,
+		License:       fm.License,
+		Compatibility: fm.Compatibility,
+		Metadata:      fm.Metadata,
+		AllowedTools:  fm.AllowedTools,
+		Content:       body,
+		Dir:           dir,
+		Path:          path,
+		Source:        source,
 	}, nil, true
 }

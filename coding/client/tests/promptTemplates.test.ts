@@ -4,6 +4,7 @@ import {
   filterPromptTemplates,
   localizePromptTemplate,
   parsePromptTemplateInvocation,
+  parsePromptTemplateQuery,
   promptTemplateArgumentsText,
   serializePromptTemplateInvocationCopy,
   type PromptTemplateEntry,
@@ -40,6 +41,15 @@ describe('Prompt template composer commands', () => {
       '/review security',
     )
     expect(buildPromptTemplateInvocation('review', '  ')).toBe('/review')
+  })
+
+  test('uses slash as the shared resource catalog query', () => {
+    expect(parsePromptTemplateQuery('/review security')).toEqual({
+      query: 'review',
+      argumentsText: 'security',
+    })
+    expect(parsePromptTemplateQuery('/')).toEqual({ query: '', argumentsText: '' })
+    expect(parsePromptTemplateQuery('$review security')).toBeUndefined()
   })
 
   test('parses a visible invocation into its token and arguments', () => {

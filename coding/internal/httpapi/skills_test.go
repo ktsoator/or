@@ -58,7 +58,7 @@ func getSkills(t *testing.T, query string) skillsResp {
 func TestHandleSkillsUserOnly(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	writeSkillFixture(t, filepath.Join(home, ".or", "skills"), "frontend-design", "frontend-design", "distinctive UI design")
+	writeSkillFixture(t, filepath.Join(home, ".agents", "skills"), "frontend-design", "frontend-design", "distinctive UI design")
 
 	resp := getSkills(t, "")
 
@@ -76,21 +76,26 @@ func TestHandleSkillsUserOnly(t *testing.T) {
 	}
 }
 
-func TestHandleSkillsIncludesInvocationControl(t *testing.T) {
+func TestHandleSkillsIncludesStandardOptionalFields(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	root := filepath.Join(home, ".or", "skills", "deploy")
+	root := filepath.Join(home, ".agents", "skills", "deploy")
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	body := "---\nname: deploy\ndescription: deploy the app\ndisable-model-invocation: true\n---\nbody\n"
+	body := "---\nname: deploy\ndescription: deploy the app\nlicense: MIT\ncompatibility: Requires git\nmetadata:\n  author: example\nallowed-tools: Bash(git:*) Read\n---\nbody\n"
 	if err := os.WriteFile(filepath.Join(root, "SKILL.md"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	resp := getSkills(t, "")
-	if len(resp.User) != 1 || !resp.User[0].DisableModelInvocation {
-		t.Fatalf("user skills = %+v, want manual deploy skill", resp.User)
+	if len(resp.User) != 1 {
+		t.Fatalf("user skills = %+v, want deploy skill", resp.User)
+	}
+	skill := resp.User[0]
+	if skill.License != "MIT" || skill.Compatibility != "Requires git" ||
+		skill.Metadata["author"] != "example" || skill.AllowedTools != "Bash(git:*) Read" {
+		t.Fatalf("standard optional fields = %+v", skill)
 	}
 }
 
@@ -99,11 +104,11 @@ func TestHandleSkillsProjectOverridesUser(t *testing.T) {
 	workspace := t.TempDir()
 	t.Setenv("HOME", home)
 
-	userDir := filepath.Join(home, ".or", "skills")
+	userDir := filepath.Join(home, ".agents", "skills")
 	writeSkillFixture(t, userDir, "commit", "commit", "system commit skill")
 	writeSkillFixture(t, userDir, "frontend-design", "frontend-design", "distinctive UI design")
 
-	projectDir := filepath.Join(workspace, ".or", "skills")
+	projectDir := filepath.Join(workspace, ".agents", "skills")
 	writeSkillFixture(t, projectDir, "commit", "commit", "project commit skill")
 
 	resp := getSkills(t, "?workspace="+url.QueryEscape(workspace))
@@ -124,7 +129,7 @@ func TestHandleSkillsReportsDiagnostics(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	// Directory name does not match frontmatter name: skipped, reported.
-	writeSkillFixture(t, filepath.Join(home, ".or", "skills"), "commit", "not-commit", "mismatched")
+	writeSkillFixture(t, filepath.Join(home, ".agents", "skills"), "commit", "not-commit", "mismatched")
 
 	resp := getSkills(t, "")
 
@@ -139,7 +144,7 @@ func TestHandleSkillsReportsDiagnostics(t *testing.T) {
 func TestHandleSkillContent(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	dir := filepath.Join(home, ".or", "skills")
+	dir := filepath.Join(home, ".agents", "skills")
 	if err := os.MkdirAll(filepath.Join(dir, "commit"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -164,9 +169,9 @@ func TestHandleSkillContent(t *testing.T) {
 	if got.Name != "commit" || got.Source != "user" {
 		t.Errorf("meta = %+v, want commit/user", got)
 	}
-	// The body is returned frontmatter-stripped, starting at the Markdown heading.
-	if !strings.HasPrefix(got.Content, "# Commit") {
-		t.Errorf("content = %q, want it to start at the body heading", got.Content)
+	// The body is returned frontmatter-stripped and otherwise byte-preserved.
+	if !strings.HasPrefix(got.Content, "\n# Commit") {
+		t.Errorf("content = %q, want the post-frontmatter body unchanged", got.Content)
 	}
 	if strings.Contains(got.Content, "description:") {
 		t.Errorf("content should not include frontmatter: %q", got.Content)

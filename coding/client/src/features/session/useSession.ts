@@ -10,7 +10,6 @@ import { useSessionConnection } from './connection'
 import { threadsReducer } from './reducer'
 import { sessionResourceAPI } from './resourceApi'
 import type { Session } from './types'
-import { displaySkillInvocation } from '@/features/skills'
 import { useBrowserResultOutbox } from './useBrowserResultOutbox'
 import { useServiceConnection } from '@/serviceConnection'
 import {
@@ -399,12 +398,11 @@ export function useSession(secondarySessionID?: string): Session {
       images: MessageImage[],
       files: PromptFile[],
     ) => {
-      const displayText = displaySkillInvocation(text)
       dispatch({
         t: 'sendUser',
         sessionID,
         id,
-        text: displayText,
+        text,
         images,
         files: promptFileMetadata(files),
         startedAt: new Date().toISOString(),
@@ -412,7 +410,7 @@ export function useSession(secondarySessionID?: string): Session {
       dispatchSessionStore({
         t: 'sessionPromptStarted',
         sessionID,
-        text: displayText,
+        text,
         updatedAt: new Date().toISOString(),
       })
       void sessionCommands.sendPrompt(sessionID, { text, images, files }).catch((error: unknown) => {
@@ -487,7 +485,7 @@ export function useSession(secondarySessionID?: string): Session {
         t: 'sendUser',
         sessionID,
         id,
-        text: displaySkillInvocation(trimmed),
+        text: trimmed,
         images,
         files: promptFileMetadata(files),
         startedAt: new Date().toISOString(),

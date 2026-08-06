@@ -45,6 +45,38 @@ func TestPrepareCutsAtUserTurnWithoutSplittingToolPair(t *testing.T) {
 	}
 }
 
+func TestPrepareRedactsProtectedSkillInstructions(t *testing.T) {
+	call := &llm.AssistantMessage{
+		Content: []llm.AssistantContent{&llm.ToolCall{
+			ID: "skill-call", Name: "skill", Arguments: map[string]any{"name": "review"},
+		}},
+		StopReason: llm.StopReasonToolUse,
+	}
+	result := &llm.ToolResultMessage{
+		ToolCallID: "skill-call", ToolName: "skill",
+		Content: []llm.ToolResultContent{&llm.TextContent{Text: "secret full Skill body"}},
+	}
+	entries := makeEntries([]agent.AgentMessage{
+		agent.UserMessage("old request " + strings.Repeat("x", 80)),
+		agent.FromLLM(call),
+		agent.FromLLM(result),
+		agent.FromLLM(&llm.AssistantMessage{Content: []llm.AssistantContent{&llm.TextContent{Text: "done"}}}),
+		agent.UserMessage("new request " + strings.Repeat("y", 80)),
+	})
+
+	prepared, err := Prepare(entries, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	message, _ := agent.ToLLM(prepared.Messages[2])
+	redacted := message.(*llm.ToolResultMessage)
+	text := redacted.Content[0].(*llm.TextContent).Text
+	if strings.Contains(text, "secret full Skill body") ||
+		!strings.Contains(text, "protected session context") {
+		t.Fatalf("Skill result was not redacted: %q", text)
+	}
+}
+
 func makeEntries(messages []agent.AgentMessage) []transcript.Entry {
 	entries := make([]transcript.Entry, 0, len(messages))
 	for _, message := range messages {

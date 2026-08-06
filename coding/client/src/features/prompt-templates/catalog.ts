@@ -89,6 +89,22 @@ export function filterPromptTemplates(
   )
 }
 
+export type PromptTemplateQuery = {
+  query: string
+  argumentsText: string
+}
+
+export function parsePromptTemplateQuery(
+  draft: string,
+): PromptTemplateQuery | undefined {
+  if (!draft.startsWith('/')) return undefined
+  const token = draft.slice(1).match(/^[^\s]*/)?.[0] ?? ''
+  return {
+    query: token,
+    argumentsText: draft.slice(token.length + 1).trimStart(),
+  }
+}
+
 export function buildPromptTemplateInvocation(
   name: string,
   argumentsText: string,

@@ -12,7 +12,7 @@ import { Markdown } from '@/shared/ui/Markdown'
 import { SidebarToggleButton } from '@/components/SidebarToggleButton'
 
 // relativizeHome trims the user's home prefix off an absolute path so directory
-// hints read as "~/.or/skills/commit" rather than a long absolute path.
+// hints read as "~/.agents/skills/commit" rather than a long absolute path.
 function relativizeHome(path: string): string {
   const home = path.match(/^(\/(?:Users|home)\/[^/]+)/)?.[1]
   return home ? path.replace(home, '~') : path
@@ -113,14 +113,14 @@ export function SkillsPage({
             <div className="mt-10 space-y-9">
               <SkillSection
                 title={workspaceName ? t('skills.projectSectionNamed', { name: workspaceName }) : t('skills.projectSection')}
-                hint={workspacePath ? relativizeHome(`${workspacePath}/.or/skills`) : t('skills.noProject')}
+                hint={workspacePath ? relativizeHome(`${workspacePath}/.agents/skills`) : t('skills.noProject')}
                 skills={data?.project ?? []}
                 empty={workspacePath ? t('skills.emptyProject') : t('skills.noProjectHint')}
                 onSelect={setSelected}
               />
               <SkillSection
                 title={t('skills.systemSection')}
-                hint="~/.or/skills"
+                hint="~/.agents/skills"
                 skills={data?.user ?? []}
                 empty={t('skills.emptySystem')}
                 onSelect={setSelected}
@@ -186,7 +186,6 @@ function SkillSection({
 }
 
 function SkillCard({ skill, onSelect }: { skill: SkillEntry; onSelect: (skill: SkillEntry) => void }) {
-  const { t } = useI18n()
   return (
     <button
       type="button"
@@ -198,11 +197,6 @@ function SkillCard({ skill, onSelect }: { skill: SkillEntry; onSelect: (skill: S
         <div className="min-w-0 flex-1 truncate font-mono text-[0.84375rem] font-medium text-ink">
           {skill.name}
         </div>
-        {skill.disableModelInvocation && (
-          <span className="shrink-0 rounded-md bg-canvas-sunken px-1.5 py-0.5 text-[0.625rem] font-medium text-ink-muted">
-            {t('skills.manual')}
-          </span>
-        )}
       </div>
       <p className="line-clamp-2 text-[0.8125rem] leading-[1.45] text-ink-muted">{skill.description}</p>
     </button>
@@ -280,11 +274,6 @@ function SkillDetailDialog({
               <span className="shrink-0 rounded-full bg-canvas-sunken px-2 py-0.5 text-[0.6875rem] font-medium text-ink-muted">
                 {sourceLabel}
               </span>
-              {skill.disableModelInvocation && (
-                <span className="shrink-0 rounded-md bg-canvas-sunken px-1.5 py-0.5 text-[0.625rem] font-medium text-ink-muted">
-                  {t('skills.manual')}
-                </span>
-              )}
             </div>
             <p className="mt-1 text-[0.8125rem] leading-5 text-ink-muted">{skill.description}</p>
             <p className="mt-1 truncate font-mono text-[0.6875rem] text-ink-faint" title={skill.dir}>

@@ -42,8 +42,8 @@ type Options struct {
 	// Tools is the tool set. Nil uses tools.CodingTools rooted at Cwd, backed by
 	// tools.LocalOps.
 	Tools []tools.Tool
-	// Skills is the initial immutable skill snapshot. The stable skill tool is
-	// present even when this slice is empty.
+	// Skills is the initial immutable skill snapshot. The Skill tool is advertised
+	// only while the active snapshot contains at least one Skill.
 	Skills []skills.Skill
 	// SkillLoader refreshes the resolved skill snapshot once at session
 	// construction and once before every top-level Prompt or Continue. Nil keeps
@@ -106,6 +106,7 @@ type Session struct {
 	agent                  *agent.Agent
 	store                  transcript.Store
 	tools                  []tools.Tool
+	allTools               []tools.Tool
 	toolByName             map[string]tools.Tool
 	authorizer             *permission.Service
 	tasks                  *tools.TaskManager
@@ -122,6 +123,7 @@ type Session struct {
 	pendingContextRevision string
 	modelContext           *modelcontext.Manager
 	promptSections         []string
+	instructions           string
 
 	maxRetries    int
 	contextWindow int64
@@ -189,8 +191,8 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	} else if err := registerTools(registry, "coding.configured-tools", opts.Tools, false); err != nil {
 		return nil, err
 	}
-	// The skill tool's schema and closure have session lifetime even when no
-	// skill is installed. Only the immutable registry behind the closure moves.
+	// Keep one snapshot-aware Skill tool available for request-boundary add/remove
+	// changes. It is filtered out of the provider tool set while no Skill exists.
 	if err := registerTools(registry, "coding.skills", []tools.Tool{{
 		AgentTool: dynamicSkills.Tool(),
 		AccessFor: tools.InternalAccess,
@@ -210,6 +212,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		}
 	}
 	toolSet := registry.Tools()
+	activeToolSet := toolsWithSkillAvailability(toolSet, initialRegistry.Len() > 0)
 	capabilityBeforeToolCall := registry.BeforeToolCall()
 	capabilityAfterToolCall := registry.AfterToolCall()
 
@@ -257,15 +260,17 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 
 	s := &Session{
 		store:                opts.Store,
-		tools:                toolSet,
+		tools:                activeToolSet,
+		allTools:             toolSet,
 		toolByName:           toolsByName(toolSet),
 		authorizer:           authorizer,
 		tasks:                tasks,
 		cwd:                  cwd,
 		promptSections:       registry.PromptSections(),
+		instructions:         opts.Instructions,
 		skillRegistry:        dynamicSkills,
 		skillLoader:          opts.SkillLoader,
-		skillRevision:        initialRegistry.ModelRevision(),
+		skillRevision:        initialRegistry.Revision(),
 		promptTemplates:      prompttemplate.NewRegistry(initialPromptTemplates),
 		promptTemplateLoader: opts.PromptTemplateLoader,
 		maxRetries:           maxRetries,
@@ -293,6 +298,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		s.skillRevision,
 		s.buildSkillListing(),
 	)
+	s.modelContext.RestoreActivatedSkills(restoredActivatedSkills(entries))
 	if s.tasks != nil {
 		s.taskUnsubscribe = s.tasks.Subscribe(func(state tools.TaskState) {
 			if state.Status != tools.TaskRunning {
@@ -313,7 +319,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		SystemPrompt:  s.buildSystemPrompt(opts.Instructions),
 		Model:         opts.Model,
 		ThinkingLevel: opts.ThinkingLevel,
-		Tools:         tools.AgentTools(toolSet),
+		Tools:         tools.AgentTools(activeToolSet),
 		Messages:      seed,
 		StreamOptions: opts.StreamOptions,
 		StreamFn:      s.modelStreamFn(opts.StreamFn),
@@ -337,7 +343,24 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 			})
 			return decision.Behavior != permission.Allow, decision.Reason
 		},
-		AfterToolCall:   capabilityAfterToolCall,
+		AfterToolCall: func(ctx agent.AfterToolCallCtx) *agent.AfterToolCallResult {
+			override := (*agent.AfterToolCallResult)(nil)
+			if capabilityAfterToolCall != nil {
+				override = capabilityAfterToolCall(ctx)
+			}
+			outcome := ctx.Result.Outcome
+			if override != nil && override.Outcome != nil {
+				outcome = *override.Outcome
+			}
+			if ctx.ToolCall.Name == skills.ToolName && !outcome.Failed() {
+				if args, ok := ctx.Args.(map[string]any); ok {
+					if name, ok := args["name"].(string); ok {
+						s.activateSkill(name)
+					}
+				}
+			}
+			return override
+		},
 		PrepareNextTurn: s.prepareNextTurn,
 	}
 	s.agent = agent.New(agentOpts)
@@ -420,16 +443,22 @@ func (s *Session) promptMessage(
 	if s.pendingSkills != nil {
 		registry = s.pendingSkills
 	}
-	expanded, matched, err := registry.ExpandExplicitInvocation(text)
+	_, matched, err := registry.ResolveExplicitInvocation(text)
 	if err != nil {
 		return nil, err
 	}
 	if matched {
+		if activated, ok := registry.ExplicitInvocationSkill(text); ok {
+			s.modelContext.StageActivatedSkill(
+				activated.Name,
+				"",
+				skills.FormatActivatedContext(activated),
+			)
+		}
 		return userMessage(
 			registry.DisplayExplicitInvocation(text),
 			files,
 			images,
-			expanded,
 		), nil
 	}
 	templates := s.promptTemplates
@@ -437,7 +466,7 @@ func (s *Session) promptMessage(
 		templates = prompttemplate.NewRegistry(s.promptTemplateLoader())
 		s.promptTemplates = templates
 	}
-	expanded, matched = templates.ExpandExplicitInvocation(text)
+	expanded, matched := templates.ExpandExplicitInvocation(text)
 	if !matched {
 		return userMessage(text, files, images), nil
 	}
@@ -469,6 +498,7 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 		return err
 	}
 	s.prepareSkillRefresh()
+	s.setSkillToolAvailable(s.currentSkillRegistry().Len() > 0)
 	s.prepareContextRefresh()
 	startedAt := time.Now().UTC()
 	runEntryStart := len(s.snapshotTranscript())
@@ -893,8 +923,37 @@ func (s *Session) buildBaseContext() (rendered, revision string) {
 func (s *Session) buildSkillListing() string {
 	return prompt.RenderSkillListing(
 		s.skillRevision,
-		skillInfos(s.skillRegistry.ModelList()),
+		skillInfos(s.skillRegistry.List()),
 	)
+}
+
+func (s *Session) currentSkillRegistry() *skills.Registry {
+	if s.pendingSkills != nil {
+		return s.pendingSkills
+	}
+	return s.skillRegistry.Snapshot()
+}
+
+func (s *Session) activateSkill(name string) {
+	skill, ok := s.currentSkillRegistry().Lookup(name)
+	if !ok {
+		return
+	}
+	s.modelContext.StageActivatedSkill(
+		skill.Name,
+		"",
+		skills.FormatActivatedContext(skill),
+	)
+}
+
+func (s *Session) setSkillToolAvailable(available bool) {
+	next := toolsWithSkillAvailability(s.allTools, available)
+	if sameToolNames(s.tools, next) {
+		return
+	}
+	s.tools = next
+	s.agent.SetTools(tools.AgentTools(next))
+	s.agent.SetSystemPrompt(s.buildSystemPrompt(s.instructions))
 }
 
 // prepareSkillRefresh stages one immutable snapshot for the next request. The
@@ -905,13 +964,11 @@ func (s *Session) prepareSkillRefresh() {
 		return
 	}
 	next := skills.NewRegistry(s.skillLoader())
-	nextRevision := next.ModelRevision()
+	nextRevision := next.Revision()
 
 	if s.pendingSkills != nil {
 		switch nextRevision {
 		case s.pendingSkillRevision:
-			// The model-visible snapshot is unchanged, but a manual-only skill
-			// may have changed while the update was staged.
 			s.pendingSkills = next
 			return
 		case s.skillRevision:
@@ -922,19 +979,14 @@ func (s *Session) prepareSkillRefresh() {
 			return
 		}
 	} else if nextRevision == s.skillRevision {
-		// Manual-only changes require no model-context update, but become
-		// available to explicit user invocation at this top-level boundary.
 		s.skillRegistry.Replace(next)
 		return
 	}
 
-	delta := skills.Diff(
-		s.skillRegistry.Snapshot().ModelRegistry(),
-		next.ModelRegistry(),
-	)
+	delta := skills.Diff(s.skillRegistry.Snapshot(), next)
 	rendered := prompt.RenderSkillsUpdate(
 		nextRevision,
-		skillInfos(next.ModelList()),
+		skillInfos(next.List()),
 		promptSkillDelta(delta),
 	)
 	s.pendingSkills = next
@@ -1017,6 +1069,26 @@ func nextContextEpoch(entries []transcript.Entry) uint64 {
 	return latest + 1
 }
 
+func restoredActivatedSkills(entries []transcript.Entry) []modelcontext.Attachment {
+	result := make([]modelcontext.Attachment, 0)
+	for _, entry := range entries {
+		if entry.Type != transcript.ContextEntry || entry.Context == nil ||
+			entry.Context.Kind != string(modelcontext.ActivatedSkill) {
+			continue
+		}
+		result = append(result, modelcontext.Attachment{
+			ID:        entry.Context.AttachmentID,
+			Epoch:     entry.Context.Epoch,
+			Kind:      modelcontext.ActivatedSkill,
+			Placement: modelcontext.Placement(entry.Context.Placement),
+			Path:      entry.Context.Path,
+			Revision:  entry.Context.Revision,
+			Rendered:  entry.Context.Rendered,
+		})
+	}
+	return result
+}
+
 // skillInfos projects loaded skills into the prompt's listing entries.
 func skillInfos(skills []skills.Skill) []prompt.SkillInfo {
 	if len(skills) == 0 {
@@ -1035,6 +1107,29 @@ func promptSkillDelta(delta skills.Delta) prompt.SkillsDelta {
 		Updated: skillInfos(delta.Updated),
 		Removed: append([]string(nil), delta.Removed...),
 	}
+}
+
+func toolsWithSkillAvailability(toolSet []tools.Tool, available bool) []tools.Tool {
+	result := make([]tools.Tool, 0, len(toolSet))
+	for _, tool := range toolSet {
+		if !available && tool.Name() == skills.ToolName {
+			continue
+		}
+		result = append(result, tool)
+	}
+	return result
+}
+
+func sameToolNames(left, right []tools.Tool) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index].Name() != right[index].Name() {
+			return false
+		}
+	}
+	return true
 }
 
 func registerTools(registry *capability.Registry, id string, toolSet []tools.Tool, replace bool) error {

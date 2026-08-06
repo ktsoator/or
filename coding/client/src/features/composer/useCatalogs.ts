@@ -10,21 +10,29 @@ import { fetchSkills, type SkillsResponse } from '@/features/skills'
 export function useComposerCatalogs({
   workspacePath,
   locale,
-  refreshPromptTemplates,
+  catalogOpen,
 }: {
   workspacePath?: string
   locale: Locale
-  refreshPromptTemplates: boolean
+  catalogOpen: boolean
 }) {
   const [skillsData, setSkillsData] = useState<SkillsResponse>()
-  const [skillsLoading, setSkillsLoading] = useState(true)
+  const [skillsLoading, setSkillsLoading] = useState(false)
   const [skillsFailed, setSkillsFailed] = useState(false)
   const [promptTemplatesData, setPromptTemplatesData] =
     useState<PromptTemplatesResponse>()
-  const [promptTemplatesLoading, setPromptTemplatesLoading] = useState(true)
+  const [promptTemplatesLoading, setPromptTemplatesLoading] = useState(false)
   const [promptTemplatesFailed, setPromptTemplatesFailed] = useState(false)
 
   useEffect(() => {
+    setSkillsData(undefined)
+    setSkillsFailed(false)
+    setPromptTemplatesData(undefined)
+    setPromptTemplatesFailed(false)
+  }, [workspacePath])
+
+  useEffect(() => {
+    if (!catalogOpen) return
     const controller = new AbortController()
     setSkillsLoading(true)
     setSkillsFailed(false)
@@ -39,9 +47,10 @@ export function useComposerCatalogs({
         if (!controller.signal.aborted) setSkillsLoading(false)
       })
     return () => controller.abort()
-  }, [workspacePath])
+  }, [catalogOpen, workspacePath])
 
   useEffect(() => {
+    if (!catalogOpen) return
     const controller = new AbortController()
     setPromptTemplatesLoading(true)
     setPromptTemplatesFailed(false)
@@ -56,7 +65,7 @@ export function useComposerCatalogs({
         if (!controller.signal.aborted) setPromptTemplatesLoading(false)
       })
     return () => controller.abort()
-  }, [refreshPromptTemplates, workspacePath])
+  }, [catalogOpen, workspacePath])
 
   const skills = useMemo(
     () => [...(skillsData?.project ?? []), ...(skillsData?.user ?? [])],

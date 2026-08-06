@@ -326,27 +326,6 @@ describe('threadsReducer event sequences', () => {
     ).not.toHaveProperty('invocation')
   })
 
-  test('projects legacy skill commands to reference form', () => {
-    const state = reduce([
-      {
-        t: 'wire',
-        sessionID,
-        ev: {
-          type: 'user_message',
-          text: '/skill:frontend-design polish the composer',
-          images: [],
-        },
-      },
-    ])
-
-    expect(thread(state).items).toContainEqual(
-      expect.objectContaining({
-        kind: 'user',
-        text: '[$frontend-design]() polish the composer',
-      }),
-    )
-  })
-
   test('discards a partial attempt and retains the retry response', () => {
     let state = reduce([
       {

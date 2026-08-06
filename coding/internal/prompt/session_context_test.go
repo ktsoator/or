@@ -150,16 +150,11 @@ func TestContextRevisionTracksEveryModelVisibleInput(t *testing.T) {
 	}
 }
 
-func TestRenderSkillListingTruncatesDescription(t *testing.T) {
-	long := strings.Repeat("x", maxSkillDescChars+50)
+func TestRenderSkillListingPreservesValidDescription(t *testing.T) {
+	long := strings.Repeat("x", 1024)
 	out := RenderSkillListing("revision", []SkillInfo{{Name: "big", Description: long}})
-	// The entry line is truncated to the cap (with an ellipsis) rather than
-	// emitting the full description.
-	if strings.Contains(out, long) {
-		t.Errorf("long description should be truncated:\n%s", out)
-	}
-	if !strings.Contains(out, "…") {
-		t.Errorf("truncation should append an ellipsis:\n%s", out)
+	if !strings.Contains(out, long) {
+		t.Errorf("valid description should be preserved:\n%s", out)
 	}
 }
 
@@ -223,7 +218,7 @@ func TestRenderSkillsUpdateCanRemoveLastSkill(t *testing.T) {
 		nil,
 		SkillsDelta{Removed: []string{"last"}},
 	)
-	if !strings.Contains(out, `<available-skills none="true" />`) ||
+	if strings.Contains(out, "<available-skills") ||
 		!strings.Contains(out, "<name>last</name>") {
 		t.Fatalf("last-skill removal is not explicit:\n%s", out)
 	}

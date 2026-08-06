@@ -35,8 +35,8 @@ func TestSessionAssemblesCapabilityToolsAndPromptSections(t *testing.T) {
 	for _, tool := range state.Tools {
 		names = append(names, tool.Definition.Name)
 	}
-	if !reflect.DeepEqual(names, []string{"skill", "deploy"}) {
-		t.Fatalf("tools = %v, want stable skill plus contributed deploy", names)
+	if !reflect.DeepEqual(names, []string{"deploy"}) {
+		t.Fatalf("tools = %v, want only contributed deploy", names)
 	}
 	if !strings.Contains(state.SystemPrompt, "## Deploy policy\nUse staging first.") {
 		t.Fatalf("system prompt omitted capability section:\n%s", state.SystemPrompt)

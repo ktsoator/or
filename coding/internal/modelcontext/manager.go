@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"sort"
 	"sync"
 
 	"github.com/ktsoator/or/llm"
@@ -16,11 +17,12 @@ type AttachmentKind string
 type Placement string
 
 const (
-	BaseContext   AttachmentKind = "base"
-	SkillListing  AttachmentKind = "skill_listing"
-	SkillsUpdate  AttachmentKind = "skills_update"
-	ContextUpdate AttachmentKind = "context_update"
-	TaskStatus    AttachmentKind = "task_status"
+	BaseContext    AttachmentKind = "base"
+	SkillListing   AttachmentKind = "skill_listing"
+	SkillsUpdate   AttachmentKind = "skills_update"
+	ActivatedSkill AttachmentKind = "activated_skill"
+	ContextUpdate  AttachmentKind = "context_update"
+	TaskStatus     AttachmentKind = "task_status"
 
 	Prefix       Placement = "prefix"
 	AfterCurrent Placement = "after-current"
@@ -60,6 +62,8 @@ type State struct {
 	StagedContextRevision string
 	ActiveTaskRevision    string
 	StagedTaskRevision    string
+	ActivatedSkillCount   int
+	PendingSkillCount     int
 }
 
 type trackedAttachment struct {
@@ -130,12 +134,13 @@ func (u *updateSlot) revisions() (active, staged string) {
 type Manager struct {
 	mu sync.Mutex
 
-	epoch   uint64
-	base    *trackedAttachment
-	listing *trackedAttachment
-	skills  updateSlot
-	context updateSlot
-	tasks   updateSlot
+	epoch     uint64
+	base      *trackedAttachment
+	listing   *trackedAttachment
+	skills    updateSlot
+	context   updateSlot
+	tasks     updateSlot
+	activated map[string]*trackedAttachment
 }
 
 // New constructs an epoch from independently rendered Base Context and initial
@@ -148,10 +153,11 @@ func New(
 	skillListingRendered string,
 ) *Manager {
 	manager := &Manager{
-		epoch:   epoch,
-		skills:  updateSlot{kind: SkillsUpdate},
-		context: updateSlot{kind: ContextUpdate},
-		tasks:   updateSlot{kind: TaskStatus},
+		epoch:     epoch,
+		skills:    updateSlot{kind: SkillsUpdate},
+		context:   updateSlot{kind: ContextUpdate},
+		tasks:     updateSlot{kind: TaskStatus},
+		activated: make(map[string]*trackedAttachment),
 	}
 	if baseRendered != "" {
 		if baseRevision == "" {
@@ -178,6 +184,48 @@ func New(
 		)
 	}
 	return manager
+}
+
+// RestoreActivatedSkills installs durable Skill instructions recovered from the
+// transcript. The first activation of a name wins so a Skill edit cannot change
+// the instructions already governing an in-flight conversation.
+func (m *Manager) RestoreActivatedSkills(attachments []Attachment) {
+	if m == nil || len(attachments) == 0 {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, attachment := range attachments {
+		if attachment.Kind != ActivatedSkill || attachment.Path == "" || attachment.Rendered == "" {
+			continue
+		}
+		if _, exists := m.activated[attachment.Path]; exists {
+			continue
+		}
+		copy := attachment
+		m.activated[attachment.Path] = &trackedAttachment{Attachment: copy, committed: true}
+	}
+}
+
+// StageActivatedSkill protects one loaded Skill body from transcript
+// compaction. Repeated activation is a no-op; the session keeps the exact first
+// body snapshot until the conversation ends.
+func (m *Manager) StageActivatedSkill(name, revision, rendered string) {
+	if m == nil || name == "" || rendered == "" {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, exists := m.activated[name]; exists {
+		return
+	}
+	if revision == "" {
+		revision = revisionOf(rendered)
+	}
+	tracked := newTracked(m.epoch, ActivatedSkill, AfterCurrent, revision, rendered)
+	tracked.ID = fmt.Sprintf("%s:%d:%s:%s", ActivatedSkill, m.epoch, name, revision)
+	tracked.Path = name
+	m.activated[name] = tracked
 }
 
 // StageSkillsUpdate prepares a complete replacement skill snapshot for the next
@@ -262,7 +310,9 @@ func (m *Manager) PrepareStep(input llm.Context) PreparedStep {
 
 	prepared := PreparedStep{Input: cloneContext(input)}
 	prefix := compactAttachments(m.base, m.listing)
-	suffix := compactAttachments(m.context.current(), m.skills.current(), m.tasks.current())
+	suffix := compactAttachments(m.context.current(), m.skills.current())
+	suffix = append(suffix, m.activatedSkills()...)
+	suffix = append(suffix, compactAttachments(m.tasks.current())...)
 
 	messages := make([]llm.Message, 0, len(prefix)+len(input.Messages)+len(suffix))
 	for _, attachment := range prefix {
@@ -301,6 +351,13 @@ func (m *Manager) Commit(prepared PreparedStep) {
 		case m.skills.commit(pending.ID):
 		case m.context.commit(pending.ID):
 		case m.tasks.commit(pending.ID):
+		default:
+			for _, activated := range m.activated {
+				if pending.ID == activated.ID {
+					activated.committed = true
+					break
+				}
+			}
 		}
 	}
 }
@@ -330,7 +387,26 @@ func (m *Manager) State() State {
 	state.ActiveSkillsRevision, state.StagedSkillsRevision = m.skills.revisions()
 	state.ActiveContextRevision, state.StagedContextRevision = m.context.revisions()
 	state.ActiveTaskRevision, state.StagedTaskRevision = m.tasks.revisions()
+	for _, activated := range m.activated {
+		state.ActivatedSkillCount++
+		if !activated.committed {
+			state.PendingSkillCount++
+		}
+	}
 	return state
+}
+
+func (m *Manager) activatedSkills() []*trackedAttachment {
+	names := make([]string, 0, len(m.activated))
+	for name := range m.activated {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	result := make([]*trackedAttachment, 0, len(names))
+	for _, name := range names {
+		result = append(result, m.activated[name])
+	}
+	return result
 }
 
 func compactAttachments(items ...*trackedAttachment) []*trackedAttachment {
