@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
-import { browserRuntimeTabID } from '../src/browserRuntime'
+import { browserRuntimeTabID } from '../src/features/browser/runtimeID'
 
 // The webview bridge only touches window for timers and URL resolution.
 ;(globalThis as unknown as { window: unknown }).window = {
@@ -9,7 +9,7 @@ import { browserRuntimeTabID } from '../src/browserRuntime'
 }
 
 const { registerWebviewBrowser, webviewBrowserBridge } = await import(
-  '../src/lib/webviewBrowser'
+  '../src/features/browser/webviewBrowser'
 )
 type BrowserRuntimeState = Awaited<
   ReturnType<typeof webviewBrowserBridge.navigate>

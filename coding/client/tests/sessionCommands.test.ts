@@ -3,7 +3,7 @@ import { APIError } from '../src/api'
 import {
   createSessionCommands,
   type SessionRequest,
-} from '../src/sessionCommands'
+} from '../src/features/session/commands'
 
 type RequestCall = {
   url: string

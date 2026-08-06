@@ -3,7 +3,7 @@ import {
   browserInspectionScript,
   browserInspectionTextLimit,
   type BrowserInspectionText,
-} from '../src/lib/browserInspection'
+} from '../src/features/browser/inspection'
 
 async function inspectPage(page: Page) {
   return page.evaluate(

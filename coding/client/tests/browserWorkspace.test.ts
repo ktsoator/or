@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { createBrowserTab, type BrowserNavigationTarget } from '../src/browserTabs'
-import { browserRuntimeTabID } from '../src/browserRuntime'
+import { createBrowserTab, type BrowserNavigationTarget } from '../src/features/browser/tabs'
+import { browserRuntimeTabID } from '../src/features/browser/runtimeID'
 import {
   browserWorkspaceCommandTabID,
   browserWorkspaceContext,
@@ -11,7 +11,7 @@ import {
   createBrowserWorkspaceRegistryState,
   createBrowserWorkspaceState,
   selectedBrowserTab,
-} from '../src/browserWorkspace'
+} from '../src/features/browser/workspace'
 
 const webTarget = (
   requestedURL: string,

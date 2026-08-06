@@ -9,17 +9,17 @@ import {
   FileText,
   LoaderCircle,
 } from 'lucide-react'
-import { formatFileSize } from '@/attachments'
+import { formatFileSize } from '@/shared/attachments'
 import {
   parseSkillReference,
   serializeSkillReferenceCopy,
   type SkillReference,
-} from '@/skills'
+} from '@/features/skills'
 import {
   promptTemplateArgumentsText,
   serializePromptTemplateInvocationCopy,
   type PromptTemplateInvocation,
-} from '@/promptTemplates'
+} from '@/features/prompt-templates'
 import type { Item } from '@/types'
 import { useI18n } from '@/i18n'
 import { formatMessageTime } from '@/lib/time'

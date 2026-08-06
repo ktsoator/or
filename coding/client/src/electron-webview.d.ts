@@ -3,7 +3,7 @@ import type {
   HTMLAttributes,
   Ref,
 } from 'react'
-import type { BrowserWebviewElement } from './lib/webviewBrowser'
+import type { BrowserWebviewElement } from './features/browser/webviewBrowser'
 
 declare module 'react' {
   namespace JSX {

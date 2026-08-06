@@ -3,7 +3,7 @@ import {
   threadsReducer,
   type ThreadAction,
   type ThreadsState,
-} from '../src/sessionReducer'
+} from '../src/features/session/reducer'
 
 const sessionID = 'session-1'
 const startedAt = '2026-07-23T12:00:00.000Z'

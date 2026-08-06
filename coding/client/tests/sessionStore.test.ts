@@ -5,7 +5,7 @@ import {
   sessionStoreReducer,
   type SessionStoreAction,
   type SessionStoreState,
-} from '../src/sessionStore'
+} from '../src/features/session/store'
 import type { SessionSummary } from '../src/types'
 
 function session(id: string, updatedAt = '2026-07-23T12:00:00.000Z'): SessionSummary {

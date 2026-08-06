@@ -8,12 +8,12 @@ import {
   serializeSkillReferenceCopy,
   skillArgumentsFromDraft,
   type SkillEntry,
-} from '../src/skills'
+} from '../src/features/skills'
 import {
   composerPreviewCommands,
   parseExecutableComposerCommand,
   previewSkillCommandCount,
-} from '../src/components/composerPanelStyles'
+} from '../src/features/composer/panelStyles'
 
 describe('Skill composer commands', () => {
   test('recognizes slash search and preserves arguments', () => {
