@@ -269,6 +269,7 @@ export default function App() {
     const session = sessions.find((candidate) => candidate.id === id)
     if (session) setSelectedWorkspacePath(session.scope === 'project' ? session.workspacePath : undefined)
     selectSession(id)
+    setView({ type: 'conversation' })
     setWorkbenchTaskRequest(undefined)
     closeMobileSessions()
   }
@@ -279,6 +280,7 @@ export default function App() {
     setWorkbenchTaskRequest(undefined)
     setSecondarySessionID(id)
     showSessionInWorkbench(id)
+    setView({ type: 'conversation' })
     closeMobileSessions()
   }
 
@@ -299,6 +301,7 @@ export default function App() {
   const addSession = (workspacePath?: string, projectScoped = false) => {
     setSelectedWorkspacePath(projectScoped ? workspacePath : undefined)
     startDraft(workspacePath, projectScoped)
+    setView({ type: 'conversation' })
     setWorkbenchTaskRequest(undefined)
     closeMobileSessions()
   }

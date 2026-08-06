@@ -3819,6 +3819,31 @@ test('prompt templates page groups resources, reports diagnostics, and opens det
   await expect.poll(listRequests).toBe(beforeRefresh + 1)
 })
 
+test('sidebar session actions leave catalog pages for the conversation', async ({ page }) => {
+  await openDesktopClient(page, { existingSession: true })
+  const conversation = page.getByTestId('conversation-pane')
+  const sidebar = page.locator('aside')
+
+  await sidebar.getByRole('button', { name: 'Skills', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Skills', exact: true })).toBeVisible()
+  await page
+    .getByRole('navigation', { name: 'Chats' })
+    .getByRole('button', { name: 'New session', exact: true })
+    .click()
+  await expect(conversation).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Skills', exact: true })).toBeHidden()
+
+  await sidebar.getByRole('button', { name: 'Prompt templates', exact: true }).click()
+  await expect(
+    page.getByRole('heading', { name: 'Prompt templates', exact: true }),
+  ).toBeVisible()
+  await sidebar.getByRole('button', { name: 'New session', exact: true }).first().click()
+  await expect(conversation).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Prompt templates', exact: true }),
+  ).toBeHidden()
+})
+
 test('prompt templates share the slash menu and send a compact invocation', async ({
   page,
 }) => {
