@@ -29,7 +29,7 @@ type Config struct {
 // Defaults returns process-level defaults.
 func Defaults() Config {
 	return Config{
-		Cwd:          envOr("OR_CWD", ""),
+		Cwd:          "",
 		DataDir:      envOr("OR_DATA_DIR", ""),
 		Addr:         "localhost:8787",
 		ClientOrigin: envOr("OR_CLIENT_ORIGIN", ""),
@@ -42,7 +42,6 @@ func Parse(args []string) (Config, error) {
 	cfg := Defaults()
 	flags := flag.NewFlagSet("coding", flag.ContinueOnError)
 
-	flags.StringVar(&cfg.Cwd, "cwd", cfg.Cwd, "initial directory-browser location")
 	flags.StringVar(&cfg.DataDir, "data-dir", cfg.DataDir, "coding data directory (default: ~/.or/coding)")
 	flags.StringVar(&cfg.Addr, "addr", cfg.Addr, "API listen address")
 	flags.StringVar(&cfg.ClientOrigin, "client-origin", cfg.ClientOrigin, "allowed client origin for cross-origin API access")
