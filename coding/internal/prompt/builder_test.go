@@ -75,7 +75,6 @@ func TestBuildSystemIsDeterministic(t *testing.T) {
 			{Name: "read", Guidelines: []string{"First.", "Shared."}},
 			{Name: "edit", Guidelines: []string{"Shared.", "Second."}},
 		},
-		AdditionalSections: []string{"  ## Deploy\nUse staging first.  ", ""},
 	}
 	first := BuildSystem(opts)
 	for range 10 {
@@ -85,8 +84,5 @@ func TestBuildSystemIsDeterministic(t *testing.T) {
 	}
 	if strings.Count(first, "- Shared.") != 1 {
 		t.Fatalf("duplicate guideline was not removed:\n%s", first)
-	}
-	if !strings.Contains(first, "## Deploy\nUse staging first.\n\n## Response style") {
-		t.Fatalf("additional section was not placed before response style:\n%s", first)
 	}
 }

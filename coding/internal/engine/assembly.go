@@ -2,12 +2,10 @@ package engine
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/ktsoator/or/agent"
-	"github.com/ktsoator/or/coding/internal/capability"
 	"github.com/ktsoator/or/coding/internal/compaction"
 	"github.com/ktsoator/or/coding/internal/modelcontext"
 	"github.com/ktsoator/or/coding/internal/permission"
@@ -42,44 +40,27 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		initialPromptTemplates = opts.PromptTemplateLoader()
 	}
 
-	registry := capability.NewRegistry()
+	var toolSet []tools.Tool
 	var tasks *tools.TaskManager
 	if opts.Tools == nil {
 		coreTools, coreTasks := tools.CoreToolsWithTasks(cwd, tools.LocalOps{})
 		tasks = coreTasks
-		if err := registerTools(registry, "coding.core-tools", coreTools, false); err != nil {
-			return nil, err
-		}
-		if err := registerTools(registry, "coding.browser", tools.BrowserTools(cwd, opts.Browser), false); err != nil {
-			return nil, err
-		}
-	} else if err := registerTools(registry, "coding.configured-tools", opts.Tools, false); err != nil {
-		return nil, err
+		toolSet = append(coreTools, tools.BrowserTools(cwd, opts.Browser)...)
+	} else {
+		toolSet = append([]tools.Tool(nil), opts.Tools...)
 	}
 	// Keep one snapshot-aware Skill tool available for request-boundary add/remove
 	// changes. It is filtered out of the provider tool set while no Skill exists.
-	if err := registerTools(registry, "coding.skills", []tools.Tool{{
+	toolSet = append(toolSet, tools.Tool{
 		AgentTool: dynamicSkills.Tool(),
 		AccessFor: tools.InternalAccess,
-	}}, true); err != nil {
-		return nil, err
-	}
+	})
 	// The question tool needs a surface that can reach the user, which only the
 	// product shell has. A session without one advertises no question tool.
 	if opts.Asker != nil {
-		if err := registerTools(registry, "coding.ask-user", []tools.Tool{tools.AskUserQuestion(opts.Asker)}, true); err != nil {
-			return nil, err
-		}
+		toolSet = append(toolSet, tools.AskUserQuestion(opts.Asker))
 	}
-	for _, definition := range opts.Capabilities {
-		if err := registry.Register(definition); err != nil {
-			return nil, fmt.Errorf("register coding capability %q: %w", definition.Manifest.ID, err)
-		}
-	}
-	toolSet := registry.Tools()
 	activeToolSet := toolsWithSkillAvailability(toolSet, initialRegistry.Len() > 0)
-	capabilityBeforeToolCall := registry.BeforeToolCall()
-	capabilityAfterToolCall := registry.AfterToolCall()
 
 	authorizer, err := permission.NewService(cwd, opts.Policy, opts.Approver)
 	if err != nil {
@@ -103,7 +84,6 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		authorizer:           authorizer,
 		tasks:                tasks,
 		cwd:                  cwd,
-		promptSections:       registry.PromptSections(),
 		instructions:         opts.Instructions,
 		skillRegistry:        dynamicSkills,
 		skillLoader:          opts.SkillLoader,
@@ -156,11 +136,6 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		StreamFn:      s.modelStreamFn(opts.StreamFn),
 		GetAPIKey:     opts.GetAPIKey,
 		BeforeToolCall: func(bc agent.BeforeToolCallCtx) (bool, string) {
-			if capabilityBeforeToolCall != nil {
-				if block, reason := capabilityBeforeToolCall(bc); block {
-					return true, reason
-				}
-			}
 			args, _ := bc.Args.(map[string]any)
 			var accesses []permission.Access
 			if t, ok := s.toolByName[bc.ToolCall.Name]; ok {
@@ -175,22 +150,14 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 			return decision.Behavior != permission.Allow, decision.Reason
 		},
 		AfterToolCall: func(ctx agent.AfterToolCallCtx) *agent.AfterToolCallResult {
-			override := (*agent.AfterToolCallResult)(nil)
-			if capabilityAfterToolCall != nil {
-				override = capabilityAfterToolCall(ctx)
-			}
-			outcome := ctx.Result.Outcome
-			if override != nil && override.Outcome != nil {
-				outcome = *override.Outcome
-			}
-			if ctx.ToolCall.Name == skills.ToolName && !outcome.Failed() {
+			if ctx.ToolCall.Name == skills.ToolName && !ctx.Result.Outcome.Failed() {
 				if args, ok := ctx.Args.(map[string]any); ok {
 					if name, ok := args["name"].(string); ok {
 						s.activateSkill(name)
 					}
 				}
 			}
-			return override
+			return nil
 		},
 		PrepareNextTurn: s.prepareNextTurn,
 	}
@@ -203,20 +170,6 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	})
 
 	return s, nil
-}
-
-func registerTools(registry *capability.Registry, id string, toolSet []tools.Tool, replace bool) error {
-	contributions := make([]capability.ToolContribution, len(toolSet))
-	for index, tool := range toolSet {
-		contributions[index] = capability.ToolContribution{Tool: tool, Replace: replace}
-	}
-	if err := registry.Register(capability.Definition{
-		Manifest: capability.Manifest{ID: id, Version: "1"},
-		Tools:    contributions,
-	}); err != nil {
-		return fmt.Errorf("register coding capability %q: %w", id, err)
-	}
-	return nil
 }
 
 // toolsByName indexes the tool set by advertised name for access description.

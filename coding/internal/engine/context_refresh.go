@@ -17,10 +17,9 @@ func (s *Session) buildSystemPrompt(instructions string) string {
 		infos[i] = prompt.ToolInfo{Name: t.Name(), Guidelines: t.Guidelines}
 	}
 	return prompt.BuildSystem(prompt.SystemOptions{
-		Instructions:       instructions,
-		WorkspaceRoot:      s.cwd,
-		Tools:              infos,
-		AdditionalSections: s.promptSections,
+		Instructions:  instructions,
+		WorkspaceRoot: s.cwd,
+		Tools:         infos,
 	})
 }
 
