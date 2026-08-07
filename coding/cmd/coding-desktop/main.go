@@ -43,7 +43,6 @@ func run(args []string) error {
 	cfg := config.Defaults()
 	flags := flag.NewFlagSet("coding-desktop", flag.ContinueOnError)
 	assets := flags.String("assets", "", "directory containing the built web client")
-	flags.StringVar(&cfg.Cwd, "cwd", cfg.Cwd, "initial directory-browser location")
 	flags.StringVar(&cfg.DataDir, "data-dir", cfg.DataDir, "coding data directory")
 	if err := flags.Parse(args); err != nil {
 		return err
