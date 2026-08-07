@@ -1,12 +1,19 @@
 package engine
 
 import (
+	"sync"
 	"time"
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/invocation"
 	"github.com/ktsoator/or/llm"
 )
+
+type eventBus struct {
+	mu        sync.Mutex
+	listeners map[int]func(Event)
+	nextID    int
+}
 
 // EventType identifies a UI-neutral coding-session event. Product adapters
 // render these events for their own transport instead of depending on the
@@ -89,6 +96,36 @@ type Event struct {
 	// steering or follow-up work consumed before the run ends.
 	StartedAt   time.Time
 	CompletedAt time.Time
+}
+
+// Subscribe registers a listener for UI-neutral coding events and returns a
+// function that removes it.
+func (s *Session) Subscribe(listener func(Event)) (unsubscribe func()) {
+	s.events.mu.Lock()
+	if s.events.listeners == nil {
+		s.events.listeners = make(map[int]func(Event))
+	}
+	id := s.events.nextID
+	s.events.nextID++
+	s.events.listeners[id] = listener
+	s.events.mu.Unlock()
+	return func() {
+		s.events.mu.Lock()
+		delete(s.events.listeners, id)
+		s.events.mu.Unlock()
+	}
+}
+
+func (s *Session) dispatchEvent(event Event) {
+	s.events.mu.Lock()
+	listeners := make([]func(Event), 0, len(s.events.listeners))
+	for _, listener := range s.events.listeners {
+		listeners = append(listeners, listener)
+	}
+	s.events.mu.Unlock()
+	for _, listener := range listeners {
+		listener(event)
+	}
 }
 
 // projectAgentEvent maps a low-level agent event into the stable coding event

@@ -116,18 +116,12 @@ func (s *Session) compactLocked(
 	entry.Compaction.TokensAfter = tokensAfter
 	candidate[len(candidate)-1] = entry
 
-	if s.store != nil {
-		if err := s.store.Append(ctx, entry); err != nil {
-			return CompactionResult{}, err
-		}
+	if err := s.journal.appendCompaction(ctx, entry); err != nil {
+		return CompactionResult{}, err
 	}
 	// Persistence is the commit point. Nothing observable changes before it.
 	s.agent.SetMessages(projected)
-	s.transcriptMu.Lock()
-	s.entries = candidate
-	s.usageStart = len(projected)
-	s.persistedLen = len(projected)
-	s.transcriptMu.Unlock()
+	s.journal.applyCompaction(candidate, len(projected))
 	s.dispatchEvent(Event{
 		Type: CompactionCompleted, Usage: response.Usage,
 		Provider: response.Provider, Model: response.Model,
