@@ -102,13 +102,13 @@ func (s *Session) dropTrailingOverflowTurn() {
 }
 
 func (s *Session) autoCompactionWasAttempted() bool {
-	s.runStateMu.RLock()
-	defer s.runStateMu.RUnlock()
-	return s.autoCompactAttempted
+	s.runState.mu.RLock()
+	defer s.runState.mu.RUnlock()
+	return s.runState.autoCompactAttempted
 }
 
 func (s *Session) markAutoCompactionAttempted() {
-	s.runStateMu.Lock()
-	s.autoCompactAttempted = true
-	s.runStateMu.Unlock()
+	s.runState.mu.Lock()
+	s.runState.autoCompactAttempted = true
+	s.runState.mu.Unlock()
 }

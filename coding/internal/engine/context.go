@@ -22,9 +22,7 @@ type ContextUsage struct {
 // model currently selected by the Session.
 func (s *Session) ContextUsage() ContextUsage {
 	state := s.agent.Snapshot()
-	s.transcriptMu.RLock()
-	usageStart := s.usageStart
-	s.transcriptMu.RUnlock()
+	usageStart := s.journal.usageStartIndex()
 	result := ContextUsage{
 		Provider:      state.Model.Provider,
 		Model:         state.Model.ID,
