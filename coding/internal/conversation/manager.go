@@ -11,6 +11,8 @@ import (
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/coding/internal/titlegen"
+	"github.com/ktsoator/or/coding/internal/tools"
+	"github.com/ktsoator/or/coding/internal/transcript"
 	"github.com/ktsoator/or/coding/internal/usage"
 	"github.com/ktsoator/or/coding/internal/workspace"
 	"github.com/ktsoator/or/llm"
@@ -66,6 +68,10 @@ func NewManager(ctx context.Context, opts Options) (*Manager, error) {
 		generateTitle: opts.TitleGenerator,
 		sessions:      make(map[string]*sessionRuntime),
 		usage:         opts.Usage,
+	}
+	if err := transcript.MigratePrivatePermissions(dir); err != nil {
+		cancel()
+		return nil, fmt.Errorf("session: secure transcript storage: %w", err)
 	}
 
 	records, err := m.loadRecords()
@@ -124,6 +130,35 @@ func (m *Manager) EnsureLoaded(id string) error {
 	return err
 }
 
+// ReleaseIfIdle unloads an engine-backed runtime once its delivery layer can
+// atomically prove that no viewer is attached. The durable record remains in
+// the manager so a later history or SSE request restores the session lazily.
+// Active runs, viewer decisions, title generation, and live background tasks
+// pin the runtime because closing any of them would change user-visible work.
+func (m *Manager) ReleaseIfIdle(id string) bool {
+	m.mu.Lock()
+	runtime, ok := m.sessions[id]
+	if m.closed || !ok || runtime.session == nil || runtime.transport == nil ||
+		runtime.running.Load() || runtime.live.Load() || runtime.awaitingUser() ||
+		runtime.titleGenerating.Load() || runtime.hasRunningTask() {
+		m.mu.Unlock()
+		return false
+	}
+	closer, ok := runtime.transport.(idleClosingTransport)
+	if !ok || !closer.TryCloseIfIdle() {
+		m.mu.Unlock()
+		return false
+	}
+
+	unloaded := newSessionRuntime(runtime.record)
+	unloaded.titleGeneration = runtime.titleGeneration
+	m.sessions[id] = unloaded
+	m.mu.Unlock()
+
+	runtime.close()
+	return true
+}
+
 func (m *Manager) loadRuntimeLocked(id string) (*sessionRuntime, error) {
 	runtime, ok := m.sessions[id]
 	if !ok {
@@ -144,6 +179,7 @@ func (m *Manager) loadRuntimeLocked(id string) (*sessionRuntime, error) {
 		loaded.close()
 		return nil, fmt.Errorf("session: backfill usage for session %s: %w", id, err)
 	}
+	loaded.titleGeneration = runtime.titleGeneration
 
 	m.sessions[id] = loaded
 	if loaded.record != runtime.record {
@@ -268,6 +304,18 @@ func (s *sessionRuntime) close() {
 	}
 }
 
+func (s *sessionRuntime) hasRunningTask() bool {
+	if s.session == nil {
+		return false
+	}
+	for _, task := range s.session.Tasks() {
+		if task.Status == string(tools.TaskRunning) {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *Manager) handleSessionEvent(sessionID string, runtime *sessionRuntime, ev engine.Event) {
 	if ev.Type == engine.MessageCompleted || ev.Type == engine.CompactionCompleted {
 		// Usage accounting must not interrupt a successful model run. The
@@ -297,4 +345,9 @@ func (m *Manager) handleSessionEvent(sessionID string, runtime *sessionRuntime, 
 		runtime.live.Store(false)
 	}
 	runtime.forward(ev)
+	if ev.Type == engine.TaskCompleted {
+		// Task completion is delivered from the task manager's listener stack.
+		// Release asynchronously so Session.Close never re-enters that manager.
+		go m.ReleaseIfIdle(sessionID)
+	}
 }

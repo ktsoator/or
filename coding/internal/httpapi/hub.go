@@ -105,6 +105,22 @@ func (h *Hub) remove(ch chan hubFrame) {
 	h.mu.Unlock()
 }
 
+// closeIfIdle atomically closes the replay stream only when it has no viewers.
+// Once it succeeds, add cannot attach a client to the retiring transport.
+func (h *Hub) closeIfIdle() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.closed {
+		return true
+	}
+	if len(h.clients) != 0 {
+		return false
+	}
+	h.closed = true
+	h.events = nil
+	return true
+}
+
 // Close disconnects every viewer and rejects later broadcasts or subscribers.
 func (h *Hub) Close() {
 	h.mu.Lock()

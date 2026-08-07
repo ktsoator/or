@@ -21,6 +21,13 @@ import (
 
 type testTransport struct{ closed atomic.Bool }
 
+type idleClosingTestTransport struct{ *testTransport }
+
+func (t *idleClosingTestTransport) TryCloseIfIdle() bool {
+	t.Close()
+	return true
+}
+
 func (*testTransport) Publish(Event)             {}
 func (*testTransport) PublishAgent(engine.Event) {}
 func (t *testTransport) Close()                  { t.closed.Store(true) }
@@ -271,6 +278,145 @@ func TestManagerDefersTranscriptErrorsUntilFirstUse(t *testing.T) {
 	runtime, ok = restored.runtime(created.ID)
 	if !ok || runtime.session != nil || runtime.transport != nil {
 		t.Fatal("failed lazy load replaced the metadata-only conversation")
+	}
+}
+
+func TestManagerMigratesTranscriptPermissionsBeforeLazyLoad(t *testing.T) {
+	dataDir := t.TempDir()
+	model, thinking := testCatalogModel(t)
+	manager := newTestManager(t, dataDir)
+	created, err := manager.Create(
+		"Private storage",
+		t.TempDir(),
+		ScopeProject,
+		model,
+		thinking,
+		permission.ModeAsk,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime, _ := manager.runtime(created.ID)
+	transcriptPath := runtime.record.Transcript
+	detailsPath := detailsFile(transcriptPath)
+	if err := os.WriteFile(transcriptPath, []byte("{\"type\":\"session\",\"version\":3}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(detailsPath, []byte("{\"id\":\"call-1\",\"payload\":{}}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sessionDir := filepath.Dir(transcriptPath)
+	if err := os.Chmod(sessionDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manager.Close()
+
+	restored := newTestManager(t, dataDir)
+	restoredRuntime, ok := restored.runtime(created.ID)
+	if !ok || restoredRuntime.session != nil || restoredRuntime.transport != nil {
+		t.Fatal("restored conversation did not remain lazy")
+	}
+	for path, want := range map[string]os.FileMode{
+		sessionDir:     0o700,
+		transcriptPath: 0o600,
+		detailsPath:    0o600,
+	} {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := info.Mode().Perm(); got != want {
+			t.Fatalf("%s permissions = %04o, want %04o", path, got, want)
+		}
+	}
+}
+
+func TestManagerReleasesAndReloadsIdleConversation(t *testing.T) {
+	dataDir := t.TempDir()
+	model, thinking := testCatalogModel(t)
+	var transports []*idleClosingTestTransport
+	manager := newTestManagerWithTransport(t, dataDir, func(string) Transport {
+		transport := &idleClosingTestTransport{testTransport: &testTransport{}}
+		transports = append(transports, transport)
+		return transport
+	})
+	created, err := manager.Create(
+		"Unload me",
+		t.TempDir(),
+		ScopeProject,
+		model,
+		thinking,
+		permission.ModeAsk,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime, ok := manager.runtime(created.ID)
+	if !ok || runtime.session == nil || runtime.transport == nil {
+		t.Fatal("new conversation was not loaded")
+	}
+	runtime.titleGeneration = TitleGeneration{
+		Status:    TitleGenerationFailed,
+		ErrorCode: "test_failure",
+	}
+
+	if !manager.ReleaseIfIdle(created.ID) {
+		t.Fatal("idle conversation was not released")
+	}
+	if len(transports) != 1 || !transports[0].closed.Load() {
+		t.Fatalf("released transports = %d, closed = %v", len(transports), len(transports) == 1 && transports[0].closed.Load())
+	}
+	unloaded, ok := manager.runtime(created.ID)
+	if !ok || unloaded.session != nil || unloaded.transport != nil {
+		t.Fatalf("released runtime = %#v", unloaded)
+	}
+	if unloaded.titleGeneration.ErrorCode != "test_failure" {
+		t.Fatalf("released title generation = %+v", unloaded.titleGeneration)
+	}
+
+	snapshot, err := manager.Snapshot(created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(transports) != 2 {
+		t.Fatalf("transports after reload = %d, want 2", len(transports))
+	}
+	if snapshot.Title != created.Title || snapshot.TitleGeneration.ErrorCode != "test_failure" {
+		t.Fatalf("reloaded snapshot = %+v", snapshot)
+	}
+	reloaded, ok := manager.runtime(created.ID)
+	if !ok || reloaded.session == nil || reloaded.transport == nil {
+		t.Fatal("snapshot did not reload the conversation")
+	}
+}
+
+func TestManagerDoesNotReleaseRunningConversation(t *testing.T) {
+	dataDir := t.TempDir()
+	model, thinking := testCatalogModel(t)
+	manager := newTestManagerWithTransport(t, dataDir, func(string) Transport {
+		return &idleClosingTestTransport{testTransport: &testTransport{}}
+	})
+	created, err := manager.Create(
+		"Keep me",
+		t.TempDir(),
+		ScopeProject,
+		model,
+		thinking,
+		permission.ModeAsk,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime, _ := manager.runtime(created.ID)
+	runtime.running.Store(true)
+	t.Cleanup(func() { runtime.running.Store(false) })
+
+	if manager.ReleaseIfIdle(created.ID) {
+		t.Fatal("running conversation was released")
+	}
+	current, _ := manager.runtime(created.ID)
+	if current != runtime || current.session == nil {
+		t.Fatal("running runtime was replaced")
 	}
 }
 

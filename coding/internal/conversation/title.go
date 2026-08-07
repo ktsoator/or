@@ -91,8 +91,11 @@ func (m *Manager) maybeGenerateTitle(runtime *sessionRuntime, eventPrompt string
 	runtime.emit(stateEvent)
 
 	go func() {
-		defer m.tasks.Done()
-		defer runtime.titleGenerating.Store(false)
+		defer func() {
+			runtime.titleGenerating.Store(false)
+			m.tasks.Done()
+			m.ReleaseIfIdle(sessionID)
+		}()
 		if err := m.generateSessionTitle(m.ctx, runtime, firstPrompt, generator); err != nil &&
 			!errors.Is(err, context.Canceled) {
 			log.Printf("coding: generate title for session %s: %v", sessionID, err)

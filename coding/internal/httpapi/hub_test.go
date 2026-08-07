@@ -85,3 +85,25 @@ func TestHubCloseDisconnectsAndRejectsLaterWork(t *testing.T) {
 		t.Fatal("closed hub accepted a new client")
 	}
 }
+
+func TestHubClosesIfAndOnlyIfNoViewerIsAttached(t *testing.T) {
+	hub := NewHub()
+	ch, syncRequired := hub.add(0)
+	if syncRequired {
+		t.Fatal("unexpected sync requirement")
+	}
+	if hub.closeIfIdle() {
+		t.Fatal("hub closed while a viewer was attached")
+	}
+	hub.remove(ch)
+	if !hub.closeIfIdle() {
+		t.Fatal("idle hub did not close")
+	}
+	next, syncRequired := hub.add(0)
+	if syncRequired {
+		t.Fatal("closed hub unexpectedly requested a history sync")
+	}
+	if _, ok := <-next; ok {
+		t.Fatal("closed hub accepted a new viewer")
+	}
+}
