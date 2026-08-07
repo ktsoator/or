@@ -47,6 +47,13 @@ type Transport interface {
 // it once when the session runtime loads and owns closing the returned transport.
 type NewTransport func(sessionID string) Transport
 
+// idleClosingTransport is implemented by delivery layers that can atomically
+// prove no viewer is attached while retiring their replay state. Keeping this
+// capability optional lets non-HTTP adapters pin their runtime until shutdown.
+type idleClosingTransport interface {
+	TryCloseIfIdle() bool
+}
+
 // MessageAccepted reports a user message the server has taken responsibility
 // for. Queued distinguishes one waiting behind a running turn from one the run
 // has already picked up.

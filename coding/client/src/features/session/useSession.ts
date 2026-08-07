@@ -9,6 +9,7 @@ import { sessionCommands } from './commands'
 import { useSessionConnection } from './connection'
 import { threadsReducer } from './reducer'
 import { sessionResourceAPI } from './resourceApi'
+import { findEvictableThreadIDs } from './threadRetention'
 import type { Session } from './types'
 import { useBrowserResultOutbox } from './useBrowserResultOutbox'
 import { useServiceConnection } from '@/serviceConnection'
@@ -144,6 +145,17 @@ export function useSession(secondarySessionID?: string): Session {
   const secondaryCheckpoint = secondaryConnectionThread?.loaded
     ? { eventSeq: secondaryConnectionThread.serverEventSeq }
     : undefined
+
+  useEffect(() => {
+    const retainedSessionIDs = new Set(
+      [activeSessionID, connectedSecondarySessionID].filter(
+        (sessionID): sessionID is string => Boolean(sessionID),
+      ),
+    )
+    for (const sessionID of findEvictableThreadIDs(threads, retainedSessionIDs)) {
+      dispatch({ t: 'forget', sessionID })
+    }
+  }, [activeSessionID, connectedSecondarySessionID, threads])
 
   useSessionConnection(activeSessionID, {
     onWire: applySessionWire,

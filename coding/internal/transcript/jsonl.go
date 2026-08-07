@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sync"
 )
 
@@ -41,7 +40,7 @@ func (s *JSONL) Append(_ context.Context, entries ...Entry) error {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
+	if err := ensurePrivateDirectory(s.path); err != nil {
 		return fmt.Errorf("store: create session dir: %w", err)
 	}
 	info, statErr := os.Stat(s.path)
@@ -61,9 +60,13 @@ func (s *JSONL) Append(_ context.Context, entries ...Entry) error {
 		}
 	}
 
-	file, err := os.OpenFile(s.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	file, err := os.OpenFile(s.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, privateFileMode)
 	if err != nil {
 		return fmt.Errorf("store: open %s: %w", s.path, err)
+	}
+	if err := file.Chmod(privateFileMode); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("store: secure %s: %w", s.path, err)
 	}
 	if _, err := file.Write(encoded); err != nil {
 		_ = file.Close()
@@ -80,6 +83,9 @@ func (s *JSONL) Append(_ context.Context, entries ...Entry) error {
 }
 
 func (s *JSONL) loadLocked() ([]Entry, error) {
+	if _, err := secureExistingFile(s.path); err != nil {
+		return nil, fmt.Errorf("store: secure %s: %w", s.path, err)
+	}
 	data, err := os.ReadFile(s.path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil

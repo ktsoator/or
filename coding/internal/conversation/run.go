@@ -155,4 +155,5 @@ func (m *Manager) finishRun(id string, runtime *sessionRuntime) {
 		runtime.emit(MessageCancelled{ID: message.ID})
 	}
 	m.tasks.Done()
+	m.ReleaseIfIdle(id)
 }

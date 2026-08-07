@@ -158,6 +158,16 @@ func (t *sessionTransport) Close() {
 	})
 }
 
+// TryCloseIfIdle lets the conversation manager retire this transport without
+// racing a newly attached SSE viewer.
+func (t *sessionTransport) TryCloseIfIdle() bool {
+	if !t.hub.closeIfIdle() {
+		return false
+	}
+	t.Close()
+	return true
+}
+
 // projectSessionEvent maps a session state change to the HTTP wire protocol.
 // It is the counterpart to ProjectEvent: that one projects events coming up
 // from the agent, this one projects events the session layer raises itself.

@@ -92,6 +92,45 @@ func TestJSONLRoundTripsRunTiming(t *testing.T) {
 	}
 }
 
+func TestJSONLUsesPrivatePermissionsAndMigratesExistingStorage(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "sessions")
+	path := filepath.Join(dir, "session.jsonl")
+	store := NewJSONL(path)
+	if err := store.Append(context.Background(), NewMessage(agent.UserMessage("secret"))); err != nil {
+		t.Fatal(err)
+	}
+	assertPrivateStoragePermissions(t, dir, path)
+
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewJSONL(path).Load(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	assertPrivateStoragePermissions(t, dir, path)
+}
+
+func assertPrivateStoragePermissions(t *testing.T, dir, path string) {
+	t.Helper()
+	dirInfo, err := os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := dirInfo.Mode().Perm(); got != privateDirectoryMode {
+		t.Fatalf("directory permissions = %04o, want %04o", got, privateDirectoryMode)
+	}
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fileInfo.Mode().Perm(); got != privateFileMode {
+		t.Fatalf("file permissions = %04o, want %04o", got, privateFileMode)
+	}
+}
+
 func TestJSONLRoundTripsMessageInvocation(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session.jsonl")
 	entry := NewMessageWithInvocation(agent.UserMessage("/review security"), &invocation.Record{

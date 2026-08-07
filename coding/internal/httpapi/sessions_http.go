@@ -336,7 +336,12 @@ func (s *Server) handleEvents(c *gin.Context) {
 		w.Flush()
 		return
 	}
-	defer transport.hub.remove(ch)
+	defer func() {
+		transport.hub.remove(ch)
+		if s.conversations != nil {
+			s.conversations.ReleaseIfIdle(c.Param("sessionID"))
+		}
+	}()
 
 	// Send a comment immediately so development and production proxies forward
 	// the response headers instead of buffering an otherwise empty stream.
