@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/ktsoator/or/agent"
-	"github.com/ktsoator/or/coding/internal/capability"
 	"github.com/ktsoator/or/coding/internal/compaction"
 	"github.com/ktsoator/or/coding/internal/modelcontext"
 	"github.com/ktsoator/or/coding/internal/permission"
@@ -60,11 +59,6 @@ type Options struct {
 	// answer. Nil advertises no question tool at all, so a session with nobody
 	// at the keyboard never sees one it cannot use.
 	Asker tools.Asker
-	// Capabilities extend the coding product with tools, stable prompt sections,
-	// and tool hooks. They are registered after built-in capabilities, so an
-	// explicit Replace contribution can override a built-in tool. Permissions
-	// remain authoritative for every contributed tool.
-	Capabilities []capability.Definition
 	// Store persists the transcript and seeds it on construction. Nil disables
 	// persistence.
 	Store transcript.Store
@@ -120,7 +114,6 @@ type Session struct {
 	contextRevision        string
 	pendingContextRevision string
 	modelContext           *modelcontext.Manager
-	promptSections         []string
 	instructions           string
 
 	maxRetries    int
