@@ -281,7 +281,7 @@ func TestManagerDefersTranscriptErrorsUntilFirstUse(t *testing.T) {
 	}
 }
 
-func TestManagerMigratesTranscriptPermissionsBeforeLazyLoad(t *testing.T) {
+func TestManagerSecuresTranscriptPermissionsBeforeLazyLoad(t *testing.T) {
 	dataDir := t.TempDir()
 	model, thinking := testCatalogModel(t)
 	manager := newTestManager(t, dataDir)
@@ -811,7 +811,7 @@ func newTestManagerWithTransport(
 		t.Fatal(err)
 	}
 	t.Setenv("HOME", home)
-	ledger, err := usage.NewStore(filepath.Join(dataDir, "usage", "events.jsonl"))
+	ledger, err := usage.NewStore(filepath.Join(dataDir, "usage", "events.sqlite"))
 	if err != nil {
 		t.Fatal(err)
 	}

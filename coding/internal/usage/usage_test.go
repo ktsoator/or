@@ -1,7 +1,6 @@
 package usage
 
 import (
-	"encoding/json"
 	"math"
 	"os"
 	"path/filepath"
@@ -23,8 +22,8 @@ func TestAddTotalsPreservesUnknownInput(t *testing.T) {
 }
 
 func TestStoreDeduplicatesReportsAndPaginates(t *testing.T) {
-	legacyPath := filepath.Join(t.TempDir(), "usage", "events.jsonl")
-	store, err := NewStore(legacyPath)
+	dbPath := filepath.Join(t.TempDir(), "usage", "events.sqlite")
+	store, err := NewStore(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +131,7 @@ func TestStoreDeduplicatesReportsAndPaginates(t *testing.T) {
 	if err := store.Close(); err != nil {
 		t.Fatal(err)
 	}
-	store, err = NewStore(legacyPath)
+	store, err = NewStore(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +143,7 @@ func TestStoreDeduplicatesReportsAndPaginates(t *testing.T) {
 	if reopened.Total.Requests != 3 || reopened.Total.TotalTokens != 35 {
 		t.Fatalf("reopened report = %+v", reopened)
 	}
-	info, err := os.Stat(databasePath(legacyPath))
+	info, err := os.Stat(dbPath)
 	if err != nil {
 		t.Fatalf("SQLite ledger was not created: %v", err)
 	}
@@ -153,120 +152,8 @@ func TestStoreDeduplicatesReportsAndPaginates(t *testing.T) {
 	}
 }
 
-func TestStoreMigratesLegacyJSONLIncrementally(t *testing.T) {
-	legacyPath := filepath.Join(t.TempDir(), "usage", "events.jsonl")
-	first := Event{
-		ID:            "legacy-1",
-		SessionID:     "session-1",
-		Provider:      "provider-a",
-		Model:         "model-a",
-		ResponseModel: "model-a-old",
-		ResponseID:    "response-1",
-		Timestamp:     time.Date(2026, time.July, 1, 10, 0, 0, 0, time.UTC),
-		Usage:         llm.Usage{Input: 3, Output: 2, TotalTokens: 5},
-	}
-	replacement := first
-	replacement.ResponseModel = "model-a-replaced"
-	replacement.Usage = llm.Usage{Input: 4, Output: 3, TotalTokens: 7}
-	writeLegacyEvents(t, legacyPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, first, replacement)
-
-	store, err := NewStore(legacyPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	report, err := store.Report(time.Time{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if report.Total.Requests != 1 ||
-		report.Total.TotalTokens != 7 ||
-		len(report.Models) != 1 ||
-		report.Models[0].ResponseModel != "model-a-replaced" {
-		t.Fatalf("initial migrated report = %+v", report)
-	}
-	if err := store.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	duplicate := replacement
-	duplicate.Usage = llm.Usage{TotalTokens: 999}
-	second := Event{
-		ID:            "legacy-2",
-		SessionID:     "session-2",
-		Provider:      "provider-b",
-		Model:         "model-b",
-		ResponseModel: "model-b-new",
-		ResponseID:    "response-2",
-		Timestamp:     first.Timestamp.Add(time.Hour),
-		Usage:         llm.Usage{Input: 6, Output: 7, TotalTokens: 13},
-	}
-	writeLegacyEvents(t, legacyPath, os.O_APPEND|os.O_WRONLY, duplicate, second)
-
-	store, err = NewStore(legacyPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
-	report, err = store.Report(time.Time{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if report.Total.Requests != 2 || report.Total.TotalTokens != 20 {
-		t.Fatalf("incrementally migrated report = %+v", report)
-	}
-	page, err := store.Events("", "", time.Time{}, 0, 50)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if page.Total != 2 || len(page.Events) != 2 || page.Events[0].ID != second.ID {
-		t.Fatalf("migrated events = %+v", page)
-	}
-}
-
-func TestStoreRollsBackInvalidLegacyMigration(t *testing.T) {
-	legacyPath := filepath.Join(t.TempDir(), "usage", "events.jsonl")
-	event := Event{
-		ID:        "legacy-1",
-		SessionID: "session-1",
-		Provider:  "provider-a",
-		Model:     "model-a",
-		Timestamp: time.Date(2026, time.July, 1, 10, 0, 0, 0, time.UTC),
-		Usage:     llm.Usage{Input: 3, Output: 2, TotalTokens: 5},
-	}
-	writeLegacyEvents(t, legacyPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, event)
-	file, err := os.OpenFile(legacyPath, os.O_APPEND|os.O_WRONLY, 0o600)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := file.WriteString("not-json\n"); err != nil {
-		_ = file.Close()
-		t.Fatal(err)
-	}
-	if err := file.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if store, err := NewStore(legacyPath); err == nil {
-		_ = store.Close()
-		t.Fatal("NewStore succeeded with an invalid legacy ledger")
-	}
-
-	writeLegacyEvents(t, legacyPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, event)
-	store, err := NewStore(legacyPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
-	report, err := store.Report(time.Time{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if report.Total.Requests != 1 || report.Total.TotalTokens != 5 {
-		t.Fatalf("report after migration retry = %+v", report)
-	}
-}
-
 func TestStoreIndexesTimestampsOutsideUnixNanoRange(t *testing.T) {
-	legacyPath := filepath.Join(t.TempDir(), "usage", "events.jsonl")
+	dbPath := filepath.Join(t.TempDir(), "usage", "events.sqlite")
 	early := Event{
 		ID:        "early",
 		SessionID: "session-1",
@@ -283,12 +170,17 @@ func TestStoreIndexesTimestampsOutsideUnixNanoRange(t *testing.T) {
 		Timestamp: time.Date(2500, time.January, 1, 0, 0, 0, 2, time.UTC),
 		Usage:     llm.Usage{TotalTokens: 5},
 	}
-	writeLegacyEvents(t, legacyPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, early, late)
-	store, err := NewStore(legacyPath)
+	store, err := NewStore(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer store.Close()
+	if err := store.append(early); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.append(late); err != nil {
+		t.Fatal(err)
+	}
 
 	page, err := store.Events("", "", time.Time{}, 0, 50)
 	if err != nil {
@@ -306,77 +198,5 @@ func TestStoreIndexesTimestampsOutsideUnixNanoRange(t *testing.T) {
 	}
 	if report.Total.Requests != 1 || report.Total.TotalTokens != 5 {
 		t.Fatalf("wide-range report = %+v", report)
-	}
-}
-
-func TestStoreDoesNotOverwriteDatabaseWhenLegacyAppearsLater(t *testing.T) {
-	legacyPath := filepath.Join(t.TempDir(), "usage", "events.jsonl")
-	store, err := NewStore(legacyPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	event := engine.Event{
-		Type:          engine.MessageCompleted,
-		Provider:      "provider-a",
-		Model:         "model-a",
-		ResponseModel: "sqlite-value",
-		ResponseID:    "response-1",
-		Timestamp:     time.Date(2026, time.July, 1, 10, 0, 0, 0, time.UTC),
-		Usage:         llm.Usage{TotalTokens: 5},
-	}
-	if err := store.RecordEvent("session-1", event); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	legacy := Event{
-		ID:            "provider-a:response-1",
-		SessionID:     "session-1",
-		Provider:      event.Provider,
-		Model:         event.Model,
-		ResponseModel: "legacy-value",
-		ResponseID:    event.ResponseID,
-		Timestamp:     event.Timestamp,
-		Usage:         llm.Usage{TotalTokens: 999},
-	}
-	writeLegacyEvents(t, legacyPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, legacy)
-
-	store, err = NewStore(legacyPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
-	page, err := store.Events("", "", time.Time{}, 0, 50)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if page.Total != 1 ||
-		len(page.Events) != 1 ||
-		page.Events[0].ResponseModel != "sqlite-value" ||
-		page.Events[0].Usage.TotalTokens != 5 {
-		t.Fatalf("database event was overwritten by legacy data: %+v", page)
-	}
-}
-
-func writeLegacyEvents(t *testing.T, path string, flags int, events ...Event) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	file, err := os.OpenFile(path, flags, 0o600)
-	if err != nil {
-		t.Fatal(err)
-	}
-	encoder := json.NewEncoder(file)
-	for _, event := range events {
-		if err := encoder.Encode(event); err != nil {
-			_ = file.Close()
-			t.Fatal(err)
-		}
-	}
-	if err := file.Close(); err != nil {
-		t.Fatal(err)
 	}
 }

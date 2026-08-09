@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestJSONLDetailsUsesPrivatePermissionsAndMigratesExistingStorage(t *testing.T) {
+func TestJSONLDetailsUsesPrivatePermissionsAndSecuresExistingStorage(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "sessions")
 	path := filepath.Join(dir, "session.details.jsonl")
 	store := NewJSONLDetails(path)

@@ -91,7 +91,7 @@ func TestJSONLRoundTripsRunTiming(t *testing.T) {
 	}
 }
 
-func TestJSONLUsesPrivatePermissionsAndMigratesExistingStorage(t *testing.T) {
+func TestJSONLUsesPrivatePermissionsAndSecuresExistingStorage(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "sessions")
 	path := filepath.Join(dir, "session.jsonl")
 	store := NewJSONL(path)

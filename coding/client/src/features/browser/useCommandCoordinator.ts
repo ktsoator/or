@@ -129,7 +129,7 @@ export function useBrowserCommandCoordinator({
       return
     }
     dispatch({
-      t: 'legacy_preview_received',
+      t: 'restored_preview_received',
       previewKey,
       tabID: agentBrowserTabID(sessionID),
       sessionID: sessionID ?? 'unknown',

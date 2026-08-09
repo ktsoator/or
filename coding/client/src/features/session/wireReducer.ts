@@ -445,10 +445,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
             (!ev.tool || it.name === ev.tool),
         )
       }
-      const outcome: ToolOutcome = ev.outcome ?? {
-        status: ev.isError ? 'failed' : 'success',
-        ...(ev.isError ? { errorCode: 'legacy_tool_error' } : {}),
-      }
+      const outcome: ToolOutcome = ev.outcome ?? { status: 'success' }
       const structuredChange = outcomeChange(outcome)
       const structuredPreview = outcomePreview(ev.tool, outcome)
       const patch = {

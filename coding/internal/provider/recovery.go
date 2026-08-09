@@ -50,7 +50,7 @@ func (s *Store) restoreUtilityModel(saved UtilityModelSelection) (*UtilityModelS
 		return &restored, nil
 	}
 
-	if route, err := s.resolveLegacyAutomaticUtilityRoute(); err == nil {
+	if route, err := s.fallbackUtilityRoute(); err == nil {
 		fallback := utilitySelectionFromRoute(route.Route)
 		replacement := modelSelectionReference(fallback.Provider, fallback.Model)
 		return &fallback, repairedSelection(

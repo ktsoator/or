@@ -34,7 +34,7 @@ type Runtime struct {
 func New(ctx context.Context, cfg config.Config) (*Runtime, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	sessionDir := filepath.Join(cfg.DataDir, "sessions")
-	ledger, err := usage.NewStore(filepath.Join(cfg.DataDir, "usage", "events.jsonl"))
+	ledger, err := usage.NewStore(filepath.Join(cfg.DataDir, "usage", "events.sqlite"))
 	if err != nil {
 		cancel()
 		return nil, err

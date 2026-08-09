@@ -62,8 +62,7 @@ type Options struct {
 	Compactor compaction.Compactor
 	// DetailsStore persists machine-readable tool outcomes out of band, keyed by
 	// tool-call ID, so a reloaded session restores status, error metadata, rich
-	// rendering, and preview targets. Nil derives legacy status from the
-	// transcript and replays without structured data.
+	// rendering, and preview targets. Nil replays without structured data.
 	DetailsStore transcript.DetailsStore
 	// Instructions overrides the base system-prompt preamble. Empty uses
 	// prompt.DefaultInstructions.

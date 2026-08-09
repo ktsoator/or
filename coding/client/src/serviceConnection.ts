@@ -28,9 +28,7 @@ const browserDependencies = (
 ): ServiceConnectionDependencies => ({
   health: async (signal) => {
     const response = await fetch(apiURL('/health'), { cache: 'no-store', signal })
-    // A 404 still proves that a pre-health-endpoint sidecar is reachable. This
-    // matters in development, where Vite updates before the Go binary restarts.
-    if (!response.ok && response.status !== 404) {
+    if (!response.ok) {
       throw new Error(`health check failed (${response.status})`)
     }
   },

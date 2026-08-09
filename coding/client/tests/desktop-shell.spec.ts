@@ -141,7 +141,6 @@ async function openDesktopClient(
   options: {
     failCreate?: boolean
     healthFailures?: number
-    legacyHealth?: boolean
     browserResultFailures?: number
     existingSession?: boolean
     historyEvents?: unknown[]
@@ -412,7 +411,7 @@ async function openDesktopClient(
         remainingHealthFailures--
         await route.fulfill({ status: 503 })
       } else {
-        await route.fulfill({ status: options.legacyHealth ? 404 : 204 })
+        await route.fulfill({ status: 204 })
       }
       return
     }
@@ -960,7 +959,7 @@ test('desktop external links open in the system browser without leaving Or', asy
 })
 
 test('Or API startup retries recover the Composer automatically', async ({ page }) => {
-  const requests = await openDesktopClient(page, { healthFailures: 2, legacyHealth: true })
+  const requests = await openDesktopClient(page, { healthFailures: 2 })
   const input = page.getByTestId('composer').locator('textarea')
 
   await expect(input).toBeDisabled()

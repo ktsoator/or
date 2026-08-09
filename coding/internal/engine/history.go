@@ -43,8 +43,7 @@ type HistoryItem struct {
 	ToolName   string
 	ToolArgs   any
 	ToolResult string
-	// ToolOutcome is restored from the sidecar. Histories written before the
-	// outcome contract derive success/failed from the model-facing IsError bit.
+	// ToolOutcome is restored from the sidecar.
 	ToolOutcome agent.ToolOutcome
 
 	// Usage is populated for HistoryUsage and aggregates every assistant model
@@ -237,11 +236,7 @@ func projectHistory(messages []agent.AgentMessage, outcomes map[string]agent.Too
 		case *llm.ToolResultMessage:
 			outcome, ok := outcomes[message.ToolCallID]
 			if !ok {
-				outcome.Status = agent.ToolOutcomeSuccess
-				if message.IsError {
-					outcome.Status = agent.ToolOutcomeFailed
-					outcome.ErrorCode = "legacy_tool_error"
-				}
+				outcome = agent.ToolOutcome{Status: agent.ToolOutcomeSuccess}
 			}
 			items = append(items, HistoryItem{
 				Type:        HistoryToolResult,

@@ -107,9 +107,9 @@ func (s *Store) resolveUtilityRoute(selection UtilityModelSelection) (ResolvedMo
 	}, nil
 }
 
-// resolveLegacyAutomaticUtilityRoute preserves the route chosen by the v3
-// auto mode while migrating it to an explicit v4 selection.
-func (s *Store) resolveLegacyAutomaticUtilityRoute() (ResolvedModelRoute, error) {
+// fallbackUtilityRoute selects a configured utility route when the persisted
+// selection is no longer runnable.
+func (s *Store) fallbackUtilityRoute() (ResolvedModelRoute, error) {
 	type candidate struct {
 		selection UtilityModelSelection
 		model     llm.Model
@@ -194,13 +194,6 @@ func (s *Store) reconcileUtilityLocked() {
 	if _, err := s.resolveUtilityRoute(*s.utilityModel); err != nil {
 		s.utilityModel = nil
 	}
-}
-
-func utilitySelectionEmpty(selection UtilityModelSelection) bool {
-	return strings.TrimSpace(selection.Provider) == "" &&
-		strings.TrimSpace(selection.Model) == "" &&
-		strings.TrimSpace(selection.ConnectionID) == "" &&
-		strings.TrimSpace(selection.KeyID) == ""
 }
 
 func utilitySelectionFromRoute(route ModelRoute) UtilityModelSelection {

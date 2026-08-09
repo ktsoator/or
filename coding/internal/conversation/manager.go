@@ -69,7 +69,7 @@ func NewManager(ctx context.Context, opts Options) (*Manager, error) {
 		sessions:      make(map[string]*sessionRuntime),
 		usage:         opts.Usage,
 	}
-	if err := transcript.MigratePrivatePermissions(dir); err != nil {
+	if err := transcript.SecurePrivatePermissions(dir); err != nil {
 		cancel()
 		return nil, fmt.Errorf("session: secure transcript storage: %w", err)
 	}

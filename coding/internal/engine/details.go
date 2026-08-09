@@ -7,9 +7,8 @@ import (
 	"github.com/ktsoator/or/coding/internal/tools"
 )
 
-// Tool outcomes live in the existing details sidecar so transcript messages
-// remain provider-neutral. Legacy detail-only records are decoded as successful
-// outcomes, allowing existing sessions to keep their rich rendering.
+// Tool outcomes live in the details sidecar so transcript messages remain
+// provider-neutral.
 
 const (
 	kindToolOutcome     = "tool_outcome"
@@ -83,11 +82,7 @@ func decodeOutcome(raw json.RawMessage) (agent.ToolOutcome, bool) {
 		return agent.ToolOutcome{}, false
 	}
 	if env.Kind != kindToolOutcome {
-		data := decodeOutcomeData(env.Kind, env.Data)
-		if data == nil {
-			return agent.ToolOutcome{}, false
-		}
-		return agent.ToolOutcome{Status: agent.ToolOutcomeSuccess, Data: data}, true
+		return agent.ToolOutcome{}, false
 	}
 
 	var persisted persistedToolOutcome
@@ -95,7 +90,7 @@ func decodeOutcome(raw json.RawMessage) (agent.ToolOutcome, bool) {
 		return agent.ToolOutcome{}, false
 	}
 	if persisted.Status == "" {
-		persisted.Status = agent.ToolOutcomeSuccess
+		return agent.ToolOutcome{}, false
 	}
 	return agent.ToolOutcome{
 		Status:    persisted.Status,

@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"encoding/json"
 	"reflect"
 	"testing"
 
@@ -33,22 +32,5 @@ func TestToolOutcomeRoundTrip(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("decoded outcome = %#v, want %#v", got, want)
-	}
-}
-
-func TestLegacyPreviewDetailsDecodeAsSuccessfulOutcome(t *testing.T) {
-	want := tools.PreviewRequest{Path: "/workspace/index.html", Title: "Legacy"}
-	payload, err := json.Marshal(want)
-	if err != nil {
-		t.Fatal(err)
-	}
-	raw, err := json.Marshal(detailsEnvelope{Kind: kindPreview, Data: payload})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	got, ok := decodeOutcome(raw)
-	if !ok || got.Status != agent.ToolOutcomeSuccess || !reflect.DeepEqual(got.Data, want) {
-		t.Fatalf("decoded legacy outcome = %#v, want success with %#v", got, want)
 	}
 }
