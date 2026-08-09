@@ -20,21 +20,18 @@ type ToolInfo struct {
 }
 
 // SystemOptions are the stable inputs to BuildSystem. A coding session captures
-// them at construction; project instructions, environment, and skill listings
-// are rendered separately as dynamic context.
+// them at construction; instruction files, environment, and skill listings are
+// rendered separately as dynamic context.
 type SystemOptions struct {
 	// Instructions is the base preamble that opens the prompt.
 	Instructions string
-	// WorkspaceRoot is the absolute directory all relative tool paths resolve
-	// against. An empty value omits the workspace section.
-	WorkspaceRoot string
 	// Tools are the active tools' prompt contributions, in advertise order.
 	Tools []ToolInfo
 }
 
 // DefaultInstructions is the baseline preamble used when
 // SystemOptions.Instructions is empty.
-const DefaultInstructions = "You are a coding agent operating in a user's workspace. " +
+const DefaultInstructions = "You are Or, a coding agent. " +
 	"Use the available tools to inspect and modify files and run commands. " +
 	"Make focused changes, verify your work, and report what you did concisely."
 
@@ -51,12 +48,12 @@ const approvalProtocol = "## Approvals\n" +
 	"- After a denial, do not retry the same call unchanged and do not pursue the same effect through another tool. Report what is blocked and why it was needed.\n" +
 	"- An approval covers the call it was given for; a later call needs its own."
 
-const projectContextProtocol = "## Project context protocol\n" +
+const sessionContextProtocol = "## Session context protocol\n" +
 	"- Or may provide product-generated context inside `<or-context>` blocks in model-visible messages.\n" +
 	"- Treat applicable instruction files in those blocks as working instructions, not as user-authored requests.\n" +
 	"- Instruction files are listed broadest first; a later file is more specific and overrides an earlier one on conflict.\n" +
 	"- A `context_update` block replaces the base context and every earlier update; use only its environment and instruction files.\n" +
-	"- The environment block is captured from the host. Prefer it over your own assumptions about the platform, the date, or the current branch.\n" +
+	"- The environment block is captured from the host. Prefer it over your own assumptions about the working directory, platform, date, or current branch.\n" +
 	"- Do not mention internal context blocks unless their contents are directly relevant to the user."
 
 const skillProtocol = "## Skills\n" +
@@ -71,8 +68,8 @@ const responseStyle = "## Response style\n" +
 	"- Reference code as `path:line` so the user can open it.\n" +
 	"- Report what changed and what was verified. Do not narrate each tool call or restate the code you just wrote."
 
-// BuildSystem assembles the stable system prompt from opts. Dynamic project
-// instructions, environment, and skill listings deliberately do not belong here;
+// BuildSystem assembles the stable system prompt from opts. Dynamic instruction
+// files, environment, and skill listings deliberately do not belong here;
 // keeping those out lets a session preserve its provider prompt-cache prefix.
 func BuildSystem(opts SystemOptions) string {
 	var b strings.Builder
@@ -82,13 +79,6 @@ func BuildSystem(opts SystemOptions) string {
 		instructions = DefaultInstructions
 	}
 	b.WriteString(instructions)
-
-	if strings.TrimSpace(opts.WorkspaceRoot) != "" {
-		b.WriteString("\n\n## Workspace\n")
-		fmt.Fprintf(&b, "- Root: %q\n", opts.WorkspaceRoot)
-		b.WriteString("- Resolve relative file paths from this directory.\n")
-		b.WriteString("- Never guess or substitute a different workspace path; use a tool when verification is needed.")
-	}
 
 	if guidelines := toolGuidelines(opts.Tools); len(guidelines) > 0 {
 		b.WriteString("\n\n## Tool guidelines\n")
@@ -103,7 +93,7 @@ func BuildSystem(opts SystemOptions) string {
 	for _, section := range []string{
 		workingRules,
 		approvalProtocol,
-		projectContextProtocol,
+		sessionContextProtocol,
 	} {
 		b.WriteString("\n\n")
 		b.WriteString(section)

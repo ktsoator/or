@@ -7,7 +7,6 @@ import (
 
 func TestBuildSystemContainsStableProtocols(t *testing.T) {
 	out := BuildSystem(SystemOptions{
-		WorkspaceRoot: "/repo",
 		Tools: []ToolInfo{
 			{Name: "read", Guidelines: []string{"Inspect before editing."}},
 			{Name: "skill"},
@@ -16,12 +15,11 @@ func TestBuildSystemContainsStableProtocols(t *testing.T) {
 
 	for _, want := range []string{
 		DefaultInstructions,
-		`- Root: "/repo"`,
 		"## Tool guidelines",
 		"- Inspect before editing.",
 		"## Working rules",
 		"## Approvals",
-		"## Project context protocol",
+		"## Session context protocol",
 		"`<or-context>`",
 		"`context_update`",
 		"## Skills",
@@ -56,6 +54,9 @@ func TestBuildSystemOmitsSkillProtocolWithoutTool(t *testing.T) {
 func TestBuildSystemDoesNotContainDynamicResourceSections(t *testing.T) {
 	out := BuildSystem(SystemOptions{})
 	for _, unwanted := range []string{
+		"user's workspace",
+		"## Workspace",
+		"## Working directory",
 		"<instruction-file",
 		"<available-skills>",
 		"## Project context:",
@@ -69,8 +70,7 @@ func TestBuildSystemDoesNotContainDynamicResourceSections(t *testing.T) {
 
 func TestBuildSystemIsDeterministic(t *testing.T) {
 	opts := SystemOptions{
-		Instructions:  "\nCustom instructions.\n",
-		WorkspaceRoot: "/repo",
+		Instructions: "\nCustom instructions.\n",
 		Tools: []ToolInfo{
 			{Name: "read", Guidelines: []string{"First.", "Shared."}},
 			{Name: "edit", Guidelines: []string{"Shared.", "Second."}},

@@ -55,6 +55,7 @@ func TestRenderBaseContextIncludesInstructionFilesInInputOrder(t *testing.T) {
 
 func TestRenderBaseContextIncludesEnvironment(t *testing.T) {
 	out := RenderBaseContext(Environment{
+		Cwd:       "/repo",
 		OS:        "darwin",
 		Arch:      "arm64",
 		Shell:     "/bin/zsh",
@@ -63,6 +64,8 @@ func TestRenderBaseContextIncludesEnvironment(t *testing.T) {
 		GitBranch: "main",
 	}, nil)
 	for _, want := range []string{
+		"<cwd>/repo</cwd>",
+		"may be an isolated scratch directory",
 		"<os>darwin</os>",
 		"<arch>arm64</arch>",
 		"<shell>/bin/zsh</shell>",
