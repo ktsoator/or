@@ -22,7 +22,7 @@
 - 通过函数钩子控制行为，例如拦截某个工具调用、替换工具结果、切换模型、压缩上下文。
 
 如果你只想手动控制一次模型请求，直接用 [`or/llm`](../llm/README.md)。如果你还需要会话
-持久化、自动上下文压缩、按回合构造系统提示词、skills 或 prompt templates，可以在
+持久化、自动上下文压缩、按回合构造系统提示词或 skills，可以在
 `agent` 之上使用
 [`or/harness`](https://pkg.go.dev/github.com/ktsoator/or/harness)。
 

@@ -39,22 +39,11 @@ const SettingsPage = lazy(() =>
 const SkillsPage = lazy(() =>
   import('@/features/skills/SkillsPage').then((module) => ({ default: module.SkillsPage })),
 )
-const PromptTemplatesPage = lazy(() =>
-  import('@/features/prompt-templates/PromptTemplatesPage').then((module) => ({
-    default: module.PromptTemplatesPage,
-  })),
-)
-const WorkspacePickerDialog = lazy(() =>
-  import('@/components/WorkspacePickerDialog').then((module) => ({
-    default: module.WorkspacePickerDialog,
-  })),
-)
 
 type AppView =
   | { type: 'conversation' }
   | { type: 'settings'; section: SettingsSection }
   | { type: 'skills' }
-  | { type: 'promptTemplates' }
 
 export default function App() {
   const { t } = useI18n()
@@ -129,7 +118,7 @@ export default function App() {
   const [removingWorkspace, setRemovingWorkspace] = useState(false)
   const [removeWorkspaceError, setRemoveWorkspaceError] = useState('')
   const [view, setView] = useState<AppView>({ type: 'conversation' })
-  const [workspacePickerOpen, setWorkspacePickerOpen] = useState(false)
+  const [workspaceOpenError, setWorkspaceOpenError] = useState('')
   const [selectedWorkspacePath, setSelectedWorkspacePath] = useState<string>()
   const {
     mobileSessionsOpen,
@@ -382,22 +371,23 @@ export default function App() {
     const workspace = await registerWorkspace(path)
     updateDraftWorkspace(workspace.path, true)
     setSelectedWorkspacePath(workspace.path)
-    setWorkspacePickerOpen(false)
     closeMobileSessions()
   }
 
   const browseWorkspaceFolders = async () => {
+    setWorkspaceOpenError('')
     try {
       const path = await chooseNativeDirectory(workspacePickerPath, t('workspace.chooseFolder'))
       if (path === undefined) {
-        setWorkspacePickerOpen(true)
+        setWorkspaceOpenError(t('workspace.openFailed'))
         return
       }
       if (!path) return
       await selectWorkspaceFolder(path)
-    } catch {
-      // The web picker remains a usable fallback when the native bridge fails.
-      setWorkspacePickerOpen(true)
+    } catch (error) {
+      setWorkspaceOpenError(
+        error instanceof Error ? error.message : t('workspace.openFailed'),
+      )
     }
   }
 
@@ -414,6 +404,7 @@ export default function App() {
       projectPickerVisible={Boolean(draft)}
       workspaces={workspaces}
       workspacePath={draft?.projectScoped ? draft.workspacePath : undefined}
+      workspaceError={workspaceOpenError}
       models={models}
       modelProvider={draft?.modelProvider ?? activeSession?.modelProvider}
       modelID={draft?.modelID ?? activeSession?.modelId}
@@ -427,6 +418,7 @@ export default function App() {
       onResolve={resolveApproval}
       onResolveQuestion={resolveQuestion}
       onSelectProject={(path) => {
+        setWorkspaceOpenError('')
         updateDraftWorkspace(path, Boolean(path))
         setSelectedWorkspacePath(path)
       }}
@@ -513,7 +505,6 @@ export default function App() {
           toggleSidebar,
           addSession,
           onOpenSkills: () => setView({ type: 'skills' }),
-          onOpenPromptTemplates: () => setView({ type: 'promptTemplates' }),
           chooseSession,
           openSessionInWorkbench,
           togglePinnedSession,
@@ -532,16 +523,6 @@ export default function App() {
       {view.type === 'skills' ? (
         <Suspense fallback={<AppViewFallback />}>
           <SkillsPage
-            onBack={() => setView({ type: 'conversation' })}
-            sidebarCollapsed={sidebarCollapsed}
-            onExpandSidebar={expandSidebar}
-            workspacePath={activeSession?.workspacePath}
-            workspaceName={activeSession?.workspaceName}
-          />
-        </Suspense>
-      ) : view.type === 'promptTemplates' ? (
-        <Suspense fallback={<AppViewFallback />}>
-          <PromptTemplatesPage
             onBack={() => setView({ type: 'conversation' })}
             sidebarCollapsed={sidebarCollapsed}
             onExpandSidebar={expandSidebar}
@@ -711,20 +692,6 @@ export default function App() {
           }}
           onConfirm={() => void confirmRemoveWorkspace()}
         />
-      )}
-
-      {workspacePickerOpen && (
-        <Suspense fallback={null}>
-          <WorkspacePickerDialog
-            initialPath={workspacePickerPath}
-            onClose={() => {
-              setWorkspacePickerOpen(false)
-            }}
-            onSelect={async (path) => {
-              await selectWorkspaceFolder(path)
-            }}
-          />
-        </Suspense>
       )}
     </div>
   )

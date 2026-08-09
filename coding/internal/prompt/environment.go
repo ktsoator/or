@@ -11,9 +11,12 @@ import (
 // Environment is the ambient machine state a coding agent has to know before it
 // can write a correct shell command or reason about dates. It is captured from
 // the host rather than guessed by the model, and it is refreshed with the rest
-// of the project context, so a session that crosses midnight or switches branch
+// of the session context, so a session that crosses midnight or switches branch
 // does not keep reporting stale values.
 type Environment struct {
+	// Cwd is the session's tool root. It may be an isolated scratch directory,
+	// not a user-selected project.
+	Cwd string
 	// OS and Arch are the Go runtime's platform identifiers, e.g. "darwin" and
 	// "arm64". Shell commands differ between platforms, so the model needs them.
 	OS   string
@@ -30,12 +33,16 @@ type Environment struct {
 	GitBranch string
 }
 
-// DetectEnvironment captures the environment for a workspace root. Git state is
-// read directly from the repository's HEAD file rather than by running git: it
+// DetectEnvironment captures the environment for a session's tool root. Git
+// state is read directly from the repository's HEAD file rather than by running git: it
 // avoids a subprocess on a hot path, and it cannot report a working tree as
 // clean when it is not, because it never claims to know.
 func DetectEnvironment(root string) Environment {
+	if abs, err := filepath.Abs(root); err == nil {
+		root = abs
+	}
 	env := Environment{
+		Cwd:   root,
 		OS:    runtime.GOOS,
 		Arch:  runtime.GOARCH,
 		Shell: strings.TrimSpace(os.Getenv("SHELL")),

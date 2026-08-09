@@ -38,7 +38,7 @@ skills/
 - 目录名必须与 `SKILL.md` frontmatter 中的 `name` 完全一致。
 - 只使用 Agent Skills 规范定义的字段。版本信息写入 `metadata.version`，不要使用
   顶层 `version` 字段。
-- 不添加 Or 私有兼容字段、Prompt Template 参数替换或额外运行时路径。
+- 不添加 Or 私有兼容字段、参数替换或额外运行时路径。
 - 从第三方引入 Skill 时保留来源和许可证信息，只收录项目有权再分发的内容。
 - 收录前审查附带脚本。读取 Skill 不代表其脚本获得执行权限。
 - 不提交凭据、生成产物、依赖缓存或本地配置。

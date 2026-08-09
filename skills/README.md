@@ -39,7 +39,7 @@ skills/
 - Make the directory name exactly match the `name` in `SKILL.md` frontmatter.
 - Use only fields defined by the Agent Skills specification. Put version data
   under `metadata.version`; do not add a top-level `version` field.
-- Do not add Or-specific compatibility fields, prompt-template substitution, or
+- Do not add Or-specific compatibility fields, argument substitution, or
   alternate runtime paths.
 - Preserve upstream attribution and licensing for imported Skills. Only include
   content that the project may redistribute.

@@ -19,11 +19,10 @@ type Store struct {
 	path     string
 	registry *llm.ProviderRegistry
 
-	mu           sync.Mutex
-	profiles     map[string]Profile
-	activeModel  *ModelSelection
-	utilityModel *UtilityModelSelection
-	repairs      []SelectionRepair
+	mu          sync.Mutex
+	profiles    map[string]Profile
+	activeModel *ModelSelection
+	repairs     []SelectionRepair
 }
 
 func NewStore(
@@ -50,7 +49,7 @@ func NewStore(
 	if err := json.Unmarshal(data, &file); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", store.path, err)
 	}
-	if file.Version != 2 && file.Version != 3 && file.Version != fileVersion {
+	if file.Version != fileVersion {
 		return nil, fmt.Errorf("unsupported provider settings version %d", file.Version)
 	}
 	if file.Providers != nil {
@@ -75,20 +74,7 @@ func NewStore(
 			repaired = true
 		}
 	}
-	if file.Version == 3 && file.UtilityModel != nil && utilitySelectionEmpty(*file.UtilityModel) {
-		if route, resolveErr := store.resolveLegacyAutomaticUtilityRoute(); resolveErr == nil {
-			selection := utilitySelectionFromRoute(route.Route)
-			store.utilityModel = &selection
-		}
-	} else if file.UtilityModel != nil {
-		selection, repair := store.restoreUtilityModel(*file.UtilityModel)
-		store.utilityModel = selection
-		if repair != nil {
-			store.repairs = append(store.repairs, *repair)
-			repaired = true
-		}
-	}
-	if file.Version == 3 || repaired {
+	if repaired {
 		if err := store.saveLocked(); err != nil {
 			return nil, fmt.Errorf("update %s: %w", store.path, err)
 		}
@@ -126,10 +112,9 @@ func (s *Store) Snapshot() map[string]Profile {
 
 func (s *Store) saveLocked() error {
 	data, err := json.MarshalIndent(profileFile{
-		Version:      fileVersion,
-		ActiveModel:  s.activeModel,
-		UtilityModel: s.utilityModel,
-		Providers:    s.profiles,
+		Version:     fileVersion,
+		ActiveModel: s.activeModel,
+		Providers:   s.profiles,
 	}, "", "  ")
 	if err != nil {
 		return err

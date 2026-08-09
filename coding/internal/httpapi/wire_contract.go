@@ -34,7 +34,6 @@ const (
 	wireEventDone              wireEventType = "done"
 	wireEventSyncRequired      wireEventType = "sync_required"
 	wireEventTitleUpdate       wireEventType = "title_update"
-	wireEventTitleGeneration   wireEventType = "title_generation_update"
 	wireEventQuestionRequest   wireEventType = "question_request"
 	wireEventQuestionResolved  wireEventType = "question_resolved"
 	wireEventQuestionCancelled wireEventType = "question_cancelled"
@@ -47,16 +46,6 @@ const (
 	wireTaskSucceeded wireTaskStatus = "succeeded"
 	wireTaskFailed    wireTaskStatus = "failed"
 	wireTaskStopped   wireTaskStatus = "stopped"
-)
-
-type wireTitleGenerationStatus string
-
-const (
-	wireTitleGenerationIdle        wireTitleGenerationStatus = "idle"
-	wireTitleGenerationGenerating  wireTitleGenerationStatus = "generating"
-	wireTitleGenerationSucceeded   wireTitleGenerationStatus = "succeeded"
-	wireTitleGenerationFailed      wireTitleGenerationStatus = "failed"
-	wireTitleGenerationUnavailable wireTitleGenerationStatus = "unavailable"
 )
 
 type wireDeltaKind string
@@ -81,19 +70,6 @@ const (
 	wireDeliverySteer    wireDeliveryMode = "steer"
 	wireDeliveryFollowUp wireDeliveryMode = "followup"
 )
-
-type wireInvocationKind string
-
-const (
-	wireInvocationPromptTemplate wireInvocationKind = "prompt_template"
-)
-
-type wireInvocation struct {
-	Kind   wireInvocationKind `json:"kind"`
-	Name   string             `json:"name"`
-	Source string             `json:"source"`
-	Path   string             `json:"path"`
-}
 
 type wireBrowserDisposition string
 
@@ -267,12 +243,11 @@ type wireEvent struct {
 	Preview          *wirePreview `json:"preview,omitempty"`
 	IsError          bool         `json:"isError,omitempty"`
 	// message_end fallback text (used when nothing streamed)
-	Text       string          `json:"text,omitempty"`
-	Images     []wireImage     `json:"images,omitempty"`
-	Files      []wireFile      `json:"files,omitempty"`
-	Invocation *wireInvocation `json:"invocation,omitempty"`
-	Usage      *wireUsage      `json:"usage,omitempty"`
-	Final      bool            `json:"finalResponse,omitempty"`
+	Text   string      `json:"text,omitempty"`
+	Images []wireImage `json:"images,omitempty"`
+	Files  []wireFile  `json:"files,omitempty"`
+	Usage  *wireUsage  `json:"usage,omitempty"`
+	Final  bool        `json:"finalResponse,omitempty"`
 	// Completed-response metadata. ModelName is the stable catalog display name;
 	// Provider and Model keep the exact identity available to other clients.
 	Provider  string `json:"provider,omitempty"`
@@ -297,16 +272,7 @@ type wireEvent struct {
 	// question_request
 	Questions []wireQuestion `json:"questions,omitempty"`
 	// title_update
-	Title       string `json:"title,omitempty"`
-	AITitle     string `json:"aiTitle,omitempty"`
-	CustomTitle string `json:"customTitle,omitempty"`
-	// title_generation_update
-	TitleGenerationStatus      wireTitleGenerationStatus `json:"titleGenerationStatus,omitempty"`
-	TitleGenerationProvider    string                    `json:"titleGenerationProvider,omitempty"`
-	TitleGenerationModel       string                    `json:"titleGenerationModel,omitempty"`
-	TitleGenerationErrorCode   string                    `json:"titleGenerationErrorCode,omitempty"`
-	TitleGenerationError       string                    `json:"titleGenerationError,omitempty"`
-	TitleGenerationAttemptedAt string                    `json:"titleGenerationAttemptedAt,omitempty"`
+	Title string `json:"title,omitempty"`
 	// run timing
 	StartedAt   string `json:"startedAt,omitempty"`
 	CompletedAt string `json:"completedAt,omitempty"`
@@ -417,19 +383,11 @@ type wireTaskOutputResponse struct {
 }
 
 type wireHistoryResponse struct {
-	Events                     []wireEvent               `json:"events"`
-	Queue                      []wireEvent               `json:"queue"`
-	Context                    wireContextUsage          `json:"context"`
-	Tasks                      []wireBackgroundTask      `json:"tasks"`
-	Running                    bool                      `json:"running"`
-	EventSeq                   uint64                    `json:"eventSeq"`
-	Title                      string                    `json:"title"`
-	AITitle                    string                    `json:"aiTitle,omitempty"`
-	CustomTitle                string                    `json:"customTitle,omitempty"`
-	TitleGenerationStatus      wireTitleGenerationStatus `json:"titleGenerationStatus"`
-	TitleGenerationProvider    string                    `json:"titleGenerationProvider,omitempty"`
-	TitleGenerationModel       string                    `json:"titleGenerationModel,omitempty"`
-	TitleGenerationErrorCode   string                    `json:"titleGenerationErrorCode,omitempty"`
-	TitleGenerationError       string                    `json:"titleGenerationError,omitempty"`
-	TitleGenerationAttemptedAt string                    `json:"titleGenerationAttemptedAt,omitempty"`
+	Events   []wireEvent          `json:"events"`
+	Queue    []wireEvent          `json:"queue"`
+	Context  wireContextUsage     `json:"context"`
+	Tasks    []wireBackgroundTask `json:"tasks"`
+	Running  bool                 `json:"running"`
+	EventSeq uint64               `json:"eventSeq"`
+	Title    string               `json:"title"`
 }

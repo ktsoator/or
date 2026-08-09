@@ -8,7 +8,6 @@ import (
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/conversation"
 	"github.com/ktsoator/or/coding/internal/engine"
-	"github.com/ktsoator/or/coding/internal/invocation"
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/llm"
 )
@@ -45,38 +44,6 @@ func TestProjectEventIncludesResponseCompletionTime(t *testing.T) {
 	}
 	if want := completedAt.UTC().Format(time.RFC3339Nano); event.CompletedAt != want {
 		t.Fatalf("completedAt = %q, want %q", event.CompletedAt, want)
-	}
-}
-
-func TestProjectUserMessageIncludesResolvedInvocation(t *testing.T) {
-	record := &invocation.Record{
-		Kind:   invocation.PromptTemplate,
-		Name:   "review",
-		Source: "project",
-		Path:   "/workspace/.or/prompts/review.md",
-	}
-	data, ok := ProjectEvent(engine.Event{
-		Type: engine.UserMessageCompleted, Text: "/review security", Invocation: record,
-	})
-	if !ok {
-		t.Fatal("user message event was not projected")
-	}
-	var event wireEvent
-	if err := json.Unmarshal(data, &event); err != nil {
-		t.Fatal(err)
-	}
-	if event.Invocation == nil || event.Invocation.Kind != wireInvocationPromptTemplate ||
-		event.Invocation.Name != "review" || event.Invocation.Source != "project" ||
-		event.Invocation.Path != "/workspace/.or/prompts/review.md" {
-		t.Fatalf("invocation = %#v", event.Invocation)
-	}
-
-	history := ProjectHistory([]engine.HistoryItem{{
-		Type: engine.HistoryUser, Text: "/review security", Invocation: record,
-	}})
-	if len(history) != 1 || history[0].Invocation == nil ||
-		history[0].Invocation.Name != "review" {
-		t.Fatalf("history = %#v", history)
 	}
 }
 

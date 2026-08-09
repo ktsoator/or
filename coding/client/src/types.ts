@@ -6,11 +6,9 @@ import type {
   HistoryResponse,
   MessageFile,
   MessageImage,
-  MessageInvocation,
   PreviewRequest,
   Question,
   TaskStatus,
-  TitleGenerationStatus,
   ToolOutcome,
   Usage,
 } from './generated/wire'
@@ -54,14 +52,6 @@ export type ThreadSnapshot = Pick<HistoryResponse, 'events' | 'running'> &
       | 'tasks'
       | 'eventSeq'
       | 'title'
-      | 'aiTitle'
-      | 'customTitle'
-      | 'titleGenerationStatus'
-      | 'titleGenerationProvider'
-      | 'titleGenerationModel'
-      | 'titleGenerationErrorCode'
-      | 'titleGenerationError'
-      | 'titleGenerationAttemptedAt'
     >
   >
 
@@ -136,7 +126,6 @@ export type UserItem = {
   text: string
   images: MessageImage[]
   files?: MessageFile[]
-  invocation?: MessageInvocation
   sentAt?: string
   deliveryStatus?: 'sending' | 'failed'
 }
@@ -238,12 +227,6 @@ export type ProviderInfo = {
   effectiveBaseURL?: string
   activeConnectionId: string
   connections: ProviderConnectionInfo[]
-  utilityModels: ProviderUtilityModelInfo[]
-}
-
-export type ProviderUtilityModelInfo = {
-  id: string
-  name: string
 }
 
 export type ActiveModelSelection = {
@@ -255,12 +238,11 @@ export type ActiveModelSelection = {
 export type ProviderListResponse = {
   providers: ProviderInfo[]
   activeModel?: ActiveModelSelection
-  utilityModel?: UtilityModelSelection
   repairs?: ProviderSelectionRepair[]
 }
 
 export type ProviderSelectionRepair = {
-  target: 'active_model' | 'utility_model'
+  target: 'active_model'
   reason: 'unavailable' | 'unsupported_thinking_level'
   previous: ProviderModelReference
   replacement?: ProviderModelReference
@@ -270,13 +252,6 @@ export type ProviderModelReference = {
   provider: string
   model: string
   thinkingLevel?: ThinkingLevel
-}
-
-export type UtilityModelSelection = {
-  provider: string
-  model: string
-  connectionId: string
-  keyId: string
 }
 
 export type ProviderConnectionInfo = {
@@ -304,9 +279,6 @@ export type ModelCatalogResponse = {
 export type SessionSummary = {
   id: string
   title: string
-  aiTitle?: string
-  customTitle?: string
-  titleGeneration: TitleGeneration
   workspacePath: string
   workspaceName: string
   scope: 'chat' | 'project'
@@ -323,30 +295,10 @@ export type SessionSummary = {
   permissionMode: PermissionMode
 }
 
-export type TitleGeneration = {
-  status: TitleGenerationStatus
-  provider?: string
-  model?: string
-  errorCode?: string
-  error?: string
-  attemptedAt?: string
-}
-
 export type WorkspaceSummary = {
   path: string
   name: string
   addedAt: string
-}
-
-export type DirectoryEntry = {
-  name: string
-  path: string
-}
-
-export type DirectoryListing = {
-  path: string
-  parent: string
-  directories: DirectoryEntry[]
 }
 
 export type CompactionResult = {

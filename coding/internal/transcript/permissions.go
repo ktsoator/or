@@ -12,10 +12,9 @@ const (
 	privateFileMode      os.FileMode = 0o600
 )
 
-// MigratePrivatePermissions tightens every transcript and details JSONL file
-// already present in dir. It lets the session index stay lazy without leaving
-// unopened data from older releases world-readable.
-func MigratePrivatePermissions(dir string) error {
+// SecurePrivatePermissions enforces private modes for every transcript JSONL
+// file in dir, including files that remain lazily unloaded.
+func SecurePrivatePermissions(dir string) error {
 	if err := os.MkdirAll(dir, privateDirectoryMode); err != nil {
 		return err
 	}
@@ -45,8 +44,7 @@ func ensurePrivateDirectory(path string) error {
 	return os.Chmod(dir, privateDirectoryMode)
 }
 
-// secureExistingFile tightens storage created by older releases before any
-// sensitive transcript or tool details are read.
+// secureExistingFile enforces private modes before a transcript is read.
 func secureExistingFile(path string) (bool, error) {
 	if _, err := os.Stat(path); err != nil {
 		if errors.Is(err, os.ErrNotExist) {

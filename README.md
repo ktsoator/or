@@ -40,7 +40,7 @@ these packages.
 |---|---|---|
 | [`or/llm`](docs/llm/README.md) | Available | Unified model access, streaming, tools, reasoning, images, and conversation history |
 | [`or/agent`](docs/agent/README.md) | Available | Stateful agent loop with tools, streaming events, steering, follow-ups, and abort |
-| [`or/harness`](https://pkg.go.dev/github.com/ktsoator/or/harness) | Available | Orchestration over the agent: transcript persistence, context compaction, per-turn system prompt, skills, and prompt templates |
+| [`or/harness`](https://pkg.go.dev/github.com/ktsoator/or/harness) | Available | Orchestration over the agent: transcript persistence, context compaction, per-turn system prompt, and skills |
 | [`Or`](coding/README.md) | Product | Coding agent service, React client, and Electron desktop application |
 
 Future packages can build higher-level orchestration on the same foundations

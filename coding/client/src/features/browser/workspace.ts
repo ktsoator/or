@@ -69,7 +69,7 @@ export type BrowserWorkspaceAction =
       selectForAgent: boolean
     }
   | {
-      t: 'legacy_preview_received'
+      t: 'restored_preview_received'
       previewKey: string
       tabID: string
       sessionID: string
@@ -303,7 +303,7 @@ export function browserWorkspaceReducer(
         },
       }
 
-    case 'legacy_preview_received':
+    case 'restored_preview_received':
       if (state.handledPreviewKey === action.previewKey) return state
       return {
         ...state,

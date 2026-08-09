@@ -29,7 +29,7 @@ func (h *activeRunHistory) apply(event wireEvent) {
 	// These have dedicated snapshot fields and should not inflate the active
 	// run log. Queued messages are reconstructed from the queue snapshot until
 	// they are consumed and re-emitted as ordinary user messages.
-	if event.Type == wireEventTitleUpdate || event.Type == wireEventTitleGeneration ||
+	if event.Type == wireEventTitleUpdate ||
 		(event.Type == wireEventUserMessage && event.Queued) {
 		return
 	}

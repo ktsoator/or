@@ -16,10 +16,6 @@ type Delta struct {
 	Removed []string
 }
 
-func (d Delta) Empty() bool {
-	return len(d.Added) == 0 && len(d.Updated) == 0 && len(d.Removed) == 0
-}
-
 // Revision fingerprints the complete resolved registry, including skill bodies
 // and source paths. A body-only edit therefore advances the revision even when
 // its model-visible name and description do not change.

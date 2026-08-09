@@ -61,7 +61,12 @@ func TestBuildContextOmitsProductContextEntries(t *testing.T) {
 		Rendered:     "<or-context>internal</or-context>",
 	})
 	user := NewMessage(agent.UserMessage("visible user"))
-	entries := []Entry{contextEntry, user}
+	outcome := NewToolOutcome(ToolOutcome{
+		ToolCallID: "call-1",
+		Status:     agent.ToolOutcomeFailed,
+		ErrorCode:  "tool_failed",
+	})
+	entries := []Entry{contextEntry, user, outcome}
 
 	projected, err := BuildContext(entries)
 	if err != nil {

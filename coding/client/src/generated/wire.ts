@@ -27,7 +27,6 @@ export type WireEventType =
   | "done"
   | "sync_required"
   | "title_update"
-  | "title_generation_update"
   | "question_request"
   | "question_resolved"
   | "question_cancelled"
@@ -48,25 +47,9 @@ export type TaskStatus =
   | "failed"
   | "stopped"
 
-export type TitleGenerationStatus =
-  | "idle"
-  | "generating"
-  | "succeeded"
-  | "failed"
-  | "unavailable"
-
 export type DeliveryMode =
   | "steer"
   | "followup"
-
-export type InvocationKind = "prompt_template"
-
-export type MessageInvocation = {
-  kind: InvocationKind
-  name: string
-  source: string
-  path: string
-}
 
 export type BrowserDisposition =
   | "reuse_agent_tab"
@@ -287,7 +270,6 @@ export type WireEvent = {
   text?: string
   images?: MessageImage[]
   files?: MessageFile[]
-  invocation?: MessageInvocation
   usage?: Usage
   finalResponse?: boolean
   provider?: string
@@ -304,14 +286,6 @@ export type WireEvent = {
   tabID?: string
   questions?: Question[]
   title?: string
-  aiTitle?: string
-  customTitle?: string
-  titleGenerationStatus?: TitleGenerationStatus
-  titleGenerationProvider?: string
-  titleGenerationModel?: string
-  titleGenerationErrorCode?: string
-  titleGenerationError?: string
-  titleGenerationAttemptedAt?: string
   startedAt?: string
   completedAt?: string
   durationMs?: number
@@ -326,12 +300,4 @@ export type HistoryResponse = {
   running: boolean
   eventSeq: number
   title: string
-  aiTitle?: string
-  customTitle?: string
-  titleGenerationStatus: TitleGenerationStatus
-  titleGenerationProvider?: string
-  titleGenerationModel?: string
-  titleGenerationErrorCode?: string
-  titleGenerationError?: string
-  titleGenerationAttemptedAt?: string
 }

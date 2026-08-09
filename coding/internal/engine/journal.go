@@ -17,8 +17,7 @@ import (
 // Session's run, history, and compaction paths from coordinating its locks and
 // stores independently.
 type sessionJournal struct {
-	store        transcript.Store
-	detailsStore transcript.DetailsStore
+	store transcript.Store
 
 	mu           sync.RWMutex
 	entries      []transcript.Entry
@@ -32,7 +31,6 @@ type sessionJournal struct {
 func newSessionJournal(
 	ctx context.Context,
 	store transcript.Store,
-	detailsStore transcript.DetailsStore,
 ) (*sessionJournal, []agent.AgentMessage, []transcript.Entry, error) {
 	var entries []transcript.Entry
 	if store != nil {
@@ -54,21 +52,17 @@ func newSessionJournal(
 	}
 
 	outcomes := map[string]agent.ToolOutcome{}
-	if detailsStore != nil {
-		stored, err := detailsStore.Load(ctx)
-		if err != nil {
-			return nil, nil, nil, err
+	for _, entry := range entries {
+		if entry.Type != transcript.ToolOutcomeEntry || entry.ToolOutcome == nil {
+			continue
 		}
-		for id, raw := range stored {
-			if outcome, ok := decodeOutcome(raw); ok {
-				outcomes[id] = outcome
-			}
+		if outcome, ok := decodeOutcome(*entry.ToolOutcome); ok {
+			outcomes[entry.ToolOutcome.ToolCallID] = outcome
 		}
 	}
 
 	journal := &sessionJournal{
 		store:        store,
-		detailsStore: detailsStore,
 		entries:      append([]transcript.Entry(nil), entries...),
 		persistedLen: len(seed),
 		usageStart:   usageStart,
@@ -78,26 +72,16 @@ func newSessionJournal(
 }
 
 // captureOutcomes subscribes to tool completions and retains each terminal
-// outcome in memory, persisting it to the sidecar so reload restores status,
-// error metadata, and structured data. It is registered once per session.
+// outcome until the corresponding tool result is checkpointed. It is
+// registered once per session.
 func (j *sessionJournal) captureOutcomes(source *agent.Agent) {
 	source.Subscribe(func(ev agent.AgentEvent) {
 		if ev.Type != agent.ToolEnd {
 			return
 		}
-		result := ev.Result
-		payload, ok := encodeOutcome(result.Outcome)
-		if !ok {
-			return
-		}
 		j.outcomeMu.Lock()
-		j.outcomes[ev.ToolCallID] = result.Outcome
+		j.outcomes[ev.ToolCallID] = ev.Result.Outcome
 		j.outcomeMu.Unlock()
-		if j.detailsStore != nil {
-			// Persist out of band; a failure here must not disrupt the run, and the
-			// live event already carried the outcome to any subscriber.
-			_ = j.detailsStore.Put(context.Background(), ev.ToolCallID, payload)
-		}
 	})
 }
 
@@ -247,12 +231,25 @@ func (j *sessionJournal) persistMessages(
 	if persistedLen < len(all) {
 		added = all[persistedLen:]
 	}
-	entries := make([]transcript.Entry, 0, len(contextEntries)+len(added)+1)
+	outcomes := j.snapshotOutcomes()
+	entries := make([]transcript.Entry, 0, len(contextEntries)+2*len(added)+1)
 	entries = append(entries, contextEntries...)
 	for _, message := range added {
-		entries = append(entries, transcript.NewMessageWithInvocation(
-			message,
-			messageInvocation(message),
+		entries = append(entries, transcript.NewMessage(message))
+		llmMessage, ok := agent.ToLLM(message)
+		if !ok {
+			continue
+		}
+		result, ok := llmMessage.(*llm.ToolResultMessage)
+		if !ok {
+			continue
+		}
+		outcome, ok := outcomes[result.ToolCallID]
+		if !ok {
+			continue
+		}
+		entries = append(entries, transcript.NewToolOutcome(
+			encodeOutcome(result.ToolCallID, outcome),
 		))
 	}
 	if !startedAt.IsZero() && !completedAt.IsZero() {

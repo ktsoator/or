@@ -4,7 +4,6 @@ import type {
 } from 'react'
 import {
   BookOpenText,
-  FileText,
   LoaderCircle,
   Search,
   SquarePen,
@@ -42,7 +41,6 @@ type AppSidebarProps = {
     toggleSidebar: () => void
     addSession: (workspacePath?: string, projectScoped?: boolean) => void
     onOpenSkills: () => void
-    onOpenPromptTemplates: () => void
     chooseSession: (id: string) => void
     openSessionInWorkbench: (id: string) => void
     togglePinnedSession: (id: string) => void
@@ -80,7 +78,6 @@ export function AppSidebar({ layout, content, actions }: AppSidebarProps) {
     toggleSidebar,
     addSession,
     onOpenSkills,
-    onOpenPromptTemplates,
     chooseSession,
     openSessionInWorkbench,
     togglePinnedSession,
@@ -188,12 +185,6 @@ export function AppSidebar({ layout, content, actions }: AppSidebarProps) {
                 label={t('app.skills')}
                 collapsed={sidebarCollapsed}
                 onClick={() => onOpenSkills()}
-              />
-              <SidebarNavItem
-                icon={FileText}
-                label={t('app.promptTemplates')}
-                collapsed={sidebarCollapsed}
-                onClick={() => onOpenPromptTemplates()}
               />
             </div>
           </div>

@@ -64,9 +64,6 @@ Usage:
 - old_string must match exactly one place in the file unless replace_all is set; include enough surrounding context (usually a few adjacent lines) to make it unique.
 - Preserve exact indentation — match the text as it appears after the line-number prefix in read output, never including that prefix.
 - Prefer edit over write when changing part of an existing file.`,
-	guidelines: []string{
-		"Include enough context in old_string to match exactly one location, or set replace_all.",
-	},
 }
 
 var writeText = toolText{
@@ -97,7 +94,6 @@ Usage:
 - For a long-lived process that does not exit on its own — a dev server, a watcher, a database — set run_in_background instead of waiting for it. bash returns a task id and managed output path immediately. Completion is reported automatically; read the output file only when logs are needed, and stop it with task_stop. Do not poll. Never wait on such a command in the foreground.`,
 	guidelines: []string{
 		"Never bypass a `read`, `edit`, or `write` error with `bash`; satisfy the requested precondition and retry the same tool.",
-		"Set `bash`'s `description` to a short active-voice summary of each command; it is what the UI shows instead of the raw command.",
 		"Start long-lived processes (servers, watchers) with `bash` `run_in_background`; wait for automatic completion notifications, read the returned output file only when needed, and stop them with `task_stop`. Do not poll.",
 	},
 }

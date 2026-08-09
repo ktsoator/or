@@ -48,30 +48,6 @@ func TestSkillUnknownErrors(t *testing.T) {
 	}
 }
 
-func TestPromptFromTemplateSubstitutesArgs(t *testing.T) {
-	ctx := context.Background()
-	rec := &recordingStream{turns: [][]llm.Event{textTurn("ok")}}
-	h, err := harness.New(ctx, harness.Options{
-		Model:    testModel,
-		StreamFn: rec.fn(),
-		PromptTemplates: []harness.PromptTemplate{
-			{Name: "greet", Content: "Say hi to $1 about $ARGUMENTS."},
-		},
-	})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-
-	if err := h.PromptFromTemplate(ctx, "greet", "Alice", "Bob"); err != nil {
-		t.Fatalf("PromptFromTemplate() error = %v", err)
-	}
-
-	prompt := messageText(t, h.Snapshot().Messages[0])
-	if prompt != "Say hi to Alice about Alice Bob." {
-		t.Fatalf("substituted prompt = %q", prompt)
-	}
-}
-
 func TestFormatSkillsForSystemPrompt(t *testing.T) {
 	skills := []harness.Skill{
 		{Name: "review", Description: "review code"},

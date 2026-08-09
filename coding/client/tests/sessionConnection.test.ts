@@ -97,7 +97,6 @@ function history(overrides: Partial<HistoryResponse> = {}): HistoryResponse {
     running: false,
     eventSeq: 0,
     title: 'New session',
-    titleGenerationStatus: 'idle',
     ...overrides,
   }
 }
@@ -120,7 +119,6 @@ function session(id: string): SessionSummary {
     modelName: 'Test model',
     thinkingLevel: 'medium',
     permissionMode: 'ask',
-    titleGeneration: { status: 'idle' },
   }
 }
 
@@ -133,7 +131,7 @@ async function waitFor(check: () => boolean, message: string) {
 }
 
 describe('startSessionConnection', () => {
-  test('restores an AI title completed before the SSE stream opens', async () => {
+  test('restores a title completed before the SSE stream opens', async () => {
     const sessionID = 'session-1'
     const sources: TestEventSource[] = []
     let state: SessionStoreState = {
@@ -143,7 +141,6 @@ describe('startSessionConnection', () => {
     let snapshotApplied = false
     const restored = history({
       title: 'Inspect parser behavior',
-      aiTitle: 'Inspect parser behavior',
       eventSeq: 8,
     })
     const handlers: SessionConnectionHandlers = {
@@ -169,10 +166,7 @@ describe('startSessionConnection', () => {
     const stop = startSessionConnection(sessionID, handlers, dependencies)
     await waitFor(() => sources.length === 1, 'event stream was not opened')
 
-    expect(state.sessions[0]).toMatchObject({
-      title: 'Inspect parser behavior',
-      aiTitle: 'Inspect parser behavior',
-    })
+    expect(state.sessions[0]?.title).toBe('Inspect parser behavior')
     expect(sources[0]?.url).toBe('/api/sessions/session-1/events?after=8')
 
     stop()

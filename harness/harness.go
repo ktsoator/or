@@ -34,12 +34,11 @@ type Harness struct {
 	runCtx       context.Context
 
 	// cfgMu guards the registries the Set* methods may change between runs: the
-	// tool set and active subset, plus skills and prompt templates.
+	// tool set, active subset, and skills.
 	cfgMu       sync.Mutex
 	toolset     []agent.AgentTool
 	activeNames map[string]bool // nil means every registered tool is active
 	skills      []Skill
-	templates   []PromptTemplate
 }
 
 // New builds a Harness. When a Session is configured, its stored transcript is
@@ -63,7 +62,6 @@ func New(ctx context.Context, opts Options) (*Harness, error) {
 		toolset:      append([]agent.AgentTool(nil), opts.Tools...),
 		activeNames:  namesSet(opts.ActiveTools),
 		skills:       append([]Skill(nil), opts.Skills...),
-		templates:    append([]PromptTemplate(nil), opts.PromptTemplates...),
 	}
 
 	agentOpts := agent.Options{

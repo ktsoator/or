@@ -11,7 +11,6 @@ import (
 	"github.com/ktsoator/or/coding/internal/compaction"
 	"github.com/ktsoator/or/coding/internal/modelcontext"
 	"github.com/ktsoator/or/coding/internal/permission"
-	"github.com/ktsoator/or/coding/internal/prompttemplate"
 	"github.com/ktsoator/or/coding/internal/skills"
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/transcript"
@@ -43,10 +42,6 @@ type Options struct {
 	// Skills static. The loader is deliberately not called for provider retries,
 	// tool-loop turns, or context-overflow recovery.
 	SkillLoader func() []skills.Skill
-	// PromptTemplates is the initial prompt-template snapshot. The optional
-	// loader refreshes it before every top-level prompt.
-	PromptTemplates      []prompttemplate.Template
-	PromptTemplateLoader func() []prompttemplate.Template
 	// Policy classifies resolved tool access. Nil uses permission.DefaultPolicy.
 	Policy permission.Policy
 	// Approver obtains decisions for calls classified as Ask. Nil denies them.
@@ -65,11 +60,6 @@ type Options struct {
 	// Compactor creates checkpoint summaries. Nil uses a native, tool-free LLM
 	// request configured from StreamFn, StreamOptions, and GetAPIKey.
 	Compactor compaction.Compactor
-	// DetailsStore persists machine-readable tool outcomes out of band, keyed by
-	// tool-call ID, so a reloaded session restores status, error metadata, rich
-	// rendering, and preview targets. Nil derives legacy status from the
-	// transcript and replays without structured data.
-	DetailsStore transcript.DetailsStore
 	// Instructions overrides the base system-prompt preamble. Empty uses
 	// prompt.DefaultInstructions.
 	Instructions string
@@ -107,9 +97,6 @@ type Session struct {
 	skillRevision        string
 	pendingSkills        *skills.Registry
 	pendingSkillRevision string
-
-	promptTemplates      *prompttemplate.Registry
-	promptTemplateLoader func() []prompttemplate.Template
 
 	contextRevision        string
 	pendingContextRevision string
@@ -188,9 +175,6 @@ func (s *Session) ClearQueuedMessages() { s.agent.ClearQueues() }
 
 // Snapshot returns a read-only snapshot of the underlying agent state.
 func (s *Session) Snapshot() agent.State { return s.agent.Snapshot() }
-
-// Cwd returns the workspace root.
-func (s *Session) Cwd() string { return s.cwd }
 
 // SetModel replaces the model used by the next run. Call it only while the
 // session is idle; an in-flight run has already captured its model.

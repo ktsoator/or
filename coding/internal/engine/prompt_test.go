@@ -52,7 +52,7 @@ func TestSessionProjectsBaseContextOutsideStableSystemPrompt(t *testing.T) {
 
 	system := session.agent.Snapshot().SystemPrompt
 	for _, want := range []string{
-		"## Project context protocol",
+		"## Session context protocol",
 		"## Skills",
 	} {
 		if !strings.Contains(system, want) {
@@ -60,6 +60,9 @@ func TestSessionProjectsBaseContextOutsideStableSystemPrompt(t *testing.T) {
 		}
 	}
 	for _, dynamic := range []string{
+		workspace,
+		"## Workspace",
+		"## Working directory",
 		`<or-context kind="base">`,
 		`<or-context kind="skill_listing">`,
 		"Follow the workspace rule.",
@@ -82,6 +85,8 @@ func TestSessionProjectsBaseContextOutsideStableSystemPrompt(t *testing.T) {
 	base := llmUserText(t, captured.Messages[0])
 	for _, want := range []string{
 		`<or-context kind="base">`,
+		"<cwd>" + workspace + "</cwd>",
+		"may be an isolated scratch directory",
 		"Follow the workspace rule.",
 	} {
 		if !strings.Contains(base, want) {

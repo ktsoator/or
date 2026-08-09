@@ -14,7 +14,6 @@ func (s *Store) Replace(providerID string, update Update) (Profile, error) {
 	}
 	s.mu.Lock()
 	previous, found := s.profiles[providerID]
-	previousUtility := s.utilityModel
 	existing := normalizeProfile(previous)
 	next, err := mergeProfile(existing, update)
 	if err != nil {
@@ -22,9 +21,7 @@ func (s *Store) Replace(providerID string, update Update) (Profile, error) {
 		return Profile{}, err
 	}
 	s.profiles[providerID] = next
-	s.reconcileUtilityLocked()
 	if err := s.saveLocked(); err != nil {
-		s.utilityModel = previousUtility
 		if found {
 			s.profiles[providerID] = previous
 		} else {
@@ -51,7 +48,6 @@ func (s *Store) Save(providerID string, update Update) (Profile, error) {
 
 	s.mu.Lock()
 	previous, found := s.profiles[providerID]
-	previousUtility := s.utilityModel
 	existing := normalizeProfile(previous)
 
 	connectionIDs := make(map[string]struct{}, len(update.Connections))
@@ -84,9 +80,7 @@ func (s *Store) Save(providerID string, update Update) (Profile, error) {
 		next.ActiveConnectionID = OfficialConnectionID
 	}
 	s.profiles[providerID] = next
-	s.reconcileUtilityLocked()
 	if err := s.saveLocked(); err != nil {
-		s.utilityModel = previousUtility
 		restoreProfile(s.profiles, providerID, previous, found)
 		s.mu.Unlock()
 		return Profile{}, err
@@ -171,18 +165,15 @@ func (s *Store) Delete(providerID string) error {
 	s.mu.Lock()
 	previous, found := s.profiles[providerID]
 	previousModel := s.activeModel
-	previousUtility := s.utilityModel
 	delete(s.profiles, providerID)
 	if s.activeModel != nil && s.activeModel.Provider == providerID {
 		s.activeModel = nil
 	}
-	s.reconcileUtilityLocked()
 	if err := s.saveLocked(); err != nil {
 		if found {
 			s.profiles[providerID] = previous
 		}
 		s.activeModel = previousModel
-		s.utilityModel = previousUtility
 		s.mu.Unlock()
 		return err
 	}

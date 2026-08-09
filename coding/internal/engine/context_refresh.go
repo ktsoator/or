@@ -8,7 +8,7 @@ import (
 	"github.com/ktsoator/or/coding/internal/transcript"
 )
 
-// buildSystemPrompt assembles only the stable coding prompt. Project
+// buildSystemPrompt assembles only the stable coding prompt. Session
 // instructions and skill listings are projected by modelContext at the request
 // boundary and never become part of the Agent's canonical system prompt.
 func (s *Session) buildSystemPrompt(instructions string) string {
@@ -17,9 +17,8 @@ func (s *Session) buildSystemPrompt(instructions string) string {
 		infos[i] = prompt.ToolInfo{Name: t.Name(), Guidelines: t.Guidelines}
 	}
 	return prompt.BuildSystem(prompt.SystemOptions{
-		Instructions:  instructions,
-		WorkspaceRoot: s.cwd,
-		Tools:         infos,
+		Instructions: instructions,
+		Tools:        infos,
 	})
 }
 

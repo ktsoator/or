@@ -14,7 +14,6 @@ import (
 
 func TestRuntimeServesAPIAndClosesMoreThanOnce(t *testing.T) {
 	runtime, err := New(context.Background(), config.Config{
-		Cwd:     t.TempDir(),
 		DataDir: t.TempDir(),
 	})
 	if err != nil {
@@ -36,7 +35,7 @@ func TestRuntimeOpensRestoredSessionHistoryLazily(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	dataDir := t.TempDir()
 	projectDir := t.TempDir()
-	cfg := config.Config{Cwd: projectDir, DataDir: dataDir}
+	cfg := config.Config{DataDir: dataDir}
 	model, thinking := runtimeTestModel(t)
 
 	first, err := New(context.Background(), cfg)

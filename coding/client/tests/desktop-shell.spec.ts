@@ -141,7 +141,6 @@ async function openDesktopClient(
   options: {
     failCreate?: boolean
     healthFailures?: number
-    legacyHealth?: boolean
     browserResultFailures?: number
     existingSession?: boolean
     historyEvents?: unknown[]
@@ -155,20 +154,6 @@ async function openDesktopClient(
     modelThinkingVisibility?: 'visible' | 'hidden'
     composerUpdateDelayMs?: number
     nativeDirectory?: string
-    promptTemplates?: Array<{
-      name: string
-      description: string
-      descriptions?: { en?: string; 'zh-CN'?: string }
-      argumentHint: string
-      argumentHints?: { en?: string; 'zh-CN'?: string }
-      source: 'user' | 'project'
-      path: string
-    }>
-    promptTemplateDiagnostics?: Array<{
-      path: string
-      message: string
-    }>
-    promptTemplateContents?: Record<string, string>
     usageReport?: UsageReport
     usageEventPages?: UsageEventPage[]
     usageEventPagesByOffset?: Record<number, UsageEventPage>
@@ -426,7 +411,7 @@ async function openDesktopClient(
         remainingHealthFailures--
         await route.fulfill({ status: 503 })
       } else {
-        await route.fulfill({ status: options.legacyHealth ? 404 : 204 })
+        await route.fulfill({ status: 204 })
       }
       return
     }
@@ -563,21 +548,12 @@ async function openDesktopClient(
                 keys: [{ id: 'default', name: 'Default', preview: 'sk-test' }],
               },
             ],
-            utilityModels: [
-              { id: 'test-model', name: options.modelName ?? 'Test model' },
-            ],
           },
         ],
         activeModel: {
           provider: 'openai',
           model: 'test-model',
           thinkingLevel: modelThinkingLevel,
-        },
-        utilityModel: {
-          provider: 'openai',
-          model: 'test-model',
-          connectionId: 'official',
-          keyId: 'default',
         },
       }
     }
@@ -586,14 +562,6 @@ async function openDesktopClient(
         user: options.skills?.filter((item) => item.source === 'user') ?? [],
         project: options.skills?.filter((item) => item.source === 'project') ?? [],
         diagnostics: [],
-      }
-    }
-    if (path === '/api/prompt-templates') {
-      body = {
-        user: options.promptTemplates?.filter((item) => item.source === 'user') ?? [],
-        project:
-          options.promptTemplates?.filter((item) => item.source === 'project') ?? [],
-        diagnostics: options.promptTemplateDiagnostics ?? [],
       }
     }
     if (path === '/api/usage' && options.usageReport) {
@@ -611,19 +579,6 @@ async function openDesktopClient(
     if (path === '/api/usage/events' && options.usageEventPagesByOffset) {
       const offset = Number(new URL(request.url()).searchParams.get('offset') ?? 0)
       body = options.usageEventPagesByOffset[offset] ?? options.usageEventPagesByOffset[0]
-    }
-    if (path.startsWith('/api/prompt-templates/')) {
-      const name = decodeURIComponent(path.slice('/api/prompt-templates/'.length))
-      const template = options.promptTemplates?.find((item) => item.name === name)
-      if (template) {
-        body = {
-          ...template,
-          content: options.promptTemplateContents?.[name] ?? `# ${name}`,
-        }
-      } else {
-        status = 404
-        body = { error: 'prompt template not found' }
-      }
     }
     if (path === '/api/sessions') {
       body = sessionCreated
@@ -995,7 +950,7 @@ test('desktop external links open in the system browser without leaving Or', asy
 })
 
 test('Or API startup retries recover the Composer automatically', async ({ page }) => {
-  const requests = await openDesktopClient(page, { healthFailures: 2, legacyHealth: true })
+  const requests = await openDesktopClient(page, { healthFailures: 2 })
   const input = page.getByTestId('composer').locator('textarea')
 
   await expect(input).toBeDisabled()
@@ -3888,7 +3843,7 @@ test('Models settings show full configured model names when space is available',
   await page.getByRole('button', { name: 'Models', exact: true }).click()
 
   const labels = page.getByTitle(modelName)
-  await expect(labels).toHaveCount(2)
+  await expect(labels).toHaveCount(1)
   for (const label of await labels.all()) {
     const layout = await label.evaluate((element) => ({
       clientWidth: element.clientWidth,
@@ -3896,27 +3851,15 @@ test('Models settings show full configured model names when space is available',
     }))
     expect(layout.scrollWidth).toBe(layout.clientWidth)
   }
-  await expect
-    .poll(async () =>
-      (
-        await page
-          .getByRole('button', { name: 'Utility model', exact: true })
-          .boundingBox()
-      )?.width,
-    )
-    .toBeLessThan(260)
-
-  for (const testID of ['default-model-controls', 'utility-model-controls']) {
-    const controls = page.getByTestId(testID).locator('button')
-    await expect(controls.first()).toHaveCSS('border-radius', '10px')
-    await expect(controls.nth(1)).toHaveCSS('border-radius', '10px')
-    const gap = await controls.evaluateAll(([first, second]) => {
-      const firstRect = first.getBoundingClientRect()
-      const secondRect = second.getBoundingClientRect()
-      return secondRect.left - firstRect.right
-    })
-    expect(gap).toBeGreaterThan(0)
-  }
+  const controls = page.getByTestId('default-model-controls').locator('button')
+  await expect(controls.first()).toHaveCSS('border-radius', '10px')
+  await expect(controls.nth(1)).toHaveCSS('border-radius', '10px')
+  const gap = await controls.evaluateAll(([first, second]) => {
+    const firstRect = first.getBoundingClientRect()
+    const secondRect = second.getBoundingClientRect()
+    return secondRect.left - firstRect.right
+  })
+  expect(gap).toBeGreaterThan(0)
 
   const defaultsLayout = page.getByTestId('model-defaults-section').locator(':scope > div')
   await expect(defaultsLayout).toHaveCSS('border-top-width', '0px')
@@ -4217,73 +4160,6 @@ test('first send creates a session and renders the user message', async ({ page 
   ).toEqual({ text: message, images: [] })
 })
 
-test('prompt templates page groups resources, reports diagnostics, and opens details', async ({
-  page,
-}) => {
-  const requests = await openDesktopClient(page, {
-    existingSession: true,
-    promptTemplates: [
-      {
-        name: 'review',
-        description: 'Review current changes',
-        argumentHint: '[focus]',
-        source: 'project',
-        path: '/tmp/test-session/.or/prompts/review.md',
-      },
-      {
-        name: 'commit',
-        description: 'Create a local commit',
-        argumentHint: '[instructions]',
-        source: 'user',
-        path: '/tmp/home/.or/prompts/commit.md',
-      },
-    ],
-    promptTemplateDiagnostics: [
-      {
-        path: '/tmp/test-session/.or/prompts/broken.md',
-        message: "unterminated YAML frontmatter (missing closing '---' line)",
-      },
-    ],
-    promptTemplateContents: {
-      review: '# Project review\n\nInspect the diff carefully.',
-    },
-  })
-
-  await page.getByRole('button', { name: 'Prompt templates' }).click()
-
-  await expect(page.getByRole('heading', { name: 'Prompt templates' })).toBeVisible()
-  await expect(
-    page.getByRole('heading', { name: 'Project templates · test-session' }),
-  ).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Global templates' })).toBeVisible()
-  const review = page.getByRole('button', {
-    name: /review.*\[focus\].*Review current changes/,
-  })
-  await expect(review).toBeVisible()
-  await expect(
-    page.getByRole('button', {
-      name: /commit.*\[instructions\].*Create a local commit/,
-    }),
-  ).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Problems' })).toBeVisible()
-  await expect(page.getByText('/tmp/test-session/.or/prompts/broken.md')).toBeVisible()
-  await expect(page.getByText(/unterminated YAML frontmatter/)).toBeVisible()
-
-  await review.click()
-  const dialog = page.getByRole('dialog', { name: 'review' })
-  await expect(dialog).toBeVisible()
-  await expect(dialog.getByRole('heading', { name: 'Project review' })).toBeVisible()
-  await expect(dialog.getByText('Inspect the diff carefully.')).toBeVisible()
-  await dialog.getByRole('button', { name: 'Close' }).click()
-  await expect(dialog).toBeHidden()
-
-  const listRequests = () =>
-    requests.filter((request) => request.path === '/api/prompt-templates').length
-  const beforeRefresh = listRequests()
-  await page.getByRole('button', { name: 'Refresh prompt templates' }).click()
-  await expect.poll(listRequests).toBe(beforeRefresh + 1)
-})
-
 test('sidebar session actions leave catalog pages for the conversation', async ({ page }) => {
   await openDesktopClient(page, { existingSession: true })
   const conversation = page.getByTestId('conversation-pane')
@@ -4298,100 +4174,6 @@ test('sidebar session actions leave catalog pages for the conversation', async (
   await expect(conversation).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Skills', exact: true })).toBeHidden()
 
-  await sidebar.getByRole('button', { name: 'Prompt templates', exact: true }).click()
-  await expect(
-    page.getByRole('heading', { name: 'Prompt templates', exact: true }),
-  ).toBeVisible()
-  await sidebar.getByRole('button', { name: 'New session', exact: true }).first().click()
-  await expect(conversation).toBeVisible()
-  await expect(
-    page.getByRole('heading', { name: 'Prompt templates', exact: true }),
-  ).toBeHidden()
-})
-
-test('prompt templates share the slash menu and send a compact invocation', async ({
-  page,
-}) => {
-  const requests = await openDesktopClient(page, {
-    existingSession: true,
-    historyEvents: [
-      { type: 'user_message', text: '/hello', images: [] },
-    ],
-    promptTemplates: [
-      {
-        name: 'review',
-        description: '审查当前代码改动',
-        descriptions: {
-          en: 'Review working tree changes',
-          'zh-CN': '审查当前代码改动',
-        },
-        argumentHint: '[关注点]',
-        argumentHints: { en: '[focus]', 'zh-CN': '[关注点]' },
-        source: 'project',
-        path: '/tmp/test-session/.or/prompts/review.md',
-      },
-    ],
-  })
-  const composer = page.getByTestId('composer')
-  const input = composer.locator('textarea')
-  const transcript = page.getByTestId('conversation-transcript')
-
-  await expect(transcript.getByText('/hello', { exact: true })).toBeVisible()
-  await expect(transcript.getByTestId('prompt-template-reference')).toHaveCount(0)
-
-  await input.fill('/rev')
-  const suggestions = page.getByRole('listbox', { name: 'Commands and resources' })
-  await expect(suggestions).toBeVisible()
-  const template = suggestions.getByRole('option', { name: /review.*\[focus\]/ })
-  await expect(template).toContainText('Review working tree changes')
-  await expect(template).not.toContainText('/review')
-  await template.click()
-
-  await expect(
-    composer.getByRole('button', { name: 'Remove prompt template review' }),
-  ).toBeVisible()
-  await expect(input).toHaveAttribute('placeholder', 'Arguments [focus]')
-  await input.fill('security')
-  await input.press('Enter')
-
-  await expect.poll(() =>
-    requests.find((request) => request.path === '/api/sessions/test-session/prompt')
-      ?.body,
-  ).toEqual({ text: '/review security', images: [] })
-  await expect(transcript.getByTestId('prompt-template-reference')).toHaveCount(0)
-  await page.evaluate(() => {
-    const emit = (window as Window & { __emitSSE?: (payload: unknown) => void }).__emitSSE
-    emit?.({
-      type: 'user_message',
-      text: '/review security',
-      images: [],
-      invocation: {
-        kind: 'prompt_template',
-        name: 'review',
-        source: 'project',
-        path: '/tmp/test-session/.or/prompts/review.md',
-      },
-    })
-  })
-  const reference = transcript.getByTestId('prompt-template-reference')
-  await expect(reference).toContainText('review')
-  await expect(reference).not.toContainText('/review')
-  await expect(reference.locator('svg')).toBeVisible()
-  await expect(reference.locator('xpath=..')).toContainText('security')
-  const copied = await reference.evaluate((element) => {
-    const range = document.createRange()
-    range.selectNodeContents(element)
-    const selection = window.getSelection()
-    selection?.removeAllRanges()
-    selection?.addRange(range)
-    const clipboardData = new DataTransfer()
-    element.dispatchEvent(
-      new ClipboardEvent('copy', { bubbles: true, cancelable: true, clipboardData }),
-    )
-    selection?.removeAllRanges()
-    return clipboardData.getData('text/plain')
-  })
-  expect(copied).toBe('/review')
 })
 
 test('skill invocations render and copy as file references', async ({
@@ -4399,15 +4181,6 @@ test('skill invocations render and copy as file references', async ({
 }) => {
   const requests = await openDesktopClient(page, {
     existingSession: true,
-    promptTemplates: [
-      {
-        name: 'frontend-design',
-        description: 'Template with the same name',
-        argumentHint: '',
-        source: 'user',
-        path: '/tmp/prompts/frontend-design.md',
-      },
-    ],
     skills: [
       {
         name: 'frontend-design',
@@ -4423,10 +4196,7 @@ test('skill invocations render and copy as file references', async ({
 
   await input.fill('/front hello')
   const suggestions = page.getByRole('listbox', { name: 'Commands and resources' })
-  await expect(suggestions.getByRole('option', { name: /frontend-design/ })).toHaveCount(2)
-  const skill = suggestions
-    .getByRole('option', { name: /frontend-design/ })
-    .filter({ hasText: 'Build polished interfaces' })
+  const skill = suggestions.getByRole('option', { name: /frontend-design/ })
   await expect(skill).toBeVisible()
   await skill.click()
 
@@ -4465,18 +4235,11 @@ test('skill invocations render and copy as file references', async ({
   })
 })
 
-test('composer slash catalog combines resources, refreshes, and follows keyboard navigation', async ({
+test('composer slash catalog lists skills, refreshes, and follows keyboard navigation', async ({
   page,
 }) => {
   const requests = await openDesktopClient(page, {
     existingSession: true,
-    promptTemplates: Array.from({ length: 8 }, (_, index) => ({
-      name: `template-${index + 1}`,
-      description: `Template ${index + 1} description`,
-      argumentHint: '',
-      source: 'user' as const,
-      path: `/tmp/prompts/template-${index + 1}.md`,
-    })),
     skills: Array.from({ length: 18 }, (_, index) => ({
       name: `skill-${index + 1}`,
       description: `Skill ${index + 1} description`,
@@ -4487,10 +4250,7 @@ test('composer slash catalog combines resources, refreshes, and follows keyboard
   const input = page.getByTestId('composer').locator('textarea')
   const skillRequests = () =>
     requests.filter((request) => request.path === '/api/skills').length
-  const templateRequests = () =>
-    requests.filter((request) => request.path === '/api/prompt-templates').length
   const skillsBeforeOpen = skillRequests()
-  const templatesBeforeOpen = templateRequests()
   await input.fill('$skill')
   await expect(page.getByRole('listbox', { name: 'Commands and resources' })).toBeHidden()
   await input.fill('/')
@@ -4499,9 +4259,7 @@ test('composer slash catalog combines resources, refreshes, and follows keyboard
   await expect(suggestions.getByRole('option', { name: /skill-1/ })).toBeVisible()
   const scrollArea = suggestions.locator(':scope > div').first()
   await expect(suggestions.getByRole('option', { name: /Code review/ })).toBeVisible()
-  await expect(suggestions.getByRole('option', { name: /template-1/ })).toBeVisible()
   await expect.poll(skillRequests).toBe(skillsBeforeOpen + 1)
-  await expect.poll(templateRequests).toBe(templatesBeforeOpen + 1)
   await expect.poll(() => scrollArea.evaluate((element) => element.scrollHeight)).toBeGreaterThan(
     await scrollArea.evaluate((element) => element.clientHeight),
   )
@@ -4519,7 +4277,6 @@ test('composer slash catalog combines resources, refreshes, and follows keyboard
   await expect(suggestions).toBeHidden()
   await input.fill('/')
   await expect.poll(skillRequests).toBe(skillsBeforeOpen + 2)
-  await expect.poll(templateRequests).toBe(templatesBeforeOpen + 2)
 })
 
 test('failed first send keeps the draft and shows the server error', async ({ page }) => {

@@ -14,7 +14,6 @@ import (
 	"github.com/ktsoator/or/coding/internal/conversation"
 	"github.com/ktsoator/or/coding/internal/httpapi"
 	"github.com/ktsoator/or/coding/internal/provider"
-	"github.com/ktsoator/or/coding/internal/titlegen"
 	"github.com/ktsoator/or/coding/internal/usage"
 	"github.com/ktsoator/or/coding/internal/workspace"
 	"github.com/ktsoator/or/llm"
@@ -34,7 +33,7 @@ type Runtime struct {
 func New(ctx context.Context, cfg config.Config) (*Runtime, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	sessionDir := filepath.Join(cfg.DataDir, "sessions")
-	ledger, err := usage.NewStore(filepath.Join(cfg.DataDir, "usage", "events.jsonl"))
+	ledger, err := usage.NewStore(filepath.Join(cfg.DataDir, "usage", "events.sqlite"))
 	if err != nil {
 		cancel()
 		return nil, err
@@ -57,11 +56,10 @@ func New(ctx context.Context, cfg config.Config) (*Runtime, error) {
 	providerTests := provider.NewConnectionTester(providers, llm.Complete)
 
 	manager, err := conversation.NewManager(ctx, conversation.Options{
-		DataDir:        cfg.DataDir,
-		Usage:          ledger,
-		Workspaces:     workspaces,
-		NewTransport:   transports.New,
-		TitleGenerator: titlegen.New(providers),
+		DataDir:      cfg.DataDir,
+		Usage:        ledger,
+		Workspaces:   workspaces,
+		NewTransport: transports.New,
 	})
 	if err != nil {
 		_ = ledger.Close()
@@ -77,7 +75,6 @@ func New(ctx context.Context, cfg config.Config) (*Runtime, error) {
 		Registry:      registry,
 		Providers:     providers,
 		ProviderTests: providerTests,
-		BrowseRoot:    cfg.Cwd,
 		ClientOrigin:  cfg.ClientOrigin,
 	})
 	return &Runtime{

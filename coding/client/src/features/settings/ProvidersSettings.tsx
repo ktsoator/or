@@ -17,7 +17,6 @@ import { ProviderIcon } from '@/shared/ui/ProviderIdentity'
 import { ProviderConnectionTestDialog } from './ProviderConnectionTestDialog'
 import { FixedThinkingStatus } from '@/shared/ui/FixedThinkingStatus'
 import { ThinkingModeToggle } from '@/shared/ui/ThinkingModeToggle'
-import { UtilityModelSection } from './UtilityModelSection'
 import { providerName } from '@/lib/provider'
 import { isFixedThinking, isToggleThinking, toggleThinkingLevel } from '@/modelThinking'
 import type {
@@ -105,16 +104,7 @@ export function ProvidersSettings({ onChanged }: { onChanged?: () => void }) {
           </div>
         </div>
       )}
-      <DefaultModelSection
-        onChanged={afterChange}
-        utilityModel={providerData && (
-          <UtilityModelSection
-            providers={providerData.providers}
-            selection={providerData.utilityModel}
-            onChanged={afterChange}
-          />
-        )}
-      />
+      <DefaultModelSection onChanged={afterChange} />
 
       {loading ? (
         <div className="flex items-center gap-2 py-6 text-[0.8125rem] text-ink-faint">
@@ -161,18 +151,6 @@ function selectionRepairMessage(
       replacement: thinkingLevelLabel(repair.replacement.thinkingLevel, t),
     })
   }
-  if (repair.target === 'utility_model') {
-    if (
-      repair.replacement &&
-      repair.replacement.provider === repair.previous.provider &&
-      repair.replacement.model === repair.previous.model
-    ) {
-      return t('providers.utilityRouteRecovered', { model: previous })
-    }
-    return replacement
-      ? t('providers.utilityModelRecovered', { previous, replacement })
-      : t('providers.utilityModelCleared', { previous })
-  }
   return replacement
     ? t('providers.defaultModelRecovered', { previous, replacement })
     : t('providers.defaultModelCleared', { previous })
@@ -210,13 +188,7 @@ type ModelsResponse = {
 // thinking mode that new sessions start with. It reads the model catalog and
 // current default from /api/models and persists changes to /api/model-selection.
 // The UI uses provider, model, and model-specific thinking controls.
-function DefaultModelSection({
-  onChanged,
-  utilityModel,
-}: {
-  onChanged?: () => void
-  utilityModel?: ReactNode
-}) {
+function DefaultModelSection({ onChanged }: { onChanged?: () => void }) {
   const { t } = useI18n()
   const [models, setModels] = useState<ModelOption[]>([])
   const [provider, setProvider] = useState('')
@@ -348,18 +320,12 @@ function DefaultModelSection({
     <section className="mb-9" data-testid="model-defaults-section">
       <div>
         {loading ? (
-          <div className={cn(
-            'flex items-center gap-2 py-6 text-[0.8125rem] text-ink-faint',
-            utilityModel && 'border-b border-edge/75',
-          )}>
+          <div className="flex items-center gap-2 py-6 text-[0.8125rem] text-ink-faint">
             <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
             {t('providers.loading')}
           </div>
         ) : models.length === 0 ? (
-          <div className={cn(
-            'py-6 text-[0.8125rem] text-ink-faint',
-            utilityModel && 'border-b border-edge/75',
-          )}>
+          <div className="py-6 text-[0.8125rem] text-ink-faint">
             {t('settings.defaultModelEmpty')}
           </div>
         ) : (
@@ -520,7 +486,6 @@ function DefaultModelSection({
             </div>
           </SettingsRowLike>
         )}
-        {utilityModel}
       </div>
       {error && <p className="mt-2 text-[0.8125rem] text-danger-soft">{error}</p>}
     </section>

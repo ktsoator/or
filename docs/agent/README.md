@@ -29,7 +29,7 @@ Use [`or/llm`](../llm/README.md) directly when you want to manage a single model
 request yourself. Use
 [`or/harness`](https://pkg.go.dev/github.com/ktsoator/or/harness)
 on top of `agent` when you also want transcript persistence, automatic context
-compaction, per-turn system prompts, skills, or prompt templates.
+compaction, per-turn system prompts, or skills.
 
 ## What a run does
 

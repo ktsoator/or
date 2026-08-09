@@ -15,6 +15,17 @@ export function parseExecutableComposerCommand(
   return input.trim() === '/compact' ? 'compact' : undefined
 }
 
+export function parseComposerCatalogQuery(
+  draft: string,
+): { query: string; argumentsText: string } | undefined {
+  if (!draft.startsWith('/')) return undefined
+  const token = draft.slice(1).match(/^[^\s]*/)?.[0] ?? ''
+  return {
+    query: token,
+    argumentsText: draft.slice(token.length + 1).trimStart(),
+  }
+}
+
 export function skillSuggestionOptionID(index: number): string {
   return `${skillSuggestionsID}-${index}`
 }

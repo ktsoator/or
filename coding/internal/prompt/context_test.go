@@ -56,28 +56,18 @@ func TestLoadContextFilesOrdersEveryScopeBroadestFirst(t *testing.T) {
 	}
 }
 
-func TestLoadContextFilesTakesOneFilePerDirectory(t *testing.T) {
+func TestLoadContextFilesIgnoresClaudeFiles(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	workspace := t.TempDir()
-	writeFile(t, filepath.Join(workspace, "AGENTS.md"), "preferred")
-	writeFile(t, filepath.Join(workspace, "CLAUDE.md"), "fallback")
+	claude := filepath.Join(workspace, "CLAUDE.md")
+	localClaude := filepath.Join(workspace, "CLAUDE.local.md")
+	writeFile(t, claude, "unsupported")
+	writeFile(t, localClaude, "unsupported local")
 
 	for _, file := range LoadContextFiles(workspace) {
-		if file.Content == "fallback" {
-			t.Fatal("CLAUDE.md was loaded alongside AGENTS.md in the same directory")
+		if file.Path == claude || file.Path == localClaude {
+			t.Fatalf("unsupported context file was loaded: %s", file.Path)
 		}
-	}
-
-	other := t.TempDir()
-	writeFile(t, filepath.Join(other, "CLAUDE.md"), "fallback")
-	var found bool
-	for _, file := range LoadContextFiles(other) {
-		if file.Content == "fallback" && file.Scope == ScopeProject {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatal("CLAUDE.md was not used as the fallback name")
 	}
 }
 

@@ -50,7 +50,7 @@ type SkillsDelta struct {
 // announced in the rendered block rather than made silently.
 const maxContextFileChars = 8_000
 
-// RenderBaseContext renders the session's environment together with its project
+// RenderBaseContext renders the session's environment together with its
 // instruction files. It is stable for one context epoch; RenderContextUpdate
 // supersedes it when either input changes.
 func RenderBaseContext(env Environment, contextFiles []ContextFile) string {
@@ -104,7 +104,12 @@ func renderEnvironment(b *strings.Builder, env Environment) {
 	if env == (Environment{}) {
 		return
 	}
-	b.WriteString("\n<environment>\n")
+	b.WriteByte('\n')
+	if strings.TrimSpace(env.Cwd) != "" {
+		b.WriteString("The cwd is the session's tool root and may be an isolated scratch directory rather than a user-selected project.\n")
+	}
+	b.WriteString("<environment>\n")
+	writeEnvField(b, "cwd", env.Cwd)
 	writeEnvField(b, "os", env.OS)
 	writeEnvField(b, "arch", env.Arch)
 	writeEnvField(b, "shell", env.Shell)

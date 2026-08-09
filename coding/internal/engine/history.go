@@ -5,8 +5,6 @@ import (
 	"time"
 
 	"github.com/ktsoator/or/agent"
-	"github.com/ktsoator/or/coding/internal/invocation"
-	"github.com/ktsoator/or/coding/internal/prompttemplate"
 	"github.com/ktsoator/or/coding/internal/skills"
 	"github.com/ktsoator/or/coding/internal/transcript"
 	"github.com/ktsoator/or/llm"
@@ -35,9 +33,6 @@ type HistoryItem struct {
 	Text   string
 	Images []llm.ImageContent
 	Files  []File
-	// Invocation is backend-resolved metadata for the resource represented by a
-	// user message. It is nil for ordinary text, including unknown slash input.
-	Invocation *invocation.Record
 	// FinalResponse is true for the assistant item that completes one visible
 	// reply. Tool-use pauses remain false even when they contain explanatory text.
 	FinalResponse bool
@@ -48,8 +43,7 @@ type HistoryItem struct {
 	ToolName   string
 	ToolArgs   any
 	ToolResult string
-	// ToolOutcome is restored from the sidecar. Histories written before the
-	// outcome contract derive success/failed from the model-facing IsError bit.
+	// ToolOutcome is restored from the transcript's product-facing entries.
 	ToolOutcome agent.ToolOutcome
 
 	// Usage is populated for HistoryUsage and aggregates every assistant model
@@ -118,7 +112,7 @@ func projectEntryHistory(entries []transcript.Entry, outcomes map[string]agent.T
 	var items []HistoryItem
 	var pending []transcript.Entry
 	flushMessages := func(entries []transcript.Entry) {
-		items = append(items, projectRecordedHistory(entryMessages(entries), outcomes)...)
+		items = append(items, projectHistory(entryMessages(entries), outcomes)...)
 	}
 
 	for _, entry := range entries {
@@ -162,16 +156,16 @@ func projectRunHistory(
 	startedAt time.Time,
 	completedAt time.Time,
 ) []HistoryItem {
-	return projectRecordedRunHistory(recordAgentMessages(messages), outcomes, startedAt, completedAt)
+	return projectRecordedRunHistory(messages, outcomes, startedAt, completedAt)
 }
 
 func projectRecordedRunHistory(
-	messages []recordedMessage,
+	messages []agent.AgentMessage,
 	outcomes map[string]agent.ToolOutcome,
 	startedAt time.Time,
 	completedAt time.Time,
 ) []HistoryItem {
-	projected := projectRecordedHistory(messages, outcomes)
+	projected := projectHistory(messages, outcomes)
 	if !completedAt.IsZero() {
 		for index := len(projected) - 1; index >= 0; index-- {
 			if projected[index].Type == HistoryAssistant && projected[index].FinalResponse {
@@ -189,42 +183,17 @@ func projectRecordedRunHistory(
 	return append([]HistoryItem{run}, projected...)
 }
 
-type recordedMessage struct {
-	message    agent.AgentMessage
-	invocation *invocation.Record
-}
-
-func entryMessages(entries []transcript.Entry) []recordedMessage {
-	messages := make([]recordedMessage, 0, len(entries))
+func entryMessages(entries []transcript.Entry) []agent.AgentMessage {
+	messages := make([]agent.AgentMessage, 0, len(entries))
 	for _, entry := range entries {
 		if entry.Type == transcript.MessageEntry {
-			invoked := cloneInvocation(entry.Invocation)
-			if invoked == nil {
-				invoked = messageInvocation(entry.Message)
-			}
-			messages = append(messages, recordedMessage{
-				message: entry.Message, invocation: invoked,
-			})
+			messages = append(messages, entry.Message)
 		}
 	}
 	return messages
 }
 
 func projectHistory(messages []agent.AgentMessage, outcomes map[string]agent.ToolOutcome) []HistoryItem {
-	return projectRecordedHistory(recordAgentMessages(messages), outcomes)
-}
-
-func recordAgentMessages(messages []agent.AgentMessage) []recordedMessage {
-	recorded := make([]recordedMessage, 0, len(messages))
-	for _, message := range messages {
-		recorded = append(recorded, recordedMessage{
-			message: message, invocation: messageInvocation(message),
-		})
-	}
-	return recorded
-}
-
-func projectRecordedHistory(messages []recordedMessage, outcomes map[string]agent.ToolOutcome) []HistoryItem {
 	var items []HistoryItem
 	var usage llm.Usage
 	flushUsage := func() {
@@ -235,8 +204,8 @@ func projectRecordedHistory(messages []recordedMessage, outcomes map[string]agen
 		items = append(items, HistoryItem{Type: HistoryUsage, Usage: usage})
 		usage = llm.Usage{}
 	}
-	for _, recorded := range messages {
-		llmMessage, ok := agent.ToLLM(recorded.message)
+	for _, agentMessage := range messages {
+		llmMessage, ok := agent.ToLLM(agentMessage)
 		if !ok {
 			continue
 		}
@@ -250,11 +219,10 @@ func projectRecordedHistory(messages []recordedMessage, outcomes map[string]agen
 			text, images, files := userMessageContent(message)
 			if text != "" || len(images) > 0 || len(files) > 0 {
 				items = append(items, HistoryItem{
-					Type:       HistoryUser,
-					Text:       text,
-					Images:     images,
-					Files:      files,
-					Invocation: cloneInvocation(recorded.invocation),
+					Type:   HistoryUser,
+					Text:   text,
+					Images: images,
+					Files:  files,
 				})
 			}
 
@@ -268,11 +236,7 @@ func projectRecordedHistory(messages []recordedMessage, outcomes map[string]agen
 		case *llm.ToolResultMessage:
 			outcome, ok := outcomes[message.ToolCallID]
 			if !ok {
-				outcome.Status = agent.ToolOutcomeSuccess
-				if message.IsError {
-					outcome.Status = agent.ToolOutcomeFailed
-					outcome.ErrorCode = "legacy_tool_error"
-				}
+				outcome = agent.ToolOutcome{Status: agent.ToolOutcomeSuccess}
 			}
 			items = append(items, HistoryItem{
 				Type:        HistoryToolResult,
@@ -285,41 +249,6 @@ func projectRecordedHistory(messages []recordedMessage, outcomes map[string]agen
 	}
 	flushUsage()
 	return items
-}
-
-func messageInvocation(message agent.AgentMessage) *invocation.Record {
-	llmMessage, ok := agent.ToLLM(message)
-	if !ok {
-		return nil
-	}
-	user, ok := llmMessage.(*llm.UserMessage)
-	if !ok || user == nil {
-		return nil
-	}
-	seenVisibleText := false
-	for _, content := range user.Content {
-		text, ok := content.(*llm.TextContent)
-		if !ok || text == nil {
-			continue
-		}
-		if !seenVisibleText {
-			seenVisibleText = true
-			continue
-		}
-		record, matched := prompttemplate.ParseExplicitInvocationText(text.Text)
-		if matched {
-			return &record
-		}
-	}
-	return nil
-}
-
-func cloneInvocation(record *invocation.Record) *invocation.Record {
-	if record == nil {
-		return nil
-	}
-	copy := *record
-	return &copy
 }
 
 func userMessageContent(message *llm.UserMessage) (string, []llm.ImageContent, []File) {
@@ -343,8 +272,7 @@ func userMessageContent(message *llm.UserMessage) (string, []llm.ImageContent, [
 					continue
 				}
 			}
-			if textBlocks > 0 && (skills.IsExplicitInvocationText(block.Text) ||
-				prompttemplate.IsExplicitInvocationText(block.Text)) {
+			if textBlocks > 0 && skills.IsExplicitInvocationText(block.Text) {
 				textBlocks++
 				continue
 			}

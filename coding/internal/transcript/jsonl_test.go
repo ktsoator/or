@@ -3,6 +3,7 @@ package transcript
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,7 +11,6 @@ import (
 	"time"
 
 	"github.com/ktsoator/or/agent"
-	"github.com/ktsoator/or/coding/internal/invocation"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -92,7 +92,64 @@ func TestJSONLRoundTripsRunTiming(t *testing.T) {
 	}
 }
 
-func TestJSONLUsesPrivatePermissionsAndMigratesExistingStorage(t *testing.T) {
+func TestJSONLRoundTripsToolOutcome(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	exitCode := 17
+	entry := NewToolOutcome(ToolOutcome{
+		ToolCallID: "call-17",
+		Status:     agent.ToolOutcomeFailed,
+		ErrorCode:  "command_exit_nonzero",
+		ExitCode:   &exitCode,
+		DataKind:   "generic",
+		Data:       json.RawMessage(`{"command":"go test ./..."}`),
+	})
+	store := NewJSONL(path)
+	if err := store.Append(context.Background(), entry); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := store.Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Type != ToolOutcomeEntry || entries[0].ToolOutcome == nil {
+		t.Fatalf("entries = %#v", entries)
+	}
+	got := entries[0].ToolOutcome
+	if got.ToolCallID != "call-17" || got.Status != agent.ToolOutcomeFailed ||
+		got.ErrorCode != "command_exit_nonzero" || got.ExitCode == nil || *got.ExitCode != 17 ||
+		got.DataKind != "generic" || !bytes.Equal(got.Data, entry.ToolOutcome.Data) {
+		t.Fatalf("tool outcome = %#v", got)
+	}
+}
+
+func TestToolOutcomeEntryValidatesRequiredFieldsAndData(t *testing.T) {
+	tests := []struct {
+		name    string
+		outcome ToolOutcome
+	}{
+		{name: "tool call id", outcome: ToolOutcome{Status: agent.ToolOutcomeSuccess}},
+		{name: "status", outcome: ToolOutcome{ToolCallID: "call-1"}},
+		{
+			name: "data",
+			outcome: ToolOutcome{
+				ToolCallID: "call-1",
+				Status:     agent.ToolOutcomeSuccess,
+				DataKind:   "generic",
+				Data:       json.RawMessage(`{"unterminated"`),
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if err := NewToolOutcome(test.outcome).Validate(); err == nil {
+				t.Fatal("Validate() succeeded for an invalid tool outcome")
+			}
+		})
+	}
+}
+
+func TestJSONLUsesPrivatePermissionsAndSecuresExistingStorage(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "sessions")
 	path := filepath.Join(dir, "session.jsonl")
 	store := NewJSONL(path)
@@ -128,33 +185,6 @@ func assertPrivateStoragePermissions(t *testing.T, dir, path string) {
 	}
 	if got := fileInfo.Mode().Perm(); got != privateFileMode {
 		t.Fatalf("file permissions = %04o, want %04o", got, privateFileMode)
-	}
-}
-
-func TestJSONLRoundTripsMessageInvocation(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "session.jsonl")
-	entry := NewMessageWithInvocation(agent.UserMessage("/review security"), &invocation.Record{
-		Kind:   invocation.PromptTemplate,
-		Name:   "review",
-		Source: "project",
-		Path:   "/workspace/.or/prompts/review.md",
-	})
-	store := NewJSONL(path)
-	if err := store.Append(context.Background(), entry); err != nil {
-		t.Fatal(err)
-	}
-
-	entries, err := store.Load(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 1 || entries[0].Invocation == nil {
-		t.Fatalf("entries = %#v", entries)
-	}
-	if got := entries[0].Invocation; got.Kind != invocation.PromptTemplate ||
-		got.Name != "review" || got.Source != "project" ||
-		got.Path != "/workspace/.or/prompts/review.md" {
-		t.Fatalf("invocation = %#v", got)
 	}
 }
 

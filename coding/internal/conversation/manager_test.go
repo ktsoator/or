@@ -12,7 +12,6 @@ import (
 
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/permission"
-	"github.com/ktsoator/or/coding/internal/titlegen"
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/usage"
 	"github.com/ktsoator/or/coding/internal/workspace"
@@ -45,12 +44,6 @@ func (*testTransport) HasPendingQuestion() bool { return false }
 
 type recordingTransport struct {
 	events chan Event
-}
-
-type titleGeneratorFunc func(context.Context, string) (titlegen.Result, error)
-
-func (f titleGeneratorFunc) Generate(ctx context.Context, prompt string) (titlegen.Result, error) {
-	return f(ctx, prompt)
 }
 
 func (t *recordingTransport) Publish(event Event)     { t.events <- event }
@@ -98,14 +91,12 @@ func TestManagerCreatesAndRestoresProjectConversation(t *testing.T) {
 		t.Fatalf("restored conversations = %d, want 1", len(items))
 	}
 	got := items[0]
-	if got.ID != created.ID || got.Title != created.Title || got.WorkspacePath != created.WorkspacePath {
+	if got.ID != created.ID || got.Title != created.Title || got.WorkspacePath != created.WorkspacePath ||
+		got.ModelProvider != created.ModelProvider || got.ModelID != created.ModelID {
 		t.Fatalf("restored summary = %+v, want %+v", got, created)
 	}
 	if got.PermissionMode != permission.ModeAutoEdit {
 		t.Fatalf("restored permission mode = %q, want %q", got.PermissionMode, permission.ModeAutoEdit)
-	}
-	if !restored.UsesProvider(model.Provider) {
-		t.Fatalf("restored manager does not report provider %q in use", model.Provider)
 	}
 }
 
@@ -175,11 +166,14 @@ func TestManagerRestoresConversationsLazily(t *testing.T) {
 	if runtime.session != nil || runtime.transport != nil {
 		t.Fatal("restored conversation loaded before first use")
 	}
-	if got := restored.List(); len(got) != 2 {
-		t.Fatalf("restored conversations = %+v", got)
+	items := restored.List()
+	if len(items) != 2 {
+		t.Fatalf("restored conversations = %+v", items)
 	}
-	if !restored.UsesProvider(model.Provider) {
-		t.Fatalf("restored manager does not report provider %q in use", model.Provider)
+	for _, item := range items {
+		if item.ModelProvider != model.Provider {
+			t.Fatalf("restored conversation provider = %q, want %q", item.ModelProvider, model.Provider)
+		}
 	}
 	renamed, err := restored.Rename(created.ID, "Renamed before loading")
 	if err != nil {
@@ -281,7 +275,7 @@ func TestManagerDefersTranscriptErrorsUntilFirstUse(t *testing.T) {
 	}
 }
 
-func TestManagerMigratesTranscriptPermissionsBeforeLazyLoad(t *testing.T) {
+func TestManagerSecuresTranscriptPermissionsBeforeLazyLoad(t *testing.T) {
 	dataDir := t.TempDir()
 	model, thinking := testCatalogModel(t)
 	manager := newTestManager(t, dataDir)
@@ -298,11 +292,7 @@ func TestManagerMigratesTranscriptPermissionsBeforeLazyLoad(t *testing.T) {
 	}
 	runtime, _ := manager.runtime(created.ID)
 	transcriptPath := runtime.record.Transcript
-	detailsPath := detailsFile(transcriptPath)
 	if err := os.WriteFile(transcriptPath, []byte("{\"type\":\"session\",\"version\":3}\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(detailsPath, []byte("{\"id\":\"call-1\",\"payload\":{}}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	sessionDir := filepath.Dir(transcriptPath)
@@ -319,7 +309,6 @@ func TestManagerMigratesTranscriptPermissionsBeforeLazyLoad(t *testing.T) {
 	for path, want := range map[string]os.FileMode{
 		sessionDir:     0o700,
 		transcriptPath: 0o600,
-		detailsPath:    0o600,
 	} {
 		info, err := os.Stat(path)
 		if err != nil {
@@ -355,11 +344,6 @@ func TestManagerReleasesAndReloadsIdleConversation(t *testing.T) {
 	if !ok || runtime.session == nil || runtime.transport == nil {
 		t.Fatal("new conversation was not loaded")
 	}
-	runtime.titleGeneration = TitleGeneration{
-		Status:    TitleGenerationFailed,
-		ErrorCode: "test_failure",
-	}
-
 	if !manager.ReleaseIfIdle(created.ID) {
 		t.Fatal("idle conversation was not released")
 	}
@@ -370,10 +354,6 @@ func TestManagerReleasesAndReloadsIdleConversation(t *testing.T) {
 	if !ok || unloaded.session != nil || unloaded.transport != nil {
 		t.Fatalf("released runtime = %#v", unloaded)
 	}
-	if unloaded.titleGeneration.ErrorCode != "test_failure" {
-		t.Fatalf("released title generation = %+v", unloaded.titleGeneration)
-	}
-
 	snapshot, err := manager.Snapshot(created.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -381,7 +361,7 @@ func TestManagerReleasesAndReloadsIdleConversation(t *testing.T) {
 	if len(transports) != 2 {
 		t.Fatalf("transports after reload = %d, want 2", len(transports))
 	}
-	if snapshot.Title != created.Title || snapshot.TitleGeneration.ErrorCode != "test_failure" {
+	if snapshot.Title != created.Title {
 		t.Fatalf("reloaded snapshot = %+v", snapshot)
 	}
 	reloaded, ok := manager.runtime(created.ID)
@@ -436,6 +416,9 @@ func TestManagerRunReservationProtectsConversation(t *testing.T) {
 	if !runtime.live.Load() {
 		t.Fatal("runtime is not exposed as running")
 	}
+	if runtime.record.Title != "Inspect the parser" || !runtime.record.GenerateTitle {
+		t.Fatalf("prompt fallback = %q, pending = %v", runtime.record.Title, runtime.record.GenerateTitle)
+	}
 	if _, err := manager.reservePrompt(created.ID, "second", nil, nil); !errors.Is(err, engine.ErrBusy) {
 		t.Fatalf("second reservation error = %v, want ErrBusy", err)
 	}
@@ -477,19 +460,18 @@ func TestManagerGeneratesTitleBeforeAssistantResponseCompletes(t *testing.T) {
 
 	started := make(chan string, 1)
 	release := make(chan struct{})
-	manager.generateTitle = titleGeneratorFunc(func(ctx context.Context, prompt string) (titlegen.Result, error) {
+	manager.generateTitle = func(ctx context.Context, gotModel llm.Model, prompt string) (string, error) {
+		if gotModel.Provider != model.Provider || gotModel.ID != model.ID {
+			t.Errorf("title model = %s/%s, want %s/%s", gotModel.Provider, gotModel.ID, model.Provider, model.ID)
+		}
 		started <- prompt
 		select {
 		case <-release:
-			return titlegen.Result{
-				Title:    "Inspect parser behavior",
-				Provider: "utility-provider",
-				Model:    "utility-model",
-			}, nil
+			return "Inspect parser behavior", nil
 		case <-ctx.Done():
-			return titlegen.Result{}, ctx.Err()
+			return "", ctx.Err()
 		}
-	})
+	}
 	events := make(chan Event, 4)
 	runtime.transport = &recordingTransport{events: events}
 
@@ -520,7 +502,7 @@ func TestManagerGeneratesTitleBeforeAssistantResponseCompletes(t *testing.T) {
 			if !ok {
 				continue
 			}
-			if changed.Title != "Inspect parser behavior" || changed.AITitle != "Inspect parser behavior" {
+			if changed.Title != "Inspect parser behavior" {
 				t.Fatalf("title event = %+v", changed)
 			}
 			goto titlePublished
@@ -531,16 +513,15 @@ func TestManagerGeneratesTitleBeforeAssistantResponseCompletes(t *testing.T) {
 
 titlePublished:
 
-	if got := manager.List()[0]; got.Title != "Inspect parser behavior" ||
-		got.AITitle != "Inspect parser behavior" ||
-		got.TitleGeneration.Status != TitleGenerationSucceeded ||
-		got.TitleGeneration.Provider != "utility-provider" ||
-		got.TitleGeneration.Model != "utility-model" {
+	if got := manager.List()[0]; got.Title != "Inspect parser behavior" {
 		t.Fatalf("conversation summary = %+v", got)
+	}
+	if runtime.record.Title != "Inspect parser behavior" || runtime.record.GenerateTitle {
+		t.Fatalf("persisted automatic title = %q, pending = %v", runtime.record.Title, runtime.record.GenerateTitle)
 	}
 }
 
-func TestManagerTitleFailureKeepsPromptFallbackAndExposesState(t *testing.T) {
+func TestManagerTitleFailureKeepsPromptFallback(t *testing.T) {
 	dataDir := t.TempDir()
 	model, thinking := testCatalogModel(t)
 	manager := newTestManager(t, dataDir)
@@ -554,46 +535,24 @@ func TestManagerTitleFailureKeepsPromptFallbackAndExposesState(t *testing.T) {
 	}
 	manager.mu.Lock()
 	runtime.record.Title = titleFromPrompt("Investigate flaky title generation")
-	runtime.record.AutoTitle = false
+	runtime.record.GenerateTitle = true
 	manager.mu.Unlock()
-	manager.generateTitle = titleGeneratorFunc(func(context.Context, string) (titlegen.Result, error) {
-		return titlegen.Result{Provider: "utility-provider", Model: "utility-model"}, errors.New("secret upstream detail")
-	})
-	events := make(chan Event, 4)
-	runtime.transport = &recordingTransport{events: events}
+	manager.generateTitle = func(context.Context, llm.Model, string) (string, error) {
+		return "", errors.New("secret upstream detail")
+	}
 
 	manager.handleSessionEvent(created.ID, runtime, engine.Event{
 		Type: engine.UserMessageCompleted,
 		Text: "Investigate flaky title generation",
 	})
-
-	deadline := time.After(time.Second)
-	for {
-		select {
-		case event := <-events:
-			changed, ok := event.(TitleGenerationChanged)
-			if !ok || changed.Generation.Status == TitleGenerationGenerating {
-				continue
-			}
-			if changed.Generation.Status != TitleGenerationFailed ||
-				changed.Generation.ErrorCode != titlegen.CodeRequestFailed ||
-				changed.Generation.Error == "secret upstream detail" {
-				t.Fatalf("title generation state = %+v", changed.Generation)
-			}
-			goto failurePublished
-		case <-deadline:
-			t.Fatal("title failure was not published")
-		}
-	}
-
-failurePublished:
+	manager.tasks.Wait()
 	got := manager.List()[0]
-	if got.Title != "Investigate flaky title generation" || got.AITitle != "" {
+	if got.Title != "Investigate flaky title generation" || !runtime.record.GenerateTitle {
 		t.Fatalf("fallback title was replaced: %+v", got)
 	}
 }
 
-func TestManagerCustomTitleWinsOverLateUtilityTitle(t *testing.T) {
+func TestManagerCustomTitleWinsOverLateAITitle(t *testing.T) {
 	dataDir := t.TempDir()
 	model, thinking := testCatalogModel(t)
 	manager := newTestManager(t, dataDir)
@@ -607,15 +566,15 @@ func TestManagerCustomTitleWinsOverLateUtilityTitle(t *testing.T) {
 	}
 	started := make(chan struct{})
 	release := make(chan struct{})
-	manager.generateTitle = titleGeneratorFunc(func(ctx context.Context, _ string) (titlegen.Result, error) {
+	manager.generateTitle = func(ctx context.Context, _ llm.Model, _ string) (string, error) {
 		close(started)
 		select {
 		case <-release:
-			return titlegen.Result{Title: "Late generated title"}, nil
+			return "Late generated title", nil
 		case <-ctx.Done():
-			return titlegen.Result{}, ctx.Err()
+			return "", ctx.Err()
 		}
-	})
+	}
 	runtime.transport = &recordingTransport{events: make(chan Event, 8)}
 	manager.handleSessionEvent(created.ID, runtime, engine.Event{
 		Type: engine.UserMessageCompleted,
@@ -633,7 +592,8 @@ func TestManagerCustomTitleWinsOverLateUtilityTitle(t *testing.T) {
 	manager.tasks.Wait()
 
 	got := manager.List()[0]
-	if got.Title != "My custom title" || got.CustomTitle != "My custom title" || got.AITitle != "" {
+	if got.Title != "My custom title" || runtime.record.CustomTitle != "My custom title" ||
+		runtime.record.Title != defaultTitle || !runtime.record.GenerateTitle {
 		t.Fatalf("late generated title won: %+v", got)
 	}
 }
@@ -652,18 +612,14 @@ func TestManagerDeleteRemovesScratchWorkspaceAndSessionFiles(t *testing.T) {
 	}
 	transport := runtime.transport.(*testTransport)
 	transcriptPath := runtime.record.Transcript
-	detailsPath := detailsFile(transcriptPath)
 	if err := os.WriteFile(transcriptPath, []byte("transcript"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(detailsPath, []byte("details"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := manager.Delete(created.ID); err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{created.WorkspacePath, transcriptPath, detailsPath} {
+	for _, path := range []string{created.WorkspacePath, transcriptPath} {
 		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("%s still exists or stat failed: %v", path, err)
 		}
@@ -785,8 +741,8 @@ func TestManagerCloseIsIdempotentAndRejectsNewWork(t *testing.T) {
 	if !transport.closed.Load() {
 		t.Fatal("manager close did not close the conversation transport")
 	}
-	if err := manager.StartPrompt(created.ID, "after shutdown"); !errors.Is(err, ErrManagerClosed) {
-		t.Fatalf("StartPrompt error = %v, want ErrManagerClosed", err)
+	if err := manager.StartPromptWithFiles(created.ID, "after shutdown", nil); !errors.Is(err, ErrManagerClosed) {
+		t.Fatalf("StartPromptWithFiles error = %v, want ErrManagerClosed", err)
 	}
 	if _, err := manager.Create("", t.TempDir(), ScopeProject, model, thinking, permission.ModeAsk); !errors.Is(err, ErrManagerClosed) {
 		t.Fatalf("Create error = %v, want ErrManagerClosed", err)
@@ -811,7 +767,7 @@ func newTestManagerWithTransport(
 		t.Fatal(err)
 	}
 	t.Setenv("HOME", home)
-	ledger, err := usage.NewStore(filepath.Join(dataDir, "usage", "events.jsonl"))
+	ledger, err := usage.NewStore(filepath.Join(dataDir, "usage", "events.sqlite"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -831,6 +787,7 @@ func newTestManagerWithTransport(
 	if err != nil {
 		t.Fatal(err)
 	}
+	manager.generateTitle = nil
 	t.Cleanup(func() {
 		manager.Close()
 	})

@@ -2,7 +2,6 @@ import { useLayoutEffect, useRef } from 'react'
 import {
   BookOpen,
   Bug,
-  FileText,
   ListChecks,
   LoaderCircle,
   MessageSquarePlus,
@@ -11,7 +10,6 @@ import {
 } from 'lucide-react'
 import { useI18n } from '@/i18n'
 import type { SkillEntry } from '@/features/skills'
-import type { PromptTemplateEntry } from '@/features/prompt-templates'
 import { cn } from '@/lib/utils'
 import {
   composerPreviewCommands,
@@ -26,36 +24,28 @@ export function ComposerSkillSuggestions({
   query,
   commandsEnabled,
   skillsEnabled,
-  templates,
   skills,
   activeIndex,
   keyboardNavigating,
   loading,
   failed,
-  templatesLoading,
-  templatesFailed,
   onActiveIndexChange,
   onPointerNavigation,
   onCommandSelect,
-  onTemplateSelect,
   onSelect,
 }: {
   visible: boolean
   query: string
   commandsEnabled: boolean
   skillsEnabled: boolean
-  templates: PromptTemplateEntry[]
   skills: SkillEntry[]
   activeIndex: number
   keyboardNavigating: boolean
   loading: boolean
   failed: boolean
-  templatesLoading: boolean
-  templatesFailed: boolean
   onActiveIndexChange: (index: number) => void
   onPointerNavigation: () => void
   onCommandSelect: (command: ComposerPreviewCommand) => void
-  onTemplateSelect: (template: PromptTemplateEntry) => void
   onSelect: (skill: SkillEntry) => void
 }) {
   const { t } = useI18n()
@@ -82,9 +72,6 @@ export function ComposerSkillSuggestions({
     skillsEnabled && (!normalizedQuery || loading || failed || skills.length > 0)
   const noMatchingSuggestions = Boolean(
     normalizedQuery &&
-      !templatesLoading &&
-      !templatesFailed &&
-      templates.length === 0 &&
       !loading &&
       !failed &&
       skills.length === 0,
@@ -188,75 +175,6 @@ export function ComposerSkillSuggestions({
             </button>
           )
         })}
-        {(templates.length > 0 || templatesLoading || templatesFailed) && (
-          <div
-            role="presentation"
-            className="flex h-7 shrink-0 items-center px-2.5 text-[0.71875rem] font-medium text-ink-faint"
-          >
-            {t('promptTemplates.title')}
-          </div>
-        )}
-        {templatesLoading ? (
-          <div className="flex h-14 items-center justify-center gap-2 text-[0.75rem] text-ink-faint">
-            <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
-            {t('composer.loadingPromptTemplates')}
-          </div>
-        ) : templatesFailed ? (
-          <p className="px-3 py-4 text-center text-[0.75rem] text-ink-faint">
-            {t('composer.promptTemplatesLoadError')}
-          </p>
-        ) : templates.map((template, index) => {
-          const optionIndex = previewCommands.length + index
-          return (
-            <button
-              id={skillSuggestionOptionID(optionIndex)}
-              key={`${template.source}-${template.name}`}
-              type="button"
-              role="option"
-              aria-selected={optionIndex === activeIndex}
-              className={cn(
-                suggestionRowClass,
-                'cursor-pointer outline-none transition-colors',
-                optionIndex === activeIndex
-                  ? 'bg-surface-active'
-                  : 'bg-transparent',
-              )}
-              onMouseEnter={() => onActiveIndexChange(optionIndex)}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => onTemplateSelect(template)}
-            >
-              <FileText
-                className={cn(
-                  'size-4 shrink-0',
-                  optionIndex === activeIndex ? 'text-ink-muted' : 'text-ink-faint',
-                )}
-                strokeWidth={1.8}
-                aria-hidden="true"
-              />
-              <span
-                className={cn(
-                  'flex min-w-0 items-baseline gap-1.5 font-medium',
-                  optionIndex === activeIndex ? 'text-ink' : 'text-ink-soft',
-                )}
-              >
-                <span className="truncate">{template.name}</span>
-                {template.argumentHint && (
-                  <span className="shrink-0 text-[0.6875rem] font-normal text-ink-faint">
-                    {template.argumentHint}
-                  </span>
-                )}
-              </span>
-              <span className="min-w-0 truncate text-right text-ink-faint">
-                {template.description}
-              </span>
-              <span className="text-[0.6875rem] text-ink-faint">
-                {template.source === 'project'
-                  ? t('skills.systemSourceProject')
-                  : t('skills.systemSourceUser')}
-              </span>
-            </button>
-          )
-        })}
         {showSkills && (
           <div
             role="presentation"
@@ -280,7 +198,7 @@ export function ComposerSkillSuggestions({
               {t('composer.noSkills')}
             </p>
           ) : skills.map((skill, index) => {
-            const optionIndex = previewCommands.length + templates.length + index
+            const optionIndex = previewCommands.length + index
             return (
               <button
                 id={skillSuggestionOptionID(optionIndex)}

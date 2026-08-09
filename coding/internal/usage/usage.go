@@ -123,25 +123,6 @@ func (s *Store) BackfillEntries(sessionID string, entries []transcript.Entry) er
 	return nil
 }
 
-// Backfill adds provider responses already present in a restored transcript.
-// Stable event IDs make the operation safe to run on every startup.
-func (s *Store) Backfill(sessionID string, messages []agent.AgentMessage) error {
-	for _, message := range messages {
-		llmMessage, ok := agent.ToLLM(message)
-		if !ok {
-			continue
-		}
-		assistant, ok := llmMessage.(*llm.AssistantMessage)
-		if !ok || assistant == nil || !present(assistant.Usage) {
-			continue
-		}
-		if err := s.appendAssistant(sessionID, assistant); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (s *Store) appendAssistant(sessionID string, assistant *llm.AssistantMessage) error {
 	timestamp := time.UnixMilli(assistant.Timestamp).UTC()
 	return s.append(Event{

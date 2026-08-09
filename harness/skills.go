@@ -3,7 +3,6 @@ package harness
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strings"
 )
 
@@ -22,18 +21,6 @@ type Skill struct {
 	DisableModelInvocation bool
 }
 
-// PromptTemplate is a named, parameterized prompt invoked with PromptFromTemplate.
-// In Content, $1..$N expand to positional arguments and $ARGUMENTS (or $@) to all
-// arguments joined by spaces.
-type PromptTemplate struct {
-	// Name is the stable identifier used for lookup.
-	Name string
-	// Description is an optional note for command lists or autocomplete.
-	Description string
-	// Content is the template body with argument placeholders.
-	Content string
-}
-
 // Skill invokes a registered skill by name: it injects the skill's instructions
 // (plus any additional instructions) as a new user turn and runs it like Prompt.
 // It returns an error if the skill is unknown, or ErrBusy if a run is already in
@@ -48,19 +35,6 @@ func (h *Harness) Skill(ctx context.Context, name string, additionalInstructions
 	return h.Prompt(ctx, formatSkillInvocation(skill, strings.Join(additionalInstructions, "\n\n")))
 }
 
-// PromptFromTemplate invokes a registered prompt template by name, substituting
-// args into its placeholders, and runs the result like Prompt. It returns an
-// error if the template is unknown, or ErrBusy if a run is already in progress.
-func (h *Harness) PromptFromTemplate(ctx context.Context, name string, args ...string) error {
-	h.cfgMu.Lock()
-	template, ok := findTemplate(h.templates, name)
-	h.cfgMu.Unlock()
-	if !ok {
-		return fmt.Errorf("harness: unknown prompt template: %s", name)
-	}
-	return h.Prompt(ctx, substituteArgs(template.Content, args))
-}
-
 // SetSkills replaces the registered skills. Changes apply from the next run.
 func (h *Harness) SetSkills(skills []Skill) {
 	h.cfgMu.Lock()
@@ -68,22 +42,8 @@ func (h *Harness) SetSkills(skills []Skill) {
 	h.skills = append([]Skill(nil), skills...)
 }
 
-// SetPromptTemplates replaces the registered prompt templates.
-func (h *Harness) SetPromptTemplates(templates []PromptTemplate) {
-	h.cfgMu.Lock()
-	defer h.cfgMu.Unlock()
-	h.templates = append([]PromptTemplate(nil), templates...)
-}
-
 // Skills returns a copy of the registered skills.
 func (h *Harness) Skills() []Skill { return h.skillsSnapshot() }
-
-// PromptTemplates returns a copy of the registered prompt templates.
-func (h *Harness) PromptTemplates() []PromptTemplate {
-	h.cfgMu.Lock()
-	defer h.cfgMu.Unlock()
-	return append([]PromptTemplate(nil), h.templates...)
-}
 
 func (h *Harness) skillsSnapshot() []Skill {
 	h.cfgMu.Lock()
@@ -100,15 +60,6 @@ func findSkill(skills []Skill, name string) (Skill, bool) {
 	return Skill{}, false
 }
 
-func findTemplate(templates []PromptTemplate, name string) (PromptTemplate, bool) {
-	for _, template := range templates {
-		if template.Name == name {
-			return template, true
-		}
-	}
-	return PromptTemplate{}, false
-}
-
 // formatSkillInvocation renders a skill as the user turn that invokes it.
 func formatSkillInvocation(skill Skill, additionalInstructions string) string {
 	block := fmt.Sprintf("<skill name=%q>\n%s\n</skill>", skill.Name, skill.Content)
@@ -116,25 +67,6 @@ func formatSkillInvocation(skill Skill, additionalInstructions string) string {
 		return block + "\n\n" + additionalInstructions
 	}
 	return block
-}
-
-var positionalArg = regexp.MustCompile(`\$(\d+)`)
-
-// substituteArgs expands $1..$N to positional arguments and $ARGUMENTS / $@ to
-// all arguments joined by spaces.
-func substituteArgs(content string, args []string) string {
-	result := positionalArg.ReplaceAllStringFunc(content, func(match string) string {
-		index := 0
-		fmt.Sscanf(match, "$%d", &index)
-		if index >= 1 && index <= len(args) {
-			return args[index-1]
-		}
-		return ""
-	})
-	all := strings.Join(args, " ")
-	result = strings.ReplaceAll(result, "$ARGUMENTS", all)
-	result = strings.ReplaceAll(result, "$@", all)
-	return result
 }
 
 // FormatSkillsForSystemPrompt renders the model-invocable skills as a block to

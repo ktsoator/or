@@ -1,9 +1,7 @@
 package usage
 
 import (
-	"bufio"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -17,10 +15,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const (
-	ledgerSchemaVersion = 1
-	maxLedgerLineBytes  = 2 * 1024 * 1024
-)
+const ledgerSchemaVersion = 1
 
 const createLedgerSchema = `
 CREATE TABLE IF NOT EXISTS usage_events (
@@ -55,24 +50,10 @@ CREATE INDEX IF NOT EXISTS usage_events_provider_model_occurred
 	ON usage_events (
 		provider, model, occurred_at_seconds DESC, occurred_at_nanos DESC, id DESC
 	);
-CREATE TABLE IF NOT EXISTS usage_metadata (
-	key TEXT PRIMARY KEY,
-	value TEXT NOT NULL
-);
 `
 
 const insertEventSQL = `
 INSERT OR IGNORE INTO usage_events (
-	id, session_id, provider, model, response_model, response_id,
-	occurred_at, occurred_at_seconds, occurred_at_nanos,
-	input_tokens, input_unknown, output_tokens, cache_read_tokens,
-	cache_write_tokens, total_tokens,
-	cost_input, cost_output, cost_cache_read, cost_cache_write, cost_total
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`
-
-const replaceEventSQL = `
-INSERT OR REPLACE INTO usage_events (
 	id, session_id, provider, model, response_model, response_id,
 	occurred_at, occurred_at_seconds, occurred_at_nanos,
 	input_tokens, input_unknown, output_tokens, cache_read_tokens,
@@ -87,10 +68,8 @@ type Store struct {
 	db *sql.DB
 }
 
-// NewStore opens the SQLite ledger derived from legacyPath. Existing JSONL
-// data is imported transactionally and retained as a recovery source.
-func NewStore(legacyPath string) (*Store, error) {
-	dbPath := databasePath(legacyPath)
+// NewStore opens the SQLite ledger at dbPath.
+func NewStore(dbPath string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o700); err != nil {
 		return nil, fmt.Errorf("usage: create ledger directory: %w", err)
 	}
@@ -112,10 +91,6 @@ func NewStore(legacyPath string) (*Store, error) {
 		_ = db.Close()
 		return nil, err
 	}
-	if err := store.migrateJSONL(legacyPath, dbPath); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
 	return store, nil
 }
 
@@ -126,13 +101,6 @@ func (s *Store) Close() error {
 		return nil
 	}
 	return s.db.Close()
-}
-
-func databasePath(legacyPath string) string {
-	if strings.EqualFold(filepath.Ext(legacyPath), ".jsonl") {
-		return strings.TrimSuffix(legacyPath, filepath.Ext(legacyPath)) + ".sqlite"
-	}
-	return legacyPath
 }
 
 func createPrivateFile(path string) error {
@@ -175,91 +143,6 @@ func (s *Store) initialize() error {
 		if _, err := s.db.Exec("PRAGMA user_version = " + strconv.Itoa(ledgerSchemaVersion)); err != nil {
 			return fmt.Errorf("usage: set database schema version: %w", err)
 		}
-	}
-	return nil
-}
-
-func (s *Store) migrateJSONL(legacyPath, dbPath string) error {
-	if filepath.Clean(legacyPath) == filepath.Clean(dbPath) {
-		return nil
-	}
-	info, err := os.Stat(legacyPath)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("usage: stat legacy ledger: %w", err)
-	}
-	state := fmt.Sprintf("%d:%d", info.Size(), info.ModTime().UnixNano())
-	var previous string
-	err = s.db.QueryRow(
-		"SELECT value FROM usage_metadata WHERE key = 'legacy_jsonl_state'",
-	).Scan(&previous)
-	switch {
-	case err == nil && previous == state:
-		return nil
-	case err != nil && !errors.Is(err, sql.ErrNoRows):
-		return fmt.Errorf("usage: read migration state: %w", err)
-	}
-	firstMigration := errors.Is(err, sql.ErrNoRows)
-	if firstMigration {
-		var eventCount int
-		if err := s.db.QueryRow("SELECT COUNT(*) FROM usage_events").Scan(&eventCount); err != nil {
-			return fmt.Errorf("usage: count events before migration: %w", err)
-		}
-		firstMigration = eventCount == 0
-	}
-
-	file, err := os.Open(legacyPath)
-	if err != nil {
-		return fmt.Errorf("usage: open legacy ledger: %w", err)
-	}
-	defer file.Close()
-	tx, err := s.db.Begin()
-	if err != nil {
-		return fmt.Errorf("usage: begin legacy migration: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	statement := insertEventSQL
-	if firstMigration {
-		// The old in-memory map kept the final duplicate from a JSONL file.
-		statement = replaceEventSQL
-	}
-	insert, err := tx.Prepare(statement)
-	if err != nil {
-		return fmt.Errorf("usage: prepare legacy migration: %w", err)
-	}
-	defer insert.Close()
-
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 64*1024), maxLedgerLineBytes)
-	for scanner.Scan() {
-		if strings.TrimSpace(scanner.Text()) == "" {
-			continue
-		}
-		var event Event
-		if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
-			return fmt.Errorf("usage: decode legacy ledger: %w", err)
-		}
-		if event.ID == "" {
-			continue
-		}
-		if _, err := insert.Exec(eventValues(event)...); err != nil {
-			return fmt.Errorf("usage: migrate legacy event: %w", err)
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("usage: read legacy ledger: %w", err)
-	}
-	if _, err := tx.Exec(`
-		INSERT INTO usage_metadata (key, value) VALUES ('legacy_jsonl_state', ?)
-		ON CONFLICT(key) DO UPDATE SET value = excluded.value
-	`, state); err != nil {
-		return fmt.Errorf("usage: record migration state: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("usage: commit legacy migration: %w", err)
 	}
 	return nil
 }
