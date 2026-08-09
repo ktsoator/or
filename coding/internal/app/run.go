@@ -14,7 +14,6 @@ import (
 	"github.com/ktsoator/or/coding/internal/conversation"
 	"github.com/ktsoator/or/coding/internal/httpapi"
 	"github.com/ktsoator/or/coding/internal/provider"
-	"github.com/ktsoator/or/coding/internal/titlegen"
 	"github.com/ktsoator/or/coding/internal/usage"
 	"github.com/ktsoator/or/coding/internal/workspace"
 	"github.com/ktsoator/or/llm"
@@ -57,11 +56,10 @@ func New(ctx context.Context, cfg config.Config) (*Runtime, error) {
 	providerTests := provider.NewConnectionTester(providers, llm.Complete)
 
 	manager, err := conversation.NewManager(ctx, conversation.Options{
-		DataDir:        cfg.DataDir,
-		Usage:          ledger,
-		Workspaces:     workspaces,
-		NewTransport:   transports.New,
-		TitleGenerator: titlegen.New(providers),
+		DataDir:      cfg.DataDir,
+		Usage:        ledger,
+		Workspaces:   workspaces,
+		NewTransport: transports.New,
 	})
 	if err != nil {
 		_ = ledger.Close()

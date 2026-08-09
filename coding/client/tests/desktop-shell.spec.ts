@@ -548,21 +548,12 @@ async function openDesktopClient(
                 keys: [{ id: 'default', name: 'Default', preview: 'sk-test' }],
               },
             ],
-            utilityModels: [
-              { id: 'test-model', name: options.modelName ?? 'Test model' },
-            ],
           },
         ],
         activeModel: {
           provider: 'openai',
           model: 'test-model',
           thinkingLevel: modelThinkingLevel,
-        },
-        utilityModel: {
-          provider: 'openai',
-          model: 'test-model',
-          connectionId: 'official',
-          keyId: 'default',
         },
       }
     }
@@ -3852,7 +3843,7 @@ test('Models settings show full configured model names when space is available',
   await page.getByRole('button', { name: 'Models', exact: true }).click()
 
   const labels = page.getByTitle(modelName)
-  await expect(labels).toHaveCount(2)
+  await expect(labels).toHaveCount(1)
   for (const label of await labels.all()) {
     const layout = await label.evaluate((element) => ({
       clientWidth: element.clientWidth,
@@ -3860,27 +3851,15 @@ test('Models settings show full configured model names when space is available',
     }))
     expect(layout.scrollWidth).toBe(layout.clientWidth)
   }
-  await expect
-    .poll(async () =>
-      (
-        await page
-          .getByRole('button', { name: 'Utility model', exact: true })
-          .boundingBox()
-      )?.width,
-    )
-    .toBeLessThan(260)
-
-  for (const testID of ['default-model-controls', 'utility-model-controls']) {
-    const controls = page.getByTestId(testID).locator('button')
-    await expect(controls.first()).toHaveCSS('border-radius', '10px')
-    await expect(controls.nth(1)).toHaveCSS('border-radius', '10px')
-    const gap = await controls.evaluateAll(([first, second]) => {
-      const firstRect = first.getBoundingClientRect()
-      const secondRect = second.getBoundingClientRect()
-      return secondRect.left - firstRect.right
-    })
-    expect(gap).toBeGreaterThan(0)
-  }
+  const controls = page.getByTestId('default-model-controls').locator('button')
+  await expect(controls.first()).toHaveCSS('border-radius', '10px')
+  await expect(controls.nth(1)).toHaveCSS('border-radius', '10px')
+  const gap = await controls.evaluateAll(([first, second]) => {
+    const firstRect = first.getBoundingClientRect()
+    const secondRect = second.getBoundingClientRect()
+    return secondRect.left - firstRect.right
+  })
+  expect(gap).toBeGreaterThan(0)
 
   const defaultsLayout = page.getByTestId('model-defaults-section').locator(':scope > div')
   await expect(defaultsLayout).toHaveCSS('border-top-width', '0px')

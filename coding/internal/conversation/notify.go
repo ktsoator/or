@@ -74,22 +74,14 @@ type MessageCancelled struct{ ID string }
 // RunFailed reports an asynchronous prompt failure to the viewer.
 type RunFailed struct{ Text string }
 
-// TitleChanged reports the session's display title and the two sources it is
-// derived from, so a client can tell a user-set name from a generated one.
-type TitleChanged struct {
-	Title       string
-	AITitle     string
-	CustomTitle string
-}
+// TitleChanged reports the session's current display title.
+type TitleChanged struct{ Title string }
 
-type TitleGenerationChanged struct{ Generation TitleGeneration }
-
-func (MessageAccepted) Event()        {}
-func (MessageDequeued) Event()        {}
-func (MessageCancelled) Event()       {}
-func (RunFailed) Event()              {}
-func (TitleChanged) Event()           {}
-func (TitleGenerationChanged) Event() {}
+func (MessageAccepted) Event()  {}
+func (MessageDequeued) Event()  {}
+func (MessageCancelled) Event() {}
+func (RunFailed) Event()        {}
+func (TitleChanged) Event()     {}
 
 // emit hands one state change to the transport. It must not block: a session
 // raising an event is often mid-run.

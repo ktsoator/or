@@ -45,7 +45,7 @@ app -> features -> shared
 - `features/workbench` owns the secondary panel, task view, conversation/browser
   composition, and responsive panel layout.
 - `features/settings` owns settings navigation, provider configuration, usage,
-  utility models, and provider connection testing.
+  default models and provider connection testing.
 - `features/skills` owns the skill catalog API, invocation parsing, and its lazy
   catalog page.
 - `shared/attachments.ts` is shared because attachment metadata is rendered by

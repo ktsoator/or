@@ -360,12 +360,11 @@ func TestActiveModelStartsEmptyAndPersistsAfterExplicitActivation(t *testing.T) 
 	}
 }
 
-func TestStoreRepairsUnavailableActiveAndUtilityModels(t *testing.T) {
+func TestStoreRepairsUnavailableActiveModel(t *testing.T) {
 	dir := t.TempDir()
 	data := []byte(`{
   "version": 4,
   "activeModel": {"provider":"test-provider","model":"removed-model","thinkingLevel":"high"},
-  "utilityModel": {"provider":"test-provider","model":"removed-utility","connectionId":"official","keyId":"work"},
   "providers": {
     "test-provider": {
       "activeConnectionId": "official",
@@ -386,24 +385,14 @@ func TestStoreRepairsUnavailableActiveAndUtilityModels(t *testing.T) {
 		active.ThinkingLevel != llm.ModelThinkingOff {
 		t.Fatalf("repaired active model = %#v, %v", active, ok)
 	}
-	utility, ok := store.UtilityModel()
-	if !ok || utility.Provider != "test-provider" || utility.Model != "test-model" ||
-		utility.ConnectionID != OfficialConnectionID || utility.KeyID != "work" {
-		t.Fatalf("repaired utility model = %#v, %v", utility, ok)
-	}
 	repairs := store.Repairs()
-	if len(repairs) != 2 {
-		t.Fatalf("repairs = %#v, want active and utility repairs", repairs)
+	if len(repairs) != 1 {
+		t.Fatalf("repairs = %#v, want one active model repair", repairs)
 	}
 	if repairs[0].Target != SelectionRepairActiveModel || repairs[0].Reason != SelectionRepairUnavailable ||
 		repairs[0].Replacement == nil || repairs[0].Replacement.Model != "test-model" {
 		t.Fatalf("active repair = %#v", repairs[0])
 	}
-	if repairs[1].Target != SelectionRepairUtilityModel || repairs[1].Replacement == nil ||
-		repairs[1].Replacement.Model != "test-model" {
-		t.Fatalf("utility repair = %#v", repairs[1])
-	}
-
 	var persisted profileFile
 	persistedData, err := os.ReadFile(dir + "/providers.json")
 	if err != nil {
@@ -415,22 +404,12 @@ func TestStoreRepairsUnavailableActiveAndUtilityModels(t *testing.T) {
 	if persisted.ActiveModel == nil || *persisted.ActiveModel != active {
 		t.Fatalf("persisted active model = %#v, want %#v", persisted.ActiveModel, active)
 	}
-	if persisted.UtilityModel == nil || *persisted.UtilityModel != utility {
-		t.Fatalf("persisted utility model = %#v, want %#v", persisted.UtilityModel, utility)
-	}
-
 	store.Apply()
 	if _, err := store.ActivateModel(active); err != nil {
 		t.Fatal(err)
 	}
-	if repairs := store.Repairs(); len(repairs) != 1 || repairs[0].Target != SelectionRepairUtilityModel {
-		t.Fatalf("repairs after active selection = %#v, want utility repair only", repairs)
-	}
-	if _, err := store.SetUtilityModel(utility); err != nil {
-		t.Fatal(err)
-	}
 	if repairs := store.Repairs(); len(repairs) != 0 {
-		t.Fatalf("repairs after explicit selections = %#v, want none", repairs)
+		t.Fatalf("repairs after explicit selection = %#v, want none", repairs)
 	}
 }
 
@@ -559,91 +538,5 @@ func testModel() llm.Model {
 		Protocol: llm.ProtocolOpenAICompletions,
 		BaseURL:  "https://catalog.example.com/v1",
 		Input:    []llm.ModelInput{llm.ModelInputText},
-	}
-}
-
-func TestUtilityModelUsesRequestScopedRouteWithoutChangingActiveConnection(t *testing.T) {
-	store := newTestStore(t, nil)
-	_, err := store.Replace("test-provider", Update{
-		ActiveConnectionID: OfficialConnectionID,
-		Connections: []ConnectionUpdate{
-			{
-				ID:          OfficialConnectionID,
-				ActiveKeyID: "main",
-				Keys:        []KeyUpdate{{ID: "main", Name: "Main", APIKey: "main-secret"}},
-			},
-			{
-				ID:          "utility",
-				Name:        "Utility gateway",
-				BaseURL:     "https://utility.example.com/v1",
-				ActiveKeyID: "small",
-				Keys:        []KeyUpdate{{ID: "small", Name: "Small", APIKey: "utility-secret"}},
-			},
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = store.SetUtilityModel(UtilityModelSelection{
-		Provider:     "test-provider",
-		Model:        "test-model",
-		ConnectionID: "utility",
-		KeyID:        "small",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	route, err := store.ResolveUtilityModel()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if route.Options.APIKey != "utility-secret" || route.Options.BaseURL != "https://utility.example.com/v1" {
-		t.Fatalf("utility options = %#v", route.Options)
-	}
-	resolved, options := store.registry.ResolveRequest(testModel(), llm.StreamOptions{})
-	if resolved.BaseURL != "https://catalog.example.com/v1" || options.APIKey != "main-secret" {
-		t.Fatalf("active route changed: model=%#v options=%#v", resolved, options)
-	}
-}
-
-func TestRemovingUtilityCredentialClearsSelection(t *testing.T) {
-	store := newTestStore(t, nil)
-	_, err := store.Replace("test-provider", Update{
-		ActiveConnectionID: OfficialConnectionID,
-		Connections: []ConnectionUpdate{
-			{ID: OfficialConnectionID},
-			{
-				ID:          "utility",
-				Name:        "Utility gateway",
-				BaseURL:     "https://utility.example.com/v1",
-				ActiveKeyID: "small",
-				Keys:        []KeyUpdate{{ID: "small", Name: "Small", APIKey: "utility-secret"}},
-			},
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = store.SetUtilityModel(UtilityModelSelection{
-		Provider:     "test-provider",
-		Model:        "test-model",
-		ConnectionID: "utility",
-		KeyID:        "small",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = store.Save("test-provider", Update{
-		Connections: []ConnectionUpdate{
-			{ID: OfficialConnectionID},
-			{ID: "utility", Name: "Utility gateway", BaseURL: "https://utility.example.com/v1"},
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, ok := store.UtilityModel(); ok {
-		t.Fatalf("utility selection = %#v, want unconfigured", got)
 	}
 }

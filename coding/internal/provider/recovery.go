@@ -44,30 +44,6 @@ func (s *Store) restoreActiveModel(saved ModelSelection) (*ModelSelection, *Sele
 	)
 }
 
-func (s *Store) restoreUtilityModel(saved UtilityModelSelection) (*UtilityModelSelection, *SelectionRepair) {
-	previous := modelSelectionReference(saved.Provider, saved.Model)
-	if restored, err := s.validateUtilitySelection(saved); err == nil {
-		return &restored, nil
-	}
-
-	if route, err := s.fallbackUtilityRoute(); err == nil {
-		fallback := utilitySelectionFromRoute(route.Route)
-		replacement := modelSelectionReference(fallback.Provider, fallback.Model)
-		return &fallback, repairedSelection(
-			SelectionRepairUtilityModel,
-			SelectionRepairUnavailable,
-			previous,
-			&replacement,
-		)
-	}
-	return nil, repairedSelection(
-		SelectionRepairUtilityModel,
-		SelectionRepairUnavailable,
-		previous,
-		nil,
-	)
-}
-
 func (s *Store) fallbackActiveModel(
 	preferredProvider string,
 	thinking llm.ModelThinkingLevel,

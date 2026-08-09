@@ -4,8 +4,6 @@ import type {
   PermissionMode,
   PromptFile,
   SessionSummary,
-  TitleGeneration,
-  TitleGenerationStatus,
   ThreadSnapshot,
   ThinkingLevel,
   WireEvent,
@@ -189,18 +187,10 @@ export function sessionStoreReducer(
               ? {
                   ...session,
                   title: event.title ?? session.title,
-                  aiTitle: event.aiTitle,
-                  customTitle: event.customTitle,
                 }
               : session,
           ),
         }
-      }
-      if (event.type === 'title_generation_update') {
-        const titleGeneration = titleGenerationFromWire(event)
-        return titleGeneration
-          ? patchSession(state, action.sessionID, { titleGeneration })
-          : state
       }
       return state
     }
@@ -228,16 +218,12 @@ export function sessionStoreReducer(
         ? {}
         : {
             title: action.history.title,
-            aiTitle: action.history.aiTitle,
-            customTitle: action.history.customTitle,
           }
-      const titleGeneration = titleGenerationFromWire(action.history)
       return patchSession(state, action.sessionID, {
         running: action.history.running,
         hasApproval,
         hasQuestion,
         ...titlePatch,
-        ...(titleGeneration ? { titleGeneration } : {}),
       })
     }
 
@@ -377,25 +363,6 @@ export function sessionStoreReducer(
 
     case 'sessionQuestionResolved':
       return patchSession(state, action.sessionID, { hasQuestion: false })
-  }
-}
-
-function titleGenerationFromWire(source: {
-  titleGenerationStatus?: string
-  titleGenerationProvider?: string
-  titleGenerationModel?: string
-  titleGenerationErrorCode?: string
-  titleGenerationError?: string
-  titleGenerationAttemptedAt?: string
-}): TitleGeneration | undefined {
-  if (!source.titleGenerationStatus) return undefined
-  return {
-    status: source.titleGenerationStatus as TitleGenerationStatus,
-    provider: source.titleGenerationProvider,
-    model: source.titleGenerationModel,
-    errorCode: source.titleGenerationErrorCode,
-    error: source.titleGenerationError,
-    attemptedAt: source.titleGenerationAttemptedAt,
   }
 }
 

@@ -19,11 +19,10 @@ type Store struct {
 	path     string
 	registry *llm.ProviderRegistry
 
-	mu           sync.Mutex
-	profiles     map[string]Profile
-	activeModel  *ModelSelection
-	utilityModel *UtilityModelSelection
-	repairs      []SelectionRepair
+	mu          sync.Mutex
+	profiles    map[string]Profile
+	activeModel *ModelSelection
+	repairs     []SelectionRepair
 }
 
 func NewStore(
@@ -75,14 +74,6 @@ func NewStore(
 			repaired = true
 		}
 	}
-	if file.UtilityModel != nil {
-		selection, repair := store.restoreUtilityModel(*file.UtilityModel)
-		store.utilityModel = selection
-		if repair != nil {
-			store.repairs = append(store.repairs, *repair)
-			repaired = true
-		}
-	}
 	if repaired {
 		if err := store.saveLocked(); err != nil {
 			return nil, fmt.Errorf("update %s: %w", store.path, err)
@@ -121,10 +112,9 @@ func (s *Store) Snapshot() map[string]Profile {
 
 func (s *Store) saveLocked() error {
 	data, err := json.MarshalIndent(profileFile{
-		Version:      fileVersion,
-		ActiveModel:  s.activeModel,
-		UtilityModel: s.utilityModel,
-		Providers:    s.profiles,
+		Version:     fileVersion,
+		ActiveModel: s.activeModel,
+		Providers:   s.profiles,
 	}, "", "  ")
 	if err != nil {
 		return err

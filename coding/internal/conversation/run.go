@@ -86,7 +86,7 @@ func (m *Manager) reservePrompt(
 	runtime.live.Store(true)
 	previous := runtime.record
 	runtime.record.UpdatedAt = time.Now().UTC()
-	if runtime.record.AutoTitle {
+	if runtime.record.GenerateTitle && runtime.record.Title == defaultTitle {
 		title := prompt
 		if strings.TrimSpace(title) == "" && len(images) > 0 {
 			title = "Image"
@@ -94,7 +94,6 @@ func (m *Manager) reservePrompt(
 			title = files[0].Name
 		}
 		runtime.record.Title = titleFromPrompt(title)
-		runtime.record.AutoTitle = false
 	}
 	if err := m.saveLocked(); err != nil {
 		runtime.record = previous

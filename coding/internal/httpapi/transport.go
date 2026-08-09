@@ -201,20 +201,8 @@ func projectSessionWireEvent(event conversation.Event) (wireEvent, bool) {
 		out = wireEvent{Type: wireEventError, Text: e.Text}
 	case conversation.TitleChanged:
 		out = wireEvent{
-			Type:        wireEventTitleUpdate,
-			Title:       e.Title,
-			AITitle:     e.AITitle,
-			CustomTitle: e.CustomTitle,
-		}
-	case conversation.TitleGenerationChanged:
-		out = wireEvent{
-			Type:                       wireEventTitleGeneration,
-			TitleGenerationStatus:      wireTitleGenerationStatus(e.Generation.Status),
-			TitleGenerationProvider:    e.Generation.Provider,
-			TitleGenerationModel:       e.Generation.Model,
-			TitleGenerationErrorCode:   e.Generation.ErrorCode,
-			TitleGenerationError:       e.Generation.Error,
-			TitleGenerationAttemptedAt: e.Generation.AttemptedAt,
+			Type:  wireEventTitleUpdate,
+			Title: e.Title,
 		}
 	default:
 		return wireEvent{}, false

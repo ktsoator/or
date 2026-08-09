@@ -15,7 +15,6 @@ import (
 func (s *Server) mountProviders(r gin.IRouter) {
 	r.GET("/providers", s.handleProviders)
 	r.PUT("/model-selection", s.handleActivateModel)
-	r.PUT("/utility-model-selection", s.handleUtilityModelSelection)
 	r.PUT("/providers/:providerID", s.handleSetProvider)
 	r.PATCH("/providers/:providerID/active-connection", s.handleActivateProviderConnection)
 	r.PATCH("/providers/:providerID/connections/:connectionID/active-key", s.handleActivateProviderKey)
@@ -27,20 +26,14 @@ func (s *Server) mountProviders(r gin.IRouter) {
 // the coding product's saved connection profiles. Secrets are represented only
 // by masked previews.
 type providerInfo struct {
-	ID                 string                     `json:"id"`
-	Name               string                     `json:"name"`
-	Configured         bool                       `json:"configured"`
-	Models             int                        `json:"models"`
-	OfficialBaseURL    string                     `json:"officialBaseURL,omitempty"`
-	EffectiveBaseURL   string                     `json:"effectiveBaseURL,omitempty"`
-	ActiveConnectionID string                     `json:"activeConnectionId"`
-	Connections        []providerConnectionInfo   `json:"connections"`
-	UtilityModels      []providerUtilityModelInfo `json:"utilityModels"`
-}
-
-type providerUtilityModelInfo struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID                 string                   `json:"id"`
+	Name               string                   `json:"name"`
+	Configured         bool                     `json:"configured"`
+	Models             int                      `json:"models"`
+	OfficialBaseURL    string                   `json:"officialBaseURL,omitempty"`
+	EffectiveBaseURL   string                   `json:"effectiveBaseURL,omitempty"`
+	ActiveConnectionID string                   `json:"activeConnectionId"`
+	Connections        []providerConnectionInfo `json:"connections"`
 }
 
 type providerConnectionInfo struct {
@@ -102,10 +95,9 @@ type providerConnectionTestResponse struct {
 }
 
 type providerListResponse struct {
-	Providers    []providerInfo                  `json:"providers"`
-	ActiveModel  *provider.ModelSelection        `json:"activeModel,omitempty"`
-	UtilityModel *provider.UtilityModelSelection `json:"utilityModel,omitempty"`
-	Repairs      []provider.SelectionRepair      `json:"repairs,omitempty"`
+	Providers   []providerInfo             `json:"providers"`
+	ActiveModel *provider.ModelSelection   `json:"activeModel,omitempty"`
+	Repairs     []provider.SelectionRepair `json:"repairs,omitempty"`
 }
 
 func (s *Server) handleProviders(c *gin.Context) {
@@ -130,24 +122,7 @@ func (s *Server) handleProviders(c *gin.Context) {
 	if selection, ok := s.providers.ActiveModel(); ok {
 		response.ActiveModel = &selection
 	}
-	if selection, ok := s.providers.UtilityModel(); ok {
-		response.UtilityModel = &selection
-	}
 	c.JSON(http.StatusOK, response)
-}
-
-func (s *Server) handleUtilityModelSelection(c *gin.Context) {
-	var body provider.UtilityModelSelection
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid utility model selection"})
-		return
-	}
-	selection, err := s.providers.SetUtilityModel(body)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, selection)
 }
 
 func (s *Server) projectProviderInfo(id string, profile provider.Profile) (providerInfo, bool) {
@@ -192,17 +167,6 @@ func (s *Server) projectProviderInfo(id string, profile provider.Profile) (provi
 		}
 		connections = append(connections, info)
 	}
-	utilityModels := make([]providerUtilityModelInfo, 0)
-	for _, model := range registered.Models() {
-		if !provider.IsUtilityModelEligible(model) {
-			continue
-		}
-		name := model.Name
-		if name == "" {
-			name = model.ID
-		}
-		utilityModels = append(utilityModels, providerUtilityModelInfo{ID: model.ID, Name: name})
-	}
 	return providerInfo{
 		ID:                 id,
 		Name:               status.Label,
@@ -212,7 +176,6 @@ func (s *Server) projectProviderInfo(id string, profile provider.Profile) (provi
 		EffectiveBaseURL:   effectiveBaseURL,
 		ActiveConnectionID: profile.ActiveConnectionID,
 		Connections:        connections,
-		UtilityModels:      utilityModels,
 	}, true
 }
 

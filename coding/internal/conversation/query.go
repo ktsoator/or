@@ -12,15 +12,12 @@ import (
 
 // Snapshot is the complete client-readable state of one conversation.
 type Snapshot struct {
-	History         []engine.HistoryItem
-	Queue           []Event
-	ContextUsage    engine.ContextUsage
-	Tasks           []engine.BackgroundTask
-	Running         bool
-	Title           string
-	AITitle         string
-	CustomTitle     string
-	TitleGeneration TitleGeneration
+	History      []engine.HistoryItem
+	Queue        []Event
+	ContextUsage engine.ContextUsage
+	Tasks        []engine.BackgroundTask
+	Running      bool
+	Title        string
 }
 
 // Snapshot returns the current client-readable state without exposing the
@@ -32,19 +29,15 @@ func (m *Manager) Snapshot(id string) (Snapshot, error) {
 		m.mu.Unlock()
 		return Snapshot{}, err
 	}
-	title := runtime.titleChanged()
-	titleGeneration := runtime.titleGeneration
+	title := runtime.displayTitle()
 	m.mu.Unlock()
 	return Snapshot{
-		History:         runtime.session.History(),
-		Queue:           runtime.pendingEvents(),
-		ContextUsage:    runtime.session.ContextUsage(),
-		Tasks:           runtime.session.Tasks(),
-		Running:         runtime.live.Load(),
-		Title:           title.Title,
-		AITitle:         title.AITitle,
-		CustomTitle:     title.CustomTitle,
-		TitleGeneration: titleGeneration,
+		History:      runtime.session.History(),
+		Queue:        runtime.pendingEvents(),
+		ContextUsage: runtime.session.ContextUsage(),
+		Tasks:        runtime.session.Tasks(),
+		Running:      runtime.live.Load(),
+		Title:        title,
 	}, nil
 }
 
@@ -146,24 +139,21 @@ func (s *sessionRuntime) summary() Summary {
 		hasQuestion = s.transport.HasPendingQuestion()
 	}
 	return Summary{
-		ID:              s.record.ID,
-		Title:           s.displayTitle(),
-		AITitle:         s.record.AITitle,
-		CustomTitle:     s.record.CustomTitle,
-		TitleGeneration: s.titleGeneration,
-		WorkspacePath:   s.record.WorkspacePath,
-		WorkspaceName:   filepath.Base(s.record.WorkspacePath),
-		Scope:           s.record.Scope,
-		WorkspaceKind:   s.record.WorkspaceKind,
-		CreatedAt:       s.record.CreatedAt,
-		UpdatedAt:       s.record.UpdatedAt,
-		Running:         s.live.Load(),
-		HasApproval:     hasApproval,
-		HasQuestion:     hasQuestion,
-		ModelProvider:   s.record.Provider,
-		ModelID:         s.record.Model,
-		ModelName:       modelName,
-		ThinkingLevel:   llm.ModelThinkingLevel(s.record.Thinking),
-		PermissionMode:  permission.NormalizeMode(permission.Mode(s.record.PermissionMode)),
+		ID:             s.record.ID,
+		Title:          s.displayTitle(),
+		WorkspacePath:  s.record.WorkspacePath,
+		WorkspaceName:  filepath.Base(s.record.WorkspacePath),
+		Scope:          s.record.Scope,
+		WorkspaceKind:  s.record.WorkspaceKind,
+		CreatedAt:      s.record.CreatedAt,
+		UpdatedAt:      s.record.UpdatedAt,
+		Running:        s.live.Load(),
+		HasApproval:    hasApproval,
+		HasQuestion:    hasQuestion,
+		ModelProvider:  s.record.Provider,
+		ModelID:        s.record.Model,
+		ModelName:      modelName,
+		ThinkingLevel:  llm.ModelThinkingLevel(s.record.Thinking),
+		PermissionMode: permission.NormalizeMode(permission.Mode(s.record.PermissionMode)),
 	}
 }

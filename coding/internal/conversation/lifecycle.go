@@ -27,8 +27,8 @@ func (m *Manager) Create(
 	startedAt := time.Now()
 	now := startedAt.UTC()
 	title = strings.TrimSpace(title)
-	autoTitle := title == ""
-	if autoTitle {
+	generateTitle := title == ""
+	if generateTitle {
 		title = defaultTitle
 	}
 	m.mu.Lock()
@@ -77,7 +77,7 @@ func (m *Manager) Create(
 		CreatedAt:      now,
 		UpdatedAt:      now,
 		Transcript:     filepath.Join(filepath.Dir(m.indexPath), id+".jsonl"),
-		AutoTitle:      autoTitle,
+		GenerateTitle:  generateTitle,
 		Provider:       model.Provider,
 		Model:          model.ID,
 		Thinking:       string(llm.ClampThinkingLevel(model, thinking)),
@@ -227,7 +227,7 @@ func (m *Manager) UpdatePermissionMode(id string, mode permission.Mode) (Summary
 }
 
 // Rename sets a user-defined custom title on the session. An empty title clears
-// the custom title so the display falls back to the AI or prompt-derived title.
+// it so the display falls back to the AI or prompt-derived title.
 func (m *Manager) Rename(id, customTitle string) (Summary, error) {
 	customTitle = clampTitle(customTitle)
 	m.mu.Lock()
@@ -238,25 +238,16 @@ func (m *Manager) Rename(id, customTitle string) (Summary, error) {
 	}
 
 	previousCustomTitle := runtime.record.CustomTitle
-	previousGeneration := runtime.titleGeneration
 	runtime.record.CustomTitle = customTitle
-	if customTitle != "" {
-		runtime.titleGeneration = TitleGeneration{Status: TitleGenerationIdle}
-	} else if runtime.record.AITitle != "" {
-		runtime.titleGeneration = TitleGeneration{Status: TitleGenerationSucceeded}
-	}
 	runtime.record.UpdatedAt = time.Now().UTC()
 	if err := m.saveLocked(); err != nil {
 		runtime.record.CustomTitle = previousCustomTitle
-		runtime.titleGeneration = previousGeneration
 		m.mu.Unlock()
 		return Summary{}, err
 	}
 	summary := runtime.summary()
 	titleEvent := runtime.titleChanged()
-	stateEvent := runtime.titleGenerationChanged()
 	m.mu.Unlock()
 	runtime.emit(titleEvent)
-	runtime.emit(stateEvent)
 	return summary, nil
 }

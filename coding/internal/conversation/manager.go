@@ -10,7 +10,6 @@ import (
 
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/permission"
-	"github.com/ktsoator/or/coding/internal/titlegen"
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/transcript"
 	"github.com/ktsoator/or/coding/internal/usage"
@@ -32,7 +31,7 @@ type Manager struct {
 	// newTransport builds each session's link to its viewers. The delivery
 	// layer supplies it, so this package never names a transport type.
 	newTransport  NewTransport
-	generateTitle titlegen.Generator
+	generateTitle titleGenerator
 
 	mu        sync.RWMutex
 	sessions  map[string]*sessionRuntime
@@ -44,11 +43,10 @@ type Manager struct {
 
 // Options supplies the product services and storage root owned by a Manager.
 type Options struct {
-	DataDir        string
-	Usage          *usage.Store
-	Workspaces     *workspace.Registry
-	NewTransport   NewTransport
-	TitleGenerator titlegen.Generator
+	DataDir      string
+	Usage        *usage.Store
+	Workspaces   *workspace.Registry
+	NewTransport NewTransport
 }
 
 // NewManager restores and validates the session index. Restored transcripts,
@@ -65,7 +63,7 @@ func NewManager(ctx context.Context, opts Options) (*Manager, error) {
 		scratch:       workspace.NewScratch(opts.DataDir),
 		workspaces:    opts.Workspaces,
 		newTransport:  opts.NewTransport,
-		generateTitle: opts.TitleGenerator,
+		generateTitle: generateAITitle,
 		sessions:      make(map[string]*sessionRuntime),
 		usage:         opts.Usage,
 	}
@@ -151,7 +149,6 @@ func (m *Manager) ReleaseIfIdle(id string) bool {
 	}
 
 	unloaded := newSessionRuntime(runtime.record)
-	unloaded.titleGeneration = runtime.titleGeneration
 	m.sessions[id] = unloaded
 	m.mu.Unlock()
 
@@ -179,8 +176,6 @@ func (m *Manager) loadRuntimeLocked(id string) (*sessionRuntime, error) {
 		loaded.close()
 		return nil, fmt.Errorf("session: backfill usage for session %s: %w", id, err)
 	}
-	loaded.titleGeneration = runtime.titleGeneration
-
 	m.sessions[id] = loaded
 	if loaded.record != runtime.record {
 		if err := m.saveLocked(); err != nil {
@@ -193,14 +188,7 @@ func (m *Manager) loadRuntimeLocked(id string) (*sessionRuntime, error) {
 }
 
 func newSessionRuntime(record record) *sessionRuntime {
-	titleGeneration := TitleGeneration{Status: TitleGenerationIdle}
-	if record.AITitle != "" {
-		titleGeneration.Status = TitleGenerationSucceeded
-	}
-	return &sessionRuntime{
-		record:          record,
-		titleGeneration: titleGeneration,
-	}
+	return &sessionRuntime{record: record}
 }
 
 func (m *Manager) normalizeRecord(record record) (record, error) {
@@ -271,11 +259,10 @@ func (m *Manager) build(record record) (*sessionRuntime, error) {
 	session.Subscribe(func(ev engine.Event) {
 		m.handleSessionEvent(record.ID, runtime, ev)
 	})
-	if record.AutoTitle {
+	if record.GenerateTitle {
 		for _, item := range session.History() {
 			if item.Type == engine.HistoryUser && strings.TrimSpace(item.Text) != "" {
 				runtime.record.Title = titleFromPrompt(item.Text)
-				runtime.record.AutoTitle = false
 				break
 			}
 		}
