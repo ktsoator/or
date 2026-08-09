@@ -22,13 +22,13 @@ func TestToolOutcomeRoundTrip(t *testing.T) {
 			PreviewPath:  "index.html",
 		},
 	}
-	raw, ok := encodeOutcome(want)
-	if !ok {
-		t.Fatal("tool outcome was not encoded")
+	persisted := encodeOutcome("call-17", want)
+	if persisted.ToolCallID != "call-17" || persisted.DataKind != kindPreview {
+		t.Fatalf("persisted outcome = %#v", persisted)
 	}
-	got, ok := decodeOutcome(raw)
+	got, ok := decodeOutcome(persisted)
 	if !ok {
-		t.Fatalf("tool outcome was not decoded: %s", raw)
+		t.Fatalf("tool outcome was not decoded: %#v", persisted)
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("decoded outcome = %#v, want %#v", got, want)

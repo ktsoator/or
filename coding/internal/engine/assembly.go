@@ -60,7 +60,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	journal, seed, entries, err := newSessionJournal(ctx, opts.Store, opts.DetailsStore)
+	journal, seed, entries, err := newSessionJournal(ctx, opts.Store)
 	if err != nil {
 		return nil, err
 	}

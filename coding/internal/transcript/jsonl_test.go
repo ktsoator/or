@@ -3,6 +3,7 @@ package transcript
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -88,6 +89,63 @@ func TestJSONLRoundTripsRunTiming(t *testing.T) {
 	}
 	if entries[1].Run.FirstEntryID != message.ID || !entries[1].Run.StartedAt.Equal(startedAt) {
 		t.Fatalf("run timing = %#v", entries[1].Run)
+	}
+}
+
+func TestJSONLRoundTripsToolOutcome(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	exitCode := 17
+	entry := NewToolOutcome(ToolOutcome{
+		ToolCallID: "call-17",
+		Status:     agent.ToolOutcomeFailed,
+		ErrorCode:  "command_exit_nonzero",
+		ExitCode:   &exitCode,
+		DataKind:   "generic",
+		Data:       json.RawMessage(`{"command":"go test ./..."}`),
+	})
+	store := NewJSONL(path)
+	if err := store.Append(context.Background(), entry); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := store.Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Type != ToolOutcomeEntry || entries[0].ToolOutcome == nil {
+		t.Fatalf("entries = %#v", entries)
+	}
+	got := entries[0].ToolOutcome
+	if got.ToolCallID != "call-17" || got.Status != agent.ToolOutcomeFailed ||
+		got.ErrorCode != "command_exit_nonzero" || got.ExitCode == nil || *got.ExitCode != 17 ||
+		got.DataKind != "generic" || !bytes.Equal(got.Data, entry.ToolOutcome.Data) {
+		t.Fatalf("tool outcome = %#v", got)
+	}
+}
+
+func TestToolOutcomeEntryValidatesRequiredFieldsAndData(t *testing.T) {
+	tests := []struct {
+		name    string
+		outcome ToolOutcome
+	}{
+		{name: "tool call id", outcome: ToolOutcome{Status: agent.ToolOutcomeSuccess}},
+		{name: "status", outcome: ToolOutcome{ToolCallID: "call-1"}},
+		{
+			name: "data",
+			outcome: ToolOutcome{
+				ToolCallID: "call-1",
+				Status:     agent.ToolOutcomeSuccess,
+				DataKind:   "generic",
+				Data:       json.RawMessage(`{"unterminated"`),
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if err := NewToolOutcome(test.outcome).Validate(); err == nil {
+				t.Fatal("Validate() succeeded for an invalid tool outcome")
+			}
+		})
 	}
 }
 

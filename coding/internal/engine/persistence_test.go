@@ -130,8 +130,31 @@ func TestSessionCheckpointsCompleteToolBatchBeforeNextModelRequest(t *testing.T)
 				if err := json.Unmarshal(args, &parsed); err != nil {
 					return agent.ToolResult{}, err
 				}
+				if parsed.Text == "one" {
+					exitCode := 17
+					return agent.ToolResult{
+						Content: []llm.ToolResultContent{&llm.TextContent{Text: "first failed"}},
+						Outcome: agent.ToolOutcome{
+							Status:    agent.ToolOutcomeFailed,
+							ErrorCode: "command_exit_nonzero",
+							ExitCode:  &exitCode,
+							Data: tools.PreviewRequest{
+								Path:         "/workspace/one.html",
+								RelativePath: "one.html",
+								Title:        "First preview",
+							},
+						},
+					}, nil
+				}
 				return agent.ToolResult{
-					Content: []llm.ToolResultContent{&llm.TextContent{Text: parsed.Text}},
+					Content: []llm.ToolResultContent{&llm.TextContent{Text: "second timed out"}},
+					Outcome: agent.ToolOutcome{
+						Status:    agent.ToolOutcomeTimeout,
+						ErrorCode: "tool_timeout",
+						Data: tools.FileChange{
+							Path: "two.txt", Kind: tools.ChangeUpdate, Additions: 2, Deletions: 1,
+						},
+					},
 				}, nil
 			},
 		},
@@ -183,14 +206,44 @@ func TestSessionCheckpointsCompleteToolBatchBeforeNextModelRequest(t *testing.T)
 	}
 
 	entries, batches, _ := store.snapshot()
-	if len(entries) != 7 {
+	if len(entries) != 9 {
 		t.Fatalf(
-			"durable entries = %d, want context, user, tool call, two results, final assistant, run",
+			"durable entries = %d, want context, user, tool call, two result/outcome pairs, final assistant, run",
 			len(entries),
 		)
 	}
-	if len(batches) != 3 || len(batches[0]) != 2 || len(batches[1]) != 3 || len(batches[2]) != 2 {
-		t.Fatalf("append batch sizes = %v, want [2 3 2]", batchSizes(batches))
+	if len(batches) != 3 || len(batches[0]) != 2 || len(batches[1]) != 5 || len(batches[2]) != 2 {
+		t.Fatalf("append batch sizes = %v, want [2 5 2]", batchSizes(batches))
+	}
+
+	restored, err := New(ctx, Options{
+		Model: llm.Model{Provider: "test", ID: "model"},
+		Tools: []tools.Tool{},
+		Store: store,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	toolResults := make(map[string]agent.ToolOutcome)
+	for _, item := range restored.History() {
+		if item.Type == HistoryToolResult {
+			toolResults[item.ToolCallID] = item.ToolOutcome
+		}
+	}
+	first := toolResults["call-1"]
+	if first.Status != agent.ToolOutcomeFailed || first.ErrorCode != "command_exit_nonzero" ||
+		first.ExitCode == nil || *first.ExitCode != 17 {
+		t.Fatalf("restored call-1 outcome = %#v", first)
+	}
+	if preview, ok := first.Data.(tools.PreviewRequest); !ok || preview.RelativePath != "one.html" {
+		t.Fatalf("restored call-1 data = %#v", first.Data)
+	}
+	second := toolResults["call-2"]
+	if second.Status != agent.ToolOutcomeTimeout || second.ErrorCode != "tool_timeout" {
+		t.Fatalf("restored call-2 outcome = %#v", second)
+	}
+	if change, ok := second.Data.(tools.FileChange); !ok || change.Path != "two.txt" || change.Additions != 2 {
+		t.Fatalf("restored call-2 data = %#v", second.Data)
 	}
 }
 
@@ -395,8 +448,8 @@ func TestSessionRetryDoesNotPersistFailedAssistantOrDuplicatePrompt(t *testing.T
 
 func validateToolCheckpoint(entries []transcript.Entry) error {
 	// The base context is checkpointed once, ahead of the first user message.
-	if len(entries) != 5 {
-		return fmt.Errorf("entries before second model request = %d, want 5", len(entries))
+	if len(entries) != 7 {
+		return fmt.Errorf("entries before second model request = %d, want 7", len(entries))
 	}
 	if entries[0].Type != transcript.ContextEntry {
 		return fmt.Errorf("checkpoint[0] = %q, want context", entries[0].Type)
@@ -408,9 +461,17 @@ func validateToolCheckpoint(entries []transcript.Entry) error {
 	if !ok || len(assistant.ToolCalls()) != 2 {
 		return fmt.Errorf("checkpoint[2] = %#v, want assistant with two tool calls", assistant)
 	}
-	for index := 3; index < 5; index++ {
-		if _, ok := llmEntry(entries[index]).(*llm.ToolResultMessage); !ok {
-			return fmt.Errorf("checkpoint[%d] = %T, want tool result", index, llmEntry(entries[index]))
+	for index, callID := range []string{"call-1", "call-2"} {
+		messageIndex := 3 + index*2
+		outcomeIndex := messageIndex + 1
+		result, ok := llmEntry(entries[messageIndex]).(*llm.ToolResultMessage)
+		if !ok || result.ToolCallID != callID {
+			return fmt.Errorf("checkpoint[%d] = %#v, want tool result %s", messageIndex, result, callID)
+		}
+		outcome := entries[outcomeIndex]
+		if outcome.Type != transcript.ToolOutcomeEntry || outcome.ToolOutcome == nil ||
+			outcome.ToolOutcome.ToolCallID != callID {
+			return fmt.Errorf("checkpoint[%d] = %#v, want tool outcome %s", outcomeIndex, outcome, callID)
 		}
 	}
 	return nil

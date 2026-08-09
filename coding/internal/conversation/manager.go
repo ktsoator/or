@@ -18,7 +18,7 @@ import (
 )
 
 // Manager owns every conversation across the registered workspaces. Metadata
-// is kept in indexes while each transcript and details sidecar stays separate.
+// is kept in indexes while each transcript stays separate.
 // Lock ordering: mu is always taken before the workspace registry's own lock.
 // The registry never calls back into this package, so that ordering holds
 // simply by never taking mu inside a registry call.

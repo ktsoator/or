@@ -19,10 +19,11 @@ const CurrentVersion = 3
 type EntryType string
 
 const (
-	MessageEntry    EntryType = "message"
-	ContextEntry    EntryType = "context"
-	CompactionEntry EntryType = "compaction"
-	RunEntry        EntryType = "run"
+	MessageEntry     EntryType = "message"
+	ToolOutcomeEntry EntryType = "tool_outcome"
+	ContextEntry     EntryType = "context"
+	CompactionEntry  EntryType = "compaction"
+	RunEntry         EntryType = "run"
 )
 
 // Header is the first line of a session log.
@@ -35,13 +36,26 @@ func NewHeader() Header { return Header{Type: "session", Version: CurrentVersion
 
 // Entry is one item in the session's linear, append-only history.
 type Entry struct {
-	ID         string
-	Timestamp  time.Time
-	Type       EntryType
-	Message    agent.AgentMessage
-	Context    *ContextAttachment
-	Compaction *Compaction
-	Run        *Run
+	ID          string
+	Timestamp   time.Time
+	Type        EntryType
+	Message     agent.AgentMessage
+	ToolOutcome *ToolOutcome
+	Context     *ContextAttachment
+	Compaction  *Compaction
+	Run         *Run
+}
+
+// ToolOutcome records the product-facing result associated with one model-
+// visible tool result. Data stays provider-neutral and is decoded by the engine
+// according to DataKind.
+type ToolOutcome struct {
+	ToolCallID string                  `json:"toolCallId"`
+	Status     agent.ToolOutcomeStatus `json:"status"`
+	ErrorCode  string                  `json:"errorCode,omitempty"`
+	ExitCode   *int                    `json:"exitCode,omitempty"`
+	DataKind   string                  `json:"dataKind,omitempty"`
+	Data       json.RawMessage         `json:"data,omitempty"`
 }
 
 // ContextAttachment records one product-generated model-context block without
@@ -94,6 +108,15 @@ func NewMessage(message agent.AgentMessage) Entry {
 	}
 }
 
+func NewToolOutcome(outcome ToolOutcome) Entry {
+	return Entry{
+		ID:          NewID(),
+		Timestamp:   time.Now().UTC(),
+		Type:        ToolOutcomeEntry,
+		ToolOutcome: &outcome,
+	}
+}
+
 func NewContext(context ContextAttachment) Entry {
 	return Entry{
 		ID:        NewID(),
@@ -142,14 +165,24 @@ func (e Entry) Validate() error {
 	}
 	switch e.Type {
 	case MessageEntry:
-		if e.Message == nil || e.Context != nil || e.Compaction != nil || e.Run != nil {
+		if e.Message == nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Run != nil {
 			return fmt.Errorf("transcript: message entry %s has invalid payload", e.ID)
 		}
 		if _, ok := agent.ToLLM(e.Message); !ok {
 			return fmt.Errorf("transcript: cannot persist custom message %T", e.Message)
 		}
+	case ToolOutcomeEntry:
+		if e.Message != nil || e.ToolOutcome == nil || e.Context != nil || e.Compaction != nil || e.Run != nil {
+			return fmt.Errorf("transcript: tool outcome entry %s has invalid payload", e.ID)
+		}
+		if e.ToolOutcome.ToolCallID == "" || e.ToolOutcome.Status == "" {
+			return fmt.Errorf("transcript: tool outcome entry %s is incomplete", e.ID)
+		}
+		if len(e.ToolOutcome.Data) > 0 && !json.Valid(e.ToolOutcome.Data) {
+			return fmt.Errorf("transcript: tool outcome entry %s has invalid data", e.ID)
+		}
 	case ContextEntry:
-		if e.Message != nil || e.Context == nil || e.Compaction != nil || e.Run != nil {
+		if e.Message != nil || e.ToolOutcome != nil || e.Context == nil || e.Compaction != nil || e.Run != nil {
 			return fmt.Errorf("transcript: context entry %s has invalid payload", e.ID)
 		}
 		if e.Context.AttachmentID == "" ||
@@ -161,14 +194,14 @@ func (e Entry) Validate() error {
 			return fmt.Errorf("transcript: context entry %s is incomplete", e.ID)
 		}
 	case CompactionEntry:
-		if e.Message != nil || e.Context != nil || e.Compaction == nil || e.Run != nil {
+		if e.Message != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction == nil || e.Run != nil {
 			return fmt.Errorf("transcript: compaction entry %s has invalid payload", e.ID)
 		}
 		if e.Compaction.Summary == "" || e.Compaction.FirstKeptEntryID == "" {
 			return fmt.Errorf("transcript: compaction entry %s is incomplete", e.ID)
 		}
 	case RunEntry:
-		if e.Message != nil || e.Context != nil || e.Compaction != nil || e.Run == nil {
+		if e.Message != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Run == nil {
 			return fmt.Errorf("transcript: run entry %s has invalid payload", e.ID)
 		}
 		if e.Run.StartedAt.IsZero() || e.Run.CompletedAt.IsZero() {
@@ -188,16 +221,18 @@ func (e Entry) MarshalJSON() ([]byte, error) {
 		return nil, err
 	}
 	wire := struct {
-		ID         string             `json:"id"`
-		Timestamp  time.Time          `json:"timestamp"`
-		Type       EntryType          `json:"type"`
-		Message    json.RawMessage    `json:"message,omitempty"`
-		Context    *ContextAttachment `json:"context,omitempty"`
-		Compaction *Compaction        `json:"compaction,omitempty"`
-		Run        *Run               `json:"run,omitempty"`
+		ID          string             `json:"id"`
+		Timestamp   time.Time          `json:"timestamp"`
+		Type        EntryType          `json:"type"`
+		Message     json.RawMessage    `json:"message,omitempty"`
+		ToolOutcome *ToolOutcome       `json:"toolOutcome,omitempty"`
+		Context     *ContextAttachment `json:"context,omitempty"`
+		Compaction  *Compaction        `json:"compaction,omitempty"`
+		Run         *Run               `json:"run,omitempty"`
 	}{
 		ID: e.ID, Timestamp: e.Timestamp, Type: e.Type,
-		Context: e.Context, Compaction: e.Compaction, Run: e.Run,
+		ToolOutcome: e.ToolOutcome, Context: e.Context,
+		Compaction: e.Compaction, Run: e.Run,
 	}
 	if e.Message != nil {
 		message, _ := agent.ToLLM(e.Message)
@@ -215,20 +250,21 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 		return errors.New("transcript: decode into nil entry")
 	}
 	wire := struct {
-		ID         string             `json:"id"`
-		Timestamp  time.Time          `json:"timestamp"`
-		Type       EntryType          `json:"type"`
-		Message    json.RawMessage    `json:"message"`
-		Context    *ContextAttachment `json:"context"`
-		Compaction *Compaction        `json:"compaction"`
-		Run        *Run               `json:"run"`
+		ID          string             `json:"id"`
+		Timestamp   time.Time          `json:"timestamp"`
+		Type        EntryType          `json:"type"`
+		Message     json.RawMessage    `json:"message"`
+		ToolOutcome *ToolOutcome       `json:"toolOutcome"`
+		Context     *ContextAttachment `json:"context"`
+		Compaction  *Compaction        `json:"compaction"`
+		Run         *Run               `json:"run"`
 	}{}
 	if err := json.Unmarshal(data, &wire); err != nil {
 		return err
 	}
 	decoded := Entry{
 		ID: wire.ID, Timestamp: wire.Timestamp,
-		Type: wire.Type, Context: wire.Context,
+		Type: wire.Type, ToolOutcome: wire.ToolOutcome, Context: wire.Context,
 		Compaction: wire.Compaction, Run: wire.Run,
 	}
 	if len(wire.Message) > 0 && string(wire.Message) != "null" {

@@ -5,13 +5,10 @@ import (
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/tools"
+	"github.com/ktsoator/or/coding/internal/transcript"
 )
 
-// Tool outcomes live in the details sidecar so transcript messages remain
-// provider-neutral.
-
 const (
-	kindToolOutcome     = "tool_outcome"
 	kindFileChange      = "file_change"
 	kindMutationFailure = "mutation_failure"
 	kindPreview         = "preview"
@@ -19,37 +16,19 @@ const (
 	kindGenericData     = "generic"
 )
 
-type detailsEnvelope struct {
-	Kind string          `json:"kind"`
-	Data json.RawMessage `json:"data"`
-}
-
-type persistedToolOutcome struct {
-	Status    agent.ToolOutcomeStatus `json:"status"`
-	ErrorCode string                  `json:"errorCode,omitempty"`
-	ExitCode  *int                    `json:"exitCode,omitempty"`
-	DataKind  string                  `json:"dataKind,omitempty"`
-	Data      json.RawMessage         `json:"data,omitempty"`
-}
-
-func encodeOutcome(outcome agent.ToolOutcome) (json.RawMessage, bool) {
+func encodeOutcome(toolCallID string, outcome agent.ToolOutcome) transcript.ToolOutcome {
 	if outcome.Status == "" {
 		outcome.Status = agent.ToolOutcomeSuccess
 	}
 	dataKind, data := encodeOutcomeData(outcome.Data)
-	persisted := persistedToolOutcome{
-		Status:    outcome.Status,
-		ErrorCode: outcome.ErrorCode,
-		ExitCode:  outcome.ExitCode,
-		DataKind:  dataKind,
-		Data:      data,
+	return transcript.ToolOutcome{
+		ToolCallID: toolCallID,
+		Status:     outcome.Status,
+		ErrorCode:  outcome.ErrorCode,
+		ExitCode:   outcome.ExitCode,
+		DataKind:   dataKind,
+		Data:       data,
 	}
-	payload, err := json.Marshal(persisted)
-	if err != nil {
-		return nil, false
-	}
-	raw, err := json.Marshal(detailsEnvelope{Kind: kindToolOutcome, Data: payload})
-	return raw, err == nil
 }
 
 func encodeOutcomeData(data any) (string, json.RawMessage) {
@@ -76,20 +55,8 @@ func encodeOutcomeData(data any) (string, json.RawMessage) {
 	return kind, raw
 }
 
-func decodeOutcome(raw json.RawMessage) (agent.ToolOutcome, bool) {
-	var env detailsEnvelope
-	if err := json.Unmarshal(raw, &env); err != nil {
-		return agent.ToolOutcome{}, false
-	}
-	if env.Kind != kindToolOutcome {
-		return agent.ToolOutcome{}, false
-	}
-
-	var persisted persistedToolOutcome
-	if err := json.Unmarshal(env.Data, &persisted); err != nil {
-		return agent.ToolOutcome{}, false
-	}
-	if persisted.Status == "" {
+func decodeOutcome(persisted transcript.ToolOutcome) (agent.ToolOutcome, bool) {
+	if persisted.ToolCallID == "" || persisted.Status == "" {
 		return agent.ToolOutcome{}, false
 	}
 	return agent.ToolOutcome{

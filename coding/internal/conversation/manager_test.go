@@ -292,11 +292,7 @@ func TestManagerSecuresTranscriptPermissionsBeforeLazyLoad(t *testing.T) {
 	}
 	runtime, _ := manager.runtime(created.ID)
 	transcriptPath := runtime.record.Transcript
-	detailsPath := detailsFile(transcriptPath)
 	if err := os.WriteFile(transcriptPath, []byte("{\"type\":\"session\",\"version\":3}\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(detailsPath, []byte("{\"id\":\"call-1\",\"payload\":{}}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	sessionDir := filepath.Dir(transcriptPath)
@@ -313,7 +309,6 @@ func TestManagerSecuresTranscriptPermissionsBeforeLazyLoad(t *testing.T) {
 	for path, want := range map[string]os.FileMode{
 		sessionDir:     0o700,
 		transcriptPath: 0o600,
-		detailsPath:    0o600,
 	} {
 		info, err := os.Stat(path)
 		if err != nil {
@@ -617,18 +612,14 @@ func TestManagerDeleteRemovesScratchWorkspaceAndSessionFiles(t *testing.T) {
 	}
 	transport := runtime.transport.(*testTransport)
 	transcriptPath := runtime.record.Transcript
-	detailsPath := detailsFile(transcriptPath)
 	if err := os.WriteFile(transcriptPath, []byte("transcript"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(detailsPath, []byte("details"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := manager.Delete(created.ID); err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{created.WorkspacePath, transcriptPath, detailsPath} {
+	for _, path := range []string{created.WorkspacePath, transcriptPath} {
 		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("%s still exists or stat failed: %v", path, err)
 		}

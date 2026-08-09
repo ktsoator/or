@@ -2,7 +2,6 @@ package conversation
 
 import (
 	"context"
-	"strings"
 
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/permission"
@@ -37,7 +36,6 @@ func newEngineSession(
 		ThinkingLevel: cfg.ThinkingLevel,
 		Cwd:           cfg.WorkspacePath,
 		Store:         transcript.NewJSONL(cfg.TranscriptPath),
-		DetailsStore:  transcript.NewJSONLDetails(detailsFile(cfg.TranscriptPath)),
 		Policy:        permission.PolicyForMode(cfg.PermissionMode),
 		Approver:      transport,
 		Browser:       transport,
@@ -54,10 +52,4 @@ func newEngineSession(
 func loadSkills(cwd string) []skills.Skill {
 	reg, _ := skills.LoadFor(cwd)
 	return reg.List()
-}
-
-// detailsFile derives the tool-details side-car path from the transcript path,
-// keeping the two files together under the session directory.
-func detailsFile(sessionFile string) string {
-	return strings.TrimSuffix(sessionFile, ".jsonl") + ".details.jsonl"
 }

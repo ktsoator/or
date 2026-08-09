@@ -12,8 +12,8 @@ const (
 	privateFileMode      os.FileMode = 0o600
 )
 
-// SecurePrivatePermissions enforces private modes for every transcript and
-// details JSONL file in dir, including files that remain lazily unloaded.
+// SecurePrivatePermissions enforces private modes for every transcript JSONL
+// file in dir, including files that remain lazily unloaded.
 func SecurePrivatePermissions(dir string) error {
 	if err := os.MkdirAll(dir, privateDirectoryMode); err != nil {
 		return err
@@ -44,8 +44,7 @@ func ensurePrivateDirectory(path string) error {
 	return os.Chmod(dir, privateDirectoryMode)
 }
 
-// secureExistingFile enforces private modes before sensitive transcript or tool
-// details are read.
+// secureExistingFile enforces private modes before a transcript is read.
 func secureExistingFile(path string) (bool, error) {
 	if _, err := os.Stat(path); err != nil {
 		if errors.Is(err, os.ErrNotExist) {

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 // Deleting a session renames its files aside before the index is rewritten, so
@@ -29,8 +28,7 @@ func (m *Manager) sessionFiles(record record) ([]string, error) {
 	if filepath.Dir(transcript) != sessionDir {
 		return nil, fmt.Errorf("session: refusing to delete transcript outside session storage: %s", transcript)
 	}
-	details := strings.TrimSuffix(transcript, ".jsonl") + ".details.jsonl"
-	return []string{transcript, details}, nil
+	return []string{transcript}, nil
 }
 
 func stageFiles(paths []string) ([]stagedFile, error) {

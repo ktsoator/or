@@ -43,7 +43,7 @@ type HistoryItem struct {
 	ToolName   string
 	ToolArgs   any
 	ToolResult string
-	// ToolOutcome is restored from the sidecar.
+	// ToolOutcome is restored from the transcript's product-facing entries.
 	ToolOutcome agent.ToolOutcome
 
 	// Usage is populated for HistoryUsage and aggregates every assistant model
