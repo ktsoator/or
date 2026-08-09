@@ -97,19 +97,6 @@ func (m *Manager) runtime(id string) (*sessionRuntime, bool) {
 	return runtime, ok
 }
 
-// UsesProvider reports whether any restored session currently references the
-// provider.
-func (m *Manager) UsesProvider(provider string) bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	for _, runtime := range m.sessions {
-		if runtime.record.Provider == provider {
-			return true
-		}
-	}
-	return false
-}
-
 // List returns newest-active first and samples each session's live state.
 func (m *Manager) List() []Summary {
 	m.mu.RLock()

@@ -91,14 +91,12 @@ func TestManagerCreatesAndRestoresProjectConversation(t *testing.T) {
 		t.Fatalf("restored conversations = %d, want 1", len(items))
 	}
 	got := items[0]
-	if got.ID != created.ID || got.Title != created.Title || got.WorkspacePath != created.WorkspacePath {
+	if got.ID != created.ID || got.Title != created.Title || got.WorkspacePath != created.WorkspacePath ||
+		got.ModelProvider != created.ModelProvider || got.ModelID != created.ModelID {
 		t.Fatalf("restored summary = %+v, want %+v", got, created)
 	}
 	if got.PermissionMode != permission.ModeAutoEdit {
 		t.Fatalf("restored permission mode = %q, want %q", got.PermissionMode, permission.ModeAutoEdit)
-	}
-	if !restored.UsesProvider(model.Provider) {
-		t.Fatalf("restored manager does not report provider %q in use", model.Provider)
 	}
 }
 
@@ -168,11 +166,14 @@ func TestManagerRestoresConversationsLazily(t *testing.T) {
 	if runtime.session != nil || runtime.transport != nil {
 		t.Fatal("restored conversation loaded before first use")
 	}
-	if got := restored.List(); len(got) != 2 {
-		t.Fatalf("restored conversations = %+v", got)
+	items := restored.List()
+	if len(items) != 2 {
+		t.Fatalf("restored conversations = %+v", items)
 	}
-	if !restored.UsesProvider(model.Provider) {
-		t.Fatalf("restored manager does not report provider %q in use", model.Provider)
+	for _, item := range items {
+		if item.ModelProvider != model.Provider {
+			t.Fatalf("restored conversation provider = %q, want %q", item.ModelProvider, model.Provider)
+		}
 	}
 	renamed, err := restored.Rename(created.ID, "Renamed before loading")
 	if err != nil {
@@ -749,8 +750,8 @@ func TestManagerCloseIsIdempotentAndRejectsNewWork(t *testing.T) {
 	if !transport.closed.Load() {
 		t.Fatal("manager close did not close the conversation transport")
 	}
-	if err := manager.StartPrompt(created.ID, "after shutdown"); !errors.Is(err, ErrManagerClosed) {
-		t.Fatalf("StartPrompt error = %v, want ErrManagerClosed", err)
+	if err := manager.StartPromptWithFiles(created.ID, "after shutdown", nil); !errors.Is(err, ErrManagerClosed) {
+		t.Fatalf("StartPromptWithFiles error = %v, want ErrManagerClosed", err)
 	}
 	if _, err := manager.Create("", t.TempDir(), ScopeProject, model, thinking, permission.ModeAsk); !errors.Is(err, ErrManagerClosed) {
 		t.Fatalf("Create error = %v, want ErrManagerClosed", err)

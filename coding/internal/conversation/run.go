@@ -11,13 +11,6 @@ import (
 	"github.com/ktsoator/or/llm"
 )
 
-// StartPrompt reserves a session and runs the prompt in the background. The
-// manager owns the complete lifecycle so callers cannot forget to release the
-// reservation or clean up queued messages.
-func (m *Manager) StartPrompt(id, prompt string, images ...llm.ImageContent) error {
-	return m.StartPromptWithFiles(id, prompt, nil, images...)
-}
-
 // StartPromptWithFiles starts a prompt with validated text-file attachments.
 func (m *Manager) StartPromptWithFiles(
 	id string,

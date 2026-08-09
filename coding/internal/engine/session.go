@@ -180,9 +180,6 @@ func (s *Session) ClearQueuedMessages() { s.agent.ClearQueues() }
 // Snapshot returns a read-only snapshot of the underlying agent state.
 func (s *Session) Snapshot() agent.State { return s.agent.Snapshot() }
 
-// Cwd returns the workspace root.
-func (s *Session) Cwd() string { return s.cwd }
-
 // SetModel replaces the model used by the next run. Call it only while the
 // session is idle; an in-flight run has already captured its model.
 func (s *Session) SetModel(model llm.Model) {

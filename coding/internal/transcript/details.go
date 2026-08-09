@@ -113,34 +113,3 @@ func (s *JSONLDetails) Put(_ context.Context, callID string, payload json.RawMes
 	}
 	return nil
 }
-
-// MemoryDetails is an in-process DetailsStore for tests and ephemeral sessions.
-type MemoryDetails struct {
-	mu      sync.Mutex
-	entries map[string]json.RawMessage
-}
-
-// NewMemoryDetails returns an empty in-memory DetailsStore.
-func NewMemoryDetails() *MemoryDetails {
-	return &MemoryDetails{entries: map[string]json.RawMessage{}}
-}
-
-func (m *MemoryDetails) Load(context.Context) (map[string]json.RawMessage, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	out := make(map[string]json.RawMessage, len(m.entries))
-	for k, v := range m.entries {
-		out[k] = v
-	}
-	return out, nil
-}
-
-func (m *MemoryDetails) Put(_ context.Context, callID string, payload json.RawMessage) error {
-	if callID == "" {
-		return nil
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.entries[callID] = payload
-	return nil
-}
