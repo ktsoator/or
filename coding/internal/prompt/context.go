@@ -5,13 +5,10 @@ import (
 	"path/filepath"
 )
 
-// contextFileNames are the project instruction files recognized in the
-// workspace, tried in order; the first that exists in a directory is used.
-var contextFileNames = []string{"AGENTS.md", "CLAUDE.md"}
-
-// localContextFileNames are the workspace-root instruction files meant to stay
-// out of version control. They are the most specific layer, so they load last.
-var localContextFileNames = []string{"AGENTS.local.md", "CLAUDE.local.md"}
+const (
+	contextFileName      = "AGENTS.md"
+	localContextFileName = "AGENTS.local.md"
+)
 
 // userContextDir is the user-level instruction directory, relative to the home
 // directory. It matches the skills root so both layers live under one dot dir.
@@ -35,7 +32,7 @@ func LoadContextFiles(root string) []ContextFile {
 	var files []ContextFile
 	if home, err := os.UserHomeDir(); err == nil {
 		dir := filepath.Join(append([]string{home}, userContextDir...)...)
-		if file, ok := readContextFile(dir, contextFileNames, ScopeUser); ok {
+		if file, ok := readContextFile(dir, contextFileName, ScopeUser); ok {
 			files = append(files, file)
 		}
 	}
@@ -46,7 +43,7 @@ func LoadContextFiles(root string) []ContextFile {
 	var ancestors []ContextFile
 	dir := abs
 	for {
-		if file, ok := readContextFile(dir, contextFileNames, ScopeProject); ok {
+		if file, ok := readContextFile(dir, contextFileName, ScopeProject); ok {
 			ancestors = append(ancestors, file)
 		}
 		parent := filepath.Dir(dir)
@@ -60,21 +57,17 @@ func LoadContextFiles(root string) []ContextFile {
 	}
 	files = append(files, ancestors...)
 
-	if file, ok := readContextFile(abs, localContextFileNames, ScopeLocal); ok {
+	if file, ok := readContextFile(abs, localContextFileName, ScopeLocal); ok {
 		files = append(files, file)
 	}
 	return files
 }
 
-// readContextFile returns the first of names that exists in dir, if any.
-func readContextFile(dir string, names []string, scope ContextScope) (ContextFile, bool) {
-	for _, name := range names {
-		path := filepath.Join(dir, name)
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		return ContextFile{Path: path, Content: string(data), Scope: scope}, true
+func readContextFile(dir, name string, scope ContextScope) (ContextFile, bool) {
+	path := filepath.Join(dir, name)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ContextFile{}, false
 	}
-	return ContextFile{}, false
+	return ContextFile{Path: path, Content: string(data), Scope: scope}, true
 }
