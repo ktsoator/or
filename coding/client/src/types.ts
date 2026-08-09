@@ -301,17 +301,6 @@ export type WorkspaceSummary = {
   addedAt: string
 }
 
-export type DirectoryEntry = {
-  name: string
-  path: string
-}
-
-export type DirectoryListing = {
-  path: string
-  parent: string
-  directories: DirectoryEntry[]
-}
-
 export type CompactionResult = {
   summary: string
   firstKeptEntryId: string

@@ -75,7 +75,6 @@ func New(ctx context.Context, cfg config.Config) (*Runtime, error) {
 		Registry:      registry,
 		Providers:     providers,
 		ProviderTests: providerTests,
-		BrowseRoot:    cfg.Cwd,
 		ClientOrigin:  cfg.ClientOrigin,
 	})
 	return &Runtime{

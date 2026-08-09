@@ -62,6 +62,7 @@ export function Composer({
   projectPickerVisible = false,
   workspaces,
   workspacePath,
+  workspaceError,
   models,
   modelProvider,
   modelID,
@@ -91,6 +92,7 @@ export function Composer({
   projectPickerVisible?: boolean
   workspaces: WorkspaceSummary[]
   workspacePath?: string
+  workspaceError?: string
   models: ModelOption[]
   modelProvider?: string
   modelID?: string
@@ -733,9 +735,9 @@ export function Composer({
             </button>
           </div>
         )}
-        {(settingsError || attachmentError || queueError || sendError) && (
+        {(workspaceError || settingsError || attachmentError || queueError || sendError) && (
           <p className="px-4 text-[0.75rem] leading-5 text-danger" role="alert">
-            {settingsError || attachmentError || queueError || sendError}
+            {workspaceError || settingsError || attachmentError || queueError || sendError}
           </p>
         )}
       </div>

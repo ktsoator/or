@@ -30,7 +30,6 @@ type Server struct {
 	registry      *llm.ProviderRegistry
 	providers     *provider.Store
 	providerTests *provider.ConnectionTester
-	browseRoot    string
 	clientOrigin  string
 }
 
@@ -45,7 +44,6 @@ type Options struct {
 	Registry      *llm.ProviderRegistry
 	Providers     *provider.Store
 	ProviderTests *provider.ConnectionTester
-	BrowseRoot    string
 	ClientOrigin  string
 }
 
@@ -59,7 +57,6 @@ func NewServer(opts Options) *Server {
 		registry:      opts.Registry,
 		providers:     opts.Providers,
 		providerTests: opts.ProviderTests,
-		browseRoot:    opts.BrowseRoot,
 		clientOrigin:  opts.ClientOrigin,
 	}
 }
@@ -83,7 +80,6 @@ func (s *Server) Handler() http.Handler {
 	s.mountWorkspaces(api)
 	s.mountUsage(api)
 	s.mountSkills(api)
-	s.mountDirectories(api)
 	s.mountPreview(api)
 
 	return allowClientOrigin(r, s.clientOrigin, routedMethods(r))

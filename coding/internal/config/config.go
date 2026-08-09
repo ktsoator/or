@@ -13,9 +13,6 @@ import (
 
 // Config is the resolved settings for one coding product process.
 type Config struct {
-	// Cwd is only the initial directory-browser location. Every created session
-	// carries an explicit project folder or manager-owned scratch workspace.
-	Cwd string
 	// DataDir stores session indexes and transcripts independently from any
 	// project workspace.
 	DataDir string
@@ -29,7 +26,6 @@ type Config struct {
 // Defaults returns process-level defaults.
 func Defaults() Config {
 	return Config{
-		Cwd:          "",
 		DataDir:      envOr("OR_DATA_DIR", ""),
 		Addr:         "localhost:8787",
 		ClientOrigin: envOr("OR_CLIENT_ORIGIN", ""),
@@ -58,23 +54,9 @@ func Parse(args []string) (Config, error) {
 // IsHelp reports whether Parse stopped after printing flag help.
 func IsHelp(err error) bool { return errors.Is(err, flag.ErrHelp) }
 
-// Resolve finalizes derived fields. Directory browsing starts from the user's
-// home directory and state lives under ~/.or/coding, so the server is not bound
-// to whichever project launched it.
+// Resolve finalizes derived fields. State lives under ~/.or/coding, so the
+// server is not bound to whichever project launched it.
 func (c *Config) Resolve() error {
-	if strings.TrimSpace(c.Cwd) == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("resolve default workspace: %w", err)
-		}
-		c.Cwd = home
-	}
-	abs, err := filepath.Abs(c.Cwd)
-	if err != nil {
-		return err
-	}
-	c.Cwd = abs
-
 	if strings.TrimSpace(c.DataDir) == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
