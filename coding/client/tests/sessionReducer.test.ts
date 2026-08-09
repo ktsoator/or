@@ -262,53 +262,6 @@ describe('threadsReducer event sequences', () => {
     )
   })
 
-  test('adds prompt template metadata only after backend acknowledgement', () => {
-    let state = reduce([
-      {
-        t: 'sendUser',
-        sessionID,
-        id: 'template-message',
-        text: '/review security',
-        images: [],
-        startedAt,
-      },
-    ])
-
-    expect(
-      thread(state).items.find((item) => item.kind === 'user'),
-    ).not.toHaveProperty('invocation')
-
-    state = reduce(
-      [
-        {
-          t: 'wire',
-          sessionID,
-          ev: {
-            type: 'user_message',
-            text: '/review security',
-            images: [],
-            invocation: {
-              kind: 'prompt_template',
-              name: 'review',
-              source: 'project',
-              path: '/workspace/.or/prompts/review.md',
-            },
-          },
-        },
-      ],
-      state,
-    )
-
-    expect(thread(state).items.filter((item) => item.kind === 'user')).toHaveLength(1)
-    expect(thread(state).items).toContainEqual(
-      expect.objectContaining({
-        kind: 'user',
-        id: 'template-message',
-        invocation: expect.objectContaining({ kind: 'prompt_template', name: 'review' }),
-      }),
-    )
-  })
-
   test('keeps unknown slash text as an ordinary user message', () => {
     const state = reduce([
       {

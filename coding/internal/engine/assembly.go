@@ -9,7 +9,6 @@ import (
 	"github.com/ktsoator/or/coding/internal/compaction"
 	"github.com/ktsoator/or/coding/internal/modelcontext"
 	"github.com/ktsoator/or/coding/internal/permission"
-	"github.com/ktsoator/or/coding/internal/prompttemplate"
 	"github.com/ktsoator/or/coding/internal/skills"
 	"github.com/ktsoator/or/coding/internal/tools"
 )
@@ -35,11 +34,6 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	}
 	initialRegistry := skills.NewRegistry(initialSkills)
 	dynamicSkills := skills.NewDynamicRegistry(initialRegistry)
-	initialPromptTemplates := opts.PromptTemplates
-	if opts.PromptTemplateLoader != nil {
-		initialPromptTemplates = opts.PromptTemplateLoader()
-	}
-
 	var toolSet []tools.Tool
 	var tasks *tools.TaskManager
 	if opts.Tools == nil {
@@ -77,22 +71,20 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	}
 
 	s := &Session{
-		journal:              journal,
-		tools:                activeToolSet,
-		allTools:             toolSet,
-		toolByName:           toolsByName(toolSet),
-		authorizer:           authorizer,
-		tasks:                tasks,
-		cwd:                  cwd,
-		instructions:         opts.Instructions,
-		skillRegistry:        dynamicSkills,
-		skillLoader:          opts.SkillLoader,
-		skillRevision:        initialRegistry.Revision(),
-		promptTemplates:      prompttemplate.NewRegistry(initialPromptTemplates),
-		promptTemplateLoader: opts.PromptTemplateLoader,
-		maxRetries:           maxRetries,
-		contextWindow:        opts.Model.ContextWindow,
-		compactor:            opts.Compactor,
+		journal:       journal,
+		tools:         activeToolSet,
+		allTools:      toolSet,
+		toolByName:    toolsByName(toolSet),
+		authorizer:    authorizer,
+		tasks:         tasks,
+		cwd:           cwd,
+		instructions:  opts.Instructions,
+		skillRegistry: dynamicSkills,
+		skillLoader:   opts.SkillLoader,
+		skillRevision: initialRegistry.Revision(),
+		maxRetries:    maxRetries,
+		contextWindow: opts.Model.ContextWindow,
+		compactor:     opts.Compactor,
 	}
 	if s.compactor == nil {
 		s.compactor = compaction.LLM{

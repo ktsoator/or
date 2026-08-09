@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/ktsoator/or/coding/internal/engine"
-	"github.com/ktsoator/or/coding/internal/invocation"
 	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/llm"
@@ -58,13 +57,12 @@ type idleClosingTransport interface {
 // for. Queued distinguishes one waiting behind a running turn from one the run
 // has already picked up.
 type MessageAccepted struct {
-	ID         string
-	Text       string
-	Images     []llm.ImageContent
-	Files      []engine.File
-	Invocation *invocation.Record
-	Delivery   Delivery
-	Queued     bool
+	ID       string
+	Text     string
+	Images   []llm.ImageContent
+	Files    []engine.File
+	Delivery Delivery
+	Queued   bool
 }
 
 // MessageDequeued reports a queued message the user withdrew before it ran.

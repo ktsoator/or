@@ -11,7 +11,6 @@ import (
 	"github.com/ktsoator/or/coding/internal/compaction"
 	"github.com/ktsoator/or/coding/internal/modelcontext"
 	"github.com/ktsoator/or/coding/internal/permission"
-	"github.com/ktsoator/or/coding/internal/prompttemplate"
 	"github.com/ktsoator/or/coding/internal/skills"
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/transcript"
@@ -43,10 +42,6 @@ type Options struct {
 	// Skills static. The loader is deliberately not called for provider retries,
 	// tool-loop turns, or context-overflow recovery.
 	SkillLoader func() []skills.Skill
-	// PromptTemplates is the initial prompt-template snapshot. The optional
-	// loader refreshes it before every top-level prompt.
-	PromptTemplates      []prompttemplate.Template
-	PromptTemplateLoader func() []prompttemplate.Template
 	// Policy classifies resolved tool access. Nil uses permission.DefaultPolicy.
 	Policy permission.Policy
 	// Approver obtains decisions for calls classified as Ask. Nil denies them.
@@ -107,9 +102,6 @@ type Session struct {
 	skillRevision        string
 	pendingSkills        *skills.Registry
 	pendingSkillRevision string
-
-	promptTemplates      *prompttemplate.Registry
-	promptTemplateLoader func() []prompttemplate.Template
 
 	contextRevision        string
 	pendingContextRevision string

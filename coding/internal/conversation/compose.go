@@ -6,7 +6,6 @@ import (
 
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/permission"
-	"github.com/ktsoator/or/coding/internal/prompttemplate"
 	"github.com/ktsoator/or/coding/internal/skills"
 	"github.com/ktsoator/or/coding/internal/transcript"
 	"github.com/ktsoator/or/llm"
@@ -45,10 +44,6 @@ func newEngineSession(
 		Asker:         transport,
 		SkillLoader: func() []skills.Skill {
 			return loadSkills(cfg.WorkspacePath)
-		},
-		PromptTemplateLoader: func() []prompttemplate.Template {
-			registry, _ := prompttemplate.LoadFor(cfg.WorkspacePath)
-			return registry.List()
 		},
 	})
 }

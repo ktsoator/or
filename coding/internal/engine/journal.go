@@ -250,10 +250,7 @@ func (j *sessionJournal) persistMessages(
 	entries := make([]transcript.Entry, 0, len(contextEntries)+len(added)+1)
 	entries = append(entries, contextEntries...)
 	for _, message := range added {
-		entries = append(entries, transcript.NewMessageWithInvocation(
-			message,
-			messageInvocation(message),
-		))
+		entries = append(entries, transcript.NewMessage(message))
 	}
 	if !startedAt.IsZero() && !completedAt.IsZero() {
 		candidate := append(existing, entries...)

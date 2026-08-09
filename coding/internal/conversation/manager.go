@@ -326,12 +326,11 @@ func (m *Manager) handleSessionEvent(sessionID string, runtime *sessionRuntime, 
 	if ev.Type == engine.UserMessageCompleted {
 		if queued, found := runtime.consumePending(ev.QueueHandle); found {
 			runtime.emit(MessageAccepted{
-				ID:         queued.ID,
-				Text:       ev.Text,
-				Images:     ev.Images,
-				Files:      ev.Files,
-				Invocation: ev.Invocation,
-				Delivery:   queued.Delivery,
+				ID:       queued.ID,
+				Text:     ev.Text,
+				Images:   ev.Images,
+				Files:    ev.Files,
+				Delivery: queued.Delivery,
 			})
 			// Message acceptance is observable before its background title state.
 			m.maybeGenerateTitle(runtime, ev.Text)

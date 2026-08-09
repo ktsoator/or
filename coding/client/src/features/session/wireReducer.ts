@@ -227,7 +227,6 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
         )
         const existingItem = idx >= 0 ? items[idx] : undefined
         const existingUser = existingItem?.kind === 'user' ? existingItem : undefined
-        const invocation = ev.invocation ?? existingUser?.invocation
         const openRun = openRunIndex >= 0 ? items[openRunIndex] : undefined
         const user = {
           kind: 'user' as const,
@@ -235,7 +234,6 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
           text,
           images,
           ...(files.length ? { files } : {}),
-          ...(invocation ? { invocation } : {}),
           sentAt:
             existingUser?.sentAt ?? (openRun?.kind === 'run' ? openRun.startedAt : undefined),
         }

@@ -13,7 +13,6 @@ import (
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/engine"
-	"github.com/ktsoator/or/coding/internal/invocation"
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/llm"
 )
@@ -49,11 +48,10 @@ func projectEvent(ev engine.Event) (wireEvent, bool) {
 
 	case engine.UserMessageCompleted:
 		out = wireEvent{
-			Type:       wireEventUserMessage,
-			Text:       ev.Text,
-			Images:     projectImages(ev.Images),
-			Files:      projectFiles(ev.Files),
-			Invocation: projectInvocation(ev.Invocation),
+			Type:   wireEventUserMessage,
+			Text:   ev.Text,
+			Images: projectImages(ev.Images),
+			Files:  projectFiles(ev.Files),
 		}
 
 	case engine.TextDelta:
@@ -174,11 +172,10 @@ func ProjectHistory(items []engine.HistoryItem) []wireEvent {
 
 		case engine.HistoryUser:
 			out = append(out, wireEvent{
-				Type:       wireEventUserMessage,
-				Text:       item.Text,
-				Images:     projectImages(item.Images),
-				Files:      projectFiles(item.Files),
-				Invocation: projectInvocation(item.Invocation),
+				Type:   wireEventUserMessage,
+				Text:   item.Text,
+				Images: projectImages(item.Images),
+				Files:  projectFiles(item.Files),
 			})
 
 		case engine.HistoryAssistant:
@@ -225,18 +222,6 @@ func ProjectHistory(items []engine.HistoryItem) []wireEvent {
 		}
 	}
 	return out
-}
-
-func projectInvocation(record *invocation.Record) *wireInvocation {
-	if record == nil || record.Kind != invocation.PromptTemplate {
-		return nil
-	}
-	return &wireInvocation{
-		Kind:   wireInvocationPromptTemplate,
-		Name:   record.Name,
-		Source: record.Source,
-		Path:   record.Path,
-	}
 }
 
 func formatEventTime(value time.Time) string {

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/ktsoator/or/agent"
-	"github.com/ktsoator/or/coding/internal/prompttemplate"
 	"github.com/ktsoator/or/coding/internal/skills"
 	"github.com/ktsoator/or/llm"
 )
@@ -73,16 +72,7 @@ func (s *Session) promptMessage(
 			images,
 		), nil
 	}
-	templates := s.promptTemplates
-	if s.promptTemplateLoader != nil {
-		templates = prompttemplate.NewRegistry(s.promptTemplateLoader())
-		s.promptTemplates = templates
-	}
-	expanded, matched := templates.ExpandExplicitInvocation(text)
-	if !matched {
-		return userMessage(text, files, images), nil
-	}
-	return userMessage(text, files, images, expanded), nil
+	return userMessage(text, files, images), nil
 }
 
 // Continue resumes a run from the current transcript without adding a message.

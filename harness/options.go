@@ -56,7 +56,4 @@ type Options struct {
 	// Skills are named instruction sets that can be invoked explicitly with
 	// Skill and advertised to the model via FormatSkillsForSystemPrompt.
 	Skills []Skill
-	// PromptTemplates are named, parameterized prompts invoked with
-	// PromptFromTemplate.
-	PromptTemplates []PromptTemplate
 }

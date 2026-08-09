@@ -82,19 +82,6 @@ const (
 	wireDeliveryFollowUp wireDeliveryMode = "followup"
 )
 
-type wireInvocationKind string
-
-const (
-	wireInvocationPromptTemplate wireInvocationKind = "prompt_template"
-)
-
-type wireInvocation struct {
-	Kind   wireInvocationKind `json:"kind"`
-	Name   string             `json:"name"`
-	Source string             `json:"source"`
-	Path   string             `json:"path"`
-}
-
 type wireBrowserDisposition string
 
 const (
@@ -267,12 +254,11 @@ type wireEvent struct {
 	Preview          *wirePreview `json:"preview,omitempty"`
 	IsError          bool         `json:"isError,omitempty"`
 	// message_end fallback text (used when nothing streamed)
-	Text       string          `json:"text,omitempty"`
-	Images     []wireImage     `json:"images,omitempty"`
-	Files      []wireFile      `json:"files,omitempty"`
-	Invocation *wireInvocation `json:"invocation,omitempty"`
-	Usage      *wireUsage      `json:"usage,omitempty"`
-	Final      bool            `json:"finalResponse,omitempty"`
+	Text   string      `json:"text,omitempty"`
+	Images []wireImage `json:"images,omitempty"`
+	Files  []wireFile  `json:"files,omitempty"`
+	Usage  *wireUsage  `json:"usage,omitempty"`
+	Final  bool        `json:"finalResponse,omitempty"`
 	// Completed-response metadata. ModelName is the stable catalog display name;
 	// Provider and Model keep the exact identity available to other clients.
 	Provider  string `json:"provider,omitempty"`

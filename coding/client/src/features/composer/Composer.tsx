@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import {
   ArrowUp,
   BookOpen,
-  FileText,
   Info,
   Square,
   X,
@@ -28,12 +27,6 @@ import {
   filterSkills,
   type SkillEntry,
 } from '@/features/skills'
-import {
-  buildPromptTemplateInvocation,
-  filterPromptTemplates,
-  parsePromptTemplateQuery,
-  type PromptTemplateEntry,
-} from '@/features/prompt-templates'
 import { useComposerAttachments } from './useAttachments'
 import { useComposerCatalogs } from './useCatalogs'
 import { useComposerCompaction } from './useCompaction'
@@ -44,6 +37,7 @@ import { ComposerSkillSuggestions } from './ComposerSkillSuggestions'
 import {
   composerPreviewCommands,
   type ComposerPreviewCommand,
+  parseComposerCatalogQuery,
   parseExecutableComposerCommand,
   previewSkillCommandCount,
   skillSuggestionOptionID,
@@ -125,7 +119,7 @@ export function Composer({
   onPermissionModeChange: (mode: PermissionMode) => Promise<void>
   onCompact?: () => Promise<unknown>
 }) {
-  const { locale, t } = useI18n()
+  const { t } = useI18n()
   const ref = useRef<HTMLTextAreaElement>(null)
   const surfaceRef = useRef<HTMLDivElement>(null)
   const composingRef = useRef(false)
@@ -136,8 +130,6 @@ export function Composer({
   const [delivery, setDelivery] = useState<DeliveryMode>('steer')
   const [draftValue, setDraftValue] = useState('')
   const [selectedSkill, setSelectedSkill] = useState<SkillEntry>()
-  const [selectedPromptTemplate, setSelectedPromptTemplate] =
-    useState<PromptTemplateEntry>()
   const [skillSuggestionsDismissed, setSkillSuggestionsDismissed] = useState(false)
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0)
   const [skillKeyboardNavigating, setSkillKeyboardNavigating] = useState(false)
@@ -174,24 +166,18 @@ export function Composer({
   const catalogQueryEnabled =
     !running &&
     !selectedSkill &&
-    !selectedPromptTemplate &&
     !addPanelOpen &&
     !skillSuggestionsDismissed
   const slashQuery = catalogQueryEnabled
-    ? parsePromptTemplateQuery(draftValue)
+    ? parseComposerCatalogQuery(draftValue)
     : undefined
   const {
     skills: availableSkills,
-    promptTemplates: availablePromptTemplates,
     skillsLoaded,
-    promptTemplatesLoaded,
     skillsLoading,
     skillsFailed,
-    promptTemplatesLoading,
-    promptTemplatesFailed,
   } = useComposerCatalogs({
     workspacePath,
-    locale,
     catalogOpen: Boolean(slashQuery),
   })
   const {
@@ -199,20 +185,13 @@ export function Composer({
     dismiss: dismissCompactFeedback,
     compact: compactContext,
   } = useComposerCompaction(onCompact)
-  const suggestedPromptTemplates = slashQuery
-    ? filterPromptTemplates(availablePromptTemplates, slashQuery.query).slice(
-        0,
-        maxPromptTemplateSuggestions,
-      )
-    : []
   const suggestedSkills = slashQuery
     ? filterSkills(availableSkills, slashQuery.query).slice(0, maxSkillSuggestions)
     : []
   const previewCommandCount = slashQuery
     ? previewSkillCommandCount(slashQuery.query)
     : 0
-  const suggestionCount =
-    previewCommandCount + suggestedPromptTemplates.length + suggestedSkills.length
+  const suggestionCount = previewCommandCount + suggestedSkills.length
   const skillSuggestionsVisible = Boolean(slashQuery && !editorDisabled)
 
   const autosize = () => {
@@ -260,27 +239,6 @@ export function Composer({
     if (!stillAvailable) setSelectedSkill(undefined)
   }, [availableSkills, selectedSkill, skillsLoaded])
 
-  useEffect(() => {
-    if (!selectedPromptTemplate || !promptTemplatesLoaded) return
-    const stillAvailable = availablePromptTemplates.some(
-      (template) =>
-        template.name === selectedPromptTemplate.name &&
-        template.source === selectedPromptTemplate.source,
-    )
-    if (!stillAvailable) {
-      setSelectedPromptTemplate(undefined)
-      return
-    }
-    const current = availablePromptTemplates.find(
-      (template) =>
-        template.name === selectedPromptTemplate.name &&
-        template.source === selectedPromptTemplate.source,
-    )
-    if (current && current !== selectedPromptTemplate) {
-      setSelectedPromptTemplate(current)
-    }
-  }, [availablePromptTemplates, promptTemplatesLoaded, selectedPromptTemplate])
-
   const runPreviewCommand = async (command: ComposerPreviewCommand) => {
     if (command !== 'compact' || sendDisabled) return
     setDraftValue('')
@@ -299,11 +257,9 @@ export function Composer({
       return
     }
     const argumentsText = draftValue.trim()
-    const text = selectedPromptTemplate
-      ? buildPromptTemplateInvocation(selectedPromptTemplate.name, argumentsText)
-      : selectedSkill
-        ? buildSkillInvocation(selectedSkill, argumentsText)
-        : argumentsText
+    const text = selectedSkill
+      ? buildSkillInvocation(selectedSkill, argumentsText)
+      : argumentsText
     if (!text && images.length === 0 && files.length === 0) return
     if (images.length > 0 && !supportsImages) {
       reportUnsupportedImages()
@@ -326,7 +282,6 @@ export function Composer({
       if (!accepted) return
       setDraftValue('')
       setSelectedSkill(undefined)
-      setSelectedPromptTemplate(undefined)
       setSkillSuggestionsDismissed(false)
       clearAttachments()
       requestAnimationFrame(autosize)
@@ -340,11 +295,10 @@ export function Composer({
   const selectSkill = (skill: SkillEntry) => {
     const el = ref.current
     if (!el) return
-    const argumentsText = selectedSkill || selectedPromptTemplate
+    const argumentsText = selectedSkill
       ? draftValue
       : slashQuery?.argumentsText ?? draftValue
     setSelectedSkill(skill)
-    setSelectedPromptTemplate(undefined)
     setDraftValue(argumentsText)
     setAddPanelOpen(false)
     setSkillSuggestionsDismissed(true)
@@ -357,30 +311,6 @@ export function Composer({
 
   const clearSelectedSkill = () => {
     setSelectedSkill(undefined)
-    setSkillSuggestionsDismissed(false)
-    requestAnimationFrame(() => ref.current?.focus())
-  }
-
-  const selectPromptTemplate = (template: PromptTemplateEntry) => {
-    const el = ref.current
-    if (!el) return
-    const argumentsText = selectedSkill || selectedPromptTemplate
-      ? draftValue
-      : slashQuery?.argumentsText ?? draftValue
-    setSelectedPromptTemplate(template)
-    setSelectedSkill(undefined)
-    setDraftValue(argumentsText)
-    setAddPanelOpen(false)
-    setSkillSuggestionsDismissed(true)
-    requestAnimationFrame(() => {
-      autosize()
-      el.focus()
-      el.setSelectionRange(argumentsText.length, argumentsText.length)
-    })
-  }
-
-  const clearSelectedPromptTemplate = () => {
-    setSelectedPromptTemplate(undefined)
     setSkillSuggestionsDismissed(false)
     requestAnimationFrame(() => ref.current?.focus())
   }
@@ -451,18 +381,14 @@ export function Composer({
             query={slashQuery?.query ?? ''}
             commandsEnabled={Boolean(slashQuery)}
             skillsEnabled={Boolean(slashQuery)}
-            templates={suggestedPromptTemplates}
             skills={suggestedSkills}
             activeIndex={activeSuggestionIndex}
             keyboardNavigating={skillKeyboardNavigating}
             loading={Boolean(slashQuery && skillsLoading)}
             failed={Boolean(slashQuery && skillsFailed)}
-            templatesLoading={Boolean(slashQuery && promptTemplatesLoading)}
-            templatesFailed={Boolean(slashQuery && promptTemplatesFailed)}
             onActiveIndexChange={setActiveSuggestionIndex}
             onPointerNavigation={() => setSkillKeyboardNavigating(false)}
             onCommandSelect={(command) => void runPreviewCommand(command)}
-            onTemplateSelect={selectPromptTemplate}
             onSelect={selectSkill}
           />
           <div
@@ -512,26 +438,6 @@ export function Composer({
                 onRemoveImage={removeImage}
               />
               <div className="flex min-w-0 items-start px-1">
-                {selectedPromptTemplate && (
-                  <button
-                    type="button"
-                    className="mt-1.5 flex h-6 max-w-[45%] shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-1.5 font-mono text-[14px] font-medium text-ink-soft outline-none transition-colors hover:bg-surface-active focus-visible:bg-surface-active"
-                    aria-label={t('composer.removeSelectedPromptTemplate', {
-                      name: selectedPromptTemplate.name,
-                    })}
-                    title={t('composer.removeSelectedPromptTemplate', {
-                      name: selectedPromptTemplate.name,
-                    })}
-                    onClick={clearSelectedPromptTemplate}
-                  >
-                    <FileText
-                      className="size-4 shrink-0 text-ink-muted"
-                      strokeWidth={1.8}
-                      aria-hidden="true"
-                    />
-                    <span className="truncate">{selectedPromptTemplate.name}</span>
-                  </button>
-                )}
                 {selectedSkill && (
                   <button
                     type="button"
@@ -557,15 +463,9 @@ export function Composer({
                   rows={1}
                   value={draftValue}
                   disabled={editorDisabled}
-                  aria-autocomplete={
-                    !selectedSkill && !selectedPromptTemplate ? 'list' : undefined
-                  }
+                  aria-autocomplete={!selectedSkill ? 'list' : undefined}
                   aria-controls={skillSuggestionsVisible ? skillSuggestionsID : undefined}
-                  aria-expanded={
-                    !selectedSkill && !selectedPromptTemplate
-                      ? skillSuggestionsVisible
-                      : undefined
-                  }
+                  aria-expanded={!selectedSkill ? skillSuggestionsVisible : undefined}
                   aria-activedescendant={
                     skillSuggestionsVisible && suggestionCount > 0
                       ? skillSuggestionOptionID(
@@ -588,11 +488,7 @@ export function Composer({
                           ? delivery === 'steer'
                             ? t('composer.guideRun')
                             : t('composer.queueFollowUpPlaceholder')
-                          : selectedPromptTemplate?.argumentHint
-                            ? t('composer.promptTemplateArguments', {
-                                hint: selectedPromptTemplate.argumentHint,
-                              })
-                            : t('composer.askAnything')
+                          : t('composer.askAnything')
                         : t('composer.waitingForAPI')
                   }
                   onChange={(event) => {
@@ -672,18 +568,9 @@ export function Composer({
                         if (command) void runPreviewCommand(command)
                         return
                       }
-                      const templateIndex =
-                        activeSuggestionIndex - previewCommandCount
-                      if (templateIndex < suggestedPromptTemplates.length) {
-                        const template = suggestedPromptTemplates[templateIndex]
-                        if (template) selectPromptTemplate(template)
-                        return
-                      }
                       const skill = suggestedSkills[
                         Math.min(
-                          activeSuggestionIndex -
-                            previewCommandCount -
-                            suggestedPromptTemplates.length,
+                          activeSuggestionIndex - previewCommandCount,
                           suggestedSkills.length - 1,
                         )
                       ]
@@ -691,14 +578,13 @@ export function Composer({
                       return
                     }
                     if (
-                      (selectedSkill || selectedPromptTemplate) &&
+                      selectedSkill &&
                       event.key === 'Backspace' &&
                       event.currentTarget.selectionStart === 0 &&
                       event.currentTarget.selectionEnd === 0
                     ) {
                       event.preventDefault()
-                      if (selectedPromptTemplate) clearSelectedPromptTemplate()
-                      else clearSelectedSkill()
+                      clearSelectedSkill()
                       return
                     }
                     if (event.key === 'Enter' && !event.shiftKey) {
@@ -858,4 +744,3 @@ export function Composer({
 }
 
 const maxSkillSuggestions = 8
-const maxPromptTemplateSuggestions = 8

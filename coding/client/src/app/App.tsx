@@ -39,11 +39,6 @@ const SettingsPage = lazy(() =>
 const SkillsPage = lazy(() =>
   import('@/features/skills/SkillsPage').then((module) => ({ default: module.SkillsPage })),
 )
-const PromptTemplatesPage = lazy(() =>
-  import('@/features/prompt-templates/PromptTemplatesPage').then((module) => ({
-    default: module.PromptTemplatesPage,
-  })),
-)
 const WorkspacePickerDialog = lazy(() =>
   import('@/components/WorkspacePickerDialog').then((module) => ({
     default: module.WorkspacePickerDialog,
@@ -54,7 +49,6 @@ type AppView =
   | { type: 'conversation' }
   | { type: 'settings'; section: SettingsSection }
   | { type: 'skills' }
-  | { type: 'promptTemplates' }
 
 export default function App() {
   const { t } = useI18n()
@@ -513,7 +507,6 @@ export default function App() {
           toggleSidebar,
           addSession,
           onOpenSkills: () => setView({ type: 'skills' }),
-          onOpenPromptTemplates: () => setView({ type: 'promptTemplates' }),
           chooseSession,
           openSessionInWorkbench,
           togglePinnedSession,
@@ -532,16 +525,6 @@ export default function App() {
       {view.type === 'skills' ? (
         <Suspense fallback={<AppViewFallback />}>
           <SkillsPage
-            onBack={() => setView({ type: 'conversation' })}
-            sidebarCollapsed={sidebarCollapsed}
-            onExpandSidebar={expandSidebar}
-            workspacePath={activeSession?.workspacePath}
-            workspaceName={activeSession?.workspaceName}
-          />
-        </Suspense>
-      ) : view.type === 'promptTemplates' ? (
-        <Suspense fallback={<AppViewFallback />}>
-          <PromptTemplatesPage
             onBack={() => setView({ type: 'conversation' })}
             sidebarCollapsed={sidebarCollapsed}
             onExpandSidebar={expandSidebar}

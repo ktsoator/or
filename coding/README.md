@@ -21,7 +21,6 @@ coding/
     ├── compaction/         Context compaction
     ├── permission/         Tool-call approval policy
     ├── prompt/             Or system prompt
-    ├── prompttemplate/     Prompt template discovery and expansion
     ├── skills/             Skill discovery and loading
     ├── tools/              Or tools and local execution
     ├── provider/           Provider settings
@@ -66,44 +65,15 @@ Inspect the diff and report findings by severity.
 
 Or validates the standard `name`, `description`, `license`, `compatibility`,
 `metadata`, and `allowed-tools` fields. Unknown top-level fields are rejected.
-The Markdown body is loaded unchanged; Skill files do not support prompt-template
-argument substitution. Relative file references resolve from the skill directory.
+The Markdown body is loaded unchanged; Skill files do not support argument
+substitution. Relative file references resolve from the skill directory.
 
-Type `/` in the composer to search built-in commands, Prompt Templates, and
-Skills in one catalog. Selecting a Skill creates a typed Skill reference, so it
-remains distinct from a same-named Prompt Template. Or can also activate a Skill
+Type `/` in the composer to search built-in commands and Skills in one catalog.
+Selecting a Skill creates a typed Skill reference. Or can also activate a Skill
 automatically when its description matches the task. Activated instructions are
 kept as protected session context across compaction. The
 experimental `allowed-tools` field is preserved but never bypasses Or's normal
 permission policy.
-
-## Prompt templates
-
-Prompt templates are Markdown files that expand from slash commands. Or
-loads user templates from `~/.or/prompts/*.md` and project templates from
-`<workspace>/.or/prompts/*.md`. A project template replaces a user template
-with the same filename-derived name.
-
-For example, `.or/prompts/review.md` defines `/review`:
-
-```markdown
----
-description: Review working tree changes
-argument-hint: "[focus]"
----
-Review the current changes. Focus on ${ARGUMENTS:-bugs and regressions}.
-```
-
-Templates support `$1`, `$2`, `$@`, `$ARGUMENTS`, default values such as
-`${1:-default}`, and slices such as `${@:2}` or `${@:2:3}`. The slash menu
-shows the short command, argument hint, source, and description. Conversation
-history keeps the short invocation while the expanded Markdown is sent to the
-model as product-owned context.
-
-Localized menu metadata is optional. Add `description-en`,
-`description-zh-CN`, `argument-hint-en`, and `argument-hint-zh-CN` to make a
-template follow Or's interface language. The original fields remain the
-fallback for older and single-language templates.
 
 ## Desktop
 

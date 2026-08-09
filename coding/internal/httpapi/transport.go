@@ -185,14 +185,13 @@ func projectSessionWireEvent(event conversation.Event) (wireEvent, bool) {
 	switch e := event.(type) {
 	case conversation.MessageAccepted:
 		out = wireEvent{
-			Type:       wireEventUserMessage,
-			ID:         e.ID,
-			Text:       e.Text,
-			Images:     projectImages(e.Images),
-			Files:      projectFiles(e.Files),
-			Invocation: projectInvocation(e.Invocation),
-			Delivery:   projectDeliveryMode(e.Delivery),
-			Queued:     e.Queued,
+			Type:     wireEventUserMessage,
+			ID:       e.ID,
+			Text:     e.Text,
+			Images:   projectImages(e.Images),
+			Files:    projectFiles(e.Files),
+			Delivery: projectDeliveryMode(e.Delivery),
+			Queued:   e.Queued,
 		}
 	case conversation.MessageDequeued:
 		out = wireEvent{Type: wireEventQueueRemoved, ID: e.ID}
@@ -229,14 +228,13 @@ func projectQueue(events []conversation.Event) []wireEvent {
 	for _, event := range events {
 		if accepted, ok := event.(conversation.MessageAccepted); ok {
 			out = append(out, wireEvent{
-				Type:       wireEventUserMessage,
-				ID:         accepted.ID,
-				Text:       accepted.Text,
-				Images:     projectImages(accepted.Images),
-				Files:      projectFiles(accepted.Files),
-				Invocation: projectInvocation(accepted.Invocation),
-				Delivery:   projectDeliveryMode(accepted.Delivery),
-				Queued:     accepted.Queued,
+				Type:     wireEventUserMessage,
+				ID:       accepted.ID,
+				Text:     accepted.Text,
+				Images:   projectImages(accepted.Images),
+				Files:    projectFiles(accepted.Files),
+				Delivery: projectDeliveryMode(accepted.Delivery),
+				Queued:   accepted.Queued,
 			})
 		}
 	}

@@ -48,13 +48,11 @@ app -> features -> shared
   utility models, and provider connection testing.
 - `features/skills` owns the skill catalog API, invocation parsing, and its lazy
   catalog page.
-- `features/prompt-templates` owns prompt template catalog APIs, invocation
-  parsing, and its lazy catalog page.
 - `shared/attachments.ts` is shared because attachment metadata is rendered by
   both the composer and the conversation transcript.
 - `shared/ui` contains provider identity and thinking controls reused by
-  Settings and Composer, plus Markdown rendering shared by Conversation,
-  Skills, and Prompt Templates.
+  Settings and Composer, plus Markdown rendering shared by Conversation and
+  the Skills catalog.
 - `shared/lib/highlightRuntime.ts` owns the syntax-highlighting dependency and
   theme. It is loaded dynamically only when rendered content contains a code
   block, tool read preview, or diff.
