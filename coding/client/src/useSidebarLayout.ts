@@ -2,11 +2,11 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
+import { usePointerResize } from './shared/hooks/usePointerResize'
 import type { SessionSummary, WorkspaceSummary } from './types'
 import {
   DEFAULT_SIDEBAR_WIDTH,
@@ -24,18 +24,9 @@ export function useSidebarLayout(
   sessions: SessionSummary[],
   workspaces: WorkspaceSummary[],
 ) {
-  const resizeRef = useRef<
-    | {
-        pointerID: number
-        startX: number
-        startWidth: number
-      }
-    | undefined
-  >(undefined)
   const [mobileSessionsOpen, setMobileSessionsOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   const [width, setWidth] = useState(DEFAULT_SIDEBAR_WIDTH)
-  const [resizing, setResizing] = useState(false)
   const [pinnedSessionIDs, setPinnedSessionIDs] = useState(() =>
     parsePinnedSessionIDs(
       typeof localStorage === 'undefined'
@@ -55,18 +46,6 @@ export function useSidebarLayout(
   useEffect(() => {
     localStorage.setItem(PINNED_SESSIONS_KEY, JSON.stringify(pinnedSessionIDs))
   }, [pinnedSessionIDs])
-
-  useEffect(() => {
-    if (!resizing) return
-    const previousCursor = document.body.style.cursor
-    const previousUserSelect = document.body.style.userSelect
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
-    return () => {
-      document.body.style.cursor = previousCursor
-      document.body.style.userSelect = previousUserSelect
-    }
-  }, [resizing])
 
   const toggleSidebar = useCallback(() => {
     if (mobileSessionsOpen) {
@@ -101,21 +80,18 @@ export function useSidebarLayout(
     setPinnedSessionIDs((current) => current.filter((sessionID) => sessionID !== id))
   }, [])
 
-  const startResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+  const beginResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (collapsed) return
-    event.preventDefault()
-    resizeRef.current = {
-      pointerID: event.pointerId,
+    return {
       startX: event.clientX,
       startWidth: width,
     }
-    event.currentTarget.setPointerCapture(event.pointerId)
-    setResizing(true)
   }, [collapsed, width])
 
-  const resize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    const currentResize = resizeRef.current
-    if (!currentResize || currentResize.pointerID !== event.pointerId) return
+  const updateResize = useCallback((
+    currentResize: { startX: number; startWidth: number },
+    event: ReactPointerEvent<HTMLDivElement>,
+  ) => {
     setWidth(resizedSidebarWidth(
       currentResize.startWidth,
       currentResize.startX,
@@ -123,15 +99,12 @@ export function useSidebarLayout(
     ))
   }, [])
 
-  const stopResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    const currentResize = resizeRef.current
-    if (!currentResize || currentResize.pointerID !== event.pointerId) return
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-    resizeRef.current = undefined
-    setResizing(false)
-  }, [])
+  const {
+    resizing,
+    startResize,
+    resize,
+    stopResize,
+  } = usePointerResize({ start: beginResize, move: updateResize })
 
   const resizeWithKeyboard = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
     const nextWidth = keyboardSidebarWidth(event.key, width)

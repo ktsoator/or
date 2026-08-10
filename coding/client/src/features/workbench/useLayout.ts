@@ -17,6 +17,7 @@ import {
   resizedWorkbenchWidth,
   workbenchWidthBounds,
 } from './layout'
+import { usePointerResize } from '@/shared/hooks/usePointerResize'
 
 type UseWorkbenchLayoutOptions = {
   enabled: boolean
@@ -43,14 +44,6 @@ export function useWorkbenchLayout({
 }: UseWorkbenchLayoutOptions) {
   const layoutRef = useRef<HTMLDivElement>(null)
   const viewportRef = useRef<HTMLElement>(null)
-  const resizeRef = useRef<
-    | {
-        pointerID: number
-        startX: number
-        startWidth: number
-      }
-    | undefined
-  >(undefined)
   const widthRef = useRef<number | undefined>(undefined)
   const preferredWidthRef = useRef<number | undefined>(undefined)
   const constrainedRef = useRef(false)
@@ -68,7 +61,6 @@ export function useWorkbenchLayout({
   const [open, setOpenState] = useState(false)
   const [previewSessionID, setPreviewSessionID] = useState<string>()
   const [width, setWidth] = useState<number>()
-  const [resizing, setResizing] = useState(false)
   const [maximized, setMaximized] = useState(false)
   const [autoLayoutChanging, setAutoLayoutChanging] = useState(false)
   const [closing, setClosing] = useState(false)
@@ -89,7 +81,6 @@ export function useWorkbenchLayout({
   widthRef.current = width
   openRef.current = open
   maximizedRef.current = maximized
-  resizingRef.current = resizing
 
   const toggle = useCallback(() => {
     autoCollapsedRef.current = false
@@ -134,18 +125,6 @@ export function useWorkbenchLayout({
   useEffect(() => {
     autoCollapsedRef.current = false
   }, [activeDraftID, activeSessionID])
-
-  useEffect(() => {
-    if (!resizing) return
-    const previousCursor = document.body.style.cursor
-    const previousUserSelect = document.body.style.userSelect
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
-    return () => {
-      document.body.style.cursor = previousCursor
-      document.body.style.userSelect = previousUserSelect
-    }
-  }, [resizing])
 
   useLayoutEffect(() => {
     if (!enabled) return
@@ -250,9 +229,8 @@ export function useWorkbenchLayout({
     setWidth(nextWidth)
   }, [])
 
-  const startResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+  const beginResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (!open) return
-    event.preventDefault()
     const layoutWidth = getLayoutWidth()
     const startWidth = clampWorkbenchWidth(
       viewportRef.current?.getBoundingClientRect().width ??
@@ -260,19 +238,18 @@ export function useWorkbenchLayout({
         layoutWidth * DEFAULT_WORKBENCH_RATIO,
       layoutWidth,
     )
-    resizeRef.current = {
-      pointerID: event.pointerId,
+    const resize = {
       startX: event.clientX,
       startWidth,
     }
     setUserWidth(startWidth)
-    event.currentTarget.setPointerCapture(event.pointerId)
-    setResizing(true)
+    return resize
   }, [getLayoutWidth, open, setUserWidth, width])
 
-  const resize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    const currentResize = resizeRef.current
-    if (!currentResize || currentResize.pointerID !== event.pointerId) return
+  const updateResize = useCallback((
+    currentResize: { startX: number; startWidth: number },
+    event: ReactPointerEvent<HTMLDivElement>,
+  ) => {
     setUserWidth(resizedWorkbenchWidth(
       currentResize.startWidth,
       currentResize.startX,
@@ -281,15 +258,13 @@ export function useWorkbenchLayout({
     ))
   }, [getLayoutWidth, setUserWidth])
 
-  const stopResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    const currentResize = resizeRef.current
-    if (!currentResize || currentResize.pointerID !== event.pointerId) return
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-    resizeRef.current = undefined
-    setResizing(false)
-  }, [])
+  const {
+    resizing,
+    startResize,
+    resize,
+    stopResize,
+  } = usePointerResize({ start: beginResize, move: updateResize })
+  resizingRef.current = resizing
 
   const resizeWithKeyboard = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
     const layoutWidth = getLayoutWidth()

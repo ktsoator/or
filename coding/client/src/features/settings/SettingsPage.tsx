@@ -191,6 +191,7 @@ export function SettingsPage({
             onPointerMove={resizeSidebar}
             onPointerUp={stopSidebarResize}
             onPointerCancel={stopSidebarResize}
+            onLostPointerCapture={stopSidebarResize}
             onKeyDown={resizeSidebarWithKeyboard}
           >
             <span

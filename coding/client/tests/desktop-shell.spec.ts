@@ -929,6 +929,42 @@ test('settings sidebar divider supports pointer and keyboard resizing', async ({
   await handle.press('ArrowRight')
   await expect(handle).toHaveAttribute('aria-valuenow', '288')
   await expect.poll(async () => (await sidebar.boundingBox())?.width).toBeCloseTo(288, 0)
+
+  const bodyStylesBeforeLostCapture = await page.evaluate(() => ({
+    cursor: document.body.style.cursor,
+    userSelect: document.body.style.userSelect,
+  }))
+  const handleAfterKeyboard = await handle.boundingBox()
+  expect(handleAfterKeyboard).not.toBeNull()
+  await handle.evaluate((element) => {
+    element.addEventListener('pointerdown', (event) => {
+      element.setAttribute('data-test-pointer-id', String(event.pointerId))
+    }, { once: true })
+  })
+  await page.mouse.move(
+    handleAfterKeyboard!.x + handleAfterKeyboard!.width - 2,
+    handleAfterKeyboard!.y + handleAfterKeyboard!.height / 2,
+  )
+  await page.mouse.down()
+  await expect.poll(() => page.evaluate(() => ({
+    cursor: document.body.style.cursor,
+    userSelect: document.body.style.userSelect,
+  }))).toEqual({ cursor: 'col-resize', userSelect: 'none' })
+
+  const pointerID = Number(await handle.getAttribute('data-test-pointer-id'))
+  expect(Number.isInteger(pointerID)).toBe(true)
+  await handle.evaluate((element, activePointerID) => {
+    element.dispatchEvent(new PointerEvent('lostpointercapture', {
+      bubbles: true,
+      pointerId: activePointerID,
+      pointerType: 'mouse',
+    }))
+  }, pointerID)
+  await expect.poll(() => page.evaluate(() => ({
+    cursor: document.body.style.cursor,
+    userSelect: document.body.style.userSelect,
+  }))).toEqual(bodyStylesBeforeLostCapture)
+  await page.mouse.up()
 })
 
 test('desktop external links open in the system browser without leaving Or', async ({ page }) => {
