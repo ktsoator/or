@@ -6,7 +6,8 @@ when that session is unloaded or the application exits.
 
 ## Configuration file
 
-Create `mcp.json` in Or's data directory:
+Use **MCP servers** in the application sidebar to add, edit, enable, test, or
+remove servers. The page writes `mcp.json` in Or's data directory:
 
 - default: `~/.or/coding/mcp.json`
 - custom data directory: `$OR_DATA_DIR/mcp.json`
@@ -64,7 +65,8 @@ working directories, and workspace scopes support:
 
 Changes take effect the next time a conversation runtime loads. Closing and
 reopening an idle conversation is enough; the application does not need to be
-restarted.
+restarted. The page's connection test opens a temporary connection immediately,
+discovers its tools, and closes it without changing a loaded conversation.
 
 ## Tool names and permissions
 
@@ -91,8 +93,11 @@ schemas do not describe. Only configure servers you trust.
 
 Prefer `${env:NAME}` references over literal credentials. Or expands these
 values only while building a connection and does not include headers or
-environment values in status diagnostics. HTTP headers are attached only to
-requests for the configured endpoint origin, including after redirects.
+environment values in status diagnostics. A stdio server inherits only a small
+baseline environment needed to run commands; additional values must be declared
+in its `env` map. The desktop authentication token is never inherited. HTTP
+headers are attached only to requests for the configured endpoint origin,
+including after redirects.
 
 Tool text output is capped at 30,000 bytes and image output at 20 MiB per call
 to prevent one server response from filling the model context or application

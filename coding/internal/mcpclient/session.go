@@ -77,13 +77,13 @@ func Open(ctx context.Context, path, workspace string) *Session {
 			session.statuses = append(session.statuses, status)
 			continue
 		}
-		if err := server.config.validate(); err != nil {
+		if err := server.config.Validate(); err != nil {
 			status.State = StateError
 			status.Error = err.Error()
 			session.statuses = append(session.statuses, status)
 			continue
 		}
-		applies, err := server.config.appliesTo(workspace)
+		applies, err := server.config.AppliesTo(workspace)
 		if err != nil {
 			status.State = StateError
 			status.Error = err.Error()
@@ -286,7 +286,9 @@ func mergedEnvironment(configured map[string]string, workspace string) ([]string
 	values := make(map[string]string)
 	for _, entry := range os.Environ() {
 		if key, value, found := strings.Cut(entry, "="); found {
-			values[key] = value
+			if inheritedMCPEnvironment[strings.ToUpper(key)] {
+				values[key] = value
+			}
 		}
 	}
 	for key, value := range configured {
@@ -306,6 +308,19 @@ func mergedEnvironment(configured map[string]string, workspace string) ([]string
 		environment = append(environment, key+"="+values[key])
 	}
 	return environment, nil
+}
+
+// MCP commands are executable configuration, but they should not receive every
+// credential carried by the desktop sidecar. Servers opt into additional
+// values through their explicit env map and ${env:NAME} references.
+var inheritedMCPEnvironment = map[string]bool{
+	"APPDATA": true, "COLORTERM": true, "COMSPEC": true,
+	"HOME": true, "LANG": true, "LC_ALL": true, "LC_CTYPE": true,
+	"LOCALAPPDATA": true, "LOGNAME": true, "PATH": true, "PATHEXT": true,
+	"SHELL": true, "SYSTEMROOT": true, "TEMP": true, "TERM": true,
+	"TMP": true, "TMPDIR": true, "USER": true, "USERPROFILE": true,
+	"WINDIR": true, "XDG_CACHE_HOME": true, "XDG_CONFIG_HOME": true,
+	"XDG_DATA_HOME": true,
 }
 
 type headerTransport struct {

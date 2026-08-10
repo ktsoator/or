@@ -39,11 +39,15 @@ const SettingsPage = lazy(() =>
 const SkillsPage = lazy(() =>
   import('@/features/skills/SkillsPage').then((module) => ({ default: module.SkillsPage })),
 )
+const MCPPage = lazy(() =>
+  import('@/features/mcp/MCPPage').then((module) => ({ default: module.MCPPage })),
+)
 
 type AppView =
   | { type: 'conversation' }
   | { type: 'settings'; section: SettingsSection }
   | { type: 'skills' }
+  | { type: 'mcp' }
 
 export default function App() {
   const { t } = useI18n()
@@ -504,7 +508,14 @@ export default function App() {
           closeMobileSessions,
           toggleSidebar,
           addSession,
-          onOpenSkills: () => setView({ type: 'skills' }),
+          onOpenSkills: () => {
+            closeMobileSessions()
+            setView({ type: 'skills' })
+          },
+          onOpenMCP: () => {
+            closeMobileSessions()
+            setView({ type: 'mcp' })
+          },
           chooseSession,
           openSessionInWorkbench,
           togglePinnedSession,
@@ -523,6 +534,16 @@ export default function App() {
       {view.type === 'skills' ? (
         <Suspense fallback={<AppViewFallback />}>
           <SkillsPage
+            onBack={() => setView({ type: 'conversation' })}
+            sidebarCollapsed={sidebarCollapsed}
+            onExpandSidebar={expandSidebar}
+            workspacePath={activeSession?.workspacePath}
+            workspaceName={activeSession?.workspaceName}
+          />
+        </Suspense>
+      ) : view.type === 'mcp' ? (
+        <Suspense fallback={<AppViewFallback />}>
+          <MCPPage
             onBack={() => setView({ type: 'conversation' })}
             sidebarCollapsed={sidebarCollapsed}
             onExpandSidebar={expandSidebar}

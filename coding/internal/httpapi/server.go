@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"net/http"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 
@@ -29,6 +30,8 @@ type Server struct {
 	registry      *llm.ProviderRegistry
 	providers     *provider.Store
 	providerTests *provider.ConnectionTester
+	mcpConfigPath string
+	mcpConfigMu   sync.Mutex
 }
 
 // Options contains the product services exposed through HTTP. Construction
@@ -42,6 +45,7 @@ type Options struct {
 	Registry      *llm.ProviderRegistry
 	Providers     *provider.Store
 	ProviderTests *provider.ConnectionTester
+	MCPConfigPath string
 }
 
 // NewServer builds the HTTP delivery layer from already-created services.
@@ -54,6 +58,7 @@ func NewServer(opts Options) *Server {
 		registry:      opts.Registry,
 		providers:     opts.Providers,
 		providerTests: opts.ProviderTests,
+		mcpConfigPath: opts.MCPConfigPath,
 	}
 }
 
@@ -74,6 +79,7 @@ func (s *Server) Handler() http.Handler {
 	s.mountWorkspaces(api)
 	s.mountUsage(api)
 	s.mountSkills(api)
+	s.mountMCP(api)
 	s.mountPreview(api)
 
 	return r

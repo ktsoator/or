@@ -45,30 +45,9 @@ type namedServer struct {
 }
 
 func loadConfig(path string) ([]namedServer, error) {
-	file, err := os.Open(path)
+	config, err := ReadConfig(path)
 	if err != nil {
 		return nil, err
-	}
-	defer file.Close()
-
-	decoder := json.NewDecoder(file)
-	decoder.DisallowUnknownFields()
-	var config Config
-	if err := decoder.Decode(&config); err != nil {
-		return nil, fmt.Errorf("decode MCP config: %w", err)
-	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		if err == nil {
-			return nil, fmt.Errorf("decode MCP config: multiple JSON values")
-		}
-		return nil, fmt.Errorf("decode MCP config: %w", err)
-	}
-	if config.Version == 0 {
-		config.Version = configVersion
-	}
-	if config.Version != configVersion {
-		return nil, fmt.Errorf("unsupported MCP config version %d", config.Version)
 	}
 
 	names := make([]string, 0, len(config.MCPServers))
@@ -78,15 +57,92 @@ func loadConfig(path string) ([]namedServer, error) {
 	sort.Strings(names)
 	servers := make([]namedServer, 0, len(names))
 	for _, name := range names {
-		if strings.TrimSpace(name) == "" {
-			return nil, fmt.Errorf("MCP server name is empty")
-		}
 		servers = append(servers, namedServer{name: name, config: config.MCPServers[name]})
 	}
 	return servers, nil
 }
 
-func (config ServerConfig) validate() error {
+// ReadConfig loads the product-owned MCP configuration without connecting to
+// any server. A missing file remains distinguishable from an empty config so
+// callers can decide whether MCP should be surfaced at all.
+func ReadConfig(path string) (Config, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return Config{}, err
+	}
+	defer file.Close()
+
+	decoder := json.NewDecoder(file)
+	decoder.DisallowUnknownFields()
+	var config Config
+	if err := decoder.Decode(&config); err != nil {
+		return Config{}, fmt.Errorf("decode MCP config: %w", err)
+	}
+	var extra any
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return Config{}, fmt.Errorf("decode MCP config: multiple JSON values")
+		}
+		return Config{}, fmt.Errorf("decode MCP config: %w", err)
+	}
+	if config.Version == 0 {
+		config.Version = configVersion
+	}
+	if config.Version != configVersion {
+		return Config{}, fmt.Errorf("unsupported MCP config version %d", config.Version)
+	}
+	if config.MCPServers == nil {
+		config.MCPServers = make(map[string]ServerConfig)
+	}
+	for name := range config.MCPServers {
+		if strings.TrimSpace(name) == "" {
+			return Config{}, fmt.Errorf("MCP server name is empty")
+		}
+	}
+	return config, nil
+}
+
+// WriteConfig atomically replaces path with a private, canonical JSON file.
+func WriteConfig(path string, config Config) error {
+	if config.Version == 0 {
+		config.Version = configVersion
+	}
+	if config.Version != configVersion {
+		return fmt.Errorf("unsupported MCP config version %d", config.Version)
+	}
+	if config.MCPServers == nil {
+		config.MCPServers = make(map[string]ServerConfig)
+	}
+	for name := range config.MCPServers {
+		if strings.TrimSpace(name) == "" {
+			return fmt.Errorf("MCP server name is empty")
+		}
+	}
+	encoded, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode MCP config: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create MCP config directory: %w", err)
+	}
+	temporary := path + ".tmp"
+	if err := os.WriteFile(temporary, append(encoded, '\n'), 0o600); err != nil {
+		return fmt.Errorf("write MCP config: %w", err)
+	}
+	if err := os.Chmod(temporary, 0o600); err != nil {
+		_ = os.Remove(temporary)
+		return fmt.Errorf("protect MCP config: %w", err)
+	}
+	if err := os.Rename(temporary, path); err != nil {
+		_ = os.Remove(temporary)
+		return fmt.Errorf("replace MCP config: %w", err)
+	}
+	return nil
+}
+
+// Validate checks the transport-level fields that do not require expanding
+// environment references or opening a connection.
+func (config ServerConfig) Validate() error {
 	hasCommand := strings.TrimSpace(config.Command) != ""
 	hasURL := strings.TrimSpace(config.URL) != ""
 	if hasCommand == hasURL {
@@ -98,7 +154,8 @@ func (config ServerConfig) validate() error {
 	return nil
 }
 
-func (config ServerConfig) appliesTo(workspace string) (bool, error) {
+// AppliesTo reports whether this server is visible to one exact workspace.
+func (config ServerConfig) AppliesTo(workspace string) (bool, error) {
 	if len(config.Workspaces) == 0 {
 		return true, nil
 	}
