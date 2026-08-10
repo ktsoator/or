@@ -81,7 +81,7 @@ func bashTool(root string, tasks *TaskManager) Tool {
 				return commandResult(agent.ToolOutcomeSuccess, "", b.String(), result.ExitCode), nil
 			},
 		},
-		AccessFor:  commandAccess,
+		AccessFor:  executeAccess,
 		Guidelines: bashText.guidelines,
 	}
 }

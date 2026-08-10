@@ -94,9 +94,8 @@ func pathAccess(action permission.Action) func(map[string]any) []permission.Acce
 	}
 }
 
-func commandAccess(args map[string]any) []permission.Access {
-	command, _ := args["command"].(string)
-	return []permission.Access{{Action: permission.Execute, Command: command}}
+func executeAccess(map[string]any) []permission.Access {
+	return []permission.Access{{Action: permission.Execute}}
 }
 
 // InternalAccess describes a tool that only interacts with state already owned

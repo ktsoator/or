@@ -56,7 +56,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	}
 	activeToolSet := toolsWithSkillAvailability(toolSet, initialRegistry.Len() > 0)
 
-	authorizer, err := permission.NewService(cwd, opts.Policy, opts.Approver)
+	authorizer, err := permission.NewService(cwd, opts.PermissionMode, opts.Approver)
 	if err != nil {
 		return nil, err
 	}
@@ -133,13 +133,13 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 			if t, ok := s.toolByName[bc.ToolCall.Name]; ok {
 				accesses = t.Accesses(args)
 			}
-			decision, _ := s.authorizer.Authorize(bc.RunContext, permission.Request{
+			result, _ := s.authorizer.Authorize(bc.RunContext, permission.Request{
 				ToolCallID: bc.ToolCall.ID,
 				Tool:       bc.ToolCall.Name,
 				Args:       args,
 				Accesses:   accesses,
 			})
-			return decision.Behavior != permission.Allow, decision.Reason
+			return !result.Allowed, result.Reason
 		},
 		AfterToolCall: func(ctx agent.AfterToolCallCtx) *agent.AfterToolCallResult {
 			if ctx.ToolCall.Name == skills.ToolName && !ctx.Result.Outcome.Failed() {

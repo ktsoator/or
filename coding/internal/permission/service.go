@@ -6,48 +6,44 @@ import (
 	"sync"
 )
 
-// Service resolves tool effects, applies policy, and coordinates interactive
-// approval without coupling the reusable agent loop to product permissions.
+// Service resolves tool effects, applies the session mode, and coordinates
+// interactive approval without coupling the reusable agent loop to product
+// permissions.
 type Service struct {
 	paths    PathResolver
-	policyMu sync.RWMutex
-	policy   Policy
+	modeMu   sync.RWMutex
+	mode     Mode
 	approver Approver
 }
 
 // NewService creates one authorization service for a session workspace.
-func NewService(workspace string, policy Policy, approver Approver) (*Service, error) {
+func NewService(workspace string, mode Mode, approver Approver) (*Service, error) {
 	paths, err := NewPathResolver(workspace)
 	if err != nil {
 		return nil, err
 	}
-	if policy == nil {
-		policy = DefaultPolicy
-	}
-	return &Service{paths: paths, policy: policy, approver: approver}, nil
+	return &Service{paths: paths, mode: NormalizeMode(mode), approver: approver}, nil
 }
 
-// SetPolicy replaces the policy used by subsequent calls. Product code changes
-// it only while a session is idle; the lock also keeps direct callers safe.
-func (s *Service) SetPolicy(policy Policy) {
-	if policy == nil {
-		policy = DefaultPolicy
-	}
-	s.policyMu.Lock()
-	s.policy = policy
-	s.policyMu.Unlock()
+// SetMode changes the permission mode used by subsequent calls. Product code
+// changes it only while a session is idle; the lock also keeps direct callers
+// safe.
+func (s *Service) SetMode(mode Mode) {
+	s.modeMu.Lock()
+	s.mode = NormalizeMode(mode)
+	s.modeMu.Unlock()
 }
 
-func (s *Service) currentPolicy() Policy {
-	s.policyMu.RLock()
-	defer s.policyMu.RUnlock()
-	return s.policy
+func (s *Service) currentMode() Mode {
+	s.modeMu.RLock()
+	defer s.modeMu.RUnlock()
+	return s.mode
 }
 
-// Authorize returns the final decision for a validated tool call.
-func (s *Service) Authorize(ctx context.Context, req Request) (Decision, error) {
+// Authorize returns the final result for a validated tool call.
+func (s *Service) Authorize(ctx context.Context, req Request) (Result, error) {
 	if err := ctx.Err(); err != nil {
-		return Decision{Behavior: Deny, Reason: "tool approval was cancelled"}, err
+		return Result{Reason: "tool approval was cancelled"}, err
 	}
 	resolved := make([]Access, len(req.Accesses))
 	for i, access := range req.Accesses {
@@ -55,105 +51,87 @@ func (s *Service) Authorize(ctx context.Context, req Request) (Decision, error) 
 	}
 	req.Accesses = resolved
 
-	decision := s.currentPolicy()(req)
-	if decision.Behavior != Ask {
-		return decision, nil
+	reason := approvalReason(s.currentMode(), req)
+	if reason == "" {
+		return Result{Allowed: true}, nil
 	}
 	if s.approver == nil {
-		return Decision{
-			Behavior: Deny,
-			Reason:   "this tool requires approval, but no approver is configured",
-		}, nil
+		return Result{Reason: "this tool requires approval, but no approver is configured"}, nil
 	}
 
-	response, err := s.approver.Decide(ctx, ApprovalRequest{Request: req, Reason: decision.Reason})
+	response, err := s.approver.Decide(ctx, ApprovalRequest{Request: req, Reason: reason})
 	if err != nil {
-		return Decision{Behavior: Deny, Reason: "tool approval was cancelled"}, err
+		return Result{Reason: "tool approval was cancelled"}, err
 	}
 	switch response.Choice {
 	case AllowOnce:
-		return Decision{Behavior: Allow, Reason: "allowed once by the user"}, nil
+		return Result{Allowed: true}, nil
 	case Reject:
-		return Decision{Behavior: Deny, Reason: "the user declined this action"}, nil
+		return Result{Reason: "the user declined this action"}, nil
 	default:
-		return Decision{Behavior: Deny, Reason: fmt.Sprintf("invalid approval choice %q", response.Choice)}, nil
+		return Result{Reason: fmt.Sprintf("invalid approval choice %q", response.Choice)}, nil
 	}
 }
 
-// PolicyForMode returns the baseline policy for one session permission mode.
-func PolicyForMode(mode Mode) Policy {
+func approvalReason(mode Mode, req Request) string {
 	mode = NormalizeMode(mode)
-	return func(req Request) Decision {
-		return decideForMode(mode, req)
-	}
-}
-
-// DefaultPolicy is the conservative ask-before-changes mode.
-func DefaultPolicy(req Request) Decision {
-	return decideForMode(ModeAsk, req)
-}
-
-func decideForMode(mode Mode, req Request) Decision {
 	if mode == ModeFullAccess {
-		return Decision{Behavior: Allow, Reason: "full access is enabled for this session"}
+		return ""
 	}
 	if len(req.Accesses) == 0 {
-		return Decision{Behavior: Ask, Reason: "this tool has no declared access policy"}
+		return "this tool has no declared access policy"
 	}
-	decision := Decision{Behavior: Allow, Reason: "allowed by workspace policy"}
 	for _, access := range req.Accesses {
-		candidate := decideAccess(mode, access)
-		if candidate.Behavior == Deny {
-			return candidate
-		}
-		if candidate.Behavior == Ask && decision.Behavior == Allow {
-			decision = candidate
+		if reason := accessApprovalReason(mode, access); reason != "" {
+			return reason
 		}
 	}
-	return decision
+	return ""
 }
 
-func decideAccess(mode Mode, access Access) Decision {
+func accessApprovalReason(mode Mode, access Access) string {
 	switch access.Action {
 	case Internal:
-		return Decision{Behavior: Allow, Reason: "allowed internal session access"}
+		return ""
 	case Read:
 		// Checked before Location: a credentials file inside the workspace is
 		// still a credentials file, and reading it copies secrets into the
 		// model's context and the durable transcript.
 		if access.Sensitive == SecretFile {
-			return Decision{Behavior: Ask, Reason: "reading a file that may hold credentials requires approval"}
+			return "reading a file that may hold credentials requires approval"
 		}
 		if access.Location == Workspace {
-			return Decision{Behavior: Allow, Reason: "allowed workspace read"}
+			return ""
 		}
 		if access.Location == OutsideWorkspace {
-			return Decision{Behavior: Ask, Reason: "reading outside the workspace requires approval"}
+			return "reading outside the workspace requires approval"
 		}
-		return Decision{Behavior: Ask, Reason: "the read target could not be verified"}
+		return "the read target could not be verified"
 	case Write:
 		// Checked before the auto-edit allowance below. Enabling workspace edits
 		// is consent to change the project's own files, not to rewrite its
 		// credentials or the Git state that decides what later commands run.
 		if access.Sensitive == SecretFile {
-			return Decision{Behavior: Ask, Reason: "changing a file that may hold credentials requires approval"}
+			return "changing a file that may hold credentials requires approval"
 		}
 		if access.Sensitive == RepositoryInternals {
-			return Decision{Behavior: Ask, Reason: "changing Git's internal state requires approval"}
+			return "changing Git's internal state requires approval"
 		}
 		if access.Location == OutsideWorkspace {
-			return Decision{Behavior: Ask, Reason: "writing outside the workspace requires approval"}
+			return "writing outside the workspace requires approval"
 		}
 		if access.Location == LocationUnknown {
-			return Decision{Behavior: Ask, Reason: "the write target could not be verified"}
+			return "the write target could not be verified"
 		}
 		if mode == ModeAutoEdit {
-			return Decision{Behavior: Allow, Reason: "workspace edits are enabled for this session"}
+			return ""
 		}
-		return Decision{Behavior: Ask, Reason: "file changes require approval"}
+		return "file changes require approval"
 	case Execute:
-		return Decision{Behavior: Ask, Reason: "shell commands require approval"}
+		return "shell commands require approval"
+	case Network:
+		return "browser and network access requires approval"
 	default:
-		return Decision{Behavior: Ask, Reason: "this tool access is not recognized"}
+		return "this tool access is not recognized"
 	}
 }

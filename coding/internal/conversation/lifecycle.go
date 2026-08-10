@@ -212,14 +212,14 @@ func (m *Manager) UpdatePermissionMode(id string, mode permission.Mode) (Summary
 	previousRecord := runtime.record
 	previousMode := permission.NormalizeMode(permission.Mode(previousRecord.PermissionMode))
 	if runtime.session != nil {
-		runtime.session.SetPermissionPolicy(permission.PolicyForMode(mode))
+		runtime.session.SetPermissionMode(mode)
 	}
 	runtime.record.PermissionMode = string(mode)
 	runtime.record.UpdatedAt = time.Now().UTC()
 	if err := m.saveLocked(); err != nil {
 		runtime.record = previousRecord
 		if runtime.session != nil {
-			runtime.session.SetPermissionPolicy(permission.PolicyForMode(previousMode))
+			runtime.session.SetPermissionMode(previousMode)
 		}
 		return Summary{}, err
 	}

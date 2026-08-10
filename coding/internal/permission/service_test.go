@@ -13,37 +13,37 @@ func (f approverFunc) Decide(ctx context.Context, req ApprovalRequest) (Approval
 	return f(ctx, req)
 }
 
-func TestServiceDefaultPolicy(t *testing.T) {
+func TestServiceAskMode(t *testing.T) {
 	workspace := t.TempDir()
 	outside := filepath.Join(filepath.Dir(workspace), "outside.txt")
 
 	t.Run("workspace read is allowed without approval", func(t *testing.T) {
-		service, err := NewService(workspace, nil, nil)
+		service, err := NewService(workspace, ModeAsk, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		decision, err := service.Authorize(context.Background(), Request{
+		result, err := service.Authorize(context.Background(), Request{
 			Tool: "read", Accesses: []Access{{Action: Read, Path: "file.txt"}},
 		})
-		if err != nil || decision.Behavior != Allow {
-			t.Fatalf("Authorize() = %+v, %v, want Allow", decision, err)
+		if err != nil || !result.Allowed {
+			t.Fatalf("Authorize() = %+v, %v, want allowed", result, err)
 		}
 	})
 
 	t.Run("external read asks and can be allowed once", func(t *testing.T) {
 		var received ApprovalRequest
-		service, err := NewService(workspace, nil, approverFunc(func(_ context.Context, req ApprovalRequest) (ApprovalResponse, error) {
+		service, err := NewService(workspace, ModeAsk, approverFunc(func(_ context.Context, req ApprovalRequest) (ApprovalResponse, error) {
 			received = req
 			return ApprovalResponse{Choice: AllowOnce}, nil
 		}))
 		if err != nil {
 			t.Fatal(err)
 		}
-		decision, err := service.Authorize(context.Background(), Request{
+		result, err := service.Authorize(context.Background(), Request{
 			Tool: "read", Accesses: []Access{{Action: Read, Path: outside}},
 		})
-		if err != nil || decision.Behavior != Allow {
-			t.Fatalf("Authorize() = %+v, %v, want Allow", decision, err)
+		if err != nil || !result.Allowed {
+			t.Fatalf("Authorize() = %+v, %v, want allowed", result, err)
 		}
 		if len(received.Request.Accesses) != 1 || received.Request.Accesses[0].Location != OutsideWorkspace {
 			t.Fatalf("approval request access = %+v, want external", received.Request.Accesses)
@@ -52,7 +52,7 @@ func TestServiceDefaultPolicy(t *testing.T) {
 
 	t.Run("writes and commands require approval", func(t *testing.T) {
 		calls := 0
-		service, err := NewService(workspace, nil, approverFunc(func(_ context.Context, _ ApprovalRequest) (ApprovalResponse, error) {
+		service, err := NewService(workspace, ModeAsk, approverFunc(func(_ context.Context, _ ApprovalRequest) (ApprovalResponse, error) {
 			calls++
 			return ApprovalResponse{Choice: Reject}, nil
 		}))
@@ -61,21 +61,43 @@ func TestServiceDefaultPolicy(t *testing.T) {
 		}
 		for _, request := range []Request{
 			{Tool: "write", Accesses: []Access{{Action: Write, Path: "file.txt"}}},
-			{Tool: "bash", Accesses: []Access{{Action: Execute, Command: "pwd"}}},
+			{Tool: "bash", Accesses: []Access{{Action: Execute}}},
 		} {
-			decision, err := service.Authorize(context.Background(), request)
-			if err != nil || decision.Behavior != Deny {
-				t.Fatalf("Authorize(%s) = %+v, %v, want Deny", request.Tool, decision, err)
+			result, err := service.Authorize(context.Background(), request)
+			if err != nil || result.Allowed {
+				t.Fatalf("Authorize(%s) = %+v, %v, want denied", request.Tool, result, err)
 			}
 		}
 		if calls != 2 {
 			t.Fatalf("approval calls = %d, want 2", calls)
 		}
 	})
+
+	t.Run("network access asks and preserves its target", func(t *testing.T) {
+		var received ApprovalRequest
+		service, err := NewService(workspace, ModeAsk, approverFunc(func(_ context.Context, req ApprovalRequest) (ApprovalResponse, error) {
+			received = req
+			return ApprovalResponse{Choice: AllowOnce}, nil
+		}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		result, err := service.Authorize(context.Background(), Request{
+			Tool:     "open_preview",
+			Args:     map[string]any{"url": "https://example.com/docs"},
+			Accesses: []Access{{Action: Network}},
+		})
+		if err != nil || !result.Allowed {
+			t.Fatalf("Authorize() = %+v, %v, want allowed", result, err)
+		}
+		if got := received.Request.Args["url"]; got != "https://example.com/docs" {
+			t.Fatalf("approval request URL = %v, want network target", got)
+		}
+	})
 }
 
 func TestServiceCancelsApproval(t *testing.T) {
-	service, err := NewService(t.TempDir(), nil, approverFunc(func(ctx context.Context, _ ApprovalRequest) (ApprovalResponse, error) {
+	service, err := NewService(t.TempDir(), ModeAsk, approverFunc(func(ctx context.Context, _ ApprovalRequest) (ApprovalResponse, error) {
 		<-ctx.Done()
 		return ApprovalResponse{}, ctx.Err()
 	}))
@@ -84,62 +106,69 @@ func TestServiceCancelsApproval(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	decision, err := service.Authorize(ctx, Request{
-		Tool: "bash", Accesses: []Access{{Action: Execute, Command: "pwd"}},
+	result, err := service.Authorize(ctx, Request{
+		Tool: "bash", Accesses: []Access{{Action: Execute}},
 	})
-	if !errors.Is(err, context.Canceled) || decision.Behavior != Deny {
-		t.Fatalf("Authorize() = %+v, %v, want cancelled Deny", decision, err)
+	if !errors.Is(err, context.Canceled) || result.Allowed {
+		t.Fatalf("Authorize() = %+v, %v, want cancelled denial", result, err)
 	}
 }
 
-func TestPolicyModes(t *testing.T) {
+func TestModeApprovalReasons(t *testing.T) {
 	tests := []struct {
-		name   string
-		mode   Mode
-		access Access
-		want   Behavior
+		name         string
+		mode         Mode
+		access       Access
+		wantApproval bool
 	}{
-		{name: "ask allows workspace reads", mode: ModeAsk, access: Access{Action: Read, Location: Workspace}, want: Allow},
-		{name: "ask prompts for workspace writes", mode: ModeAsk, access: Access{Action: Write, Location: Workspace}, want: Ask},
-		{name: "auto edit allows workspace writes", mode: ModeAutoEdit, access: Access{Action: Write, Location: Workspace}, want: Allow},
-		{name: "auto edit prompts for external writes", mode: ModeAutoEdit, access: Access{Action: Write, Location: OutsideWorkspace}, want: Ask},
-		{name: "auto edit prompts for shell commands", mode: ModeAutoEdit, access: Access{Action: Execute}, want: Ask},
-		{name: "full access allows external reads", mode: ModeFullAccess, access: Access{Action: Read, Location: OutsideWorkspace}, want: Allow},
-		{name: "full access allows external writes", mode: ModeFullAccess, access: Access{Action: Write, Location: OutsideWorkspace}, want: Allow},
-		{name: "full access allows sensitive writes", mode: ModeFullAccess, access: Access{Action: Write, Location: Workspace, Sensitive: SecretFile}, want: Allow},
-		{name: "full access allows shell commands", mode: ModeFullAccess, access: Access{Action: Execute}, want: Allow},
+		{name: "ask allows workspace reads", mode: ModeAsk, access: Access{Action: Read, Location: Workspace}},
+		{name: "ask allows internal access", mode: ModeAsk, access: Access{Action: Internal}},
+		{name: "ask prompts for workspace writes", mode: ModeAsk, access: Access{Action: Write, Location: Workspace}, wantApproval: true},
+		{name: "ask prompts for sensitive workspace reads", mode: ModeAsk, access: Access{Action: Read, Location: Workspace, Sensitive: SecretFile}, wantApproval: true},
+		{name: "auto edit allows workspace reads", mode: ModeAutoEdit, access: Access{Action: Read, Location: Workspace}},
+		{name: "auto edit allows internal access", mode: ModeAutoEdit, access: Access{Action: Internal}},
+		{name: "auto edit allows workspace writes", mode: ModeAutoEdit, access: Access{Action: Write, Location: Workspace}},
+		{name: "auto edit prompts for sensitive workspace writes", mode: ModeAutoEdit, access: Access{Action: Write, Location: Workspace, Sensitive: SecretFile}, wantApproval: true},
+		{name: "auto edit prompts for external writes", mode: ModeAutoEdit, access: Access{Action: Write, Location: OutsideWorkspace}, wantApproval: true},
+		{name: "auto edit prompts for shell commands", mode: ModeAutoEdit, access: Access{Action: Execute}, wantApproval: true},
+		{name: "ask prompts for network access", mode: ModeAsk, access: Access{Action: Network}, wantApproval: true},
+		{name: "auto edit prompts for network access", mode: ModeAutoEdit, access: Access{Action: Network}, wantApproval: true},
+		{name: "full access allows external reads", mode: ModeFullAccess, access: Access{Action: Read, Location: OutsideWorkspace}},
+		{name: "full access allows external writes", mode: ModeFullAccess, access: Access{Action: Write, Location: OutsideWorkspace}},
+		{name: "full access allows sensitive writes", mode: ModeFullAccess, access: Access{Action: Write, Location: Workspace, Sensitive: SecretFile}},
+		{name: "full access allows shell commands", mode: ModeFullAccess, access: Access{Action: Execute}},
+		{name: "full access allows network access", mode: ModeFullAccess, access: Access{Action: Network}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := PolicyForMode(test.mode)(Request{Accesses: []Access{test.access}})
-			if got.Behavior != test.want {
-				t.Fatalf("PolicyForMode(%q) = %+v, want %q", test.mode, got, test.want)
+			reason := approvalReason(test.mode, Request{Accesses: []Access{test.access}})
+			if got := reason != ""; got != test.wantApproval {
+				t.Fatalf("approvalReason(%q) = %q, approval=%t, want %t", test.mode, reason, got, test.wantApproval)
 			}
 		})
 	}
 }
 
 func TestFullAccessAllowsToolsWithoutDeclaredAccess(t *testing.T) {
-	decision := PolicyForMode(ModeFullAccess)(Request{})
-	if decision.Behavior != Allow {
-		t.Fatalf("PolicyForMode(%q) without accesses = %+v, want %q", ModeFullAccess, decision, Allow)
+	if reason := approvalReason(ModeFullAccess, Request{}); reason != "" {
+		t.Fatalf("approvalReason(%q) without accesses = %q, want no approval", ModeFullAccess, reason)
 	}
 }
 
-func TestServiceCanChangePolicy(t *testing.T) {
-	service, err := NewService(t.TempDir(), PolicyForMode(ModeAsk), nil)
+func TestServiceCanChangeMode(t *testing.T) {
+	service, err := NewService(t.TempDir(), ModeAsk, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	request := Request{Tool: "write", Accesses: []Access{{Action: Write, Path: "file.txt"}}}
 	before, err := service.Authorize(context.Background(), request)
-	if err != nil || before.Behavior != Deny {
+	if err != nil || before.Allowed {
 		t.Fatalf("Authorize() before mode change = %+v, %v, want denied without approver", before, err)
 	}
-	service.SetPolicy(PolicyForMode(ModeAutoEdit))
+	service.SetMode(ModeAutoEdit)
 	after, err := service.Authorize(context.Background(), request)
-	if err != nil || after.Behavior != Allow {
-		t.Fatalf("Authorize() after mode change = %+v, %v, want Allow", after, err)
+	if err != nil || !after.Allowed {
+		t.Fatalf("Authorize() after mode change = %+v, %v, want allowed", after, err)
 	}
 }
 
@@ -151,8 +180,7 @@ func TestRemovedReadOnlyModeFallsBackToAsk(t *testing.T) {
 	if got := NormalizeMode(legacy); got != ModeAsk {
 		t.Fatalf("NormalizeMode(%q) = %q, want %q", legacy, got, ModeAsk)
 	}
-	decision := PolicyForMode(legacy)(Request{Accesses: []Access{{Action: Write, Location: Workspace}}})
-	if decision.Behavior != Ask {
-		t.Fatalf("legacy read-only policy = %+v, want conservative Ask fallback", decision)
+	if reason := approvalReason(legacy, Request{Accesses: []Access{{Action: Write, Location: Workspace}}}); reason == "" {
+		t.Fatal("legacy read-only mode allowed a workspace write without approval")
 	}
 }

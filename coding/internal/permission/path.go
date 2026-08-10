@@ -31,7 +31,7 @@ func NewPathResolver(workspace string) (PathResolver, error) {
 }
 
 // Resolve enriches a filesystem access with its canonical target and scope.
-// An uncertain target stays LocationUnknown so policy fails closed to Ask.
+// An uncertain target stays LocationUnknown so authorization requires approval.
 func (r PathResolver) Resolve(access Access) Access {
 	if access.Action != Read && access.Action != Write {
 		return access
@@ -43,7 +43,6 @@ func (r PathResolver) Resolve(access Access) Access {
 	resolved, err := resolveAllowMissing(target)
 	if err != nil {
 		access.Location = LocationUnknown
-		access.ResolutionError = err.Error()
 		// An unresolvable path still carries a usable name. Classifying it means
 		// an unverifiable target cannot also shed its sensitivity.
 		access.Sensitive = ClassifySensitive(target)

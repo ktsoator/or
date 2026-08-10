@@ -218,11 +218,11 @@ func previewAccess(args map[string]any) []permission.Access {
 	source, _ := args["url"].(string)
 	source = strings.TrimSpace(source)
 	if source == "" || strings.HasPrefix(strings.ToLower(source), "http://") || strings.HasPrefix(strings.ToLower(source), "https://") {
-		return InternalAccess(args)
+		return []permission.Access{{Action: permission.Network}}
 	}
 	path, err := previewInputPath(source)
 	if err != nil {
-		return InternalAccess(args)
+		return []permission.Access{{Action: permission.Network}}
 	}
 	return []permission.Access{{Action: permission.Read, Path: path}}
 }

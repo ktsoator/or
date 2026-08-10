@@ -1,6 +1,6 @@
 // Package permission owns the coding product's tool authorization policy. It
 // describes tool effects, resolves filesystem scope, and asks an approver when
-// the policy cannot allow an operation automatically.
+// the session mode cannot allow an operation automatically.
 package permission
 
 import "context"
@@ -40,6 +40,7 @@ const (
 	Read     Action = "read"
 	Write    Action = "write"
 	Execute  Action = "execute"
+	Network  Action = "network"
 	Internal Action = "internal"
 )
 
@@ -53,16 +54,14 @@ const (
 	OutsideWorkspace Location = "external"
 )
 
-// Access is one effect of a validated tool call. Tools fill Path or Command;
-// Service fills ResolvedPath, Location, and Sensitive before applying policy.
+// Access is one effect of a validated tool call. Filesystem tools fill Path;
+// Service fills ResolvedPath, Location, and Sensitive before authorization.
 type Access struct {
-	Action          Action
-	Path            string
-	Command         string
-	ResolvedPath    string
-	Location        Location
-	Sensitive       SensitiveKind
-	ResolutionError string
+	Action       Action
+	Path         string
+	ResolvedPath string
+	Location     Location
+	Sensitive    SensitiveKind
 }
 
 // Request is the complete permission input for one validated tool call.
@@ -73,25 +72,14 @@ type Request struct {
 	Accesses   []Access
 }
 
-// Behavior is the policy outcome for a tool call.
-type Behavior string
-
-const (
-	Allow Behavior = "allow"
-	Ask   Behavior = "ask"
-	Deny  Behavior = "deny"
-)
-
-// Decision is a structured authorization result.
-type Decision struct {
-	Behavior Behavior
-	Reason   string
+// Result is the final authorization outcome after any required approval.
+type Result struct {
+	Allowed bool
+	Reason  string
 }
 
-// Policy maps a resolved request to an authorization decision.
-type Policy func(Request) Decision
-
-// ApprovalRequest is sent to the product surface when policy returns Ask.
+// ApprovalRequest is sent to the product surface when authorization needs the
+// user's decision.
 type ApprovalRequest struct {
 	Request Request
 	Reason  string
