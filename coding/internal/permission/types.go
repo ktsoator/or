@@ -11,14 +11,13 @@ type Mode string
 const (
 	ModeAsk        Mode = "ask"
 	ModeAutoEdit   Mode = "auto_edit"
-	ModeReadOnly   Mode = "read_only"
 	ModeFullAccess Mode = "full_access"
 )
 
 // Valid reports whether mode is accepted from a client or persisted record.
 func (mode Mode) Valid() bool {
 	switch mode {
-	case ModeAsk, ModeAutoEdit, ModeReadOnly, ModeFullAccess:
+	case ModeAsk, ModeAutoEdit, ModeFullAccess:
 		return true
 	default:
 		return false

@@ -4462,7 +4462,7 @@ test('settings updates are isolated between the main and right-panel composers',
   await expect(sideComposer.getByTestId('composer-send')).toBeEnabled()
 
   await sidePermission.click()
-  await page.getByRole('menuitemradio', { name: /Read-only/ }).click()
+  await page.getByRole('menuitemradio', { name: /Auto edit/ }).click()
   await expect(sidePermission).toBeDisabled()
 
   await expect.poll(() =>
@@ -4479,7 +4479,7 @@ test('settings updates are isolated between the main and right-panel composers',
     },
     {
       path: '/api/sessions/secondary-session/permission-mode',
-      body: { mode: 'read_only' },
+      body: { mode: 'auto_edit' },
     },
   ])
   await expect(mainPermission).toBeEnabled()

@@ -104,9 +104,6 @@ func TestPolicyModes(t *testing.T) {
 		{name: "auto edit allows workspace writes", mode: ModeAutoEdit, access: Access{Action: Write, Location: Workspace}, want: Allow},
 		{name: "auto edit prompts for external writes", mode: ModeAutoEdit, access: Access{Action: Write, Location: OutsideWorkspace}, want: Ask},
 		{name: "auto edit prompts for shell commands", mode: ModeAutoEdit, access: Access{Action: Execute}, want: Ask},
-		{name: "read only blocks writes", mode: ModeReadOnly, access: Access{Action: Write, Location: Workspace}, want: Deny},
-		{name: "read only blocks shell commands", mode: ModeReadOnly, access: Access{Action: Execute}, want: Deny},
-		{name: "read only still prompts for external reads", mode: ModeReadOnly, access: Access{Action: Read, Location: OutsideWorkspace}, want: Ask},
 		{name: "full access allows external reads", mode: ModeFullAccess, access: Access{Action: Read, Location: OutsideWorkspace}, want: Allow},
 		{name: "full access allows external writes", mode: ModeFullAccess, access: Access{Action: Write, Location: OutsideWorkspace}, want: Allow},
 		{name: "full access allows sensitive writes", mode: ModeFullAccess, access: Access{Action: Write, Location: Workspace, Sensitive: SecretFile}, want: Allow},
@@ -146,12 +143,16 @@ func TestServiceCanChangePolicy(t *testing.T) {
 	}
 }
 
-func TestReadOnlyDenyTakesPriorityOverApproval(t *testing.T) {
-	decision := PolicyForMode(ModeReadOnly)(Request{Accesses: []Access{
-		{Action: Read, Location: OutsideWorkspace},
-		{Action: Write, Location: Workspace},
-	}})
-	if decision.Behavior != Deny {
-		t.Fatalf("read-only mixed access decision = %+v, want Deny", decision)
+func TestRemovedReadOnlyModeFallsBackToAsk(t *testing.T) {
+	legacy := Mode("read_only")
+	if legacy.Valid() {
+		t.Fatal("removed read-only mode is still valid")
+	}
+	if got := NormalizeMode(legacy); got != ModeAsk {
+		t.Fatalf("NormalizeMode(%q) = %q, want %q", legacy, got, ModeAsk)
+	}
+	decision := PolicyForMode(legacy)(Request{Accesses: []Access{{Action: Write, Location: Workspace}}})
+	if decision.Behavior != Ask {
+		t.Fatalf("legacy read-only policy = %+v, want conservative Ask fallback", decision)
 	}
 }

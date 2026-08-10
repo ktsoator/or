@@ -100,22 +100,3 @@ func TestSensitiveWorkspaceFileStillNeedsApproval(t *testing.T) {
 		})
 	}
 }
-
-func TestReadOnlyModeStillDeniesSensitiveWrites(t *testing.T) {
-	workspace := t.TempDir()
-	service, err := NewService(workspace, PolicyForMode(ModeReadOnly), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	decision, err := service.Authorize(t.Context(), Request{
-		Tool:     "write",
-		Accesses: []Access{{Action: Write, Path: ".env"}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Read-only denies every write; sensitivity must not soften that to Ask.
-	if decision.Behavior != Deny {
-		t.Fatalf("Authorize() = %q (%s), want deny", decision.Behavior, decision.Reason)
-	}
-}

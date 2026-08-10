@@ -20,7 +20,6 @@ import {
 type PermissionLabelKey =
   | 'permission.ask'
   | 'permission.autoEdit'
-  | 'permission.readOnly'
   | 'permission.fullAccess'
 
 type ModeOption = {
@@ -29,12 +28,10 @@ type ModeOption = {
   shortLabelKey:
     | 'permission.askShort'
     | 'permission.autoEditShort'
-    | 'permission.readOnlyShort'
     | 'permission.fullAccessShort'
   descriptionKey:
     | 'permission.askDescription'
     | 'permission.autoEditDescription'
-    | 'permission.readOnlyDescription'
     | 'permission.fullAccessDescription'
 }
 
@@ -50,12 +47,6 @@ const options: ModeOption[] = [
     labelKey: 'permission.autoEdit',
     shortLabelKey: 'permission.autoEditShort',
     descriptionKey: 'permission.autoEditDescription',
-  },
-  {
-    value: 'read_only',
-    labelKey: 'permission.readOnly',
-    shortLabelKey: 'permission.readOnlyShort',
-    descriptionKey: 'permission.readOnlyDescription',
   },
   {
     value: 'full_access',

@@ -98,9 +98,6 @@ func decideForMode(mode Mode, req Request) Decision {
 		return Decision{Behavior: Allow, Reason: "full access is enabled for this session"}
 	}
 	if len(req.Accesses) == 0 {
-		if mode == ModeReadOnly {
-			return Decision{Behavior: Deny, Reason: "tools without a declared access policy are blocked in read-only mode"}
-		}
 		return Decision{Behavior: Ask, Reason: "this tool has no declared access policy"}
 	}
 	decision := Decision{Behavior: Allow, Reason: "allowed by workspace policy"}
@@ -135,9 +132,6 @@ func decideAccess(mode Mode, access Access) Decision {
 		}
 		return Decision{Behavior: Ask, Reason: "the read target could not be verified"}
 	case Write:
-		if mode == ModeReadOnly {
-			return Decision{Behavior: Deny, Reason: "file changes are blocked in read-only mode"}
-		}
 		// Checked before the auto-edit allowance below. Enabling workspace edits
 		// is consent to change the project's own files, not to rewrite its
 		// credentials or the Git state that decides what later commands run.
@@ -158,14 +152,8 @@ func decideAccess(mode Mode, access Access) Decision {
 		}
 		return Decision{Behavior: Ask, Reason: "file changes require approval"}
 	case Execute:
-		if mode == ModeReadOnly {
-			return Decision{Behavior: Deny, Reason: "shell commands are blocked in read-only mode"}
-		}
 		return Decision{Behavior: Ask, Reason: "shell commands require approval"}
 	default:
-		if mode == ModeReadOnly {
-			return Decision{Behavior: Deny, Reason: "unrecognized tool access is blocked in read-only mode"}
-		}
 		return Decision{Behavior: Ask, Reason: "this tool access is not recognized"}
 	}
 }
