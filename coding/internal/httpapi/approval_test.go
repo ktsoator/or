@@ -93,7 +93,7 @@ func approvalRequest() permission.ApprovalRequest {
 		Request: permission.Request{
 			Tool:     "bash",
 			Args:     map[string]any{"command": "go test ./..."},
-			Accesses: []permission.Access{{Action: permission.Execute, Command: "go test ./..."}},
+			Accesses: []permission.Access{{Action: permission.Execute}},
 		},
 		Reason: "shell commands require approval",
 	}
@@ -145,6 +145,46 @@ func TestApprovalRequestOmitsCommandForOtherTools(t *testing.T) {
 	}
 	if got := approvalCommand(request); got != "" {
 		t.Fatalf("approvalCommand() = %q, want empty for a non-bash tool", got)
+	}
+}
+
+func TestBrowserApprovalSummariesNameTheirTarget(t *testing.T) {
+	tests := []struct {
+		name string
+		req  permission.ApprovalRequest
+		want string
+	}{
+		{
+			name: "navigation",
+			req: permission.ApprovalRequest{Request: permission.Request{
+				Tool: "open_preview",
+				Args: map[string]any{"url": "https://example.com/docs"},
+			}},
+			want: "open browser: https://example.com/docs",
+		},
+		{
+			name: "explicit inspection",
+			req: permission.ApprovalRequest{Request: permission.Request{
+				Tool: "inspect_browser",
+				Args: map[string]any{"tabID": "tab-7"},
+			}},
+			want: "inspect browser tab: tab-7",
+		},
+		{
+			name: "selected inspection",
+			req: permission.ApprovalRequest{Request: permission.Request{
+				Tool: "inspect_browser",
+				Args: map[string]any{},
+			}},
+			want: "inspect selected browser tab",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := describeApproval(test.req); got != test.want {
+				t.Fatalf("describeApproval() = %q, want %q", got, test.want)
+			}
+		})
 	}
 }
 

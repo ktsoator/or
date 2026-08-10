@@ -1,40 +1,37 @@
 # Or client
 
 The React application consumes the Or product through relative `/api`
-HTTP and SSE routes. Vite proxies them to `http://localhost:8787` for standalone
-browser development. The Electron sidecar serves the production build and API
-from one authenticated loopback origin.
+HTTP and SSE routes. The Electron sidecar serves the production build and API
+from one authenticated loopback origin. During desktop development, Electron
+starts Vite and injects the sidecar URL through `CODING_API_PROXY`.
 
 ## Development
 
-Start the API from the repository root:
+Run the complete desktop application:
 
 ```sh
-go run ./coding/cmd/coding
-```
-
-Sessions select their project directory in the browser. The directory
-picker and ordinary Chats start from the current user's home directory, while
-session metadata and transcripts are stored under `~/.or/coding`. Override that
-storage location with `OR_DATA_DIR` or `-data-dir` when needed.
-
-Start the client in another terminal:
-
-```sh
-cd coding/client
+cd coding/desktop
 bun install
 bun run dev
 ```
 
-Open `http://localhost:5173`.
+Session metadata and transcripts are stored under `~/.or/coding`. Set
+`OR_DATA_DIR` to use another location.
 
-Set `CODING_API_PROXY` when the local API uses a different address.
+Client-only checks run from this directory:
+
+```sh
+cd coding/client
+bun install
+bun run test
+bun run lint
+bun run build
+```
 
 The right-side Browser has no web iframe fallback. In Electron it renders public
 sites, localhost apps, and workspace HTML with `<webview>` elements managed by a
-renderer-side registry. Use `bun run dev` from `coding/desktop` when working on
-that feature; standalone Vite mode uses a test bridge and remains useful for the
-rest of the React client.
+renderer-side registry. Browser-only Playwright tests use a test bridge; they do
+not provide a separately deployable product mode.
 
 Run the desktop-shell UI regression tests with a locally installed Chrome:
 
@@ -45,19 +42,9 @@ bun run test:ui
 ## Production build
 
 ```sh
-cd coding/client
+cd coding/desktop
 bun run build
 ```
 
-The static application is written to `coding/client/dist`. Deploy that directory with a
-static host and route `/api/*` to the Go service.
-
-For a fully cross-origin deployment, build with the API origin and allow the
-client origin in the Go process:
-
-```sh
-VITE_API_ORIGIN=https://api.example.com bun run build
-go run ./coding/cmd/coding -client-origin https://app.example.com
-```
-
-`OR_CLIENT_ORIGIN` is the environment-variable equivalent of `-client-origin`.
+The desktop build compiles the React renderer, Electron main process, and Go
+sidecar together.

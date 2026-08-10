@@ -612,6 +612,7 @@ export default function App() {
             onPointerMove={resizeWorkbench}
             onPointerUp={stopWorkbenchResize}
             onPointerCancel={stopWorkbenchResize}
+            onLostPointerCapture={stopWorkbenchResize}
             onKeyDown={resizeWorkbenchWithKeyboard}
           >
             <span

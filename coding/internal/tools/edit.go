@@ -19,11 +19,11 @@ type editArgs struct {
 	ReplaceAll bool   `json:"replace_all,omitempty" jsonschema:"description=Replace every occurrence instead of requiring a unique match"`
 }
 
-// Edit returns a tool that replaces an exact substring in a file. By default the
+// editTool returns a tool that replaces an exact substring in a file. By default the
 // match must be unique, so an ambiguous edit fails instead of changing the wrong
 // place; set replace_all to change every occurrence. It runs sequentially with
 // other tool calls so concurrent edits cannot corrupt a file.
-func Edit(root string, ops FileOps, files *FileStateStore) Tool {
+func editTool(root string, files *fileStateStore) Tool {
 	def := llm.MustTool[editArgs]("edit", editText.description)
 	return Tool{
 		AgentTool: agent.AgentTool{
@@ -41,17 +41,17 @@ func Edit(root string, ops FileOps, files *FileStateStore) Tool {
 				}
 
 				path := resolve(root, in.Path)
-				info, err := ops.Stat(ctx, path)
+				info, err := os.Stat(path)
 				if err != nil {
 					detail := fmt.Sprintf("edit %s: %v", in.Path, err)
 					return mutationFailure(in.Path, statFailureReason(err), detail), err
 				}
-				if err := files.Check(path, info); err != nil {
+				if err := files.check(path, info); err != nil {
 					reason := stateFailureReason(err)
 					err = mutationStateError("edit", in.Path, err)
 					return mutationFailure(in.Path, reason, err.Error()), err
 				}
-				data, err := ops.ReadFile(ctx, path)
+				data, err := os.ReadFile(path)
 				if err != nil {
 					detail := fmt.Sprintf("edit %s: %v", in.Path, err)
 					return mutationFailure(in.Path, FailureIO, detail), err
@@ -69,25 +69,25 @@ func Edit(root string, ops FileOps, files *FileStateStore) Tool {
 				}
 
 				updated := strings.ReplaceAll(content, in.OldString, in.NewString)
-				current, err := ops.Stat(ctx, path)
+				current, err := os.Stat(path)
 				if err != nil {
 					detail := fmt.Sprintf("edit %s: %v", in.Path, err)
 					return mutationFailure(in.Path, statFailureReason(err), detail), err
 				}
-				if err := files.Check(path, current); err != nil {
+				if err := files.check(path, current); err != nil {
 					reason := stateFailureReason(err)
 					err = mutationStateError("edit", in.Path, err)
 					return mutationFailure(in.Path, reason, err.Error()), err
 				}
 				var perm os.FileMode = current.Mode().Perm()
-				if err := ops.WriteFile(ctx, path, []byte(updated), perm); err != nil {
+				if err := atomicWriteFile(ctx, path, []byte(updated), perm); err != nil {
 					detail := fmt.Sprintf("edit %s: %v", in.Path, err)
 					return mutationFailure(in.Path, FailureIO, detail), err
 				}
-				if updatedInfo, err := ops.Stat(ctx, path); err == nil {
-					files.Record(path, updatedInfo)
+				if updatedInfo, err := os.Stat(path); err == nil {
+					files.record(path, updatedInfo)
 				} else {
-					files.Delete(path)
+					files.delete(path)
 				}
 
 				change := FileChange{Path: in.Path, Kind: ChangeUpdate, Bytes: len(updated)}

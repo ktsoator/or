@@ -243,11 +243,12 @@ type wireEvent struct {
 	Preview          *wirePreview `json:"preview,omitempty"`
 	IsError          bool         `json:"isError,omitempty"`
 	// message_end fallback text (used when nothing streamed)
-	Text   string      `json:"text,omitempty"`
-	Images []wireImage `json:"images,omitempty"`
-	Files  []wireFile  `json:"files,omitempty"`
-	Usage  *wireUsage  `json:"usage,omitempty"`
-	Final  bool        `json:"finalResponse,omitempty"`
+	Text    string            `json:"text,omitempty"`
+	Images  []wireImage       `json:"images,omitempty"`
+	Files   []wireFile        `json:"files,omitempty"`
+	Usage   *wireUsage        `json:"usage,omitempty"`
+	Context *wireContextUsage `json:"context,omitempty"`
+	Final   bool              `json:"finalResponse,omitempty"`
 	// Completed-response metadata. ModelName is the stable catalog display name;
 	// Provider and Model keep the exact identity available to other clients.
 	Provider  string `json:"provider,omitempty"`
@@ -359,11 +360,20 @@ type wireUsageCost struct {
 }
 
 type wireContextUsage struct {
-	Provider      string `json:"provider"`
-	Model         string `json:"model"`
-	UsedTokens    int64  `json:"usedTokens"`
-	ContextWindow int64  `json:"contextWindow"`
-	Measured      bool   `json:"measured"`
+	Provider      string                `json:"provider"`
+	Model         string                `json:"model"`
+	UsedTokens    int64                 `json:"usedTokens"`
+	ContextWindow int64                 `json:"contextWindow"`
+	Measured      bool                  `json:"measured"`
+	Breakdown     *wireContextBreakdown `json:"breakdown,omitempty"`
+}
+
+type wireContextBreakdown struct {
+	Messages       int64 `json:"messages"`
+	SystemTools    int64 `json:"systemTools"`
+	SystemPrompt   int64 `json:"systemPrompt"`
+	Skills         int64 `json:"skills"`
+	ProjectContext int64 `json:"projectContext"`
 }
 
 type wireBackgroundTask struct {

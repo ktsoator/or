@@ -206,7 +206,7 @@ export type ConnectionStatus = 'connecting' | 'ready' | 'disconnected'
 
 export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 export type ModelThinkingVisibility = 'visible' | 'hidden'
-export type PermissionMode = 'ask' | 'auto_edit' | 'read_only' | 'full_access'
+export type PermissionMode = 'ask' | 'auto_edit' | 'full_access'
 
 export type ModelOption = {
   provider: string

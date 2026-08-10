@@ -32,14 +32,14 @@ func newEngineSession(
 	transport Transport,
 ) (*engine.Session, error) {
 	return engine.New(ctx, engine.Options{
-		Model:         cfg.Model,
-		ThinkingLevel: cfg.ThinkingLevel,
-		Cwd:           cfg.WorkspacePath,
-		Store:         transcript.NewJSONL(cfg.TranscriptPath),
-		Policy:        permission.PolicyForMode(cfg.PermissionMode),
-		Approver:      transport,
-		Browser:       transport,
-		Asker:         transport,
+		Model:          cfg.Model,
+		ThinkingLevel:  cfg.ThinkingLevel,
+		Cwd:            cfg.WorkspacePath,
+		Store:          transcript.NewJSONL(cfg.TranscriptPath),
+		PermissionMode: cfg.PermissionMode,
+		Approver:       transport,
+		Browser:        transport,
+		Asker:          transport,
 		SkillLoader: func() []skills.Skill {
 			return loadSkills(cfg.WorkspacePath)
 		},

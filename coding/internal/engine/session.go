@@ -31,8 +31,7 @@ type Options struct {
 	// Cwd is the workspace root the tools operate in. Empty uses the process
 	// working directory.
 	Cwd string
-	// Tools is the tool set. Nil uses tools.CodingTools rooted at Cwd, backed by
-	// tools.LocalOps.
+	// Tools is the tool set. Nil uses the built-in tools rooted at Cwd.
 	Tools []tools.Tool
 	// Skills is the initial immutable skill snapshot. The Skill tool is advertised
 	// only while the active snapshot contains at least one Skill.
@@ -42,9 +41,10 @@ type Options struct {
 	// Skills static. The loader is deliberately not called for provider retries,
 	// tool-loop turns, or context-overflow recovery.
 	SkillLoader func() []skills.Skill
-	// Policy classifies resolved tool access. Nil uses permission.DefaultPolicy.
-	Policy permission.Policy
-	// Approver obtains decisions for calls classified as Ask. Nil denies them.
+	// PermissionMode controls which tool calls require approval. Missing or
+	// unknown values use the conservative ask mode.
+	PermissionMode permission.Mode
+	// Approver obtains decisions for calls that require approval. Nil denies them.
 	Approver permission.Approver
 	// Browser delivers navigation and read-only observation requests to the
 	// product shell and waits for their acknowledgements. Nil makes those tools
@@ -189,8 +189,8 @@ func (s *Session) SetThinkingLevel(level llm.ModelThinkingLevel) {
 	s.agent.SetThinkingLevel(level)
 }
 
-// SetPermissionPolicy replaces the authorization policy used by subsequent
-// tool calls. Call it only while the session is idle.
-func (s *Session) SetPermissionPolicy(policy permission.Policy) {
-	s.authorizer.SetPolicy(policy)
+// SetPermissionMode changes the permission mode used by subsequent tool calls.
+// Call it only while the session is idle.
+func (s *Session) SetPermissionMode(mode permission.Mode) {
+	s.authorizer.SetMode(mode)
 }

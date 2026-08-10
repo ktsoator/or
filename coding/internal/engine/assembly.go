@@ -37,7 +37,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	var toolSet []tools.Tool
 	var tasks *tools.TaskManager
 	if opts.Tools == nil {
-		coreTools, coreTasks := tools.CoreToolsWithTasks(cwd, tools.LocalOps{})
+		coreTools, coreTasks := tools.CoreTools(cwd)
 		tasks = coreTasks
 		toolSet = append(coreTools, tools.BrowserTools(cwd, opts.Browser)...)
 	} else {
@@ -56,7 +56,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	}
 	activeToolSet := toolsWithSkillAvailability(toolSet, initialRegistry.Len() > 0)
 
-	authorizer, err := permission.NewService(cwd, opts.Policy, opts.Approver)
+	authorizer, err := permission.NewService(cwd, opts.PermissionMode, opts.Approver)
 	if err != nil {
 		return nil, err
 	}
@@ -133,13 +133,13 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 			if t, ok := s.toolByName[bc.ToolCall.Name]; ok {
 				accesses = t.Accesses(args)
 			}
-			decision, _ := s.authorizer.Authorize(bc.RunContext, permission.Request{
+			result, _ := s.authorizer.Authorize(bc.RunContext, permission.Request{
 				ToolCallID: bc.ToolCall.ID,
 				Tool:       bc.ToolCall.Name,
 				Args:       args,
 				Accesses:   accesses,
 			})
-			return decision.Behavior != permission.Allow, decision.Reason
+			return !result.Allowed, result.Reason
 		},
 		AfterToolCall: func(ctx agent.AfterToolCallCtx) *agent.AfterToolCallResult {
 			if ctx.ToolCall.Name == skills.ToolName && !ctx.Result.Outcome.Failed() {
@@ -157,6 +157,9 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	s.journal.captureOutcomes(s.agent)
 	s.agent.Subscribe(func(ev agent.AgentEvent) {
 		if projected, ok := projectAgentEvent(ev); ok {
+			if projected.Type == MessageCompleted {
+				projected.ContextUsage = s.ContextUsage()
+			}
 			s.dispatchEvent(projected)
 		}
 	})

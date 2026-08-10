@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -26,10 +27,10 @@ type grepArgs struct {
 	Limit      int    `json:"limit,omitempty" jsonschema:"description=Maximum files (files mode) or lines (content mode) to return; defaults to 250,minimum=1"`
 }
 
-// Grep returns a tool that searches file contents across the workspace with a
-// regular expression, skipping vendored directories. It returns matching file
+// grepTool returns a tool that searches file contents across the workspace with
+// a regular expression, skipping vendored directories. It returns matching file
 // paths by default, or matching lines in content mode.
-func Grep(root string, ops FileOps) Tool {
+func grepTool(root string) Tool {
 	def := llm.MustTool[grepArgs]("grep", grepText.description)
 	return Tool{
 		AgentTool: agent.AgentTool{
@@ -40,7 +41,7 @@ func Grep(root string, ops FileOps) Tool {
 				if err := json.Unmarshal(raw, &in); err != nil {
 					return agent.ToolResult{}, err
 				}
-				return runGrep(ctx, root, ops, in)
+				return runGrep(ctx, root, in)
 			},
 		},
 		AccessFor:  pathAccess(permission.Read),
@@ -48,7 +49,7 @@ func Grep(root string, ops FileOps) Tool {
 	}
 }
 
-func runGrep(ctx context.Context, root string, ops FileOps, in grepArgs) (agent.ToolResult, error) {
+func runGrep(ctx context.Context, root string, in grepArgs) (agent.ToolResult, error) {
 	expr := in.Pattern
 	if in.IgnoreCase {
 		expr = "(?i)" + expr
@@ -69,7 +70,7 @@ func runGrep(ctx context.Context, root string, ops FileOps, in grepArgs) (agent.
 	}
 
 	searchRoot := resolve(root, in.Path)
-	files, err := walkFiles(ctx, ops, searchRoot)
+	files, err := walkFiles(ctx, searchRoot)
 	if err != nil {
 		return textResult(fmt.Sprintf("grep: %v", err)), err
 	}
@@ -96,7 +97,7 @@ func runGrep(ctx context.Context, root string, ops FileOps, in grepArgs) (agent.
 			skippedSensitive++
 			continue
 		}
-		data, err := ops.ReadFile(ctx, full)
+		data, err := os.ReadFile(full)
 		if err != nil || bytes.IndexByte(data, 0) >= 0 {
 			continue // unreadable or binary; skip
 		}

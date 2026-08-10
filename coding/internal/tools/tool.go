@@ -1,3 +1,5 @@
+// Package tools implements the coding agent's built-in tools and the product
+// bridges those tools use to interact with the desktop surface.
 package tools
 
 import (
@@ -35,21 +37,21 @@ func (t Tool) Accesses(args map[string]any) []permission.Access {
 // Name returns the tool's advertised name.
 func (t Tool) Name() string { return t.Definition.Name }
 
-// CoreToolsWithTasks returns the filesystem and shell tools that make up the
-// coding product's core capability. Browser tools are assembled separately so
-// the engine can register them as an optional capability without coupling that
-// distinction to the reusable agent package.
-func CoreToolsWithTasks(root string, ops Ops) ([]Tool, *TaskManager) {
-	files := NewFileStateStore()
-	tasks := NewTaskManager(ops)
+// CoreTools returns the filesystem and shell tools that make up the coding
+// product's core capability, plus their session-scoped task manager. Browser
+// tools are assembled separately so the engine can register them as an optional
+// capability without coupling that distinction to the reusable agent package.
+func CoreTools(root string) ([]Tool, *TaskManager) {
+	files := newFileStateStore()
+	tasks := newTaskManager()
 	return []Tool{
-		Read(root, ops, files, tasks.OwnsOutputPath),
-		Grep(root, ops),
-		Glob(root, ops),
-		Edit(root, ops, files),
-		Write(root, ops, files),
-		Bash(root, ops, tasks),
-		TaskStop(tasks),
+		readTool(root, files, tasks.OwnsOutputPath),
+		grepTool(root),
+		globTool(root),
+		editTool(root, files),
+		writeTool(root, files),
+		bashTool(root, tasks),
+		taskStopTool(tasks),
 	}, tasks
 }
 
@@ -92,9 +94,8 @@ func pathAccess(action permission.Action) func(map[string]any) []permission.Acce
 	}
 }
 
-func commandAccess(args map[string]any) []permission.Access {
-	command, _ := args["command"].(string)
-	return []permission.Access{{Action: permission.Execute, Command: command}}
+func executeAccess(map[string]any) []permission.Access {
+	return []permission.Access{{Action: permission.Execute}}
 }
 
 // InternalAccess describes a tool that only interacts with state already owned

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -25,11 +26,11 @@ type writeArgs struct {
 	Content string `json:"content" jsonschema:"description=Full contents to write to the file"`
 }
 
-// Write returns a tool that writes a file in full, creating parent directories
+// writeTool returns a tool that writes a file in full, creating parent directories
 // as needed and overwriting any existing file. It runs sequentially with other
 // tool calls so concurrent writes cannot corrupt a file. Use Edit for targeted
 // changes to an existing file.
-func Write(root string, ops FileOps, files *FileStateStore) Tool {
+func writeTool(root string, files *fileStateStore) Tool {
 	def := llm.MustTool[writeArgs]("write", writeText.description)
 	return Tool{
 		AgentTool: agent.AgentTool{
@@ -49,19 +50,22 @@ func Write(root string, ops FileOps, files *FileStateStore) Tool {
 					return textResult("write: " + err.Error()), err
 				}
 				path := resolve(root, in.Path)
-				existed, err := checkWriteTarget(ctx, ops, files, path)
+				existed, err := checkWriteTarget(ctx, files, path)
 				if err != nil {
 					reason := stateFailureReason(err)
 					err = mutationStateError("write", in.Path, err)
 					return mutationFailure(in.Path, reason, err.Error()), err
 				}
-				if err := ops.MkdirAll(ctx, filepath.Dir(path), defaultDirPerm); err != nil {
+				if err := ctx.Err(); err != nil {
+					return textResult("write: " + err.Error()), err
+				}
+				if err := os.MkdirAll(filepath.Dir(path), defaultDirPerm); err != nil {
 					detail := fmt.Sprintf("write %s: %v", in.Path, err)
 					return mutationFailure(in.Path, FailureIO, detail), err
 				}
 				// Check again immediately before the mutation. In particular, a path
 				// that did not exist above may have been created concurrently.
-				currentExists, err := checkWriteTarget(ctx, ops, files, path)
+				currentExists, err := checkWriteTarget(ctx, files, path)
 				if err != nil {
 					reason := stateFailureReason(err)
 					err = mutationStateError("write", in.Path, err)
@@ -74,21 +78,21 @@ func Write(root string, ops FileOps, files *FileStateStore) Tool {
 				// Read the prior contents (best effort) so an update can report a diff.
 				var oldContent string
 				if existed {
-					if data, readErr := ops.ReadFile(ctx, path); readErr == nil {
+					if data, readErr := os.ReadFile(path); readErr == nil {
 						oldContent = string(data)
 					}
 				}
 				if err := ctx.Err(); err != nil {
 					return textResult("write: " + err.Error()), err
 				}
-				if err := ops.WriteFile(ctx, path, []byte(in.Content), defaultFilePerm); err != nil {
+				if err := atomicWriteFile(ctx, path, []byte(in.Content), defaultFilePerm); err != nil {
 					detail := fmt.Sprintf("write %s: %v", in.Path, err)
 					return mutationFailure(in.Path, FailureIO, detail), err
 				}
-				if info, err := ops.Stat(ctx, path); err == nil {
-					files.Record(path, info)
+				if info, err := os.Stat(path); err == nil {
+					files.record(path, info)
 				} else {
-					files.Delete(path)
+					files.delete(path)
 				}
 
 				change := FileChange{Path: in.Path, Bytes: len(in.Content)}
@@ -111,15 +115,18 @@ func Write(root string, ops FileOps, files *FileStateStore) Tool {
 
 // checkWriteTarget allows a new path, but requires an existing path to match a
 // previously observed version.
-func checkWriteTarget(ctx context.Context, ops FileOps, files *FileStateStore, path string) (bool, error) {
-	info, err := ops.Stat(ctx, path)
+func checkWriteTarget(ctx context.Context, files *fileStateStore, path string) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	info, err := os.Stat(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return false, nil
 	}
 	if err != nil {
 		return false, err
 	}
-	if err := files.Check(path, info); err != nil {
+	if err := files.check(path, info); err != nil {
 		return true, err
 	}
 	return true, nil

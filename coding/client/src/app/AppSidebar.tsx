@@ -288,6 +288,7 @@ export function AppSidebar({ layout, content, actions }: AppSidebarProps) {
             onPointerMove={resizeSidebar}
             onPointerUp={stopSidebarResize}
             onPointerCancel={stopSidebarResize}
+            onLostPointerCapture={stopSidebarResize}
             onKeyDown={resizeSidebarWithKeyboard}
           >
             <span

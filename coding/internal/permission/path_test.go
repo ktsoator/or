@@ -35,7 +35,7 @@ func TestPathResolverClassifiesWorkspaceBoundary(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			got := resolver.Resolve(Access{Action: Read, Path: test.path})
 			if got.Location != test.want {
-				t.Fatalf("Resolve(%q).Location = %q, want %q (resolved %q, error %q)", test.path, got.Location, test.want, got.ResolvedPath, got.ResolutionError)
+				t.Fatalf("Resolve(%q).Location = %q, want %q (resolved %q)", test.path, got.Location, test.want, got.ResolvedPath)
 			}
 		})
 	}
@@ -71,7 +71,7 @@ func TestPathResolverFollowsSymlinksOutsideWorkspace(t *testing.T) {
 	} {
 		got := resolver.Resolve(Access{Action: Write, Path: path})
 		if got.Location != OutsideWorkspace {
-			t.Fatalf("Resolve(%q).Location = %q, want %q (resolved %q, error %q)", path, got.Location, OutsideWorkspace, got.ResolvedPath, got.ResolutionError)
+			t.Fatalf("Resolve(%q).Location = %q, want %q (resolved %q)", path, got.Location, OutsideWorkspace, got.ResolvedPath)
 		}
 	}
 }

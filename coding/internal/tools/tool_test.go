@@ -6,7 +6,7 @@ import (
 )
 
 func TestCoreAndBrowserToolGroupsRemainSeparate(t *testing.T) {
-	core, tasks := CoreToolsWithTasks(t.TempDir(), LocalOps{})
+	core, tasks := CoreTools(t.TempDir())
 	defer tasks.Shutdown()
 	browser := BrowserTools(t.TempDir())
 

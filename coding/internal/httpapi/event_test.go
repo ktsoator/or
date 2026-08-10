@@ -65,6 +65,32 @@ func TestProjectEventPreservesUnknownInputUsage(t *testing.T) {
 	}
 }
 
+func TestProjectEventIncludesContextBreakdown(t *testing.T) {
+	data, ok := ProjectEvent(engine.Event{
+		Type: engine.MessageCompleted,
+		ContextUsage: engine.ContextUsage{
+			Provider: "openai", Model: "test-model", UsedTokens: 42,
+			ContextWindow: 128_000, Measured: true,
+			Breakdown: &engine.ContextBreakdown{
+				Messages: 20, SystemTools: 8, SystemPrompt: 6, Skills: 4, ProjectContext: 4,
+			},
+		},
+	})
+	if !ok {
+		t.Fatal("message completion event was not projected")
+	}
+
+	var event wireEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		t.Fatal(err)
+	}
+	if event.Context == nil || !event.Context.Measured || event.Context.UsedTokens != 42 ||
+		event.Context.Breakdown == nil || event.Context.Breakdown.Messages != 20 ||
+		event.Context.Breakdown.ProjectContext != 4 {
+		t.Fatalf("context = %#v", event.Context)
+	}
+}
+
 func TestProjectHistoryIncludesResponseCompletionTime(t *testing.T) {
 	completedAt := time.Date(2026, time.July, 22, 16, 43, 0, 0, time.UTC)
 	events := ProjectHistory([]engine.HistoryItem{{

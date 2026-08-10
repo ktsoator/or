@@ -18,8 +18,7 @@ func init() {
 }
 
 // Server wires the multi-session API: session discovery plus scoped history,
-// SSE, prompt, approval, and abort endpoints. The React application is
-// built and deployed independently from this service.
+// SSE, prompt, approval, and abort endpoints.
 // Each field is the store one group of routes actually reads. Handlers reach
 // for the store they need and never through another component to find it.
 type Server struct {
@@ -30,7 +29,6 @@ type Server struct {
 	registry      *llm.ProviderRegistry
 	providers     *provider.Store
 	providerTests *provider.ConnectionTester
-	clientOrigin  string
 }
 
 // Options contains the product services exposed through HTTP. Construction
@@ -44,7 +42,6 @@ type Options struct {
 	Registry      *llm.ProviderRegistry
 	Providers     *provider.Store
 	ProviderTests *provider.ConnectionTester
-	ClientOrigin  string
 }
 
 // NewServer builds the HTTP delivery layer from already-created services.
@@ -57,13 +54,10 @@ func NewServer(opts Options) *Server {
 		registry:      opts.Registry,
 		providers:     opts.Providers,
 		providerTests: opts.ProviderTests,
-		clientOrigin:  opts.ClientOrigin,
 	}
 }
 
-// Handler returns the HTTP handler for the coding API: a gin engine serving the
-// /api routes, wrapped in the cross-origin gate for a separately deployed
-// client.
+// Handler returns the HTTP handler for the coding API.
 //
 // Each mount function owns one group of routes and lives in its own file. A new
 // module is a new file plus one line here; nothing else in this package has to
@@ -82,16 +76,7 @@ func (s *Server) Handler() http.Handler {
 	s.mountSkills(api)
 	s.mountPreview(api)
 
-	return allowClientOrigin(r, s.clientOrigin, routedMethods(r))
-}
-
-// routedMethods reports every verb the mounted routes serve.
-func routedMethods(r *gin.Engine) []string {
-	methods := make([]string, 0, len(r.Routes()))
-	for _, route := range r.Routes() {
-		methods = append(methods, route.Method)
-	}
-	return methods
+	return r
 }
 
 const (
