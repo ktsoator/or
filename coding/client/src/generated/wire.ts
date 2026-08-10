@@ -202,12 +202,21 @@ export type Usage = {
   cost: UsageCost
 }
 
+export type ContextBreakdown = {
+  messages: number
+  systemTools: number
+  systemPrompt: number
+  skills: number
+  projectContext: number
+}
+
 export type ContextUsage = {
   provider: string
   model: string
   usedTokens: number
   contextWindow: number
   measured: boolean
+  breakdown?: ContextBreakdown
 }
 
 export type BackgroundTask = {
@@ -271,6 +280,7 @@ export type WireEvent = {
   images?: MessageImage[]
   files?: MessageFile[]
   usage?: Usage
+  context?: ContextUsage
   finalResponse?: boolean
   provider?: string
   model?: string

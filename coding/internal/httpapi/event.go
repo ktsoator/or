@@ -18,13 +18,31 @@ import (
 )
 
 func projectContextUsage(usage engine.ContextUsage) wireContextUsage {
-	return wireContextUsage{
+	projected := wireContextUsage{
 		Provider:      usage.Provider,
 		Model:         usage.Model,
 		UsedTokens:    usage.UsedTokens,
 		ContextWindow: usage.ContextWindow,
 		Measured:      usage.Measured,
 	}
+	if usage.Breakdown != nil {
+		projected.Breakdown = &wireContextBreakdown{
+			Messages:       usage.Breakdown.Messages,
+			SystemTools:    usage.Breakdown.SystemTools,
+			SystemPrompt:   usage.Breakdown.SystemPrompt,
+			Skills:         usage.Breakdown.Skills,
+			ProjectContext: usage.Breakdown.ProjectContext,
+		}
+	}
+	return projected
+}
+
+func projectEventContextUsage(usage engine.ContextUsage) *wireContextUsage {
+	if usage.Provider == "" && usage.Model == "" && usage.ContextWindow == 0 {
+		return nil
+	}
+	projected := projectContextUsage(usage)
+	return &projected
 }
 
 // ProjectEvent maps a UI-neutral coding event to the HTTP wire protocol.
@@ -80,6 +98,7 @@ func projectEvent(ev engine.Event) (wireEvent, bool) {
 			Type:        wireEventMessageEnd,
 			Text:        ev.Text,
 			Usage:       projectUsage(ev.Usage),
+			Context:     projectEventContextUsage(ev.ContextUsage),
 			Final:       ev.FinalResponse,
 			Provider:    ev.Provider,
 			Model:       ev.Model,

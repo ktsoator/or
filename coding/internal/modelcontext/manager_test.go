@@ -35,6 +35,25 @@ func TestPrepareStepPrependsBaseWithoutMutatingCanonicalInput(t *testing.T) {
 	}
 }
 
+func TestProjectedAttachmentsReturnsCurrentTypedProjection(t *testing.T) {
+	manager := New(3, "base-v1", "base", "skills-v1", "skills")
+	manager.StageActivatedSkill("review", "", "review instructions")
+	manager.StageTaskStatus("task status")
+
+	projected := manager.ProjectedAttachments()
+	if len(projected) != 4 ||
+		projected[0].Kind != BaseContext ||
+		projected[1].Kind != SkillListing ||
+		projected[2].Kind != ActivatedSkill ||
+		projected[3].Kind != TaskStatus {
+		t.Fatalf("projected attachments = %#v", projected)
+	}
+	projected[0].Rendered = "mutated"
+	if next := manager.ProjectedAttachments(); next[0].Rendered != "base" {
+		t.Fatal("ProjectedAttachments returned mutable manager state")
+	}
+}
+
 func TestCommitStopsRepersistingButKeepsProjectingBase(t *testing.T) {
 	manager := New(1, "", "base", "", "")
 	canonical := llm.Context{Messages: []llm.Message{llm.UserText("question")}}

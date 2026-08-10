@@ -332,6 +332,27 @@ func (m *Manager) PrepareStep(input llm.Context) PreparedStep {
 	return prepared
 }
 
+// ProjectedAttachments returns the hidden context blocks that the next provider
+// request would receive, in projection order. The returned values are detached
+// from the Manager's mutable tracking state.
+func (m *Manager) ProjectedAttachments() []Attachment {
+	if m == nil {
+		return nil
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	projected := compactAttachments(m.base, m.listing)
+	projected = append(projected, compactAttachments(m.context.current(), m.skills.current())...)
+	projected = append(projected, m.activatedSkills()...)
+	projected = append(projected, compactAttachments(m.tasks.current())...)
+	result := make([]Attachment, len(projected))
+	for index, attachment := range projected {
+		result[index] = attachment.Attachment
+	}
+	return result
+}
+
 // Commit marks exactly the attachments included in prepared as durable. A staged
 // update becomes the sole active update of its kind only after its checkpoint
 // succeeds.
