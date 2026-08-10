@@ -26,7 +26,7 @@ func TestBashReturnsExitCodeInToolOutcome(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			result, err := Bash(t.TempDir(), nil).Execute(
+			result, err := bashTool(t.TempDir(), nil).Execute(
 				context.Background(),
 				"bash-call",
 				args,

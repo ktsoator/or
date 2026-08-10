@@ -37,21 +37,21 @@ func (t Tool) Accesses(args map[string]any) []permission.Access {
 // Name returns the tool's advertised name.
 func (t Tool) Name() string { return t.Definition.Name }
 
-// CoreToolsWithTasks returns the filesystem and shell tools that make up the
-// coding product's core capability. Browser tools are assembled separately so
-// the engine can register them as an optional capability without coupling that
-// distinction to the reusable agent package.
-func CoreToolsWithTasks(root string) ([]Tool, *TaskManager) {
+// CoreTools returns the filesystem and shell tools that make up the coding
+// product's core capability, plus their session-scoped task manager. Browser
+// tools are assembled separately so the engine can register them as an optional
+// capability without coupling that distinction to the reusable agent package.
+func CoreTools(root string) ([]Tool, *TaskManager) {
 	files := NewFileStateStore()
 	tasks := NewTaskManager()
 	return []Tool{
-		Read(root, files, tasks.OwnsOutputPath),
-		Grep(root),
-		Glob(root),
-		Edit(root, files),
-		Write(root, files),
-		Bash(root, tasks),
-		TaskStop(tasks),
+		readTool(root, files, tasks.OwnsOutputPath),
+		grepTool(root),
+		globTool(root),
+		editTool(root, files),
+		writeTool(root, files),
+		bashTool(root, tasks),
+		taskStopTool(tasks),
 	}, tasks
 }
 

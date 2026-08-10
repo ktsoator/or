@@ -20,9 +20,9 @@ type globArgs struct {
 	Path    string `json:"path,omitempty" jsonschema:"description=Subdirectory to search under; defaults to the workspace root"`
 }
 
-// Glob returns a tool that finds files by name pattern, skipping vendored
+// globTool returns a tool that finds files by name pattern, skipping vendored
 // directories, and returns paths sorted by most-recently-modified first.
-func Glob(root string) Tool {
+func globTool(root string) Tool {
 	def := llm.MustTool[globArgs]("glob", globText.description)
 	return Tool{
 		AgentTool: agent.AgentTool{

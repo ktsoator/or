@@ -26,11 +26,11 @@ type writeArgs struct {
 	Content string `json:"content" jsonschema:"description=Full contents to write to the file"`
 }
 
-// Write returns a tool that writes a file in full, creating parent directories
+// writeTool returns a tool that writes a file in full, creating parent directories
 // as needed and overwriting any existing file. It runs sequentially with other
 // tool calls so concurrent writes cannot corrupt a file. Use Edit for targeted
 // changes to an existing file.
-func Write(root string, files *FileStateStore) Tool {
+func writeTool(root string, files *FileStateStore) Tool {
 	def := llm.MustTool[writeArgs]("write", writeText.description)
 	return Tool{
 		AgentTool: agent.AgentTool{

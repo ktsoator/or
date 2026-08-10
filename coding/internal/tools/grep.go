@@ -27,10 +27,10 @@ type grepArgs struct {
 	Limit      int    `json:"limit,omitempty" jsonschema:"description=Maximum files (files mode) or lines (content mode) to return; defaults to 250,minimum=1"`
 }
 
-// Grep returns a tool that searches file contents across the workspace with a
-// regular expression, skipping vendored directories. It returns matching file
+// grepTool returns a tool that searches file contents across the workspace with
+// a regular expression, skipping vendored directories. It returns matching file
 // paths by default, or matching lines in content mode.
-func Grep(root string) Tool {
+func grepTool(root string) Tool {
 	def := llm.MustTool[grepArgs]("grep", grepText.description)
 	return Tool{
 		AgentTool: agent.AgentTool{

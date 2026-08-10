@@ -129,7 +129,7 @@ func TestTaskManagerTrustsOnlyRegisteredOutputFilesAndCleansUp(t *testing.T) {
 func TestBackgroundBashReturnsTaskAndOutputPath(t *testing.T) {
 	manager := NewTaskManager()
 	defer manager.Shutdown()
-	tool := Bash(t.TempDir(), manager)
+	tool := bashTool(t.TempDir(), manager)
 	raw := json.RawMessage(`{"command":"printf ready","description":"Start test task","run_in_background":true}`)
 	result, err := tool.Execute(context.Background(), "call-1", raw, nil)
 	if err != nil {

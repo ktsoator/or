@@ -38,10 +38,10 @@ type ReadResult struct {
 	NextOffset int
 }
 
-// Read returns a tool that reads a UTF-8 text file and returns its contents with
-// 1-based line numbers, optionally windowed by offset and limit. Output is
+// readTool returns a tool that reads a UTF-8 text file and returns its contents
+// with 1-based line numbers, optionally windowed by offset and limit. Output is
 // capped to keep a large file from filling the context window.
-func Read(root string, files *FileStateStore, trustedPaths ...func(string) bool) Tool {
+func readTool(root string, files *FileStateStore, trustedPaths ...func(string) bool) Tool {
 	def := llm.MustTool[readArgs]("read", readText.description)
 	return Tool{
 		AgentTool: agent.AgentTool{

@@ -13,9 +13,9 @@ type taskStopArgs struct {
 	TaskID string `json:"task_id" jsonschema:"description=The id of the background task to stop,minLength=1"`
 }
 
-// TaskStop returns a tool that stops a managed background task and its whole
+// taskStopTool returns a tool that stops a managed background task and its whole
 // process group.
-func TaskStop(tasks *TaskManager) Tool {
+func taskStopTool(tasks *TaskManager) Tool {
 	def := llm.MustTool[taskStopArgs]("task_stop", taskStopText.description)
 	return Tool{
 		AgentTool: agent.AgentTool{

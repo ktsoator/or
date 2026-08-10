@@ -19,11 +19,11 @@ type editArgs struct {
 	ReplaceAll bool   `json:"replace_all,omitempty" jsonschema:"description=Replace every occurrence instead of requiring a unique match"`
 }
 
-// Edit returns a tool that replaces an exact substring in a file. By default the
+// editTool returns a tool that replaces an exact substring in a file. By default the
 // match must be unique, so an ambiguous edit fails instead of changing the wrong
 // place; set replace_all to change every occurrence. It runs sequentially with
 // other tool calls so concurrent edits cannot corrupt a file.
-func Edit(root string, files *FileStateStore) Tool {
+func editTool(root string, files *FileStateStore) Tool {
 	def := llm.MustTool[editArgs]("edit", editText.description)
 	return Tool{
 		AgentTool: agent.AgentTool{
