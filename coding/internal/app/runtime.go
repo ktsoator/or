@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/ktsoator/or/coding/internal/config"
 	"github.com/ktsoator/or/coding/internal/conversation"
 	"github.com/ktsoator/or/coding/internal/httpapi"
 	"github.com/ktsoator/or/coding/internal/provider"
@@ -25,11 +24,11 @@ type Runtime struct {
 }
 
 // New assembles the product runtime served by the authenticated Electron
-// sidecar.
-func New(ctx context.Context, cfg config.Config) (*Runtime, error) {
+// sidecar. dataDir is already resolved by the process host.
+func New(ctx context.Context, dataDir string) (*Runtime, error) {
 	ctx, cancel := context.WithCancel(ctx)
-	sessionDir := filepath.Join(cfg.DataDir, "sessions")
-	ledger, err := usage.NewStore(filepath.Join(cfg.DataDir, "usage", "events.sqlite"))
+	sessionDir := filepath.Join(dataDir, "sessions")
+	ledger, err := usage.NewStore(filepath.Join(dataDir, "usage", "events.sqlite"))
 	if err != nil {
 		cancel()
 		return nil, err
@@ -42,7 +41,7 @@ func New(ctx context.Context, cfg config.Config) (*Runtime, error) {
 	}
 	transports := httpapi.NewSessionTransports()
 	registry := llm.DefaultProviderRegistry()
-	providers, err := provider.NewStore(cfg.DataDir, registry)
+	providers, err := provider.NewStore(dataDir, registry)
 	if err != nil {
 		_ = ledger.Close()
 		cancel()
@@ -52,7 +51,7 @@ func New(ctx context.Context, cfg config.Config) (*Runtime, error) {
 	providerTests := provider.NewConnectionTester(providers, llm.Complete)
 
 	manager, err := conversation.NewManager(ctx, conversation.Options{
-		DataDir:      cfg.DataDir,
+		DataDir:      dataDir,
 		Usage:        ledger,
 		Workspaces:   workspaces,
 		NewTransport: transports.New,

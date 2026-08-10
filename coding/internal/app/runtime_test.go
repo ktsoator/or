@@ -6,16 +6,13 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/ktsoator/or/coding/internal/config"
 	"github.com/ktsoator/or/coding/internal/conversation"
 	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/llm"
 )
 
 func TestRuntimeServesAPIAndClosesMoreThanOnce(t *testing.T) {
-	runtime, err := New(context.Background(), config.Config{
-		DataDir: t.TempDir(),
-	})
+	runtime, err := New(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,10 +32,9 @@ func TestRuntimeOpensRestoredSessionHistoryLazily(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	dataDir := t.TempDir()
 	projectDir := t.TempDir()
-	cfg := config.Config{DataDir: dataDir}
 	model, thinking := runtimeTestModel(t)
 
-	first, err := New(context.Background(), cfg)
+	first, err := New(context.Background(), dataDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +52,7 @@ func TestRuntimeOpensRestoredSessionHistoryLazily(t *testing.T) {
 	}
 	first.Close()
 
-	restored, err := New(context.Background(), cfg)
+	restored, err := New(context.Background(), dataDir)
 	if err != nil {
 		t.Fatal(err)
 	}

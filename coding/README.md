@@ -25,8 +25,7 @@ coding/
     ├── tools/              Or tools and local execution
     ├── provider/           Provider settings
     ├── workspace/          Workspace registry and scratch directories
-    ├── usage/              Usage ledger
-    └── config/             Process startup configuration
+    └── usage/              Usage ledger
 ```
 
 ## Dependency direction
