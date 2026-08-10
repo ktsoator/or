@@ -14,16 +14,8 @@ import (
 // ToolNameAskUserQuestion is the advertised name of the question tool.
 const ToolNameAskUserQuestion = "ask_user_question"
 
-// Question limits. The schema enforces the counts, so a model that exceeds them
-// gets a validation error before the tool runs; Execute only checks what a
-// schema cannot express.
-const (
-	MinQuestions   = 1
-	MaxQuestions   = 4
-	MinOptions     = 2
-	MaxOptions     = 4
-	MaxHeaderRunes = 12
-)
+// MaxHeaderRunes is the one question constraint the JSON schema cannot express.
+const MaxHeaderRunes = 12
 
 // Option is one selectable answer to a Question.
 type Option struct {
@@ -67,9 +59,6 @@ type Asker interface {
 	Ask(context.Context, []Question) ([]Answer, error)
 }
 
-// ErrNoAsker is returned when no product surface can reach the user.
-var ErrNoAsker = errors.New("no interactive surface is available to ask the user")
-
 type askUserQuestionArgs struct {
 	Questions []Question `json:"questions" jsonschema:"description=The questions to ask. Batch related questions into one call rather than asking them one at a time,minItems=1,maxItems=4"`
 }
@@ -96,9 +85,6 @@ func AskUserQuestion(asker Asker) Tool {
 				}
 				if err := validateQuestions(in.Questions); err != nil {
 					return textResult(err.Error()), err
-				}
-				if asker == nil {
-					return textResult(ErrNoAsker.Error()), ErrNoAsker
 				}
 				answers, err := asker.Ask(ctx, in.Questions)
 				if err != nil {
