@@ -74,7 +74,7 @@ func TestSensitiveWorkspaceFileStillNeedsApproval(t *testing.T) {
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			asked := false
-			service, err := NewService(workspace, PolicyForMode(ModeAutoEdit),
+			service, err := NewService(workspace, ModeAutoEdit,
 				approverFunc(func(_ context.Context, _ ApprovalRequest) (ApprovalResponse, error) {
 					asked = true
 					return ApprovalResponse{Choice: AllowOnce}, nil
@@ -82,40 +82,21 @@ func TestSensitiveWorkspaceFileStillNeedsApproval(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			decision, err := service.Authorize(context.Background(), Request{
+			result, err := service.Authorize(context.Background(), Request{
 				Tool:     "read",
 				Accesses: []Access{{Action: test.action, Path: test.path}},
 			})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if decision.Behavior != Allow {
-				t.Fatalf("Authorize(%s %s) = %q (%s), want it allowed after approval",
-					test.action, test.path, decision.Behavior, decision.Reason)
+			if !result.Allowed {
+				t.Fatalf("Authorize(%s %s) = %+v, want it allowed after approval",
+					test.action, test.path, result)
 			}
 			if asked != test.wantAsked {
 				t.Fatalf("Authorize(%s %s) asked the user = %t, want %t",
 					test.action, test.path, asked, test.wantAsked)
 			}
 		})
-	}
-}
-
-func TestReadOnlyModeStillDeniesSensitiveWrites(t *testing.T) {
-	workspace := t.TempDir()
-	service, err := NewService(workspace, PolicyForMode(ModeReadOnly), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	decision, err := service.Authorize(t.Context(), Request{
-		Tool:     "write",
-		Accesses: []Access{{Action: Write, Path: ".env"}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Read-only denies every write; sensitivity must not soften that to Ask.
-	if decision.Behavior != Deny {
-		t.Fatalf("Authorize() = %q (%s), want deny", decision.Behavior, decision.Reason)
 	}
 }

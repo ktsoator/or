@@ -231,6 +231,15 @@ func describeApproval(req permission.ApprovalRequest) string {
 		if cmd, ok := req.Request.Args["command"].(string); ok {
 			return "bash: " + firstLine(cmd)
 		}
+	case "open_preview":
+		if target, ok := req.Request.Args["url"].(string); ok && strings.TrimSpace(target) != "" {
+			return "open browser: " + firstLine(strings.TrimSpace(target))
+		}
+	case "inspect_browser":
+		if tabID, ok := req.Request.Args["tabID"].(string); ok && strings.TrimSpace(tabID) != "" {
+			return "inspect browser tab: " + firstLine(strings.TrimSpace(tabID))
+		}
+		return "inspect selected browser tab"
 	case "read", "grep", "glob", "edit", "write":
 		if path, ok := req.Request.Args["path"].(string); ok && path != "" {
 			return req.Request.Tool + " " + path

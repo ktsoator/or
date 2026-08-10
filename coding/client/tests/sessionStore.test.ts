@@ -162,7 +162,7 @@ describe('sessionStoreReducer', () => {
         model: 'test-model',
         thinkingLevel: 'high',
       },
-      { t: 'draftPermissionUpdated', permissionMode: 'read_only' },
+      { t: 'draftPermissionUpdated', permissionMode: 'auto_edit' },
       {
         t: 'draftSendQueued',
         submission: { sessionID: 'session-1', text: 'hello', images: [] },

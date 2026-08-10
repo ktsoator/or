@@ -182,11 +182,11 @@ func TestManagerRestoresConversationsLazily(t *testing.T) {
 	if renamed.Title != "Renamed before loading" {
 		t.Fatalf("renamed conversation = %+v", renamed)
 	}
-	updated, err := restored.UpdatePermissionMode(created.ID, permission.ModeReadOnly)
+	updated, err := restored.UpdatePermissionMode(created.ID, permission.ModeAutoEdit)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.PermissionMode != permission.ModeReadOnly {
+	if updated.PermissionMode != permission.ModeAutoEdit {
 		t.Fatalf("updated conversation = %+v", updated)
 	}
 	if path, err := restored.WorkspacePath(created.ID); err != nil || path != created.WorkspacePath {
@@ -428,7 +428,7 @@ func TestManagerRunReservationProtectsConversation(t *testing.T) {
 	if _, err := manager.UpdateSettings(created.ID, model, thinking); !errors.Is(err, ErrSessionActive) {
 		t.Fatalf("UpdateSettings error = %v, want ErrSessionActive", err)
 	}
-	if _, err := manager.UpdatePermissionMode(created.ID, permission.ModeReadOnly); !errors.Is(err, ErrSessionActive) {
+	if _, err := manager.UpdatePermissionMode(created.ID, permission.ModeAutoEdit); !errors.Is(err, ErrSessionActive) {
 		t.Fatalf("UpdatePermissionMode error = %v, want ErrSessionActive", err)
 	}
 
@@ -436,8 +436,8 @@ func TestManagerRunReservationProtectsConversation(t *testing.T) {
 	if runtime.live.Load() {
 		t.Fatal("runtime is still exposed as running after cleanup")
 	}
-	updated, err := manager.UpdatePermissionMode(created.ID, permission.ModeReadOnly)
-	if err != nil || updated.PermissionMode != permission.ModeReadOnly {
+	updated, err := manager.UpdatePermissionMode(created.ID, permission.ModeAutoEdit)
+	if err != nil || updated.PermissionMode != permission.ModeAutoEdit {
 		t.Fatalf("UpdatePermissionMode() = %+v, %v", updated, err)
 	}
 	if err := manager.Delete(created.ID); err != nil {

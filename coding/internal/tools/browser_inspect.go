@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ktsoator/or/agent"
+	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -84,7 +85,9 @@ func InspectBrowser(inspectors ...BrowserInspector) Tool {
 				return browserInspectionToolResult(result), nil
 			},
 		},
-		AccessFor:  InternalAccess,
+		AccessFor: func(map[string]any) []permission.Access {
+			return []permission.Access{{Action: permission.Network}}
+		},
 		Guidelines: inspectBrowserText.guidelines,
 	}
 }
