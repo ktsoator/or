@@ -42,8 +42,8 @@ func (t Tool) Name() string { return t.Definition.Name }
 // tools are assembled separately so the engine can register them as an optional
 // capability without coupling that distinction to the reusable agent package.
 func CoreTools(root string) ([]Tool, *TaskManager) {
-	files := NewFileStateStore()
-	tasks := NewTaskManager()
+	files := newFileStateStore()
+	tasks := newTaskManager()
 	return []Tool{
 		readTool(root, files, tasks.OwnsOutputPath),
 		grepTool(root),

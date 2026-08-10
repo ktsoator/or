@@ -23,7 +23,7 @@ type editArgs struct {
 // match must be unique, so an ambiguous edit fails instead of changing the wrong
 // place; set replace_all to change every occurrence. It runs sequentially with
 // other tool calls so concurrent edits cannot corrupt a file.
-func editTool(root string, files *FileStateStore) Tool {
+func editTool(root string, files *fileStateStore) Tool {
 	def := llm.MustTool[editArgs]("edit", editText.description)
 	return Tool{
 		AgentTool: agent.AgentTool{
@@ -46,7 +46,7 @@ func editTool(root string, files *FileStateStore) Tool {
 					detail := fmt.Sprintf("edit %s: %v", in.Path, err)
 					return mutationFailure(in.Path, statFailureReason(err), detail), err
 				}
-				if err := files.Check(path, info); err != nil {
+				if err := files.check(path, info); err != nil {
 					reason := stateFailureReason(err)
 					err = mutationStateError("edit", in.Path, err)
 					return mutationFailure(in.Path, reason, err.Error()), err
@@ -74,7 +74,7 @@ func editTool(root string, files *FileStateStore) Tool {
 					detail := fmt.Sprintf("edit %s: %v", in.Path, err)
 					return mutationFailure(in.Path, statFailureReason(err), detail), err
 				}
-				if err := files.Check(path, current); err != nil {
+				if err := files.check(path, current); err != nil {
 					reason := stateFailureReason(err)
 					err = mutationStateError("edit", in.Path, err)
 					return mutationFailure(in.Path, reason, err.Error()), err
@@ -85,9 +85,9 @@ func editTool(root string, files *FileStateStore) Tool {
 					return mutationFailure(in.Path, FailureIO, detail), err
 				}
 				if updatedInfo, err := os.Stat(path); err == nil {
-					files.Record(path, updatedInfo)
+					files.record(path, updatedInfo)
 				} else {
-					files.Delete(path)
+					files.delete(path)
 				}
 
 				change := FileChange{Path: in.Path, Kind: ChangeUpdate, Bytes: len(updated)}

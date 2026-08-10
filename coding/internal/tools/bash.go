@@ -11,8 +11,8 @@ import (
 	"github.com/ktsoator/or/llm"
 )
 
-// DefaultBashTimeout bounds a single command when the model does not set one.
-const DefaultBashTimeout = 120 * time.Second
+// defaultBashTimeout bounds a single command when the model does not set one.
+const defaultBashTimeout = 120 * time.Second
 
 type bashArgs struct {
 	Command         string `json:"command" jsonschema:"description=The bash command to run,minLength=1"`
@@ -52,7 +52,7 @@ func bashTool(root string, tasks *TaskManager) Tool {
 					)), nil
 				}
 
-				timeout := DefaultBashTimeout
+				timeout := defaultBashTimeout
 				if in.Timeout > 0 {
 					timeout = time.Duration(in.Timeout) * time.Second
 				}

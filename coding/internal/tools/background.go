@@ -76,8 +76,8 @@ type TaskManager struct {
 	nextListener int
 }
 
-// NewTaskManager returns an empty session-scoped task manager.
-func NewTaskManager() *TaskManager {
+// newTaskManager returns an empty session-scoped task manager.
+func newTaskManager() *TaskManager {
 	return &TaskManager{
 		tasks:     make(map[string]*managedTask),
 		listeners: make(map[int]func(TaskState)),

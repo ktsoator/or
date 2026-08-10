@@ -30,7 +30,7 @@ type writeArgs struct {
 // as needed and overwriting any existing file. It runs sequentially with other
 // tool calls so concurrent writes cannot corrupt a file. Use Edit for targeted
 // changes to an existing file.
-func writeTool(root string, files *FileStateStore) Tool {
+func writeTool(root string, files *fileStateStore) Tool {
 	def := llm.MustTool[writeArgs]("write", writeText.description)
 	return Tool{
 		AgentTool: agent.AgentTool{
@@ -90,9 +90,9 @@ func writeTool(root string, files *FileStateStore) Tool {
 					return mutationFailure(in.Path, FailureIO, detail), err
 				}
 				if info, err := os.Stat(path); err == nil {
-					files.Record(path, info)
+					files.record(path, info)
 				} else {
-					files.Delete(path)
+					files.delete(path)
 				}
 
 				change := FileChange{Path: in.Path, Bytes: len(in.Content)}
@@ -115,7 +115,7 @@ func writeTool(root string, files *FileStateStore) Tool {
 
 // checkWriteTarget allows a new path, but requires an existing path to match a
 // previously observed version.
-func checkWriteTarget(ctx context.Context, files *FileStateStore, path string) (bool, error) {
+func checkWriteTarget(ctx context.Context, files *fileStateStore, path string) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
@@ -126,7 +126,7 @@ func checkWriteTarget(ctx context.Context, files *FileStateStore, path string) (
 	if err != nil {
 		return false, err
 	}
-	if err := files.Check(path, info); err != nil {
+	if err := files.check(path, info); err != nil {
 		return true, err
 	}
 	return true, nil
