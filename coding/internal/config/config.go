@@ -1,61 +1,31 @@
-// Package config resolves product-shell settings. Model routing is persisted by
-// the provider settings store rather than accepted as process configuration.
+// Package config resolves settings for the desktop sidecar. Model routing is
+// persisted by the provider settings store rather than accepted as process
+// configuration.
 package config
 
 import (
-	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-// Config is the resolved settings for one coding product process.
+// Config is the resolved settings for one desktop sidecar process.
 type Config struct {
 	// DataDir stores session indexes and transcripts independently from any
 	// project workspace.
 	DataDir string
-	// Addr is the API listen address.
-	Addr string
-	// ClientOrigin is the optional browser origin allowed to call the API
-	// directly when the client is deployed separately.
-	ClientOrigin string
 }
 
 // Defaults returns process-level defaults.
 func Defaults() Config {
 	return Config{
-		DataDir:      envOr("OR_DATA_DIR", ""),
-		Addr:         "localhost:8787",
-		ClientOrigin: envOr("OR_CLIENT_ORIGIN", ""),
+		DataDir: envOr("OR_DATA_DIR", ""),
 	}
 }
 
-// Parse resolves configuration from environment-backed defaults and command
-// line flags. Command line values take precedence over environment values.
-func Parse(args []string) (Config, error) {
-	cfg := Defaults()
-	flags := flag.NewFlagSet("coding", flag.ContinueOnError)
-
-	flags.StringVar(&cfg.DataDir, "data-dir", cfg.DataDir, "coding data directory (default: ~/.or/coding)")
-	flags.StringVar(&cfg.Addr, "addr", cfg.Addr, "API listen address")
-	flags.StringVar(&cfg.ClientOrigin, "client-origin", cfg.ClientOrigin, "allowed client origin for cross-origin API access")
-
-	if err := flags.Parse(args); err != nil {
-		return Config{}, err
-	}
-	if err := cfg.Resolve(); err != nil {
-		return Config{}, err
-	}
-	return cfg, nil
-}
-
-// IsHelp reports whether Parse stopped after printing flag help.
-func IsHelp(err error) bool { return errors.Is(err, flag.ErrHelp) }
-
-// Resolve finalizes derived fields. State lives under ~/.or/coding, so the
-// server is not bound to whichever project launched it.
+// Resolve finalizes derived fields. State lives under ~/.or/coding, independent
+// of whichever project the user opens.
 func (c *Config) Resolve() error {
 	if strings.TrimSpace(c.DataDir) == "" {
 		home, err := os.UserHomeDir()

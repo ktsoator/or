@@ -3,9 +3,9 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
-// The React client is deployed independently from the Go API. During local
-// development, Vite keeps requests same-origin and proxies /api to the API.
-const backend = process.env.CODING_API_PROXY ?? 'http://localhost:8787'
+// Electron injects the random-port sidecar URL during desktop development.
+// UI-only browser tests do not need an API proxy.
+const backend = process.env.CODING_API_PROXY
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -20,11 +20,13 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    proxy: {
-      '/api': {
-        target: backend,
-        changeOrigin: true,
-      },
-    },
+    proxy: backend
+      ? {
+          '/api': {
+            target: backend,
+            changeOrigin: true,
+          },
+        }
+      : undefined,
   },
 })

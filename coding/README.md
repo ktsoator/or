@@ -11,9 +11,9 @@ Or and the Go packages use the same version.
 coding/
 ├── client/                 React client
 ├── desktop/                Electron desktop shell
-├── cmd/coding/             Standalone API entry point
+├── cmd/coding-desktop/     Authenticated desktop sidecar
 └── internal/
-    ├── app/                Composition root and process startup
+    ├── app/                Product runtime composition root
     ├── engine/             One stateful coding-agent session
     ├── conversation/       Product conversation lifecycle and queueing
     ├── httpapi/            HTTP and SSE delivery
@@ -38,7 +38,7 @@ client -> HTTP/SSE -> httpapi -> conversation -> engine -> agent -> llm
                          +--- app creates and connects all services
 ```
 
-Both `cmd/coding` and `desktop` host the reusable runtime assembled by
+Electron supervises `cmd/coding-desktop`, which hosts the runtime assembled by
 `internal/app`. Product policy stays inside `coding`; `agent` and `llm` must not
 import it. The `coding` product packages must not depend on `harness`.
 
@@ -78,9 +78,9 @@ permission policy.
 ## Desktop
 
 Electron supervises a dedicated Go sidecar on a random loopback port. The
-sidecar serves both the React build and `/api`, so browser and desktop clients
-keep the same relative HTTP/SSE contract. Every request requires a per-launch
-HttpOnly session cookie installed by Electron before the first navigation.
+sidecar serves both the React build and `/api`, so the renderer uses one relative
+HTTP/SSE contract. Every request requires a per-launch HttpOnly session cookie
+installed by Electron before the first navigation.
 
 The right-side Browser is rendered with Electron `<webview>` elements. React
 owns their layout and tab lifecycle, so menus and dialogs can compose above a
@@ -120,7 +120,6 @@ bun run package -- --mac --publish never \
 Repository `vX.Y.Z` tags build Apple Silicon and Intel Mac installers. See
 [`RELEASING.md`](../RELEASING.md).
 
-The desktop and standalone shells share provider settings, sessions and
-transcripts under `~/.or/coding`. Set `OR_DATA_DIR` to use another location.
-The desktop shell is single-instance: launching it again restores and focuses
-the existing window.
+Provider settings, sessions and transcripts live under `~/.or/coding`. Set
+`OR_DATA_DIR` to use another location. The desktop shell is single-instance:
+launching it again restores and focuses the existing window.
