@@ -37,7 +37,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	var toolSet []tools.Tool
 	var tasks *tools.TaskManager
 	if opts.Tools == nil {
-		coreTools, coreTasks := tools.CoreToolsWithTasks(cwd, tools.LocalOps{})
+		coreTools, coreTasks := tools.CoreTools(cwd)
 		tasks = coreTasks
 		toolSet = append(coreTools, tools.BrowserTools(cwd, opts.Browser)...)
 	} else {

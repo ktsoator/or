@@ -18,50 +18,50 @@ var (
 	ErrFileChanged = errors.New("file has changed since it was read")
 )
 
-// FileVersion is the portable, inexpensive identity used for optimistic file
+// fileVersion is the portable, inexpensive identity used for optimistic file
 // concurrency checks. It deliberately avoids hashing the full file so a small
 // range read of a large file remains a range read.
-type FileVersion struct {
+type fileVersion struct {
 	ModTime time.Time
 	Size    int64
 }
 
-// FileStateStore tracks disk versions observed by one coding tool set. It is
+// fileStateStore tracks disk versions observed by one coding tool set. It is
 // safe for concurrent reads while mutating tools execute sequentially.
-type FileStateStore struct {
+type fileStateStore struct {
 	mu    sync.RWMutex
-	files map[string]FileVersion
+	files map[string]fileVersion
 }
 
-func NewFileStateStore() *FileStateStore {
-	return &FileStateStore{files: make(map[string]FileVersion)}
+func newFileStateStore() *fileStateStore {
+	return &fileStateStore{files: make(map[string]fileVersion)}
 }
 
-// Record marks path's current version as observed by the model or produced by a
+// record marks path's current version as observed by the model or produced by a
 // successful tool write.
-func (s *FileStateStore) Record(path string, info os.FileInfo) {
+func (s *fileStateStore) record(path string, info os.FileInfo) {
 	s.mu.Lock()
-	s.files[fileStateKey(path)] = fileVersion(info)
+	s.files[fileStateKey(path)] = fileVersionOf(info)
 	s.mu.Unlock()
 }
 
-// Check verifies that path was observed and still has the same disk version.
-func (s *FileStateStore) Check(path string, info os.FileInfo) error {
+// check verifies that path was observed and still has the same disk version.
+func (s *fileStateStore) check(path string, info os.FileInfo) error {
 	s.mu.RLock()
 	observed, ok := s.files[fileStateKey(path)]
 	s.mu.RUnlock()
 	if !ok {
 		return ErrFileNotRead
 	}
-	if !observed.Equal(fileVersion(info)) {
+	if !observed.equal(fileVersionOf(info)) {
 		return ErrFileChanged
 	}
 	return nil
 }
 
-// Delete forgets path after an operation changed it but its new version could
+// delete forgets path after an operation changed it but its new version could
 // not be observed. The next mutation must Read it again.
-func (s *FileStateStore) Delete(path string) {
+func (s *fileStateStore) delete(path string) {
 	s.mu.Lock()
 	delete(s.files, fileStateKey(path))
 	s.mu.Unlock()
@@ -69,19 +69,19 @@ func (s *FileStateStore) Delete(path string) {
 
 func fileStateKey(path string) string { return filepath.Clean(path) }
 
-func fileVersion(info os.FileInfo) FileVersion {
-	return FileVersion{ModTime: info.ModTime(), Size: info.Size()}
+func fileVersionOf(info os.FileInfo) fileVersion {
+	return fileVersion{ModTime: info.ModTime(), Size: info.Size()}
 }
 
-func (v FileVersion) Equal(other FileVersion) bool {
+func (v fileVersion) equal(other fileVersion) bool {
 	return v.Size == other.Size && v.ModTime.Equal(other.ModTime)
 }
 
 func sameFileVersion(a, b os.FileInfo) bool {
-	return fileVersion(a).Equal(fileVersion(b))
+	return fileVersionOf(a).equal(fileVersionOf(b))
 }
 
-// stateFailureReason maps a FileStateStore.Check error to a MutationFailure
+// stateFailureReason maps a fileStateStore check error to a MutationFailure
 // reason code.
 func stateFailureReason(err error) string {
 	switch {

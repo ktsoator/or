@@ -2,15 +2,10 @@ package app
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"net/http"
-	"os"
 	"path/filepath"
 	"sync"
-	"time"
 
-	"github.com/ktsoator/or/coding/internal/config"
 	"github.com/ktsoator/or/coding/internal/conversation"
 	"github.com/ktsoator/or/coding/internal/httpapi"
 	"github.com/ktsoator/or/coding/internal/provider"
@@ -19,7 +14,7 @@ import (
 	"github.com/ktsoator/or/llm"
 )
 
-// Runtime owns the product services shared by the server and desktop shells.
+// Runtime owns the product services exposed by the desktop sidecar.
 type Runtime struct {
 	handler       http.Handler
 	conversations *conversation.Manager
@@ -28,12 +23,12 @@ type Runtime struct {
 	closeOnce     sync.Once
 }
 
-// New assembles one product runtime without choosing how its HTTP handler is
-// hosted. The CLI and authenticated Electron sidecar provide separate hosts.
-func New(ctx context.Context, cfg config.Config) (*Runtime, error) {
+// New assembles the product runtime served by the authenticated Electron
+// sidecar. dataDir is already resolved by the process host.
+func New(ctx context.Context, dataDir string) (*Runtime, error) {
 	ctx, cancel := context.WithCancel(ctx)
-	sessionDir := filepath.Join(cfg.DataDir, "sessions")
-	ledger, err := usage.NewStore(filepath.Join(cfg.DataDir, "usage", "events.sqlite"))
+	sessionDir := filepath.Join(dataDir, "sessions")
+	ledger, err := usage.NewStore(filepath.Join(dataDir, "usage", "events.sqlite"))
 	if err != nil {
 		cancel()
 		return nil, err
@@ -46,7 +41,7 @@ func New(ctx context.Context, cfg config.Config) (*Runtime, error) {
 	}
 	transports := httpapi.NewSessionTransports()
 	registry := llm.DefaultProviderRegistry()
-	providers, err := provider.NewStore(cfg.DataDir, registry)
+	providers, err := provider.NewStore(dataDir, registry)
 	if err != nil {
 		_ = ledger.Close()
 		cancel()
@@ -56,7 +51,7 @@ func New(ctx context.Context, cfg config.Config) (*Runtime, error) {
 	providerTests := provider.NewConnectionTester(providers, llm.Complete)
 
 	manager, err := conversation.NewManager(ctx, conversation.Options{
-		DataDir:      cfg.DataDir,
+		DataDir:      dataDir,
 		Usage:        ledger,
 		Workspaces:   workspaces,
 		NewTransport: transports.New,
@@ -75,7 +70,6 @@ func New(ctx context.Context, cfg config.Config) (*Runtime, error) {
 		Registry:      registry,
 		Providers:     providers,
 		ProviderTests: providerTests,
-		ClientOrigin:  cfg.ClientOrigin,
 	})
 	return &Runtime{
 		handler:       server.Handler(),
@@ -85,7 +79,7 @@ func New(ctx context.Context, cfg config.Config) (*Runtime, error) {
 	}, nil
 }
 
-// Handler returns the complete /api HTTP surface.
+// Handler returns the complete desktop /api HTTP surface.
 func (r *Runtime) Handler() http.Handler { return r.handler }
 
 // Close cancels in-flight work and releases session-owned background processes.
@@ -95,38 +89,4 @@ func (r *Runtime) Close() {
 		r.conversations.Close()
 		_ = r.ledger.Close()
 	})
-}
-
-// Run starts the standalone coding API at cfg.Addr.
-func Run(ctx context.Context, cfg config.Config) error {
-	runtime, err := New(ctx, cfg)
-	if err != nil {
-		return err
-	}
-	defer runtime.Close()
-
-	// Startup notes go to stderr, where this command's errors already go, so a
-	// caller redirecting stdout is not handed a banner it did not ask for.
-	fmt.Fprintf(os.Stderr, "coding API listening on http://%s/api/\n", cfg.Addr)
-	fmt.Fprintf(os.Stderr, "sessions and transcripts in %s\n", cfg.DataDir)
-	if cfg.ClientOrigin != "" {
-		fmt.Fprintf(os.Stderr, "allowing client origin %s\n", cfg.ClientOrigin)
-	}
-	server := &http.Server{Addr: cfg.Addr, Handler: runtime.Handler()}
-	stopped := make(chan struct{})
-	defer close(stopped)
-	go func() {
-		select {
-		case <-ctx.Done():
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			_ = server.Shutdown(shutdownCtx)
-		case <-stopped:
-		}
-	}()
-	err = server.ListenAndServe()
-	if errors.Is(err, http.ErrServerClosed) && ctx.Err() != nil {
-		return nil
-	}
-	return err
 }

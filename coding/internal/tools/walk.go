@@ -41,17 +41,16 @@ type walkedFile struct {
 }
 
 // walkFiles returns every non-skipped regular file under root, with paths
-// relative to root, via the FileOps seam. Directories named in skipDirs are
-// pruned. The walk stops early and returns ctx.Err() if the context is
-// cancelled.
-func walkFiles(ctx context.Context, ops FileOps, root string) ([]walkedFile, error) {
+// relative to root. Directories named in skipDirs are pruned. The walk stops
+// early and returns ctx.Err() if the context is cancelled.
+func walkFiles(ctx context.Context, root string) ([]walkedFile, error) {
 	var out []walkedFile
 	var walk func(dir, rel string) error
 	walk = func(dir, rel string) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		entries, err := ops.ReadDir(ctx, dir)
+		entries, err := os.ReadDir(dir)
 		if err != nil {
 			return err
 		}

@@ -30,7 +30,7 @@ func TestGrepSkipsFilesThatMayHoldCredentials(t *testing.T) {
 	// credentials must not come back in either mode.
 	for _, mode := range []string{"files", "content"} {
 		t.Run(mode, func(t *testing.T) {
-			result, err := runGrep(context.Background(), root, LocalOps{}, grepArgs{
+			result, err := runGrep(context.Background(), root, grepArgs{
 				Pattern: "SEARCHTERM",
 				Mode:    mode,
 			})
@@ -65,7 +65,7 @@ func TestGrepReportsSkippedFilesWhenNothingElseMatches(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := runGrep(context.Background(), root, LocalOps{}, grepArgs{Pattern: "only-here"})
+	result, err := runGrep(context.Background(), root, grepArgs{Pattern: "only-here"})
 	if err != nil {
 		t.Fatal(err)
 	}

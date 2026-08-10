@@ -9,7 +9,7 @@ import (
 
 func TestBuiltInToolsDescribeAccess(t *testing.T) {
 	root := t.TempDir()
-	toolSet, tasks := CoreToolsWithTasks(root, LocalOps{})
+	toolSet, tasks := CoreTools(root)
 	defer tasks.Shutdown()
 	background, err := tasks.Start("true", "Run test task", root)
 	if err != nil {

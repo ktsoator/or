@@ -11,8 +11,8 @@ import (
 	"github.com/ktsoator/or/llm"
 )
 
-// DefaultBashTimeout bounds a single command when the model does not set one.
-const DefaultBashTimeout = 120 * time.Second
+// defaultBashTimeout bounds a single command when the model does not set one.
+const defaultBashTimeout = 120 * time.Second
 
 type bashArgs struct {
 	Command         string `json:"command" jsonschema:"description=The bash command to run,minLength=1"`
@@ -21,12 +21,12 @@ type bashArgs struct {
 	RunInBackground bool   `json:"run_in_background,omitempty" jsonschema:"description=Run the command as a managed background task and return its task id and output file immediately. Completion is reported automatically. Read the returned output path for logs and use task_stop to stop it. Do not poll."`
 }
 
-// Bash returns a tool that runs a shell command in the workspace directory and
+// bashTool returns a tool that runs a shell command in the workspace directory and
 // returns its combined output and exit code. A non-zero exit is a failed tool
 // outcome that still preserves output for the model and the exact exit code for
 // runtimes. When tasks is non-nil, run_in_background starts a managed task and
 // returns its id and output path instead of blocking.
-func Bash(root string, ops ExecOps, tasks *TaskManager) Tool {
+func bashTool(root string, tasks *TaskManager) Tool {
 	def := llm.MustTool[bashArgs]("bash", bashText.description)
 	return Tool{
 		AgentTool: agent.AgentTool{
@@ -52,14 +52,14 @@ func Bash(root string, ops ExecOps, tasks *TaskManager) Tool {
 					)), nil
 				}
 
-				timeout := DefaultBashTimeout
+				timeout := defaultBashTimeout
 				if in.Timeout > 0 {
 					timeout = time.Duration(in.Timeout) * time.Second
 				}
 				runCtx, cancel := context.WithTimeout(ctx, timeout)
 				defer cancel()
 
-				result, err := ops.Exec(runCtx, in.Command, root)
+				result, err := runCommand(runCtx, in.Command, root)
 				if err != nil {
 					return failedResult("command_execution_failed", fmt.Sprintf("command failed to run: %v", err), nil), err
 				}

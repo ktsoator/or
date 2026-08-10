@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/ktsoator/or/agent"
@@ -24,10 +25,10 @@ type readArgs struct {
 	Limit  int    `json:"limit,omitempty" jsonschema:"description=Maximum number of lines to read,minimum=1"`
 }
 
-// ReadResult is the provider- and UI-independent result of a text range read.
+// readResult is the provider- and UI-independent result of a text range read.
 // Content does not include line-number prefixes; those are added only when the
 // result is serialized for the model.
-type ReadResult struct {
+type readResult struct {
 	Path       string
 	Content    string
 	StartLine  int
@@ -37,10 +38,10 @@ type ReadResult struct {
 	NextOffset int
 }
 
-// Read returns a tool that reads a UTF-8 text file and returns its contents with
-// 1-based line numbers, optionally windowed by offset and limit. Output is
+// readTool returns a tool that reads a UTF-8 text file and returns its contents
+// with 1-based line numbers, optionally windowed by offset and limit. Output is
 // capped to keep a large file from filling the context window.
-func Read(root string, ops FileOps, files *FileStateStore, trustedPaths ...func(string) bool) Tool {
+func readTool(root string, files *fileStateStore, trustedPaths ...func(string) bool) Tool {
 	def := llm.MustTool[readArgs]("read", readText.description)
 	return Tool{
 		AgentTool: agent.AgentTool{
@@ -56,11 +57,14 @@ func Read(root string, ops FileOps, files *FileStateStore, trustedPaths ...func(
 					return textResult(err.Error()), err
 				}
 				path := resolve(root, in.Path)
-				before, err := ops.Stat(ctx, path)
+				if err := ctx.Err(); err != nil {
+					return textResult(fmt.Sprintf("read %s: %v", in.Path, err)), err
+				}
+				before, err := os.Stat(path)
 				if err != nil {
 					return textResult(fmt.Sprintf("read %s: %v", in.Path, err)), err
 				}
-				file, err := ops.Open(ctx, path)
+				file, err := os.Open(path)
 				if err != nil {
 					return textResult(fmt.Sprintf("read %s: %v", in.Path, err)), err
 				}
@@ -71,7 +75,7 @@ func Read(root string, ops FileOps, files *FileStateStore, trustedPaths ...func(
 					msg := fmt.Sprintf("read %s: %v", in.Path, err)
 					return textResult(msg), err
 				}
-				after, err := ops.Stat(ctx, path)
+				after, err := os.Stat(path)
 				if err != nil {
 					return textResult(fmt.Sprintf("read %s: %v", in.Path, err)), err
 				}
@@ -79,7 +83,7 @@ func Read(root string, ops FileOps, files *FileStateStore, trustedPaths ...func(
 					err := fmt.Errorf("%w while it was being read; read it again", ErrFileChanged)
 					return textResult(fmt.Sprintf("read %s: %v", in.Path, err)), err
 				}
-				files.Record(path, after)
+				files.record(path, after)
 				result.Path = in.Path
 				return textResult(formatReadResult(result)), nil
 			},
@@ -129,17 +133,17 @@ func normalizeReadArgs(in readArgs) (offset, limit int, err error) {
 // readTextRange reads at most limit complete lines beginning at the 1-based
 // offset. It keeps memory bounded by maxBytes and reads one extra line only to
 // determine whether the model can continue with NextOffset.
-func readTextRange(ctx context.Context, src io.Reader, offset, limit, maxBytes int) (ReadResult, error) {
-	result := ReadResult{StartLine: offset, Limit: limit}
+func readTextRange(ctx context.Context, src io.Reader, offset, limit, maxBytes int) (readResult, error) {
+	result := readResult{StartLine: offset, Limit: limit}
 	reader := bufio.NewReader(src)
 
 	for lineNumber := 1; lineNumber < offset; lineNumber++ {
 		if err := ctx.Err(); err != nil {
-			return ReadResult{}, err
+			return readResult{}, err
 		}
 		_, ok, _, err := readCompleteLine(reader, -1)
 		if err != nil {
-			return ReadResult{}, err
+			return readResult{}, err
 		}
 		if !ok {
 			return result, nil
@@ -150,19 +154,19 @@ func readTextRange(ctx context.Context, src io.Reader, offset, limit, maxBytes i
 	bodyBytes := 0
 	for len(lines) < limit {
 		if err := ctx.Err(); err != nil {
-			return ReadResult{}, err
+			return readResult{}, err
 		}
 		lineNumber := offset + len(lines)
 		line, ok, overflow, err := readCompleteLine(reader, maxBytes)
 		if err != nil {
-			return ReadResult{}, err
+			return readResult{}, err
 		}
 		if !ok {
 			break
 		}
 		if overflow {
 			if len(lines) == 0 {
-				return ReadResult{}, fmt.Errorf("line %d exceeds the %d-byte read output limit; use grep or bash to inspect it", lineNumber, DefaultMaxBytes)
+				return readResult{}, fmt.Errorf("line %d exceeds the %d-byte read output limit; use grep or bash to inspect it", lineNumber, DefaultMaxBytes)
 			}
 			result.HasMore = true
 			break
@@ -171,7 +175,7 @@ func readTextRange(ctx context.Context, src io.Reader, offset, limit, maxBytes i
 		formattedBytes := len(fmt.Sprintf("%6d\t", lineNumber)) + len(line) + 1
 		if bodyBytes+formattedBytes > maxBytes {
 			if len(lines) == 0 {
-				return ReadResult{}, fmt.Errorf("line %d exceeds the %d-byte read output limit; use grep or bash to inspect it", lineNumber, DefaultMaxBytes)
+				return readResult{}, fmt.Errorf("line %d exceeds the %d-byte read output limit; use grep or bash to inspect it", lineNumber, DefaultMaxBytes)
 			}
 			result.HasMore = true
 			break
@@ -189,11 +193,11 @@ func readTextRange(ctx context.Context, src io.Reader, offset, limit, maxBytes i
 
 	if len(lines) == limit {
 		if err := ctx.Err(); err != nil {
-			return ReadResult{}, err
+			return readResult{}, err
 		}
 		_, ok, _, err := readCompleteLine(reader, -1)
 		if err != nil {
-			return ReadResult{}, err
+			return readResult{}, err
 		}
 		result.HasMore = ok
 	}
@@ -248,7 +252,7 @@ readLoop:
 	return line, true, overflow, nil
 }
 
-func formatReadResult(result ReadResult) string {
+func formatReadResult(result readResult) string {
 	if result.LineCount == 0 {
 		if result.StartLine == 1 {
 			return "(empty file)"

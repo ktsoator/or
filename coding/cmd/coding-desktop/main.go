@@ -14,17 +14,20 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/ktsoator/or/coding/internal/app"
-	"github.com/ktsoator/or/coding/internal/config"
 	"github.com/ktsoator/or/coding/internal/desktopserver"
 
 	_ "github.com/ktsoator/or/llm/all" // register the built-in protocol adapters
 )
 
-const tokenEnvironment = "CODING_DESKTOP_TOKEN"
+const (
+	tokenEnvironment   = "CODING_DESKTOP_TOKEN"
+	dataDirEnvironment = "OR_DATA_DIR"
+)
 
 type readyMessage struct {
 	Type       string `json:"type"`
@@ -40,14 +43,15 @@ func main() {
 }
 
 func run(args []string) error {
-	cfg := config.Defaults()
+	dataDir := os.Getenv(dataDirEnvironment)
 	flags := flag.NewFlagSet("coding-desktop", flag.ContinueOnError)
 	assets := flags.String("assets", "", "directory containing the built web client")
-	flags.StringVar(&cfg.DataDir, "data-dir", cfg.DataDir, "coding data directory")
+	flags.StringVar(&dataDir, "data-dir", dataDir, "coding data directory")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	if err := cfg.Resolve(); err != nil {
+	dataDir, err := resolveDataDir(dataDir)
+	if err != nil {
 		return err
 	}
 	assetDir, err := validateAssets(*assets)
@@ -67,7 +71,7 @@ func run(args []string) error {
 		_, _ = io.Copy(io.Discard, os.Stdin)
 		cancel()
 	}()
-	productRuntime, err := app.New(ctx, cfg)
+	productRuntime, err := app.New(ctx, dataDir)
 	if err != nil {
 		return err
 	}
@@ -107,6 +111,17 @@ func run(args []string) error {
 		return nil
 	}
 	return err
+}
+
+func resolveDataDir(value string) (string, error) {
+	if strings.TrimSpace(value) == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("resolve data directory: %w", err)
+		}
+		value = filepath.Join(home, ".or", "coding")
+	}
+	return filepath.Abs(value)
 }
 
 func validateAssets(value string) (string, error) {
