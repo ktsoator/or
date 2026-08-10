@@ -939,7 +939,24 @@ describe('threadsReducer event sequences', () => {
       {
         t: 'wire',
         sessionID,
-        ev: { type: 'message_end', usage },
+        ev: {
+          type: 'message_end',
+          usage,
+          context: {
+            provider: 'openai',
+            model: 'test-model',
+            usedTokens: 42,
+            contextWindow: 128_000,
+            measured: true,
+            breakdown: {
+              messages: 20,
+              systemTools: 8,
+              systemPrompt: 6,
+              skills: 4,
+              projectContext: 4,
+            },
+          },
+        },
       },
       { t: 'wire', sessionID, ev: { type: 'compaction_start' } },
     ])
@@ -951,6 +968,13 @@ describe('threadsReducer event sequences', () => {
       usedTokens: 42,
       contextWindow: 128_000,
       measured: true,
+      breakdown: {
+        messages: 20,
+        systemTools: 8,
+        systemPrompt: 6,
+        skills: 4,
+        projectContext: 4,
+      },
     })
 
     state = reduce(
@@ -971,5 +995,41 @@ describe('threadsReducer event sequences', () => {
     expect(thread(state).autoCompacting).toBe(false)
     expect(thread(state).contextUsage?.usedTokens).toBe(0)
     expect(thread(state).contextUsage?.measured).toBe(false)
+    expect(thread(state).contextUsage?.breakdown).toBeUndefined()
+  })
+
+  test('does not infer context usage from response billing usage', () => {
+    const state = reduce([
+      {
+        t: 'contextInvalidate',
+        sessionID,
+        provider: 'openai',
+        model: 'test-model',
+        contextWindow: 128_000,
+      },
+      {
+        t: 'wire',
+        sessionID,
+        ev: {
+          type: 'message_end',
+          usage: {
+            input: 40,
+            output: 2,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 42,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+          },
+        },
+      },
+    ])
+
+    expect(thread(state).contextUsage).toEqual({
+      provider: 'openai',
+      model: 'test-model',
+      usedTokens: 0,
+      contextWindow: 128_000,
+      measured: false,
+    })
   })
 })

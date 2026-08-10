@@ -157,6 +157,9 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	s.journal.captureOutcomes(s.agent)
 	s.agent.Subscribe(func(ev agent.AgentEvent) {
 		if projected, ok := projectAgentEvent(ev); ok {
+			if projected.Type == MessageCompleted {
+				projected.ContextUsage = s.ContextUsage()
+			}
 			s.dispatchEvent(projected)
 		}
 	})

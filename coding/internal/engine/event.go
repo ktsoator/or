@@ -75,6 +75,9 @@ type Event struct {
 	// aggregate consumption on RunCompleted. Product adapters may accumulate
 	// tool-use requests until FinalResponse to show one total per visible reply.
 	Usage llm.Usage
+	// ContextUsage is the provider-measured latest context plus its estimated
+	// category attribution. It is populated on MessageCompleted.
+	ContextUsage ContextUsage
 
 	// Response metadata identifies the exact provider request represented by a
 	// MessageCompleted event. It lets product shells build durable, per-model

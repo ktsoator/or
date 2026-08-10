@@ -573,18 +573,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
     case 'message_end':
       completeThinking()
       responseUsage = mergeUsage(responseUsage, ev.usage)
-      if (ev.usage) {
-        const usedTokens = usageTokens(ev.usage)
-        if (usedTokens > 0) {
-          contextUsage = {
-            provider: contextUsage?.provider ?? '',
-            model: contextUsage?.model ?? '',
-            usedTokens,
-            contextWindow: contextUsage?.contextWindow ?? 0,
-            measured: true,
-          }
-        }
-      }
+      if (ev.context) contextUsage = ev.context
       {
         let idx = lastIndex(items, (it) => it.kind === 'assistant' && it.open)
         if (idx < 0 && ev.text) {
@@ -707,7 +696,12 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
     case 'compaction_end':
       autoCompacting = false
       if (!ev.isError && contextUsage) {
-        contextUsage = { ...contextUsage, usedTokens: 0, measured: false }
+        contextUsage = {
+          ...contextUsage,
+          usedTokens: 0,
+          measured: false,
+          breakdown: undefined,
+        }
       }
       break
 
@@ -815,13 +809,6 @@ function mergeUsage(current: Usage, next?: Usage): Usage {
       total: current.cost.total + next.cost.total,
     },
   }
-}
-
-function usageTokens(usage: Usage): number {
-  return (
-    usage.totalTokens ||
-    usage.input + usage.output + usage.cacheRead + usage.cacheWrite
-  )
 }
 
 function hasUsage(usage: Usage): boolean {

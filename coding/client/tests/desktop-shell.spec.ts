@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import type { UsageEventPage, UsageReport } from '../src/types'
+import type { ContextUsage, UsageEventPage, UsageReport } from '../src/types'
 
 type BrowserRuntimeRecord = {
   tabID: string
@@ -149,6 +149,7 @@ async function openDesktopClient(
     backgroundTasks?: unknown[]
     secondarySession?: boolean
     secondaryHistoryEvents?: unknown[]
+    contextUsage?: ContextUsage
     modelName?: string
     modelThinkingLevels?: Array<'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'>
     modelThinkingVisibility?: 'visible' | 'hidden'
@@ -594,7 +595,7 @@ async function openDesktopClient(
         events: options.historyEvents ?? [],
         tasks: options.backgroundTasks ?? [],
         queue: [],
-        context: {},
+        context: options.contextUsage ?? {},
         running: options.historyRunning ?? false,
         eventSeq: options.historyEventSeq ?? 0,
       }
@@ -3815,6 +3816,44 @@ test('Composer controls stay separate and compact when Chat is narrow', async ({
   }))
   expect(modelNameLayout.whiteSpace).toBe('nowrap')
   expect(modelNameLayout.scrollWidth).toBeGreaterThan(modelNameLayout.clientWidth)
+})
+
+test('model menu expands the measured context breakdown', async ({ page }) => {
+  await openDesktopClient(page, {
+    existingSession: true,
+    contextUsage: {
+      provider: 'openai',
+      model: 'test-model',
+      usedTokens: 64_000,
+      contextWindow: 128_000,
+      measured: true,
+      breakdown: {
+        messages: 40_000,
+        systemTools: 10_000,
+        systemPrompt: 6_000,
+        skills: 4_000,
+        projectContext: 4_000,
+      },
+    },
+  })
+
+  await page.getByTestId('model-settings-trigger').click()
+  const trigger = page.getByTestId('context-window-trigger')
+  await expect(trigger).toContainText('Context window')
+  await expect(trigger).toContainText(/64k\s*\/\s*128k\s*·\s*50%/)
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false')
+
+  await trigger.click()
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true')
+  const breakdown = page.getByTestId('context-window-breakdown')
+  await expect(breakdown).toBeVisible()
+  await expect(breakdown).toContainText('Estimated breakdown')
+  await expect(page.getByTestId('context-breakdown-messages')).toContainText(/Messages\s*40k\s*31\.3%/)
+  await expect(page.getByTestId('context-breakdown-tools')).toContainText(/System tools\s*10k\s*7\.8%/)
+  await expect(page.getByTestId('context-breakdown-prompt')).toContainText(/System prompt\s*6k\s*4\.7%/)
+  await expect(page.getByTestId('context-breakdown-skills')).toContainText(/Skills\s*4k\s*3\.1%/)
+  await expect(page.getByTestId('context-breakdown-project')).toContainText(/Project context\s*4k\s*3\.1%/)
+  await expect(page.getByTestId('context-breakdown-free')).toContainText(/Free space\s*64k\s*50\.0%/)
 })
 
 test('Composer shows the full model name when space is available', async ({ page }) => {
