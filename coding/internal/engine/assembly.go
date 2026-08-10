@@ -7,6 +7,7 @@ import (
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/compaction"
+	"github.com/ktsoator/or/coding/internal/mcpclient"
 	"github.com/ktsoator/or/coding/internal/modelcontext"
 	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/coding/internal/skills"
@@ -43,6 +44,17 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	} else {
 		toolSet = append([]tools.Tool(nil), opts.Tools...)
 	}
+	var mcpSession *mcpclient.Session
+	if opts.MCPConfigPath != "" {
+		mcpSession = mcpclient.Open(ctx, opts.MCPConfigPath, cwd)
+		toolSet = append(toolSet, mcpSession.Tools()...)
+	}
+	keepMCP := false
+	defer func() {
+		if !keepMCP {
+			mcpSession.Close()
+		}
+	}()
 	// Keep one snapshot-aware Skill tool available for request-boundary add/remove
 	// changes. It is filtered out of the provider tool set while no Skill exists.
 	toolSet = append(toolSet, tools.Tool{
@@ -77,6 +89,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		toolByName:    toolsByName(toolSet),
 		authorizer:    authorizer,
 		tasks:         tasks,
+		mcp:           mcpSession,
 		cwd:           cwd,
 		instructions:  opts.Instructions,
 		skillRegistry: dynamicSkills,
@@ -164,6 +177,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		}
 	})
 
+	keepMCP = true
 	return s, nil
 }
 
