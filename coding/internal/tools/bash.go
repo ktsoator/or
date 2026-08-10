@@ -26,7 +26,7 @@ type bashArgs struct {
 // outcome that still preserves output for the model and the exact exit code for
 // runtimes. When tasks is non-nil, run_in_background starts a managed task and
 // returns its id and output path instead of blocking.
-func Bash(root string, ops ExecOps, tasks *TaskManager) Tool {
+func Bash(root string, tasks *TaskManager) Tool {
 	def := llm.MustTool[bashArgs]("bash", bashText.description)
 	return Tool{
 		AgentTool: agent.AgentTool{
@@ -59,7 +59,7 @@ func Bash(root string, ops ExecOps, tasks *TaskManager) Tool {
 				runCtx, cancel := context.WithTimeout(ctx, timeout)
 				defer cancel()
 
-				result, err := ops.Exec(runCtx, in.Command, root)
+				result, err := runCommand(runCtx, in.Command, root)
 				if err != nil {
 					return failedResult("command_execution_failed", fmt.Sprintf("command failed to run: %v", err), nil), err
 				}

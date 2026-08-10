@@ -22,7 +22,7 @@ type globArgs struct {
 
 // Glob returns a tool that finds files by name pattern, skipping vendored
 // directories, and returns paths sorted by most-recently-modified first.
-func Glob(root string, ops FileOps) Tool {
+func Glob(root string) Tool {
 	def := llm.MustTool[globArgs]("glob", globText.description)
 	return Tool{
 		AgentTool: agent.AgentTool{
@@ -33,7 +33,7 @@ func Glob(root string, ops FileOps) Tool {
 				if err := json.Unmarshal(raw, &in); err != nil {
 					return agent.ToolResult{}, err
 				}
-				return runGlob(ctx, root, ops, in)
+				return runGlob(ctx, root, in)
 			},
 		},
 		AccessFor:  pathAccess(permission.Read),
@@ -41,7 +41,7 @@ func Glob(root string, ops FileOps) Tool {
 	}
 }
 
-func runGlob(ctx context.Context, root string, ops FileOps, in globArgs) (agent.ToolResult, error) {
+func runGlob(ctx context.Context, root string, in globArgs) (agent.ToolResult, error) {
 	re, err := globToRegexp(in.Pattern)
 	if err != nil {
 		msg := fmt.Sprintf("glob: invalid pattern: %v", err)
@@ -49,7 +49,7 @@ func runGlob(ctx context.Context, root string, ops FileOps, in globArgs) (agent.
 	}
 
 	searchRoot := resolve(root, in.Path)
-	files, err := walkFiles(ctx, ops, searchRoot)
+	files, err := walkFiles(ctx, searchRoot)
 	if err != nil {
 		return textResult(fmt.Sprintf("glob: %v", err)), err
 	}

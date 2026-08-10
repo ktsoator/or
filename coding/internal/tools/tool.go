@@ -1,3 +1,5 @@
+// Package tools implements the coding agent's built-in tools and the product
+// bridges those tools use to interact with the desktop surface.
 package tools
 
 import (
@@ -39,16 +41,16 @@ func (t Tool) Name() string { return t.Definition.Name }
 // coding product's core capability. Browser tools are assembled separately so
 // the engine can register them as an optional capability without coupling that
 // distinction to the reusable agent package.
-func CoreToolsWithTasks(root string, ops Ops) ([]Tool, *TaskManager) {
+func CoreToolsWithTasks(root string) ([]Tool, *TaskManager) {
 	files := NewFileStateStore()
-	tasks := NewTaskManager(ops)
+	tasks := NewTaskManager()
 	return []Tool{
-		Read(root, ops, files, tasks.OwnsOutputPath),
-		Grep(root, ops),
-		Glob(root, ops),
-		Edit(root, ops, files),
-		Write(root, ops, files),
-		Bash(root, ops, tasks),
+		Read(root, files, tasks.OwnsOutputPath),
+		Grep(root),
+		Glob(root),
+		Edit(root, files),
+		Write(root, files),
+		Bash(root, tasks),
 		TaskStop(tasks),
 	}, tasks
 }

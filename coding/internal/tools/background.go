@@ -57,7 +57,7 @@ type TaskOutput struct {
 
 type managedTask struct {
 	state         TaskState
-	proc          Process
+	proc          *localProcess
 	done          chan struct{}
 	stopRequested bool
 }
@@ -65,13 +65,7 @@ type managedTask struct {
 // TaskManager owns background processes and their output files for one coding
 // session. Tasks run in separate process groups, survive across turns, and are
 // stopped and removed when the session closes.
-//
-// Commands are launched through the session's ExecOps, the same seam the
-// foreground bash tool uses, so a backend cannot be bypassed by asking for a
-// background task.
 type TaskManager struct {
-	ops ExecOps
-
 	mu sync.Mutex
 
 	counter      int
@@ -82,11 +76,9 @@ type TaskManager struct {
 	nextListener int
 }
 
-// NewTaskManager returns an empty session-scoped task manager that launches its
-// commands through ops.
-func NewTaskManager(ops ExecOps) *TaskManager {
+// NewTaskManager returns an empty session-scoped task manager.
+func NewTaskManager() *TaskManager {
 	return &TaskManager{
-		ops:       ops,
 		tasks:     make(map[string]*managedTask),
 		listeners: make(map[int]func(TaskState)),
 	}
@@ -124,7 +116,7 @@ func (m *TaskManager) Start(command, description, dir string) (TaskInfo, error) 
 		return TaskInfo{}, fmt.Errorf("create task output: %w", err)
 	}
 
-	proc, err := m.ops.Start(command, dir, output)
+	proc, err := startCommand(command, dir, output)
 	if err != nil {
 		_ = output.Close()
 		_ = os.Remove(info.OutputPath)

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/ktsoator/or/agent"
@@ -40,7 +41,7 @@ type ReadResult struct {
 // Read returns a tool that reads a UTF-8 text file and returns its contents with
 // 1-based line numbers, optionally windowed by offset and limit. Output is
 // capped to keep a large file from filling the context window.
-func Read(root string, ops FileOps, files *FileStateStore, trustedPaths ...func(string) bool) Tool {
+func Read(root string, files *FileStateStore, trustedPaths ...func(string) bool) Tool {
 	def := llm.MustTool[readArgs]("read", readText.description)
 	return Tool{
 		AgentTool: agent.AgentTool{
@@ -56,11 +57,14 @@ func Read(root string, ops FileOps, files *FileStateStore, trustedPaths ...func(
 					return textResult(err.Error()), err
 				}
 				path := resolve(root, in.Path)
-				before, err := ops.Stat(ctx, path)
+				if err := ctx.Err(); err != nil {
+					return textResult(fmt.Sprintf("read %s: %v", in.Path, err)), err
+				}
+				before, err := os.Stat(path)
 				if err != nil {
 					return textResult(fmt.Sprintf("read %s: %v", in.Path, err)), err
 				}
-				file, err := ops.Open(ctx, path)
+				file, err := os.Open(path)
 				if err != nil {
 					return textResult(fmt.Sprintf("read %s: %v", in.Path, err)), err
 				}
@@ -71,7 +75,7 @@ func Read(root string, ops FileOps, files *FileStateStore, trustedPaths ...func(
 					msg := fmt.Sprintf("read %s: %v", in.Path, err)
 					return textResult(msg), err
 				}
-				after, err := ops.Stat(ctx, path)
+				after, err := os.Stat(path)
 				if err != nil {
 					return textResult(fmt.Sprintf("read %s: %v", in.Path, err)), err
 				}

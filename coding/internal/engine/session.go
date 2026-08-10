@@ -31,8 +31,7 @@ type Options struct {
 	// Cwd is the workspace root the tools operate in. Empty uses the process
 	// working directory.
 	Cwd string
-	// Tools is the tool set. Nil uses tools.CodingTools rooted at Cwd, backed by
-	// tools.LocalOps.
+	// Tools is the tool set. Nil uses the built-in tools rooted at Cwd.
 	Tools []tools.Tool
 	// Skills is the initial immutable skill snapshot. The Skill tool is advertised
 	// only while the active snapshot contains at least one Skill.
