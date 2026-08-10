@@ -157,6 +157,7 @@ export type ToolItem = {
   toolContentIndex?: number
   generatedBytes?: number
   result?: string
+  images?: MessageImage[]
   outcome?: ToolOutcome
   change?: Change
 }

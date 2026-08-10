@@ -609,6 +609,9 @@ const en = {
   'tool.fileEmpty': 'File is empty.',
   'tool.input': 'Input',
   'tool.output': 'Output',
+  'tool.resultImage': 'Tool result image {index}',
+  'tool.openResultImage': 'Open tool result image {index}',
+  'tool.closeResultImage': 'Close image',
   'tool.errorOutput': 'Error output',
 
   'actions.copied': 'Copied',
@@ -1233,6 +1236,9 @@ const zh: Record<TranslationKey, string> = {
   'tool.fileEmpty': '文件为空。',
   'tool.input': '输入',
   'tool.output': '输出',
+  'tool.resultImage': '工具结果图片 {index}',
+  'tool.openResultImage': '打开工具结果图片 {index}',
+  'tool.closeResultImage': '关闭图片',
   'tool.errorOutput': '错误输出',
 
   'actions.copied': '已复制',

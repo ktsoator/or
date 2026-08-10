@@ -91,7 +91,7 @@ func projectEvent(ev engine.Event) (wireEvent, bool) {
 		out = wireEvent{Type: wireEventToolStart, ID: ev.ToolCallID, Tool: ev.ToolName, Args: ev.ToolArgs}
 
 	case engine.ToolFinished:
-		out = wireEvent{Type: wireEventToolEnd, ID: ev.ToolCallID, Tool: ev.ToolName, Result: wireToolResult(ev.ToolName, ev.ToolResult), Outcome: projectToolOutcome(ev.ToolOutcome)}
+		out = wireEvent{Type: wireEventToolEnd, ID: ev.ToolCallID, Tool: ev.ToolName, Result: wireToolResult(ev.ToolName, ev.ToolResult), Images: projectImages(ev.Images), Outcome: projectToolOutcome(ev.ToolOutcome)}
 
 	case engine.MessageCompleted:
 		out = wireEvent{
@@ -225,6 +225,7 @@ func ProjectHistory(items []engine.HistoryItem) []wireEvent {
 				ID:      item.ToolCallID,
 				Tool:    item.ToolName,
 				Result:  wireToolResult(item.ToolName, item.ToolResult),
+				Images:  projectImages(item.Images),
 				Outcome: projectToolOutcome(item.ToolOutcome),
 			})
 

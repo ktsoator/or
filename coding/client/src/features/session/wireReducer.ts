@@ -453,6 +453,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
           | 'error'
           | 'complete',
         result: ev.result,
+        ...(ev.images ? { images: ev.images } : {}),
         outcome,
         change: structuredChange,
       }

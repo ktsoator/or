@@ -45,7 +45,7 @@ const (
 type Event struct {
 	Type EventType
 
-	// Streaming and completed assistant content.
+	// User messages, assistant content, and tool-result media.
 	Delta  string
 	Text   string
 	Images []llm.ImageContent
@@ -174,6 +174,7 @@ func projectAgentEvent(ev agent.AgentEvent) (Event, bool) {
 			ToolCallID:  ev.ToolCallID,
 			ToolName:    ev.ToolName,
 			ToolResult:  eventToolResultText(ev.Result),
+			Images:      toolResultContentImages(ev.Result.Content),
 			ToolOutcome: eventToolOutcome(ev.Result),
 		}, true
 
@@ -307,9 +308,7 @@ func displayAssistantText(assistant *llm.AssistantMessage) string {
 	return assistant.Text()
 }
 
-// eventToolResultText extracts text blocks from a tool result. Binary and
-// structured blocks remain available to the lower-level agent but are omitted
-// from the current text-oriented product shells.
+// eventToolResultText extracts the textual projection of a tool result.
 func eventToolResultText(result agent.ToolResult) string {
 	return toolResultContentText(result.Content)
 }
