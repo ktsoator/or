@@ -4,6 +4,7 @@ package mcpmanager
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"os"
 	"path/filepath"
@@ -16,6 +17,8 @@ import (
 )
 
 const defaultFailureRetryDelay = 15 * time.Second
+
+var errGenerationChanged = errors.New("MCP configuration changed while acquiring connections")
 
 type managedConnection interface {
 	Transport() string
@@ -46,6 +49,11 @@ type connectionEntry struct {
 	references int
 }
 
+type configStamp struct {
+	exists bool
+	digest [sha256.Size]byte
+}
+
 // Manager loads one product-owned config and shares matching connections among
 // conversation runtimes. Config generations are isolated so active runtimes
 // retain their old connections while newly loaded runtimes use new settings.
@@ -54,16 +62,18 @@ type Manager struct {
 	cancel context.CancelFunc
 	path   string
 
-	mu         sync.Mutex
-	config     mcpclient.Config
-	configErr  error
-	generation uint64
-	entries    map[connectionKey]*connectionEntry
-	closed     bool
-	connect    connectFunc
-	retryDelay time.Duration
-	background sync.WaitGroup
-	closeOnce  sync.Once
+	mu          sync.Mutex
+	reloadMu    sync.Mutex
+	config      mcpclient.Config
+	configErr   error
+	configStamp configStamp
+	generation  uint64
+	entries     map[connectionKey]*connectionEntry
+	closed      bool
+	connect     connectFunc
+	retryDelay  time.Duration
+	background  sync.WaitGroup
+	closeOnce   sync.Once
 }
 
 // New creates a manager and loads its initial configuration. Configuration
@@ -92,7 +102,13 @@ func (manager *Manager) Path() string { return manager.path }
 // Reload installs the latest on-disk configuration as a new generation. Old
 // connections remain alive until every lease using them has been released.
 func (manager *Manager) Reload() error {
-	config, err := readConfig(manager.path)
+	manager.reloadMu.Lock()
+	defer manager.reloadMu.Unlock()
+	return manager.reload()
+}
+
+func (manager *Manager) reload() error {
+	config, stamp, err := loadConfig(manager.path)
 
 	manager.mu.Lock()
 	if manager.closed {
@@ -102,6 +118,7 @@ func (manager *Manager) Reload() error {
 	manager.generation++
 	manager.config = config
 	manager.configErr = err
+	manager.configStamp = stamp
 	var closing []managedConnection
 	for key, entry := range manager.entries {
 		entry.stale = true
@@ -123,6 +140,16 @@ func (manager *Manager) Reload() error {
 // conversation lease. Connections from the active config generation remain
 // cached for later sessions.
 func (manager *Manager) Warm(workspace string) {
+	manager.warm(workspace, false)
+}
+
+// WarmGlobal starts workspace-independent HTTP servers. It is safe during app
+// startup before any project or scratch workspace has been selected.
+func (manager *Manager) WarmGlobal() {
+	manager.warm("", true)
+}
+
+func (manager *Manager) warm(workspace string, globalOnly bool) {
 	manager.mu.Lock()
 	if manager.closed {
 		manager.mu.Unlock()
@@ -132,7 +159,7 @@ func (manager *Manager) Warm(workspace string) {
 	manager.mu.Unlock()
 	go func() {
 		defer manager.background.Done()
-		lease := manager.Acquire(manager.ctx, workspace)
+		lease := manager.acquire(manager.ctx, workspace, globalOnly)
 		lease.Close()
 	}()
 }
@@ -141,8 +168,13 @@ func (manager *Manager) Warm(workspace string) {
 // returns one immutable snapshot. Individual server failures are represented
 // in Statuses and never fail the whole lease.
 func (manager *Manager) Acquire(ctx context.Context, workspace string) *Lease {
+	return manager.acquire(ctx, workspace, false)
+}
+
+func (manager *Manager) acquire(ctx context.Context, workspace string, globalOnly bool) *Lease {
+	_ = manager.reloadIfChanged()
 	workspace, workspaceErr := normalizeWorkspace(workspace)
-	config, configErr, generation, closed := manager.snapshotConfig()
+	config, generation, closed, configErr := manager.snapshotConfig()
 	lease := &Lease{manager: manager}
 	if closed {
 		lease.statuses = []mcpclient.ServerStatus{{Name: "configuration", State: mcpclient.StateError, Error: "MCP manager is closed"}}
@@ -167,6 +199,7 @@ func (manager *Manager) Acquire(ctx context.Context, workspace string) *Lease {
 		status     mcpclient.ServerStatus
 		connection managedConnection
 		entry      *connectionEntry
+		err        error
 	}
 	resolved := make(chan resolution, len(names))
 	pending := 0
@@ -185,6 +218,9 @@ func (manager *Manager) Acquire(ctx context.Context, workspace string) *Lease {
 			lease.statuses[index] = status
 			continue
 		}
+		if globalOnly && (len(config.Workspaces) > 0 || connectionScope(config, workspace) != "global") {
+			continue
+		}
 		applies, err := config.AppliesTo(workspace)
 		if err != nil {
 			status.State = mcpclient.StateError
@@ -197,7 +233,6 @@ func (manager *Manager) Acquire(ctx context.Context, workspace string) *Lease {
 			lease.statuses[index] = status
 			continue
 		}
-
 		pending++
 		go func(index int, name string, config mcpclient.ServerConfig, status mcpclient.ServerStatus) {
 			key := connectionKey{generation: generation, server: name, scope: connectionScope(config, workspace)}
@@ -205,7 +240,7 @@ func (manager *Manager) Acquire(ctx context.Context, workspace string) *Lease {
 			if err != nil {
 				status.State = mcpclient.StateError
 				status.Error = err.Error()
-				resolved <- resolution{index: index, status: status}
+				resolved <- resolution{index: index, status: status, err: err}
 				return
 			}
 			status.ToolCount = len(connection.Tools())
@@ -218,21 +253,50 @@ func (manager *Manager) Acquire(ctx context.Context, workspace string) *Lease {
 			resolved <- resolution{index: index, status: status, connection: connection, entry: entry}
 		}(index, name, config, status)
 	}
+	retryGeneration := false
 	for range pending {
 		result := <-resolved
+		if errors.Is(result.err, errGenerationChanged) {
+			retryGeneration = true
+		}
 		lease.statuses[result.index] = result.status
 		if result.connection != nil {
 			lease.entries = append(lease.entries, result.entry)
 			lease.tools = append(lease.tools, result.connection.Tools()...)
 		}
 	}
+	if retryGeneration && ctx.Err() == nil {
+		lease.Close()
+		return manager.acquire(ctx, workspace, globalOnly)
+	}
 	return lease
 }
 
-func (manager *Manager) snapshotConfig() (mcpclient.Config, error, uint64, bool) {
+func (manager *Manager) reloadIfChanged() error {
+	stamp := readConfigStamp(manager.path)
+	manager.mu.Lock()
+	unchanged := stamp == manager.configStamp
+	closed := manager.closed
+	manager.mu.Unlock()
+	if unchanged || closed {
+		return nil
+	}
+	manager.reloadMu.Lock()
+	defer manager.reloadMu.Unlock()
+	stamp = readConfigStamp(manager.path)
+	manager.mu.Lock()
+	unchanged = stamp == manager.configStamp
+	manager.mu.Unlock()
+	if unchanged {
+		return nil
+	}
+	return manager.reload()
+}
+
+func (manager *Manager) snapshotConfig() (mcpclient.Config, uint64, bool, error) {
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
-	return cloneConfig(manager.config), manager.configErr, manager.generation, manager.closed
+	return cloneConfig(manager.config), manager.generation, manager.closed, manager.configErr
 }
 
 func (manager *Manager) acquireConnection(
@@ -245,6 +309,10 @@ func (manager *Manager) acquireConnection(
 	if manager.closed {
 		manager.mu.Unlock()
 		return nil, nil, context.Canceled
+	}
+	if key.generation != manager.generation {
+		manager.mu.Unlock()
+		return nil, nil, errGenerationChanged
 	}
 	entry := manager.entries[key]
 	if entry != nil && entry.complete && entry.err != nil && entry.references == 0 &&
@@ -382,12 +450,25 @@ func (lease *Lease) Close() {
 	})
 }
 
-func readConfig(path string) (mcpclient.Config, error) {
-	config, err := mcpclient.ReadConfig(path)
+func loadConfig(path string) (mcpclient.Config, configStamp, error) {
+	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return mcpclient.Config{Version: 1, MCPServers: make(map[string]mcpclient.ServerConfig)}, nil
+		return mcpclient.Config{Version: 1, MCPServers: make(map[string]mcpclient.ServerConfig)}, configStamp{}, nil
 	}
-	return config, err
+	if err != nil {
+		return mcpclient.Config{}, configStamp{}, err
+	}
+	stamp := configStamp{exists: true, digest: sha256.Sum256(data)}
+	config, err := mcpclient.ParseConfig(data)
+	return config, stamp, err
+}
+
+func readConfigStamp(path string) configStamp {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return configStamp{}
+	}
+	return configStamp{exists: true, digest: sha256.Sum256(data)}
 }
 
 func cloneConfig(config mcpclient.Config) mcpclient.Config {

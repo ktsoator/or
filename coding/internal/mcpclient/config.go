@@ -1,6 +1,7 @@
 package mcpclient
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -66,13 +67,16 @@ func loadConfig(path string) ([]namedServer, error) {
 // any server. A missing file remains distinguishable from an empty config so
 // callers can decide whether MCP should be surfaced at all.
 func ReadConfig(path string) (Config, error) {
-	file, err := os.Open(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return Config{}, err
 	}
-	defer file.Close()
+	return ParseConfig(data)
+}
 
-	decoder := json.NewDecoder(file)
+// ParseConfig decodes one strict MCP configuration document.
+func ParseConfig(data []byte) (Config, error) {
+	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	var config Config
 	if err := decoder.Decode(&config); err != nil {

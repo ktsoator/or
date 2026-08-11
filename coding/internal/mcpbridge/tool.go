@@ -34,21 +34,29 @@ type callableTool interface {
 	Call(context.Context, any) (*protocol.CallToolResult, error)
 }
 
+// Source is an immutable MCP tool and status snapshot. Both legacy client
+// sessions and application-manager leases satisfy it.
+type Source interface {
+	Tools() []mcpclient.Tool
+	Statuses() []mcpclient.ServerStatus
+}
+
 // BuildTools adapts every discovered MCP tool for Or and appends the internal
 // status tool when at least one server or configuration diagnostic exists.
-func BuildTools(session *mcpclient.Session) []tools.Tool {
-	if session == nil {
+func BuildTools(source Source) []tools.Tool {
+	if source == nil {
 		return nil
 	}
-	statuses := session.Statuses()
+	statuses := source.Statuses()
 	statusIndex := make(map[string]int, len(statuses))
 	for index := range statuses {
 		statusIndex[statuses[index].Name] = index
 	}
 
 	usedNames := map[string]struct{}{"mcp_status": {}}
-	adaptedTools := make([]tools.Tool, 0, len(session.Tools())+1)
-	for _, discovered := range session.Tools() {
+	discoveredTools := source.Tools()
+	adaptedTools := make([]tools.Tool, 0, len(discoveredTools)+1)
+	for _, discovered := range discoveredTools {
 		adapted, err := adaptTool(discovered)
 		if err != nil {
 			markUnavailable(statuses, statusIndex, discovered.ServerName(), err.Error())

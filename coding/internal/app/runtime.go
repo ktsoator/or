@@ -8,6 +8,7 @@ import (
 
 	"github.com/ktsoator/or/coding/internal/conversation"
 	"github.com/ktsoator/or/coding/internal/httpapi"
+	"github.com/ktsoator/or/coding/internal/mcpmanager"
 	"github.com/ktsoator/or/coding/internal/provider"
 	"github.com/ktsoator/or/coding/internal/usage"
 	"github.com/ktsoator/or/coding/internal/workspace"
@@ -18,6 +19,7 @@ import (
 type Runtime struct {
 	handler       http.Handler
 	conversations *conversation.Manager
+	mcp           *mcpmanager.Manager
 	ledger        *usage.Store
 	cancel        context.CancelFunc
 	closeOnce     sync.Once
@@ -49,14 +51,21 @@ func New(ctx context.Context, dataDir string) (*Runtime, error) {
 	}
 	providers.Apply()
 	providerTests := provider.NewConnectionTester(providers, llm.Complete)
+	mcp := mcpmanager.New(ctx, filepath.Join(dataDir, "mcp.json"))
+	mcp.WarmGlobal()
+	for _, registered := range workspaces.List() {
+		mcp.Warm(registered.Path)
+	}
 
 	manager, err := conversation.NewManager(ctx, conversation.Options{
 		DataDir:      dataDir,
 		Usage:        ledger,
 		Workspaces:   workspaces,
 		NewTransport: transports.New,
+		MCP:          mcp,
 	})
 	if err != nil {
+		mcp.Close()
 		_ = ledger.Close()
 		cancel()
 		return nil, err
@@ -70,11 +79,12 @@ func New(ctx context.Context, dataDir string) (*Runtime, error) {
 		Registry:      registry,
 		Providers:     providers,
 		ProviderTests: providerTests,
-		MCPConfigPath: filepath.Join(dataDir, "mcp.json"),
+		MCP:           mcp,
 	})
 	return &Runtime{
 		handler:       server.Handler(),
 		conversations: manager,
+		mcp:           mcp,
 		ledger:        ledger,
 		cancel:        cancel,
 	}, nil
@@ -88,6 +98,7 @@ func (r *Runtime) Close() {
 	r.closeOnce.Do(func() {
 		r.cancel()
 		r.conversations.Close()
+		r.mcp.Close()
 		_ = r.ledger.Close()
 	})
 }

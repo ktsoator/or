@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ktsoator/or/coding/internal/engine"
+	"github.com/ktsoator/or/coding/internal/mcpmanager"
 	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/llm"
 )
@@ -104,6 +105,7 @@ type sessionRuntime struct {
 	// operation. The manager lock protects the transition to a loaded runtime.
 	session   *engine.Session
 	transport Transport
+	mcpLease  *mcpmanager.Lease
 	running   atomic.Bool // serializes manager-owned work for this session
 	live      atomic.Bool // state exposed to clients; clears before done is published
 

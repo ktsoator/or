@@ -6,17 +6,18 @@ import (
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/coding/internal/skills"
+	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/transcript"
 	"github.com/ktsoator/or/llm"
 )
 
 type engineSessionConfig struct {
-	WorkspacePath  string
-	TranscriptPath string
-	Model          llm.Model
-	ThinkingLevel  llm.ModelThinkingLevel
-	PermissionMode permission.Mode
-	MCPConfigPath  string
+	WorkspacePath   string
+	TranscriptPath  string
+	Model           llm.Model
+	ThinkingLevel   llm.ModelThinkingLevel
+	PermissionMode  permission.Mode
+	AdditionalTools []tools.Tool
 }
 
 // This is the one place an engine.Session is assembled. Every conversation the
@@ -44,7 +45,7 @@ func newEngineSession(
 		SkillLoader: func() []skills.Skill {
 			return loadSkills(cfg.WorkspacePath)
 		},
-		MCPConfigPath: cfg.MCPConfigPath,
+		AdditionalTools: cfg.AdditionalTools,
 	})
 }
 

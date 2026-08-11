@@ -95,6 +95,36 @@ func TestAcquireSharesGlobalHTTPAndIsolatesWorkspaceConnections(t *testing.T) {
 	}
 }
 
+func TestGlobalWarmSkipsWorkspaceDependentServers(t *testing.T) {
+	processWorkspace, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := writeTestConfig(t, map[string]mcpclient.ServerConfig{
+		"global":        {URL: "https://global.example/mcp"},
+		"selected-only": {URL: "https://selected.example/mcp", Workspaces: []string{processWorkspace}},
+		"templated":     {URL: "https://workspace.example/mcp?root=${workspace}"},
+		"stdio":         {Command: "example"},
+	})
+	manager := New(t.Context(), path)
+	t.Cleanup(manager.Close)
+	var mu sync.Mutex
+	var names []string
+	manager.connect = func(_ context.Context, name string, _ mcpclient.ServerConfig, _ string) (managedConnection, error) {
+		mu.Lock()
+		names = append(names, name)
+		mu.Unlock()
+		return &fakeConnection{}, nil
+	}
+	lease := manager.acquire(t.Context(), "", true)
+	lease.Close()
+	mu.Lock()
+	defer mu.Unlock()
+	if len(names) != 1 || names[0] != "global" {
+		t.Fatalf("warmed servers = %v", names)
+	}
+}
+
 func TestReloadKeepsLeasedGenerationAlive(t *testing.T) {
 	path := writeTestConfig(t, map[string]mcpclient.ServerConfig{
 		"demo": {URL: "https://old.example/mcp"},
@@ -139,6 +169,79 @@ func TestReloadKeepsLeasedGenerationAlive(t *testing.T) {
 		t.Fatalf("old connection close count = %d, want 1", oldConnection.closed.Load())
 	}
 	newLease.Close()
+}
+
+func TestAcquireRejectsSnapshotFromPreviousGeneration(t *testing.T) {
+	path := writeTestConfig(t, map[string]mcpclient.ServerConfig{
+		"demo": {URL: "https://demo.example/mcp"},
+	})
+	manager := New(t.Context(), path)
+	t.Cleanup(manager.Close)
+	_, generation, _, _ := manager.snapshotConfig()
+	if err := manager.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := manager.acquireConnection(t.Context(), connectionKey{
+		generation: generation,
+		server:     "demo",
+		scope:      "global",
+	}, mcpclient.ServerConfig{URL: "https://demo.example/mcp"}, t.TempDir())
+	if !errors.Is(err, errGenerationChanged) {
+		t.Fatalf("acquire error = %v, want generation change", err)
+	}
+}
+
+func TestAcquireReloadsExternallyChangedConfiguration(t *testing.T) {
+	path := writeTestConfig(t, map[string]mcpclient.ServerConfig{
+		"before": {Disabled: true, Command: "before"},
+	})
+	manager := New(t.Context(), path)
+	t.Cleanup(manager.Close)
+	if err := mcpclient.WriteConfig(path, mcpclient.Config{MCPServers: map[string]mcpclient.ServerConfig{
+		"after": {Disabled: true, Command: "after"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	lease := manager.Acquire(t.Context(), t.TempDir())
+	defer lease.Close()
+	statuses := lease.Statuses()
+	if len(statuses) != 1 || statuses[0].Name != "after" || statuses[0].State != mcpclient.StateDisabled {
+		t.Fatalf("statuses = %#v", statuses)
+	}
+}
+
+func TestAcquireDetectsSameSizeConfigurationRewrite(t *testing.T) {
+	path := writeTestConfig(t, map[string]mcpclient.ServerConfig{
+		"alpha": {Disabled: true, Command: "first"},
+	})
+	manager := New(t.Context(), path)
+	t.Cleanup(manager.Close)
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := mcpclient.WriteConfig(path, mcpclient.Config{MCPServers: map[string]mcpclient.ServerConfig{
+		"bravo": {Disabled: true, Command: "other"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.Size() != after.Size() {
+		t.Fatalf("test configs have different sizes: %d and %d", before.Size(), after.Size())
+	}
+	if err := os.Chtimes(path, before.ModTime(), before.ModTime()); err != nil {
+		t.Fatal(err)
+	}
+
+	lease := manager.Acquire(t.Context(), t.TempDir())
+	defer lease.Close()
+	statuses := lease.Statuses()
+	if len(statuses) != 1 || statuses[0].Name != "bravo" {
+		t.Fatalf("statuses = %#v", statuses)
+	}
 }
 
 func TestAcquireCachesFailuresUntilRetryWindow(t *testing.T) {

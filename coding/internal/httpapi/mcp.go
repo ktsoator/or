@@ -111,6 +111,10 @@ func (s *Server) handleSaveMCPServer(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	if err := s.reloadMCP(c.Query("workspace")); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, projectMCPServer(request.Name, request.Config, c.Query("workspace")))
 }
 
@@ -140,7 +144,25 @@ func (s *Server) handleDeleteMCPServer(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	if err := s.reloadMCP(c.Query("workspace")); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	c.Status(http.StatusNoContent)
+}
+
+func (s *Server) reloadMCP(workspace string) error {
+	if s.mcp == nil {
+		return nil
+	}
+	if err := s.mcp.Reload(); err != nil {
+		return err
+	}
+	s.mcp.WarmGlobal()
+	if strings.TrimSpace(workspace) != "" {
+		s.mcp.Warm(workspace)
+	}
+	return nil
 }
 
 func (s *Server) handleTestMCPServer(c *gin.Context) {

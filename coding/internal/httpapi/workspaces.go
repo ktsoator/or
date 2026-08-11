@@ -31,6 +31,9 @@ func (s *Server) handleRegisterWorkspace(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	if s.mcp != nil {
+		s.mcp.Warm(registered.Path)
+	}
 	c.JSON(http.StatusCreated, registered)
 }
 
