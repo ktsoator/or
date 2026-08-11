@@ -2,8 +2,10 @@ package httpapi
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/conversation"
@@ -11,6 +13,21 @@ import (
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/llm"
 )
+
+const multilineToolResult = `[
+  {
+    "name": "Github",
+    "transport": "streamable_http",
+    "state": "connected",
+    "toolCount": 44
+  },
+  {
+    "name": "local-test",
+    "transport": "stdio",
+    "state": "connected",
+    "toolCount": 5
+  }
+]`
 
 func TestProjectSessionEventIncludesRunFailure(t *testing.T) {
 	data, ok := projectSessionEvent(conversation.RunFailed{Text: "model unavailable"})
@@ -137,6 +154,50 @@ func TestProjectEventIncludesToolInputProgress(t *testing.T) {
 	if event.Delta != `{"path":` {
 		t.Fatalf("delta = %q, want streamed tool arguments", event.Delta)
 	}
+}
+
+func TestProjectEventPreservesCompleteToolResult(t *testing.T) {
+	data, ok := ProjectEvent(engine.Event{
+		Type:       engine.ToolFinished,
+		ToolCallID: "status-call",
+		ToolName:   "mcp_status",
+		ToolResult: multilineToolResult,
+	})
+	if !ok {
+		t.Fatal("tool result event was not projected")
+	}
+
+	var event wireEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		t.Fatal(err)
+	}
+	if event.Result != multilineToolResult {
+		t.Fatalf("result = %q, want complete tool result", event.Result)
+	}
+}
+
+func TestWireToolResultReportsTransportLimits(t *testing.T) {
+	t.Run("lines", func(t *testing.T) {
+		result := strings.Repeat("line\n", wireToolResultMaxLines) + "last line"
+		got := wireToolResult(result)
+		if strings.Contains(got, "last line") ||
+			!strings.HasSuffix(got, "[truncated: 1 more line(s) not shown]") {
+			t.Fatalf("result did not report the line limit: %q", got)
+		}
+	})
+
+	t.Run("bytes", func(t *testing.T) {
+		got := wireToolResult(strings.Repeat("界", wireToolResultMaxBytes))
+		if len(got) > wireToolResultMaxBytes {
+			t.Fatalf("result length = %d, want <= %d", len(got), wireToolResultMaxBytes)
+		}
+		if !utf8.ValidString(got) {
+			t.Fatal("byte-limited result is not valid UTF-8")
+		}
+		if !strings.HasSuffix(got, "[truncated: tool result exceeded 65536 bytes]") {
+			t.Fatalf("result did not report the byte limit: %q", got)
+		}
+	})
 }
 
 func TestProjectEventIncludesTaskCompletion(t *testing.T) {
@@ -372,5 +433,20 @@ func TestProjectHistoryRestoresPreviewRequest(t *testing.T) {
 	preview, ok := events[0].Outcome.Data.(*wirePreview)
 	if !ok || preview.Path != "/workspace/web/index.html" || preview.RelativePath != "web/index.html" || preview.Title != "Static page" {
 		t.Fatalf("history outcome data = %#v", events[0].Outcome.Data)
+	}
+}
+
+func TestProjectHistoryPreservesCompleteToolResult(t *testing.T) {
+	events := ProjectHistory([]engine.HistoryItem{{
+		Type:       engine.HistoryToolResult,
+		ToolCallID: "status-call",
+		ToolName:   "mcp_status",
+		ToolResult: multilineToolResult,
+	}})
+	if len(events) != 1 {
+		t.Fatalf("events = %#v, want one event", events)
+	}
+	if events[0].Result != multilineToolResult {
+		t.Fatalf("result = %q, want complete tool result", events[0].Result)
 	}
 }

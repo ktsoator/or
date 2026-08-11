@@ -8,8 +8,10 @@ package httpapi
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/engine"
@@ -91,7 +93,7 @@ func projectEvent(ev engine.Event) (wireEvent, bool) {
 		out = wireEvent{Type: wireEventToolStart, ID: ev.ToolCallID, Tool: ev.ToolName, Args: ev.ToolArgs}
 
 	case engine.ToolFinished:
-		out = wireEvent{Type: wireEventToolEnd, ID: ev.ToolCallID, Tool: ev.ToolName, Result: wireToolResult(ev.ToolName, ev.ToolResult), Outcome: projectToolOutcome(ev.ToolOutcome)}
+		out = wireEvent{Type: wireEventToolEnd, ID: ev.ToolCallID, Tool: ev.ToolName, Result: wireToolResult(ev.ToolResult), Outcome: projectToolOutcome(ev.ToolOutcome)}
 
 	case engine.MessageCompleted:
 		out = wireEvent{
@@ -224,7 +226,7 @@ func ProjectHistory(items []engine.HistoryItem) []wireEvent {
 				Type:    wireEventToolEnd,
 				ID:      item.ToolCallID,
 				Tool:    item.ToolName,
-				Result:  wireToolResult(item.ToolName, item.ToolResult),
+				Result:  wireToolResult(item.ToolResult),
 				Outcome: projectToolOutcome(item.ToolOutcome),
 			})
 
@@ -307,15 +309,38 @@ func projectUsage(usage llm.Usage) *wireUsage {
 	}
 }
 
-// wireToolResult keeps file reads inspectable in the browser while retaining a
-// compact preview for commands and other tools. The read tool already enforces
-// its own line and byte limits.
-func wireToolResult(tool, result string) string {
-	name := strings.ToLower(tool)
-	if strings.Contains(name, "read") || strings.Contains(name, "cat") {
+const (
+	wireToolResultMaxLines = 1000
+	wireToolResultMaxBytes = 64 * 1024
+)
+
+// wireToolResult preserves inspectable output while keeping SSE and history
+// responses bounded. Presentation limits belong to the client; this limit is
+// only a transport safeguard and always reports when content was removed.
+func wireToolResult(result string) string {
+	if len(result) > wireToolResultMaxBytes {
+		return limitWireToolResultBytes(result)
+	}
+
+	lines := strings.Split(result, "\n")
+	if len(lines) > wireToolResultMaxLines {
+		dropped := len(lines) - wireToolResultMaxLines
+		result = strings.Join(lines[:wireToolResultMaxLines], "\n") +
+			fmt.Sprintf("\n\n[truncated: %d more line(s) not shown]", dropped)
+	}
+	if len(result) <= wireToolResultMaxBytes {
 		return result
 	}
-	return firstLines(result, 12)
+	return limitWireToolResultBytes(result)
+}
+
+func limitWireToolResultBytes(result string) string {
+	notice := fmt.Sprintf("\n\n[truncated: tool result exceeded %d bytes]", wireToolResultMaxBytes)
+	prefix := result[:wireToolResultMaxBytes-len(notice)]
+	for !utf8.ValidString(prefix) {
+		prefix = prefix[:len(prefix)-1]
+	}
+	return prefix + notice
 }
 
 func projectToolOutcome(outcome agent.ToolOutcome) *wireToolOutcome {
@@ -409,13 +434,4 @@ func previewPayload(details any) *wirePreview {
 		GrantID:      preview.GrantID,
 		PreviewPath:  preview.PreviewPath,
 	}
-}
-
-// firstLines returns at most n lines of s.
-func firstLines(s string, n int) string {
-	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
-	if len(lines) <= n {
-		return strings.Join(lines, "\n")
-	}
-	return strings.Join(lines[:n], "\n")
 }
