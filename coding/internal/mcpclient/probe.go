@@ -7,12 +7,13 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	protocol "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// ProbeTool is the compact discovery information shown by the MCP settings UI.
+// ProbeTool is compact protocol metadata discovered during a connection probe.
 type ProbeTool struct {
 	Name        string `json:"name"`
-	Original    string `json:"original"`
 	Title       string `json:"title,omitempty"`
 	Description string `json:"description,omitempty"`
 }
@@ -66,17 +67,22 @@ func Probe(ctx context.Context, name string, config ServerConfig, workspace stri
 		if definition == nil || strings.TrimSpace(definition.Name) == "" {
 			continue
 		}
-		title := ""
-		if definition.Annotations != nil {
-			title = strings.TrimSpace(definition.Annotations.Title)
-		}
 		result.Tools = append(result.Tools, ProbeTool{
-			Name:        toolName(name, definition.Name),
-			Original:    definition.Name,
-			Title:       title,
+			Name:        definition.Name,
+			Title:       protocolToolTitle(definition),
 			Description: strings.TrimSpace(definition.Description),
 		})
 	}
 	sort.Slice(result.Tools, func(i, j int) bool { return result.Tools[i].Name < result.Tools[j].Name })
 	return result, nil
+}
+
+func protocolToolTitle(definition *protocol.Tool) string {
+	if title := strings.TrimSpace(definition.Title); title != "" {
+		return title
+	}
+	if definition.Annotations != nil {
+		return strings.TrimSpace(definition.Annotations.Title)
+	}
+	return ""
 }

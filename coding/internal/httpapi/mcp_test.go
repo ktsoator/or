@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/ktsoator/or/coding/internal/mcpclient"
 )
 
 func TestMCPConfigEndpointsCreateRenameListAndDelete(t *testing.T) {
@@ -113,6 +115,21 @@ func TestMCPConfigEndpointSurfacesMalformedFile(t *testing.T) {
 	response := mcpRequest(t, mcpTestRouter(path), http.MethodGet, "/api/mcp", nil)
 	if response.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+}
+
+func TestProjectMCPProbeToolsKeepsProductNamingAtHTTPBoundary(t *testing.T) {
+	tools := projectMCPProbeTools("demo server", []mcpclient.ProbeTool{{
+		Name:        "read.file",
+		Title:       "Read file",
+		Description: "Reads one file.",
+	}})
+	if len(tools) != 1 {
+		t.Fatalf("tools = %#v", tools)
+	}
+	tool := tools[0]
+	if tool.Name != "mcp__demo_server__read_file" || tool.Original != "read.file" || tool.Title != "Read file" {
+		t.Fatalf("tool = %#v", tool)
 	}
 }
 

@@ -1,6 +1,5 @@
-// Package mcpclient connects the Or coding product to configured Model Context
-// Protocol servers and projects their tools into the product's existing tool
-// and permission contracts.
+// Package mcpclient manages configured Model Context Protocol connections and
+// exposes protocol-native tool definitions and results to product adapters.
 package mcpclient
 
 import (
@@ -17,8 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ktsoator/or/coding/internal/permission"
-	"github.com/ktsoator/or/coding/internal/tools"
 	protocol "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -46,7 +43,7 @@ type ServerStatus struct {
 // Coding sessions are unloaded while idle, so their subprocesses and remote
 // sessions naturally follow the same lifecycle.
 type Session struct {
-	tools       []tools.Tool
+	tools       []Tool
 	statuses    []ServerStatus
 	connections []*protocol.ClientSession
 	cancels     []context.CancelFunc
@@ -65,11 +62,9 @@ func Open(ctx context.Context, path, workspace string) *Session {
 	session := &Session{}
 	if err != nil {
 		session.statuses = []ServerStatus{{Name: "configuration", State: StateError, Error: err.Error()}}
-		session.tools = []tools.Tool{session.statusTool()}
 		return session
 	}
 
-	usedNames := map[string]struct{}{"mcp_status": {}}
 	for _, server := range servers {
 		status := ServerStatus{Name: server.name, Transport: transportName(server.config)}
 		if server.config.Disabled {
@@ -105,24 +100,14 @@ func Open(ctx context.Context, path, workspace string) *Session {
 		}
 		session.connections = append(session.connections, connection)
 		session.cancels = append(session.cancels, cancel)
-		access := permission.Network
-		if strings.TrimSpace(server.config.Command) != "" {
-			access = permission.Execute
-		}
 		for _, definition := range definitions {
-			adapted, err := adaptTool(server.name, definition, connection, access)
+			discovered, err := newTool(server.name, status.Transport, definition, connection)
 			if err != nil {
 				status.State = StateError
 				status.Error = appendDiagnostic(status.Error, err.Error())
 				continue
 			}
-			if _, duplicate := usedNames[adapted.Name()]; duplicate {
-				status.State = StateError
-				status.Error = appendDiagnostic(status.Error, fmt.Sprintf("tool name collision for %q", definition.Name))
-				continue
-			}
-			usedNames[adapted.Name()] = struct{}{}
-			session.tools = append(session.tools, adapted)
+			session.tools = append(session.tools, discovered)
 			status.ToolCount++
 		}
 		if status.State != StateError {
@@ -130,18 +115,25 @@ func Open(ctx context.Context, path, workspace string) *Session {
 		}
 		session.statuses = append(session.statuses, status)
 	}
-	if len(servers) > 0 {
-		session.tools = append(session.tools, session.statusTool())
-	}
 	return session
 }
 
-// Tools returns an independent slice of the tools visible to the coding agent.
-func (session *Session) Tools() []tools.Tool {
+// Tools returns an independent slice of the tools discovered from connected
+// MCP servers.
+func (session *Session) Tools() []Tool {
 	if session == nil {
 		return nil
 	}
-	return append([]tools.Tool(nil), session.tools...)
+	return append([]Tool(nil), session.tools...)
+}
+
+// Statuses returns secret-free connection diagnostics for all configured
+// servers.
+func (session *Session) Statuses() []ServerStatus {
+	if session == nil {
+		return nil
+	}
+	return append([]ServerStatus(nil), session.statuses...)
 }
 
 // Close gracefully terminates every MCP connection. It is idempotent.

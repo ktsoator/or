@@ -4,6 +4,18 @@ Or can use tools exposed by Model Context Protocol servers over stdio or
 Streamable HTTP. MCP connections belong to one loaded coding session and close
 when that session is unloaded or the application exits.
 
+## Internal boundaries
+
+The integration keeps MCP protocol concerns separate from Or product concerns:
+
+- `internal/mcpclient` owns configuration, transports, protocol sessions, tool
+  discovery, and protocol-native tool calls and results. It does not depend on
+  Or's agent, LLM, permission, or tool packages.
+- `internal/mcpbridge` adapts discovered MCP tools to Or tool definitions,
+  provider-safe names, permission accesses, and model-facing results.
+- `internal/httpapi` and the client MCP page own configuration delivery and
+  presentation. The engine only assembles the client session and bridge output.
+
 ## Configuration file
 
 Use **MCP servers** in the application sidebar to add, edit, enable, test, or

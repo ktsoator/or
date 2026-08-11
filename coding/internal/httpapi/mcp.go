@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/ktsoator/or/coding/internal/mcpbridge"
 	"github.com/ktsoator/or/coding/internal/mcpclient"
 )
 
@@ -32,6 +33,13 @@ type mcpServerSaveRequest struct {
 	Name         string                 `json:"name"`
 	PreviousName string                 `json:"previousName,omitempty"`
 	Config       mcpclient.ServerConfig `json:"config"`
+}
+
+type mcpProbeTool struct {
+	Name        string `json:"name"`
+	Original    string `json:"original"`
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 func (s *Server) handleMCPServers(c *gin.Context) {
@@ -161,9 +169,23 @@ func (s *Server) handleTestMCPServer(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"transport": result.Transport,
-		"tools":     result.Tools,
+		"tools":     projectMCPProbeTools(name, result.Tools),
 		"latencyMs": time.Since(started).Milliseconds(),
 	})
+}
+
+func projectMCPProbeTools(serverName string, discovered []mcpclient.ProbeTool) []mcpProbeTool {
+	tools := make([]mcpProbeTool, 0, len(discovered))
+	for _, tool := range discovered {
+		tools = append(tools, mcpProbeTool{
+			Name:        mcpbridge.ToolName(serverName, tool.Name),
+			Original:    tool.Name,
+			Title:       tool.Title,
+			Description: tool.Description,
+		})
+	}
+	sort.Slice(tools, func(i, j int) bool { return tools[i].Name < tools[j].Name })
+	return tools
 }
 
 func readMCPConfig(path string) (mcpclient.Config, error) {

@@ -122,9 +122,9 @@ func TestLocalMCPServerThroughOrProbe(t *testing.T) {
 	}
 	foundImage := false
 	for _, tool := range result.Tools {
-		if tool.Original == "get-image" {
+		if tool.Name == "get-image" {
 			foundImage = true
-			if tool.Name != "mcp__local-test__get-image" || tool.Title != "Get test image" {
+			if tool.Title != "Get test image" {
 				t.Fatalf("image tool = %#v", tool)
 			}
 		}

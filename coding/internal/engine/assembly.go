@@ -7,6 +7,7 @@ import (
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/compaction"
+	"github.com/ktsoator/or/coding/internal/mcpbridge"
 	"github.com/ktsoator/or/coding/internal/mcpclient"
 	"github.com/ktsoator/or/coding/internal/modelcontext"
 	"github.com/ktsoator/or/coding/internal/permission"
@@ -47,7 +48,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	var mcpSession *mcpclient.Session
 	if opts.MCPConfigPath != "" {
 		mcpSession = mcpclient.Open(ctx, opts.MCPConfigPath, cwd)
-		toolSet = append(toolSet, mcpSession.Tools()...)
+		toolSet = append(toolSet, mcpbridge.BuildTools(mcpSession)...)
 	}
 	keepMCP := false
 	defer func() {
