@@ -50,20 +50,18 @@ func Probe(ctx context.Context, name string, config ServerConfig, workspace stri
 		return ProbeResult{}, fmt.Errorf("server is not available in workspace %s", workspace)
 	}
 
-	connection, cancel, definitions, err := connect(ctx, name, config, workspace)
+	connection, err := Connect(ctx, name, config, workspace)
 	if err != nil {
 		return ProbeResult{}, err
 	}
-	defer func() {
-		cancel()
-		_ = connection.Close()
-	}()
+	defer connection.Close()
 
 	result := ProbeResult{
-		Transport: transportName(config),
-		Tools:     make([]ProbeTool, 0, len(definitions)),
+		Transport: connection.Transport(),
+		Tools:     make([]ProbeTool, 0, len(connection.Tools())),
 	}
-	for _, definition := range definitions {
+	for _, tool := range connection.Tools() {
+		definition := tool.Definition()
 		if definition == nil || strings.TrimSpace(definition.Name) == "" {
 			continue
 		}
