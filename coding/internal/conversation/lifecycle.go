@@ -132,6 +132,8 @@ func (m *Manager) Delete(id string) error {
 	}
 
 	delete(m.sessions, id)
+	removeScratch := runtime.record.WorkspaceKind == KindScratch &&
+		!m.workspaceReferencedLocked(runtime.record.WorkspacePath)
 	if err := m.saveLocked(); err != nil {
 		m.sessions[id] = runtime
 		restoreFiles(staged)
@@ -147,10 +149,19 @@ func (m *Manager) Delete(id string) error {
 		_ = removeStagedPath(path.staged)
 	}
 	// Folder workspaces belong to the user and are never touched.
-	if runtime.record.WorkspaceKind == KindScratch {
+	if removeScratch {
 		_ = m.scratch.Remove(runtime.record.WorkspacePath)
 	}
 	return nil
+}
+
+func (m *Manager) workspaceReferencedLocked(path string) bool {
+	for _, runtime := range m.sessions {
+		if runtime.record.WorkspacePath == path {
+			return true
+		}
+	}
+	return false
 }
 
 // UpdateSettings changes the model and reasoning effort used by the session's

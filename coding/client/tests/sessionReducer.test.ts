@@ -59,6 +59,53 @@ describe('threadsReducer event sequences', () => {
     ])
   })
 
+  test('backfills durable message IDs when a live run completes', () => {
+    const state = reduce([
+      {
+        t: 'sendUser',
+        sessionID,
+        id: 'local-user',
+        text: 'question',
+        images: [],
+        startedAt,
+      },
+      {
+        t: 'wire',
+        sessionID,
+        ev: { type: 'run_start', startedAt },
+      },
+      {
+        t: 'wire',
+        sessionID,
+        ev: { type: 'message_end', text: 'answer', finalResponse: true },
+      },
+      {
+        t: 'wire',
+        sessionID,
+        ev: {
+          type: 'done',
+          startedAt,
+          userMessageIDs: ['transcript-user-1'],
+          assistantMessageID: 'transcript-assistant-1',
+        },
+      },
+    ])
+
+    expect(thread(state).items).toEqual([
+      expect.objectContaining({
+        kind: 'user',
+        id: 'local-user',
+        messageID: 'transcript-user-1',
+      }),
+      expect.objectContaining({ kind: 'run', startedAt }),
+      expect.objectContaining({
+        kind: 'assistant',
+        messageID: 'transcript-assistant-1',
+        complete: true,
+      }),
+    ])
+  })
+
   test('tracks the server event cursor and ignores duplicate replay', () => {
     const state = reduce([
       {

@@ -281,6 +281,10 @@ type wireEvent struct {
 	StartedAt   string `json:"startedAt,omitempty"`
 	CompletedAt string `json:"completedAt,omitempty"`
 	DurationMS  *int64 `json:"durationMs,omitempty"`
+	// done events backfill stable transcript IDs into messages first rendered
+	// from the live stream.
+	UserMessageIDs     []string `json:"userMessageIDs,omitempty"`
+	AssistantMessageID string   `json:"assistantMessageID,omitempty"`
 	// task_started / task_notification
 	Task *wireBackgroundTask `json:"task,omitempty"`
 }

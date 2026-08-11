@@ -141,10 +141,12 @@ func projectEvent(ev engine.Event) (wireEvent, bool) {
 
 	case engine.RunCompleted:
 		out = wireEvent{
-			Type:       wireEventDone,
-			Usage:      projectUsage(ev.Usage),
-			StartedAt:  formatEventTime(ev.StartedAt),
-			DurationMS: elapsedMilliseconds(ev.StartedAt, ev.CompletedAt),
+			Type:               wireEventDone,
+			Usage:              projectUsage(ev.Usage),
+			StartedAt:          formatEventTime(ev.StartedAt),
+			DurationMS:         elapsedMilliseconds(ev.StartedAt, ev.CompletedAt),
+			UserMessageIDs:     ev.UserMessageIDs,
+			AssistantMessageID: ev.AssistantMessageID,
 		}
 
 	default:

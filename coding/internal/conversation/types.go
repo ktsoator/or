@@ -64,39 +64,47 @@ var ErrQueuedMessageInFlight = errors.New("session: queued message is already be
 // Summary is the browser-facing metadata for one independent coding
 // conversation. Live state is sampled when the list is requested.
 type Summary struct {
-	ID             string                 `json:"id"`
-	Title          string                 `json:"title"`
-	WorkspacePath  string                 `json:"workspacePath"`
-	WorkspaceName  string                 `json:"workspaceName"`
-	Scope          string                 `json:"scope"`
-	WorkspaceKind  string                 `json:"workspaceKind"`
-	CreatedAt      time.Time              `json:"createdAt"`
-	UpdatedAt      time.Time              `json:"updatedAt"`
-	Running        bool                   `json:"running"`
-	HasApproval    bool                   `json:"hasApproval"`
-	HasQuestion    bool                   `json:"hasQuestion"`
-	ModelProvider  string                 `json:"modelProvider"`
-	ModelID        string                 `json:"modelId"`
-	ModelName      string                 `json:"modelName"`
-	ThinkingLevel  llm.ModelThinkingLevel `json:"thinkingLevel"`
-	PermissionMode permission.Mode        `json:"permissionMode"`
+	ID                  string                 `json:"id"`
+	Title               string                 `json:"title"`
+	WorkspacePath       string                 `json:"workspacePath"`
+	WorkspaceName       string                 `json:"workspaceName"`
+	Scope               string                 `json:"scope"`
+	WorkspaceKind       string                 `json:"workspaceKind"`
+	CreatedAt           time.Time              `json:"createdAt"`
+	UpdatedAt           time.Time              `json:"updatedAt"`
+	Running             bool                   `json:"running"`
+	HasApproval         bool                   `json:"hasApproval"`
+	HasQuestion         bool                   `json:"hasQuestion"`
+	ModelProvider       string                 `json:"modelProvider"`
+	ModelID             string                 `json:"modelId"`
+	ModelName           string                 `json:"modelName"`
+	ThinkingLevel       llm.ModelThinkingLevel `json:"thinkingLevel"`
+	PermissionMode      permission.Mode        `json:"permissionMode"`
+	ForkedFromSessionID string                 `json:"forkedFromSessionId,omitempty"`
+	ForkedFromMessageID string                 `json:"forkedFromMessageId,omitempty"`
 }
 
 type record struct {
-	ID             string    `json:"id"`
-	Title          string    `json:"title"`
-	CustomTitle    string    `json:"customTitle,omitempty"`
-	WorkspacePath  string    `json:"workspacePath,omitempty"`
-	Scope          string    `json:"scope,omitempty"`
-	WorkspaceKind  string    `json:"workspaceKind,omitempty"`
-	CreatedAt      time.Time `json:"createdAt"`
-	UpdatedAt      time.Time `json:"updatedAt"`
-	Transcript     string    `json:"transcript"`
-	GenerateTitle  bool      `json:"generateTitle,omitempty"`
-	Provider       string    `json:"provider,omitempty"`
-	Model          string    `json:"model,omitempty"`
-	Thinking       string    `json:"thinkingLevel,omitempty"`
-	PermissionMode string    `json:"permissionMode,omitempty"`
+	ID                  string    `json:"id"`
+	Title               string    `json:"title"`
+	CustomTitle         string    `json:"customTitle,omitempty"`
+	WorkspacePath       string    `json:"workspacePath,omitempty"`
+	Scope               string    `json:"scope,omitempty"`
+	WorkspaceKind       string    `json:"workspaceKind,omitempty"`
+	CreatedAt           time.Time `json:"createdAt"`
+	UpdatedAt           time.Time `json:"updatedAt"`
+	Transcript          string    `json:"transcript"`
+	GenerateTitle       bool      `json:"generateTitle,omitempty"`
+	Provider            string    `json:"provider,omitempty"`
+	Model               string    `json:"model,omitempty"`
+	Thinking            string    `json:"thinkingLevel,omitempty"`
+	PermissionMode      string    `json:"permissionMode,omitempty"`
+	ForkedFromSessionID string    `json:"forkedFromSessionId,omitempty"`
+	ForkedFromMessageID string    `json:"forkedFromMessageId,omitempty"`
+	// UsageBackfillOffset skips copied fork history when rebuilding the global
+	// usage ledger after restart. New responses appended after this offset are
+	// still backfilled idempotently.
+	UsageBackfillOffset int `json:"usageBackfillOffset,omitempty"`
 }
 
 type sessionRuntime struct {

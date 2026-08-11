@@ -300,6 +300,8 @@ export type WireEvent = {
   startedAt?: string
   completedAt?: string
   durationMs?: number
+  userMessageIDs?: string[]
+  assistantMessageID?: string
   task?: BackgroundTask
 }
 

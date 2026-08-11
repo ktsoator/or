@@ -45,6 +45,10 @@ func TestSessionPersistsAndReplaysRunTiming(t *testing.T) {
 	if entries[3].Run.FirstEntryID != entries[1].ID {
 		t.Fatalf("run first entry = %q, want %q", entries[3].Run.FirstEntryID, entries[1].ID)
 	}
+	if len(completed.UserMessageIDs) != 1 || completed.UserMessageIDs[0] != entries[1].ID ||
+		completed.AssistantMessageID != entries[2].ID {
+		t.Fatalf("completed message ids = users %v, assistant %q", completed.UserMessageIDs, completed.AssistantMessageID)
+	}
 
 	history := session.History()
 	want := []HistoryItemType{HistoryUser, HistoryRun, HistoryAssistant}

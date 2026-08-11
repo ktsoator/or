@@ -732,6 +732,41 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
     case 'done':
       removePreparingTools()
       completeRun(ev.durationMs, ev.startedAt)
+      {
+        const runIndex = ev.startedAt
+          ? lastIndex(items, (item) => item.kind === 'run' && item.startedAt === ev.startedAt)
+          : lastIndex(items, (item) => item.kind === 'run')
+        if (runIndex >= 0 && ev.userMessageIDs?.length) {
+          const userIndexes: number[] = []
+          for (let index = runIndex - 1; index >= 0 && items[index].kind === 'user'; index--) {
+            userIndexes.unshift(index)
+          }
+          const offset = Math.max(0, userIndexes.length - ev.userMessageIDs.length)
+          for (let index = 0; index < ev.userMessageIDs.length; index++) {
+            const itemIndex = userIndexes[offset + index]
+            const user = itemIndex === undefined ? undefined : items[itemIndex]
+            if (user?.kind === 'user') {
+              items = replaceAt(items, itemIndex, {
+                ...user,
+                messageID: ev.userMessageIDs[index],
+              })
+            }
+          }
+        }
+        if (runIndex >= 0 && ev.assistantMessageID) {
+          const assistantIndex = lastIndex(
+            items,
+            (item) => item.kind === 'assistant' && item.complete,
+          )
+          const assistant = assistantIndex > runIndex ? items[assistantIndex] : undefined
+          if (assistant?.kind === 'assistant') {
+            items = replaceAt(items, assistantIndex, {
+              ...assistant,
+              messageID: ev.assistantMessageID,
+            })
+          }
+        }
+      }
       running = false
       autoCompacting = false
       closeAssistant()

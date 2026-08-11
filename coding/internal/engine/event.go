@@ -97,6 +97,11 @@ type Event struct {
 	// steering or follow-up work consumed before the run ends.
 	StartedAt   time.Time
 	CompletedAt time.Time
+	// RunCompleted identifies the messages made durable by the finished run.
+	// UserMessageIDs follow transcript order; AssistantMessageID is the final
+	// user-visible response and excludes intermediate tool-use turns.
+	UserMessageIDs     []string
+	AssistantMessageID string
 }
 
 // Subscribe registers a listener for UI-neutral coding events and returns a

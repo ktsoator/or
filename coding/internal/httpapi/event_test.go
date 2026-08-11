@@ -64,6 +64,26 @@ func TestProjectEventIncludesResponseCompletionTime(t *testing.T) {
 	}
 }
 
+func TestProjectEventIncludesPersistedRunMessageIDs(t *testing.T) {
+	data, ok := ProjectEvent(engine.Event{
+		Type:               engine.RunCompleted,
+		UserMessageIDs:     []string{"user-1", "user-2"},
+		AssistantMessageID: "assistant-1",
+	})
+	if !ok {
+		t.Fatal("run completion event was not projected")
+	}
+
+	var event wireEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(event.UserMessageIDs, ",") != "user-1,user-2" ||
+		event.AssistantMessageID != "assistant-1" {
+		t.Fatalf("message ids = users %v, assistant %q", event.UserMessageIDs, event.AssistantMessageID)
+	}
+}
+
 func TestProjectEventPreservesUnknownInputUsage(t *testing.T) {
 	data, ok := ProjectEvent(engine.Event{
 		Type:  engine.MessageCompleted,
