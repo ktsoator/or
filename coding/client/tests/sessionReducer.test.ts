@@ -19,6 +19,46 @@ function thread(state: ThreadsState) {
 }
 
 describe('threadsReducer event sequences', () => {
+  test('preserves durable message IDs from a history snapshot', () => {
+    const state = reduce([
+      {
+        t: 'reset',
+        sessionID,
+        history: {
+          running: false,
+          events: [
+            {
+              type: 'user_message',
+              messageID: 'transcript-user-1',
+              text: 'question',
+            },
+            {
+              type: 'message_end',
+              messageID: 'transcript-assistant-1',
+              text: 'answer',
+              finalResponse: true,
+            },
+          ],
+        },
+      },
+    ])
+
+    expect(thread(state).items).toEqual([
+      expect.objectContaining({
+        kind: 'user',
+        id: 'i-0',
+        messageID: 'transcript-user-1',
+        text: 'question',
+      }),
+      expect.objectContaining({
+        kind: 'assistant',
+        id: 'i-1',
+        messageID: 'transcript-assistant-1',
+        markdown: 'answer',
+      }),
+    ])
+  })
+
   test('tracks the server event cursor and ignores duplicate replay', () => {
     const state = reduce([
       {

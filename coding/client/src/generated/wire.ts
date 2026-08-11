@@ -277,6 +277,7 @@ export type WireEvent = {
   preview?: PreviewRequest
   isError?: boolean
   text?: string
+  messageID?: string
   images?: MessageImage[]
   files?: MessageFile[]
   usage?: Usage

@@ -29,6 +29,9 @@ const (
 // or LLM message representations.
 type HistoryItem struct {
 	Type HistoryItemType
+	// MessageID is the durable transcript entry ID for persisted user and
+	// assistant messages. Live messages remain empty until they are checkpointed.
+	MessageID string
 
 	Text   string
 	Images []llm.ImageContent
@@ -112,7 +115,7 @@ func projectEntryHistory(entries []transcript.Entry, outcomes map[string]agent.T
 	var items []HistoryItem
 	var pending []transcript.Entry
 	flushMessages := func(entries []transcript.Entry) {
-		items = append(items, projectHistory(entryMessages(entries), outcomes)...)
+		items = append(items, projectHistoryMessages(entryHistoryMessages(entries), outcomes)...)
 	}
 
 	for _, entry := range entries {
@@ -141,7 +144,7 @@ func projectEntryHistory(entries []transcript.Entry, outcomes map[string]agent.T
 			}
 			flushMessages(pending[:first])
 			items = append(items, projectRecordedRunHistory(
-				entryMessages(pending[first:]), outcomes, entry.Run.StartedAt, entry.Run.CompletedAt,
+				entryHistoryMessages(pending[first:]), outcomes, entry.Run.StartedAt, entry.Run.CompletedAt,
 			)...)
 			pending = nil
 		}
@@ -156,16 +159,16 @@ func projectRunHistory(
 	startedAt time.Time,
 	completedAt time.Time,
 ) []HistoryItem {
-	return projectRecordedRunHistory(messages, outcomes, startedAt, completedAt)
+	return projectRecordedRunHistory(liveHistoryMessages(messages), outcomes, startedAt, completedAt)
 }
 
 func projectRecordedRunHistory(
-	messages []agent.AgentMessage,
+	messages []historyMessage,
 	outcomes map[string]agent.ToolOutcome,
 	startedAt time.Time,
 	completedAt time.Time,
 ) []HistoryItem {
-	projected := projectHistory(messages, outcomes)
+	projected := projectHistoryMessages(messages, outcomes)
 	if !completedAt.IsZero() {
 		for index := len(projected) - 1; index >= 0; index-- {
 			if projected[index].Type == HistoryAssistant && projected[index].FinalResponse {
@@ -183,17 +186,34 @@ func projectRecordedRunHistory(
 	return append([]HistoryItem{run}, projected...)
 }
 
-func entryMessages(entries []transcript.Entry) []agent.AgentMessage {
-	messages := make([]agent.AgentMessage, 0, len(entries))
+type historyMessage struct {
+	message   agent.AgentMessage
+	messageID string
+}
+
+func entryHistoryMessages(entries []transcript.Entry) []historyMessage {
+	messages := make([]historyMessage, 0, len(entries))
 	for _, entry := range entries {
 		if entry.Type == transcript.MessageEntry {
-			messages = append(messages, entry.Message)
+			messages = append(messages, historyMessage{message: entry.Message, messageID: entry.ID})
 		}
 	}
 	return messages
 }
 
 func projectHistory(messages []agent.AgentMessage, outcomes map[string]agent.ToolOutcome) []HistoryItem {
+	return projectHistoryMessages(liveHistoryMessages(messages), outcomes)
+}
+
+func liveHistoryMessages(messages []agent.AgentMessage) []historyMessage {
+	result := make([]historyMessage, len(messages))
+	for index, message := range messages {
+		result[index] = historyMessage{message: message}
+	}
+	return result
+}
+
+func projectHistoryMessages(messages []historyMessage, outcomes map[string]agent.ToolOutcome) []HistoryItem {
 	var items []HistoryItem
 	var usage llm.Usage
 	flushUsage := func() {
@@ -204,8 +224,8 @@ func projectHistory(messages []agent.AgentMessage, outcomes map[string]agent.Too
 		items = append(items, HistoryItem{Type: HistoryUsage, Usage: usage})
 		usage = llm.Usage{}
 	}
-	for _, agentMessage := range messages {
-		llmMessage, ok := agent.ToLLM(agentMessage)
+	for _, recorded := range messages {
+		llmMessage, ok := agent.ToLLM(recorded.message)
 		if !ok {
 			continue
 		}
@@ -219,16 +239,23 @@ func projectHistory(messages []agent.AgentMessage, outcomes map[string]agent.Too
 			text, images, files := userMessageContent(message)
 			if text != "" || len(images) > 0 || len(files) > 0 {
 				items = append(items, HistoryItem{
-					Type:   HistoryUser,
-					Text:   text,
-					Images: images,
-					Files:  files,
+					Type:      HistoryUser,
+					MessageID: recorded.messageID,
+					Text:      text,
+					Images:    images,
+					Files:     files,
 				})
 			}
 
 		case *llm.AssistantMessage:
 			addUsage(&usage, message.Usage)
-			items = append(items, assistantHistory(message)...)
+			projected := assistantHistory(message)
+			for index := range projected {
+				if projected[index].Type == HistoryAssistant {
+					projected[index].MessageID = recorded.messageID
+				}
+			}
+			items = append(items, projected...)
 			if message.StopReason != llm.StopReasonToolUse {
 				flushUsage()
 			}

@@ -123,6 +123,7 @@ export type UsageEventPage = {
 export type UserItem = {
   kind: 'user'
   id: string
+  messageID?: string
   text: string
   images: MessageImage[]
   files?: MessageFile[]
@@ -132,6 +133,7 @@ export type UserItem = {
 export type AssistantItem = {
   kind: 'assistant'
   id: string
+  messageID?: string
   markdown: string
   open: boolean
   complete: boolean

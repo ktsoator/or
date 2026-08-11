@@ -228,9 +228,11 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
         const existingItem = idx >= 0 ? items[idx] : undefined
         const existingUser = existingItem?.kind === 'user' ? existingItem : undefined
         const openRun = openRunIndex >= 0 ? items[openRunIndex] : undefined
+        const messageID = ev.messageID ?? existingUser?.messageID
         const user = {
           kind: 'user' as const,
           id: ev.id ?? (idx >= 0 ? items[idx].id : nextId()),
+          ...(messageID ? { messageID } : {}),
           text,
           images,
           ...(files.length ? { files } : {}),
@@ -594,7 +596,12 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
         if (ev.text) {
           if (idx >= 0) {
             const cur = items[idx] as Extract<Item, { kind: 'assistant' }>
-            items = replaceAt(items, idx, { ...cur, markdown: ev.text, open: false })
+            items = replaceAt(items, idx, {
+              ...cur,
+              ...(ev.messageID ? { messageID: ev.messageID } : {}),
+              markdown: ev.text,
+              open: false,
+            })
           } else {
             idx = items.length
             items = [
@@ -602,6 +609,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
               {
                 kind: 'assistant',
                 id: nextId(),
+                ...(ev.messageID ? { messageID: ev.messageID } : {}),
                 markdown: ev.text,
                 open: false,
                 complete: false,
@@ -610,7 +618,11 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
           }
         } else if (idx >= 0) {
           const cur = items[idx] as Extract<Item, { kind: 'assistant' }>
-          items = replaceAt(items, idx, { ...cur, open: false })
+          items = replaceAt(items, idx, {
+            ...cur,
+            ...(ev.messageID ? { messageID: ev.messageID } : {}),
+            open: false,
+          })
         }
 
         if (ev.finalResponse && idx >= 0) {

@@ -112,6 +112,7 @@ func TestProjectHistoryIncludesResponseCompletionTime(t *testing.T) {
 	completedAt := time.Date(2026, time.July, 22, 16, 43, 0, 0, time.UTC)
 	events := ProjectHistory([]engine.HistoryItem{{
 		Type:          engine.HistoryAssistant,
+		MessageID:     "message-1",
 		Text:          "answer",
 		FinalResponse: true,
 		CompletedAt:   completedAt,
@@ -122,6 +123,21 @@ func TestProjectHistoryIncludesResponseCompletionTime(t *testing.T) {
 	}
 	if want := completedAt.Format(time.RFC3339Nano); events[0].CompletedAt != want {
 		t.Fatalf("completedAt = %q, want %q", events[0].CompletedAt, want)
+	}
+	if events[0].MessageID != "message-1" {
+		t.Fatalf("messageID = %q, want message-1", events[0].MessageID)
+	}
+}
+
+func TestProjectHistoryIncludesUserMessageID(t *testing.T) {
+	events := ProjectHistory([]engine.HistoryItem{{
+		Type:      engine.HistoryUser,
+		MessageID: "message-2",
+		Text:      "question",
+	}})
+
+	if len(events) != 1 || events[0].MessageID != "message-2" {
+		t.Fatalf("events = %#v, want persisted user message ID", events)
 	}
 }
 

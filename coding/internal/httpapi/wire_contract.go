@@ -243,13 +243,15 @@ type wireEvent struct {
 	Preview          *wirePreview `json:"preview,omitempty"`
 	IsError          bool         `json:"isError,omitempty"`
 	// Message content and tool-result media. Text is also the message_end
-	// fallback used when nothing streamed.
-	Text    string            `json:"text,omitempty"`
-	Images  []wireImage       `json:"images,omitempty"`
-	Files   []wireFile        `json:"files,omitempty"`
-	Usage   *wireUsage        `json:"usage,omitempty"`
-	Context *wireContextUsage `json:"context,omitempty"`
-	Final   bool              `json:"finalResponse,omitempty"`
+	// fallback used when nothing streamed. MessageID identifies a checkpointed
+	// transcript message and stays empty for live content that is not durable yet.
+	Text      string            `json:"text,omitempty"`
+	MessageID string            `json:"messageID,omitempty"`
+	Images    []wireImage       `json:"images,omitempty"`
+	Files     []wireFile        `json:"files,omitempty"`
+	Usage     *wireUsage        `json:"usage,omitempty"`
+	Context   *wireContextUsage `json:"context,omitempty"`
+	Final     bool              `json:"finalResponse,omitempty"`
 	// Completed-response metadata. ModelName is the stable catalog display name;
 	// Provider and Model keep the exact identity available to other clients.
 	Provider  string `json:"provider,omitempty"`

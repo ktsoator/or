@@ -193,16 +193,18 @@ func ProjectHistory(items []engine.HistoryItem) []wireEvent {
 
 		case engine.HistoryUser:
 			out = append(out, wireEvent{
-				Type:   wireEventUserMessage,
-				Text:   item.Text,
-				Images: projectImages(item.Images),
-				Files:  projectFiles(item.Files),
+				Type:      wireEventUserMessage,
+				Text:      item.Text,
+				MessageID: item.MessageID,
+				Images:    projectImages(item.Images),
+				Files:     projectFiles(item.Files),
 			})
 
 		case engine.HistoryAssistant:
 			out = append(out, wireEvent{
 				Type:        wireEventMessageEnd,
 				Text:        item.Text,
+				MessageID:   item.MessageID,
 				Final:       item.FinalResponse,
 				Provider:    item.Provider,
 				Model:       item.Model,
