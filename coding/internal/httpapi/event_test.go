@@ -156,6 +156,29 @@ func TestProjectEventIncludesToolInputProgress(t *testing.T) {
 	}
 }
 
+func TestProjectEventIncludesToolResultImages(t *testing.T) {
+	data, ok := ProjectEvent(engine.Event{
+		Type:       engine.ToolFinished,
+		ToolCallID: "image-call",
+		ToolName:   "mcp__everything__get_tiny_image",
+		Images: []llm.ImageContent{{
+			Data:     "aW1hZ2U=",
+			MIMEType: "image/png",
+		}},
+	})
+	if !ok {
+		t.Fatal("tool result event was not projected")
+	}
+
+	var event wireEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		t.Fatal(err)
+	}
+	if len(event.Images) != 1 || event.Images[0].Data != "aW1hZ2U=" || event.Images[0].MIMEType != "image/png" {
+		t.Fatalf("images = %#v", event.Images)
+	}
+}
+
 func TestProjectEventPreservesCompleteToolResult(t *testing.T) {
 	data, ok := ProjectEvent(engine.Event{
 		Type:       engine.ToolFinished,
@@ -433,6 +456,24 @@ func TestProjectHistoryRestoresPreviewRequest(t *testing.T) {
 	preview, ok := events[0].Outcome.Data.(*wirePreview)
 	if !ok || preview.Path != "/workspace/web/index.html" || preview.RelativePath != "web/index.html" || preview.Title != "Static page" {
 		t.Fatalf("history outcome data = %#v", events[0].Outcome.Data)
+	}
+}
+
+func TestProjectHistoryRestoresToolResultImages(t *testing.T) {
+	events := ProjectHistory([]engine.HistoryItem{{
+		Type:       engine.HistoryToolResult,
+		ToolCallID: "image-call",
+		ToolName:   "mcp__everything__get_tiny_image",
+		Images: []llm.ImageContent{{
+			Data:     "aW1hZ2U=",
+			MIMEType: "image/png",
+		}},
+	}})
+	if len(events) != 1 || len(events[0].Images) != 1 {
+		t.Fatalf("events = %#v", events)
+	}
+	if events[0].Images[0].Data != "aW1hZ2U=" || events[0].Images[0].MIMEType != "image/png" {
+		t.Fatalf("images = %#v", events[0].Images)
 	}
 }
 

@@ -242,7 +242,8 @@ type wireEvent struct {
 	Bytes            int          `json:"bytes,omitempty"`
 	Preview          *wirePreview `json:"preview,omitempty"`
 	IsError          bool         `json:"isError,omitempty"`
-	// message_end fallback text (used when nothing streamed)
+	// Message content and tool-result media. Text is also the message_end
+	// fallback used when nothing streamed.
 	Text    string            `json:"text,omitempty"`
 	Images  []wireImage       `json:"images,omitempty"`
 	Files   []wireFile        `json:"files,omitempty"`

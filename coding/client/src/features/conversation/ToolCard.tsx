@@ -18,8 +18,10 @@ import {
   ScrollText,
   Search,
   Terminal,
+  X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { Dialog } from 'radix-ui'
 import type { ToolItem } from '@/types'
 import { highlightCode, languageForPath } from '@/shared/lib/highlight'
 import { useSyntaxHighlighter } from '@/shared/hooks/useSyntaxHighlighter'
@@ -238,6 +240,56 @@ function DetailBlock({ title, children }: { title: string; children: ReactNode }
         {title}
       </div>
       {children}
+    </div>
+  )
+}
+
+function ToolResultImages({ images }: Pick<ToolItem, 'images'>) {
+  const { t } = useI18n()
+  if (!images?.length) return null
+
+  return (
+    <div className="mt-1 ml-5 w-fit max-w-[calc(100%_-_1.25rem)] max-md:ml-0 max-md:max-w-full">
+      <div className="flex max-w-full flex-wrap gap-2">
+        {images.map((image, index) => {
+          const src = `data:${image.mimeType};base64,${image.data}`
+          const label = t('tool.resultImage', { index: index + 1 })
+          return (
+            <Dialog.Root key={`${image.mimeType}-${index}`}>
+              <Dialog.Trigger asChild>
+                <button
+                  type="button"
+                  className="cursor-zoom-in rounded-md border-0 bg-transparent p-0 outline-none focus-visible:ring-2 focus-visible:ring-info focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+                  aria-label={t('tool.openResultImage', { index: index + 1 })}
+                >
+                  <img
+                    className="h-36 w-auto max-w-full rounded-md border border-edge bg-canvas-raised object-contain"
+                    src={src}
+                    alt={label}
+                  />
+                </button>
+              </Dialog.Trigger>
+              <Dialog.Portal>
+                <Dialog.Overlay className="fixed inset-0 z-[180] animate-[fade-in_120ms_ease-out] bg-scrim/70 backdrop-blur-[2px]" />
+                <Dialog.Content className="fixed top-1/2 left-1/2 z-[190] max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 outline-none">
+                  <Dialog.Title className="sr-only">{label}</Dialog.Title>
+                  <img
+                    className="max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] rounded-md object-contain shadow-[0_28px_80px_-32px_rgba(0,0,0,0.85)]"
+                    src={src}
+                    alt={label}
+                  />
+                  <Dialog.Close
+                    className="absolute top-2 right-2 inline-flex size-8 items-center justify-center rounded-md border border-white/20 bg-black/60 text-white outline-none transition-colors hover:bg-black/80 focus-visible:ring-2 focus-visible:ring-white"
+                    aria-label={t('tool.closeResultImage')}
+                  >
+                    <X className="size-4" aria-hidden="true" />
+                  </Dialog.Close>
+                </Dialog.Content>
+              </Dialog.Portal>
+            </Dialog.Root>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -585,7 +637,9 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
   const fileChange = item.change?.changeType === 'file' ? item.change : undefined
   const changedFilename = fileChange?.path.split('/').filter(Boolean).pop() || fileChange?.path
   const hasDetails =
-    kind === 'browserOpen'
+    (item.images?.length ?? 0) > 0
+      ? true
+      : kind === 'browserOpen'
       ? false
       : kind === 'browserTabs'
         ? Boolean(item.result || item.status === 'error')
@@ -735,6 +789,7 @@ export function ToolCard({ item, cwd }: { item: ToolItem; cwd?: string }) {
             )}
           </div>
         )}
+        <ToolResultImages images={item.images} />
       </CollapsibleContent>
     </Collapsible>
   )

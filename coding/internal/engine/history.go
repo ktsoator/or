@@ -243,6 +243,7 @@ func projectHistory(messages []agent.AgentMessage, outcomes map[string]agent.Too
 				ToolCallID:  message.ToolCallID,
 				ToolName:    message.ToolName,
 				ToolResult:  toolResultContentText(message.Content),
+				Images:      toolResultContentImages(message.Content),
 				ToolOutcome: outcome,
 			})
 		}
@@ -373,4 +374,14 @@ func toolResultContentText(contents []llm.ToolResultContent) string {
 		}
 	}
 	return strings.Join(parts, "\n")
+}
+
+func toolResultContentImages(contents []llm.ToolResultContent) []llm.ImageContent {
+	var images []llm.ImageContent
+	for _, content := range contents {
+		if image, ok := content.(*llm.ImageContent); ok && image != nil {
+			images = append(images, *image)
+		}
+	}
+	return images
 }

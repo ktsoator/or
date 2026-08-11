@@ -70,6 +70,7 @@ func New(ctx context.Context, dataDir string) (*Runtime, error) {
 		Registry:      registry,
 		Providers:     providers,
 		ProviderTests: providerTests,
+		MCPConfigPath: filepath.Join(dataDir, "mcp.json"),
 	})
 	return &Runtime{
 		handler:       server.Handler(),

@@ -74,6 +74,12 @@ kept as protected session context across compaction. The
 experimental `allowed-tools` field is preserved but never bypasses Or's normal
 permission policy.
 
+## MCP servers
+
+Or can discover and call tools from configured Model Context Protocol servers.
+See [MCP configuration](MCP.md) for the supported stdio and Streamable HTTP
+transports, workspace scoping, environment references, and security model.
+
 ## Desktop
 
 Electron supervises a dedicated Go sidecar on a random loopback port. The

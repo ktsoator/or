@@ -4,6 +4,7 @@ import type {
 } from 'react'
 import {
   BookOpenText,
+  Cable,
   LoaderCircle,
   Search,
   SquarePen,
@@ -41,6 +42,7 @@ type AppSidebarProps = {
     toggleSidebar: () => void
     addSession: (workspacePath?: string, projectScoped?: boolean) => void
     onOpenSkills: () => void
+    onOpenMCP: () => void
     chooseSession: (id: string) => void
     openSessionInWorkbench: (id: string) => void
     togglePinnedSession: (id: string) => void
@@ -78,6 +80,7 @@ export function AppSidebar({ layout, content, actions }: AppSidebarProps) {
     toggleSidebar,
     addSession,
     onOpenSkills,
+    onOpenMCP,
     chooseSession,
     openSessionInWorkbench,
     togglePinnedSession,
@@ -109,7 +112,7 @@ export function AppSidebar({ layout, content, actions }: AppSidebarProps) {
         <aside
           className={cn(
             'app-sidebar relative flex h-full w-[var(--sidebar-expanded-width)] min-h-0 min-w-0 flex-col overflow-hidden border-r border-edge/75 bg-canvas text-ink-soft transition-transform duration-200 ease-out',
-            'max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:w-[17.5rem] max-md:shadow-2xl',
+            'max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:w-[17.5rem] max-md:shadow-2xl',
             mobileSessionsOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full',
           )}
           aria-label={t('app.sessions')}
@@ -185,6 +188,12 @@ export function AppSidebar({ layout, content, actions }: AppSidebarProps) {
                 label={t('app.skills')}
                 collapsed={sidebarCollapsed}
                 onClick={() => onOpenSkills()}
+              />
+              <SidebarNavItem
+                icon={Cable}
+                label={t('app.mcp')}
+                collapsed={sidebarCollapsed}
+                onClick={() => onOpenMCP()}
               />
             </div>
           </div>

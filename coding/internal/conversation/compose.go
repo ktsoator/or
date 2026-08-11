@@ -16,6 +16,7 @@ type engineSessionConfig struct {
 	Model          llm.Model
 	ThinkingLevel  llm.ModelThinkingLevel
 	PermissionMode permission.Mode
+	MCPConfigPath  string
 }
 
 // This is the one place an engine.Session is assembled. Every conversation the
@@ -43,6 +44,7 @@ func newEngineSession(
 		SkillLoader: func() []skills.Skill {
 			return loadSkills(cfg.WorkspacePath)
 		},
+		MCPConfigPath: cfg.MCPConfigPath,
 	})
 }
 

@@ -32,6 +32,7 @@ type Manager struct {
 	// layer supplies it, so this package never names a transport type.
 	newTransport  NewTransport
 	generateTitle titleGenerator
+	mcpConfigPath string
 
 	mu        sync.RWMutex
 	sessions  map[string]*sessionRuntime
@@ -64,6 +65,7 @@ func NewManager(ctx context.Context, opts Options) (*Manager, error) {
 		workspaces:    opts.Workspaces,
 		newTransport:  opts.NewTransport,
 		generateTitle: generateAITitle,
+		mcpConfigPath: filepath.Join(opts.DataDir, "mcp.json"),
 		sessions:      make(map[string]*sessionRuntime),
 		usage:         opts.Usage,
 	}
@@ -248,6 +250,7 @@ func (m *Manager) build(record record) (*sessionRuntime, error) {
 		Model:          model,
 		ThinkingLevel:  thinking,
 		PermissionMode: permissionMode,
+		MCPConfigPath:  m.mcpConfigPath,
 	}, transport)
 	if err != nil {
 		transport.Close()

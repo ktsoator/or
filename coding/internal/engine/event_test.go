@@ -92,6 +92,43 @@ func TestProjectAgentEventProjectsToolInputLifecycle(t *testing.T) {
 	}
 }
 
+func TestProjectAgentEventPreservesToolResultImages(t *testing.T) {
+	event, ok := projectAgentEvent(agent.AgentEvent{
+		Type:       agent.ToolEnd,
+		ToolCallID: "image-call",
+		ToolName:   "mcp__everything__get_tiny_image",
+		Result: agent.ToolResult{Content: []llm.ToolResultContent{
+			&llm.TextContent{Text: "tiny image"},
+			&llm.ImageContent{Data: "aW1hZ2U=", MIMEType: "image/png"},
+		}},
+	})
+	if !ok {
+		t.Fatal("tool result event was not projected")
+	}
+	if event.ToolResult != "tiny image" || len(event.Images) != 1 {
+		t.Fatalf("event = %#v", event)
+	}
+	if event.Images[0].Data != "aW1hZ2U=" || event.Images[0].MIMEType != "image/png" {
+		t.Fatalf("images = %#v", event.Images)
+	}
+}
+
+func TestProjectHistoryPreservesToolResultImages(t *testing.T) {
+	items := projectHistory([]agent.AgentMessage{agent.FromLLM(&llm.ToolResultMessage{
+		ToolCallID: "image-call",
+		ToolName:   "mcp__everything__get_tiny_image",
+		Content: []llm.ToolResultContent{
+			&llm.ImageContent{Data: "aW1hZ2U=", MIMEType: "image/png"},
+		},
+	})}, nil)
+	if len(items) != 1 || items[0].Type != HistoryToolResult || len(items[0].Images) != 1 {
+		t.Fatalf("history = %#v", items)
+	}
+	if items[0].Images[0].Data != "aW1hZ2U=" || items[0].Images[0].MIMEType != "image/png" {
+		t.Fatalf("images = %#v", items[0].Images)
+	}
+}
+
 func TestSessionProjectsQueuedUserMessageHandle(t *testing.T) {
 	session, err := New(context.Background(), Options{
 		Model:    llm.Model{Provider: "test", ID: "model"},
