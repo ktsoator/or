@@ -55,6 +55,7 @@
   --surface-hover: rgb(246, 246, 246);
   --surface-active: rgb(244, 244, 244);
   --surface-selected: rgb(237, 237, 237);
+  --message-editor: rgb(243, 243, 244);
   /* Destructive confirmation buttons carry white text in both themes. */
   --danger-solid: #b42318;
   --danger-solid-hover: #991b1b;
@@ -131,6 +132,7 @@
     --surface-hover: #272727;
     --surface-active: #2e2e2e;
     --surface-selected: #363636;
+    --message-editor: #2c2c2c;
     --danger-solid: #b42318;
     --danger-solid-hover: #dc2626;
     --diff-add: #1a3524;
@@ -190,6 +192,7 @@
   --surface-hover: #272727;
   --surface-active: #2e2e2e;
   --surface-selected: #363636;
+  --message-editor: #2c2c2c;
   --danger-solid: #b42318;
   --danger-solid-hover: #dc2626;
   --diff-add: #1a3524;
@@ -235,6 +238,7 @@
   --color-surface-hover: var(--surface-hover);
   --color-surface-active: var(--surface-active);
   --color-surface-selected: var(--surface-selected);
+  --color-message-editor: var(--message-editor);
   --color-danger-solid: var(--danger-solid);
   --color-danger-solid-hover: var(--danger-solid-hover);
   --color-diff-add: var(--diff-add);

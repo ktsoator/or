@@ -205,8 +205,17 @@ async function openDesktopClient(
     createdAt: '2026-07-23T00:00:00Z',
     updatedAt: '2026-07-23T00:00:00Z',
   }
+  const branchSession = {
+    ...createdSession,
+    id: 'branch-session',
+    title: 'New session (branch)',
+    forkedFromSessionId: createdSession.id,
+    forkedFromMessageId: 'assistant-branch',
+    updatedAt: '2026-07-24T00:00:00Z',
+  }
   let sessionCreated = Boolean(options.existingSession)
   let workbenchSessionCreated = false
+  let branchSessionCreated = false
   let remainingHealthFailures = options.healthFailures ?? 0
   let remainingBrowserResultFailures = options.browserResultFailures ?? 0
   const usageEventRangeKeys: string[] = []
@@ -437,6 +446,16 @@ async function openDesktopClient(
       return
     }
 
+    if (path === '/api/sessions/test-session/forks' && method === 'POST') {
+      branchSessionCreated = true
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify(branchSession),
+      })
+      return
+    }
+
     if (path === '/api/workspaces' && method === 'POST') {
       const workspacePath = (requestBody as { path: string }).path
       await route.fulfill({
@@ -584,6 +603,7 @@ async function openDesktopClient(
     if (path === '/api/sessions') {
       body = sessionCreated
         ? [
+            ...(branchSessionCreated ? [branchSession] : []),
             ...(workbenchSessionCreated ? [workbenchSession] : []),
             createdSession,
             ...(options.secondarySession ? [secondarySession] : []),
@@ -614,6 +634,15 @@ async function openDesktopClient(
         events: [],
         queue: [],
         context: {},
+        running: false,
+        eventSeq: 0,
+      }
+    }
+    if (path === '/api/sessions/branch-session/history') {
+      body = {
+        events: options.historyEvents ?? [],
+        queue: [],
+        context: options.contextUsage ?? {},
         running: false,
         eventSeq: 0,
       }
@@ -3675,14 +3704,15 @@ test('user actions appear on hover while assistant actions stay visible', async 
   const userActions = todayUser.getByTestId('user-message-actions')
 
   await expect(userActions).toHaveCSS('opacity', '0')
+  await expect(userActions).toHaveCSS('transition-duration', '0s')
+  await expect(userActions.locator('time')).toHaveText(expectedToday)
   await todayUser.hover()
   await expect(userActions).toHaveCSS('opacity', '1')
-  await expect(userActions.locator('time')).toHaveText(expectedToday)
+  await expect(userActions.locator('time')).toBeVisible()
   await todayUser.getByRole('button', { name: 'Copy', exact: true }).click()
   await expect.poll(() => page.evaluate(() => localStorage.getItem('test.clipboard'))).toBe(
     'Copy this user message',
   )
-
   await earlierUser.hover()
   await expect(earlierUser.getByTestId('user-message-actions').locator('time')).toHaveText(
     expectedEarlier,
@@ -3771,6 +3801,47 @@ test('response usage stays on one line and truncates when Chat is narrow', async
   expect(layout.textOverflow).toBe('ellipsis')
   expect(layout.scrollWidth).toBeGreaterThan(layout.clientWidth)
   await expect(actions).toHaveCSS('overflow', 'hidden')
+})
+
+test('branching from an assistant response requires confirmation', async ({ page }) => {
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    historyEvents: [
+      {
+        type: 'user_message',
+        messageID: 'user-branch',
+        text: 'Question before branching',
+        images: [],
+      },
+      {
+        type: 'message_end',
+        messageID: 'assistant-branch',
+        text: 'Response to branch from',
+        finalResponse: true,
+      },
+    ],
+  })
+  await page.setViewportSize({ width: 390, height: 720 })
+
+  const branchButton = page.getByRole('button', { name: 'Branch from this response' })
+  await branchButton.click()
+
+  const dialog = page.getByRole('dialog', { name: 'Create a new branch?' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByTestId('branch-session-details')).toContainText('Conversation history')
+  expect(requests.some((request) => request.path.endsWith('/forks'))).toBe(false)
+
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+  await expect(dialog).toBeHidden()
+  expect(requests.some((request) => request.path.endsWith('/forks'))).toBe(false)
+
+  await branchButton.click()
+  await dialog.getByRole('button', { name: 'Create branch' }).click()
+  await expect.poll(() => requests.find((request) => request.path.endsWith('/forks'))?.body).toEqual({
+    messageID: 'assistant-branch',
+    mode: 'after_assistant',
+  })
+  await expect(page.getByTestId('conversation-title')).toContainText('New session (branch)')
 })
 
 test('unknown provider input is shown as unavailable', async ({ page }) => {

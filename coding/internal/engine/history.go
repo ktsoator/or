@@ -32,6 +32,8 @@ type HistoryItem struct {
 	// MessageID is the durable transcript entry ID for persisted user and
 	// assistant messages. Live messages remain empty until they are checkpointed.
 	MessageID string
+	// SentAt is the durable transcript timestamp for a persisted user message.
+	SentAt time.Time
 
 	Text   string
 	Images []llm.ImageContent
@@ -189,13 +191,16 @@ func projectRecordedRunHistory(
 type historyMessage struct {
 	message   agent.AgentMessage
 	messageID string
+	timestamp time.Time
 }
 
 func entryHistoryMessages(entries []transcript.Entry) []historyMessage {
 	messages := make([]historyMessage, 0, len(entries))
 	for _, entry := range entries {
 		if entry.Type == transcript.MessageEntry {
-			messages = append(messages, historyMessage{message: entry.Message, messageID: entry.ID})
+			messages = append(messages, historyMessage{
+				message: entry.Message, messageID: entry.ID, timestamp: entry.Timestamp,
+			})
 		}
 	}
 	return messages
@@ -241,6 +246,7 @@ func projectHistoryMessages(messages []historyMessage, outcomes map[string]agent
 				items = append(items, HistoryItem{
 					Type:      HistoryUser,
 					MessageID: recorded.messageID,
+					SentAt:    recorded.timestamp,
 					Text:      text,
 					Images:    images,
 					Files:     files,

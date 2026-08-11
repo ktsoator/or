@@ -2,6 +2,7 @@ package conversation
 
 import (
 	"context"
+	"time"
 
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/permission"
@@ -61,6 +62,7 @@ type MessageAccepted struct {
 	Text     string
 	Images   []llm.ImageContent
 	Files    []engine.File
+	SentAt   time.Time
 	Delivery Delivery
 	Queued   bool
 }

@@ -247,6 +247,7 @@ type wireEvent struct {
 	// transcript message and stays empty for live content that is not durable yet.
 	Text      string            `json:"text,omitempty"`
 	MessageID string            `json:"messageID,omitempty"`
+	SentAt    string            `json:"sentAt,omitempty"`
 	Images    []wireImage       `json:"images,omitempty"`
 	Files     []wireFile        `json:"files,omitempty"`
 	Usage     *wireUsage        `json:"usage,omitempty"`

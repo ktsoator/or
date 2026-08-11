@@ -53,8 +53,11 @@ func TestManagerForkAfterAssistantCreatesIndependentSession(t *testing.T) {
 	if child.ID == source.ID || child.Running {
 		t.Fatalf("forked summary = %+v", child)
 	}
-	if child.Title != source.Title || child.WorkspacePath != source.WorkspacePath ||
-		child.Scope != source.Scope || child.WorkspaceKind != source.WorkspaceKind ||
+	if child.Title != "Source title (branch)" {
+		t.Fatalf("fork title = %q, want %q", child.Title, "Source title (branch)")
+	}
+	if child.WorkspacePath != source.WorkspacePath || child.Scope != source.Scope ||
+		child.WorkspaceKind != source.WorkspaceKind ||
 		child.ModelProvider != source.ModelProvider || child.ModelID != source.ModelID ||
 		child.ThinkingLevel != source.ThinkingLevel || child.PermissionMode != source.PermissionMode {
 		t.Fatalf("fork did not inherit source settings: source=%+v child=%+v", source, child)
@@ -77,6 +80,65 @@ func TestManagerForkAfterAssistantCreatesIndependentSession(t *testing.T) {
 	childEntries := childRuntime.session.Entries()
 	if len(childEntries) != len(sourceRuntime.session.Entries()) {
 		t.Fatalf("fork entries = %d, source entries = %d", len(childEntries), len(sourceRuntime.session.Entries()))
+	}
+}
+
+func TestManagerForkTitlesAreUniqueAndUseSourceDisplayTitle(t *testing.T) {
+	dataDir := t.TempDir()
+	model, thinking := testCatalogModel(t)
+	manager := newTestManager(t, dataDir)
+	manager.streamFn = forkResponses("answer")
+
+	source, err := manager.Create(
+		"Automatic title",
+		t.TempDir(),
+		ScopeProject,
+		model,
+		thinking,
+		permission.ModeAsk,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.StartPromptWithFiles(source.ID, "question", nil); err != nil {
+		t.Fatal(err)
+	}
+	waitForSessionIdle(t, manager, source.ID)
+	assistantID := findMessageID(t, mustRuntime(t, manager, source.ID).session.Entries(), false, "answer")
+
+	first, err := manager.Fork(source.ID, ForkOptions{
+		MessageID: assistantID,
+		Mode:      transcript.ForkAfterAssistant,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := manager.Fork(source.ID, ForkOptions{
+		MessageID: assistantID,
+		Mode:      transcript.ForkAfterAssistant,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Title != "Automatic title (branch)" || second.Title != "Automatic title (branch 2)" {
+		t.Fatalf("fork titles = %q and %q", first.Title, second.Title)
+	}
+
+	if _, err := manager.Rename(source.ID, "Custom title"); err != nil {
+		t.Fatal(err)
+	}
+	third, err := manager.Fork(source.ID, ForkOptions{
+		MessageID: assistantID,
+		Mode:      transcript.ForkAfterAssistant,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if third.Title != "Custom title (branch)" {
+		t.Fatalf("fork title from custom source = %q", third.Title)
+	}
+	if got := mustRuntime(t, manager, third.ID).record.CustomTitle; got != "" {
+		t.Fatalf("fork custom title = %q, want empty", got)
 	}
 }
 

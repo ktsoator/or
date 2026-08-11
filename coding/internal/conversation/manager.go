@@ -361,6 +361,7 @@ func (m *Manager) handleSessionEvent(sessionID string, runtime *sessionRuntime, 
 				Text:     ev.Text,
 				Images:   ev.Images,
 				Files:    ev.Files,
+				SentAt:   ev.SentAt,
 				Delivery: queued.Delivery,
 			})
 			// Message acceptance is observable before its background title state.

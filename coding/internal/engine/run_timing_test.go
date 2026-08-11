@@ -69,6 +69,9 @@ func TestSessionPersistsAndReplaysRunTiming(t *testing.T) {
 	if history[0].MessageID != entries[1].ID {
 		t.Fatalf("user message id = %q, want transcript entry %q", history[0].MessageID, entries[1].ID)
 	}
+	if !history[0].SentAt.Equal(entries[1].Timestamp) {
+		t.Fatalf("user message time = %v, want transcript entry time %v", history[0].SentAt, entries[1].Timestamp)
+	}
 	if history[1].MessageID != "" {
 		t.Fatalf("run message id = %q, want empty", history[1].MessageID)
 	}
@@ -95,6 +98,9 @@ func TestSessionPersistsAndReplaysRunTiming(t *testing.T) {
 	if replayed[0].MessageID != entries[1].ID || replayed[2].MessageID != entries[2].ID {
 		t.Fatalf("restored message ids = %q/%q, want %q/%q",
 			replayed[0].MessageID, replayed[2].MessageID, entries[1].ID, entries[2].ID)
+	}
+	if !replayed[0].SentAt.Equal(entries[1].Timestamp) {
+		t.Fatalf("restored user message time = %v, want %v", replayed[0].SentAt, entries[1].Timestamp)
 	}
 }
 

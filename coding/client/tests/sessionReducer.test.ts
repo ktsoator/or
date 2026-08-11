@@ -19,7 +19,8 @@ function thread(state: ThreadsState) {
 }
 
 describe('threadsReducer event sequences', () => {
-  test('preserves durable message IDs from a history snapshot', () => {
+  test('preserves durable message metadata from a history snapshot', () => {
+    const sentAt = '2026-08-11T16:30:00Z'
     const state = reduce([
       {
         t: 'reset',
@@ -30,6 +31,7 @@ describe('threadsReducer event sequences', () => {
             {
               type: 'user_message',
               messageID: 'transcript-user-1',
+              sentAt,
               text: 'question',
             },
             {
@@ -48,6 +50,7 @@ describe('threadsReducer event sequences', () => {
         kind: 'user',
         id: 'i-0',
         messageID: 'transcript-user-1',
+        sentAt,
         text: 'question',
       }),
       expect.objectContaining({

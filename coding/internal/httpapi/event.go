@@ -70,6 +70,7 @@ func projectEvent(ev engine.Event) (wireEvent, bool) {
 		out = wireEvent{
 			Type:   wireEventUserMessage,
 			Text:   ev.Text,
+			SentAt: formatEventTime(ev.SentAt),
 			Images: projectImages(ev.Images),
 			Files:  projectFiles(ev.Files),
 		}
@@ -198,6 +199,7 @@ func ProjectHistory(items []engine.HistoryItem) []wireEvent {
 				Type:      wireEventUserMessage,
 				Text:      item.Text,
 				MessageID: item.MessageID,
+				SentAt:    formatEventTime(item.SentAt),
 				Images:    projectImages(item.Images),
 				Files:     projectFiles(item.Files),
 			})

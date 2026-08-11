@@ -8,8 +8,6 @@ import {
   FileCode2,
   LoaderCircle,
   Pencil,
-  SendHorizontal,
-  X,
 } from 'lucide-react'
 import { Tooltip } from 'radix-ui'
 import { formatFileSize } from '@/shared/attachments'
@@ -21,7 +19,9 @@ import {
 import type { Item } from '@/types'
 import { useI18n } from '@/i18n'
 import { formatMessageTime } from '@/lib/time'
+import { cn } from '@/lib/utils'
 import { Markdown } from '@/shared/ui/Markdown'
+import { BranchSessionDialog } from './BranchSessionDialog'
 import { CopyButton } from './CopyButton'
 import { ResponseActions } from './ResponseActions'
 import { Thinking } from './Thinking'
@@ -81,6 +81,7 @@ export function ThreadItem({
   const [editText, setEditText] = useState('')
   const [branching, setBranching] = useState(false)
   const [branchError, setBranchError] = useState('')
+  const [branchDialogOpen, setBranchDialogOpen] = useState(false)
 
   const startEditing = () => {
     if (item.kind !== 'user' || !item.messageID || branchingDisabled || branching) return
@@ -120,6 +121,7 @@ export function ThreadItem({
     setBranchError('')
     try {
       await onForkMessage(item.messageID, 'after_assistant')
+      setBranchDialogOpen(false)
     } catch {
       setBranchError(t('actions.branchFailed'))
     } finally {
@@ -134,7 +136,14 @@ export function ThreadItem({
           className="group/message my-3.5 flex animate-[fade-in_160ms_ease-out] justify-end"
           data-testid="user-message"
         >
-          <div className="flex max-w-[78%] flex-col items-end gap-2 max-md:max-w-[88%]">
+          <div
+            className={cn(
+              'flex flex-col items-end gap-2',
+              editing
+                ? 'w-full max-w-full'
+                : 'max-w-[78%] max-md:max-w-[88%]',
+            )}
+          >
             {(item.files?.length ?? 0) > 0 && (
               <div className="flex max-w-full flex-wrap justify-end gap-1.5">
                 {item.files?.map((file, index) => (
@@ -171,13 +180,13 @@ export function ThreadItem({
             )}
             {editing ? (
               <form
-                className="w-full min-w-[20rem] max-sm:min-w-0"
+                className="w-full"
                 onSubmit={(event) => void submitEdit(event)}
               >
-                <div className="rounded-[10px] border border-edge-strong bg-canvas-raised p-1.5 shadow-[0_8px_24px_-20px_rgba(28,25,23,0.55)] focus-within:border-ink-ghost">
+                <div className="flex h-[100px] flex-col rounded-[20px] bg-message-editor px-3 py-2.5">
                   <textarea
                     autoFocus
-                    className="block max-h-48 min-h-20 w-full resize-y bg-transparent px-1.5 py-1 text-[14px] leading-[22px] text-ink outline-none"
+                    className="block min-h-0 w-full flex-1 resize-none overflow-y-auto bg-transparent px-1 py-0.5 text-[14px] leading-[22px] text-ink outline-none"
                     value={editText}
                     aria-label={t('actions.editMessage')}
                     disabled={branching}
@@ -192,36 +201,40 @@ export function ThreadItem({
                       }
                     }}
                   />
-                  <div className="flex h-8 items-center justify-between gap-2 px-0.5 pt-1">
-                    {branchError ? (
-                      <span className="min-w-0 truncate pl-1 text-[0.75rem] text-danger-soft" role="alert">
-                        {branchError}
-                      </span>
-                    ) : (
-                      <span />
-                    )}
-                    <Tooltip.Provider delayDuration={80}>
-                      <div className="flex shrink-0 items-center gap-1">
-                        <MessageActionButton
-                          icon={X}
-                          label={t('actions.cancelEdit')}
-                          disabled={branching}
-                          onClick={cancelEditing}
-                        />
-                        <MessageActionButton
-                          icon={branching ? LoaderCircle : SendHorizontal}
-                          iconClassName={branching ? 'animate-spin' : undefined}
-                          label={t('actions.sendEditedMessage')}
-                          disabled={
-                            branching ||
-                            branchingDisabled ||
-                            (!editText.trim() && item.images.length === 0 && (item.files?.length ?? 0) === 0)
-                          }
-                          type="submit"
-                          onClick={() => {}}
-                        />
-                      </div>
-                    </Tooltip.Provider>
+                  {branchError && (
+                    <p className="mt-1 px-1 text-[0.75rem] leading-4 text-danger-soft" role="alert">
+                      {branchError}
+                    </p>
+                  )}
+                  <div className="mt-1.5 flex min-h-8 items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      className="inline-flex h-8 min-w-[4.5rem] cursor-pointer items-center justify-center rounded-full border border-edge bg-canvas px-3.5 text-[0.8125rem] font-medium text-ink-soft outline-none transition-[background-color,border-color,color] hover:border-edge-strong hover:bg-canvas-raised hover:text-ink focus-visible:ring-2 focus-visible:ring-edge-stronger focus-visible:ring-offset-1 focus-visible:ring-offset-message-editor disabled:cursor-wait disabled:opacity-50"
+                      aria-label={t('actions.cancelEdit')}
+                      disabled={branching}
+                      onClick={cancelEditing}
+                    >
+                      {t('actions.cancelEditButton')}
+                    </button>
+                    <button
+                      type="submit"
+                      className="inline-flex h-8 min-w-[4.5rem] cursor-pointer items-center justify-center gap-1.5 rounded-full bg-canvas-inverse px-3.5 text-[0.8125rem] font-medium text-ink-inverse outline-none transition-[opacity,transform] hover:opacity-90 active:translate-y-px focus-visible:ring-2 focus-visible:ring-edge-stronger focus-visible:ring-offset-2 focus-visible:ring-offset-message-editor disabled:cursor-not-allowed disabled:opacity-30 motion-reduce:transition-none"
+                      aria-label={t('actions.sendEditedMessage')}
+                      disabled={
+                        branching ||
+                        branchingDisabled ||
+                        (!editText.trim() && item.images.length === 0 && (item.files?.length ?? 0) === 0)
+                      }
+                    >
+                      {branching && (
+                        <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+                      )}
+                      {t(
+                        branching
+                          ? 'actions.sendingEditedMessage'
+                          : 'actions.sendEditedMessageButton',
+                      )}
+                    </button>
                   </div>
                 </div>
               </form>
@@ -236,9 +249,20 @@ export function ThreadItem({
                   <span className="text-danger-soft">{t('app.notSent')}</span>
                 )}
                 <div
-                  className="pointer-events-none flex max-w-0 items-center gap-1 overflow-hidden opacity-0 transition-[max-width,opacity] duration-150 ease-out group-focus-within/message:pointer-events-auto group-focus-within/message:max-w-48 group-focus-within/message:opacity-100 group-hover/message:pointer-events-auto group-hover/message:max-w-48 group-hover/message:opacity-100 motion-reduce:transition-none max-md:pointer-events-auto max-md:max-w-48 max-md:opacity-100"
+                  className="pointer-events-none flex max-w-0 items-center gap-1 overflow-hidden opacity-0 group-focus-within/message:pointer-events-auto group-focus-within/message:max-w-48 group-focus-within/message:opacity-100 group-hover/message:pointer-events-auto group-hover/message:max-w-48 group-hover/message:opacity-100 max-md:pointer-events-auto max-md:max-w-48 max-md:opacity-100"
                   data-testid="user-message-actions"
                 >
+                  {item.sentAt && (
+                    <time className="mr-1 shrink-0 text-ink-faint" dateTime={item.sentAt}>
+                      {formatMessageTime(item.sentAt, locale)}
+                    </time>
+                  )}
+                  {item.text && (
+                    <CopyButton
+                      value={item.text}
+                      className="size-7 rounded-lg hover:bg-surface-active focus-visible:bg-surface-active"
+                    />
+                  )}
                   {onForkMessage && (
                     <Tooltip.Provider delayDuration={80}>
                       <MessageActionButton
@@ -248,17 +272,6 @@ export function ThreadItem({
                         onClick={startEditing}
                       />
                     </Tooltip.Provider>
-                  )}
-                  {item.text && (
-                    <CopyButton
-                      value={item.text}
-                      className="size-7 rounded-lg hover:bg-surface-active focus-visible:bg-surface-active"
-                    />
-                  )}
-                  {item.sentAt && (
-                    <time className="shrink-0 text-ink-faint" dateTime={item.sentAt}>
-                      {formatMessageTime(item.sentAt, locale)}
-                    </time>
                   )}
                 </div>
               </div>
@@ -279,16 +292,24 @@ export function ThreadItem({
               modelName={item.modelName || item.model}
               responseText={item.markdown}
               completedAt={item.completedAt}
-              onFork={onForkMessage ? () => void branchAssistant() : undefined}
+              onFork={onForkMessage ? () => {
+                setBranchError('')
+                setBranchDialogOpen(true)
+              } : undefined}
               forkDisabled={!item.messageID || branchingDisabled}
               forking={branching}
             />
           )}
-          {branchError && (
-            <p className="mt-0.5 text-[0.75rem] leading-5 text-danger-soft" role="alert">
-              {branchError}
-            </p>
-          )}
+          <BranchSessionDialog
+            open={branchDialogOpen}
+            creating={branching}
+            error={branchError}
+            onOpenChange={(open) => {
+              setBranchDialogOpen(open)
+              if (!open) setBranchError('')
+            }}
+            onConfirm={() => void branchAssistant()}
+          />
         </section>
       )
     case 'run':

@@ -159,4 +159,9 @@ func TestSessionProjectsQueuedUserMessageHandle(t *testing.T) {
 	if userEvents[1].QueueHandle != handle {
 		t.Fatalf("queued prompt handle = %#v, want %#v", userEvents[1].QueueHandle, handle)
 	}
+	for index, event := range userEvents {
+		if event.SentAt.IsZero() {
+			t.Fatalf("user completion event %d has no sent time: %#v", index, event)
+		}
+	}
 }

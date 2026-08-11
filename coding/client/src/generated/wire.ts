@@ -278,6 +278,7 @@ export type WireEvent = {
   isError?: boolean
   text?: string
   messageID?: string
+  sentAt?: string
   images?: MessageImage[]
   files?: MessageFile[]
   usage?: Usage

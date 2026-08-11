@@ -60,8 +60,7 @@ func (m *Manager) Fork(sourceID string, options ForkOptions) (Summary, error) {
 	}
 	record := record{
 		ID:                  id,
-		Title:               source.record.Title,
-		CustomTitle:         source.record.CustomTitle,
+		Title:               m.nextForkTitleLocked(source.displayTitle()),
 		WorkspacePath:       source.record.WorkspacePath,
 		Scope:               source.record.Scope,
 		WorkspaceKind:       source.record.WorkspaceKind,

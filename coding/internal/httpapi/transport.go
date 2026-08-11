@@ -188,6 +188,7 @@ func projectSessionWireEvent(event conversation.Event) (wireEvent, bool) {
 			Type:     wireEventUserMessage,
 			ID:       e.ID,
 			Text:     e.Text,
+			SentAt:   formatEventTime(e.SentAt),
 			Images:   projectImages(e.Images),
 			Files:    projectFiles(e.Files),
 			Delivery: projectDeliveryMode(e.Delivery),

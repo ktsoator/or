@@ -237,7 +237,9 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
           images,
           ...(files.length ? { files } : {}),
           sentAt:
-            existingUser?.sentAt ?? (openRun?.kind === 'run' ? openRun.startedAt : undefined),
+            ev.sentAt ??
+            existingUser?.sentAt ??
+            (openRun?.kind === 'run' ? openRun.startedAt : undefined),
         }
         if (idx >= 0) {
           items = replaceAt(items, idx, user)
