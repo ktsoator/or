@@ -4,12 +4,10 @@ import {
   CheckCircle2,
   ChevronDown,
   CircleAlert,
-  Globe2,
   LoaderCircle,
   Pencil,
   Plus,
   RefreshCw,
-  TerminalSquare,
   Trash2,
   Unplug,
   X,
@@ -186,7 +184,7 @@ export function MCPPage({
         </button>
       </header>
 
-      <main className="min-h-0 flex-1 overflow-y-auto bg-canvas">
+      <main className="min-h-0 flex-1 overflow-y-auto bg-canvas md:[scrollbar-gutter:stable_both-edges]">
         <div className="mx-auto w-full max-w-[62rem] px-10 pt-11 pb-24 max-lg:px-7 max-md:px-4 max-md:pt-8">
           <div className="flex items-start justify-between gap-6 max-sm:flex-col max-sm:gap-4">
             <div className="min-w-0">
@@ -240,7 +238,7 @@ export function MCPPage({
               </button>
             </div>
           ) : (
-            <div className="mt-9 space-y-2.5">
+            <div className="mt-9 border-y border-edge/80">
               {servers.map((server) => (
                 <ServerRow
                   key={server.name}
@@ -283,18 +281,15 @@ export function MCPPage({
 function ServerRow({ server, test, workspaceName, mutating, onToggle, onTest, onEdit, onDelete }: { server: MCPServerInfo; test?: TestState; workspaceName?: string; mutating: boolean; onToggle: () => void; onTest: () => void; onEdit: () => void; onDelete: () => void }) {
   const { t } = useI18n()
   const transport = mcpTransport(server.config)
-  const TransportIcon = transport === 'stdio' ? TerminalSquare : Globe2
   const endpoint = mcpEndpoint(server.config)
   const status = serverStatus(server, test, t)
   const workspaces = server.config.workspaces ?? []
   const testDisabled = Boolean(server.config.disabled || server.diagnostic || server.inScope === false || test?.status === 'testing')
+  const hasDetails = Boolean(server.diagnostic || test?.status === 'error' || test?.status === 'success')
 
   return (
-    <article className="overflow-hidden rounded-[12px] border border-edge/90 bg-canvas transition-colors hover:border-edge-strong">
-      <div className="flex min-h-[5.25rem] items-center gap-3.5 px-4 py-3.5 max-sm:flex-wrap max-sm:items-start max-sm:gap-3">
-        <div className="grid size-10 shrink-0 place-items-center rounded-[9px] border border-edge/80 bg-canvas-raised text-ink-muted">
-          <TransportIcon className="size-[1.125rem]" aria-hidden="true" />
-        </div>
+    <article className="border-b border-edge/75 last:border-b-0">
+      <div className={cn('grid min-h-[5.5rem] grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 px-1 pt-4', !hasDetails && 'pb-4')}>
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2.5">
             <h2 className="truncate font-mono text-[0.875rem] font-semibold text-ink">{server.name}</h2>
@@ -304,13 +299,13 @@ function ServerRow({ server, test, workspaceName, mutating, onToggle, onTest, on
             </span>
           </div>
           <p className="mt-1 truncate font-mono text-[0.71875rem] text-ink-muted" title={endpoint}>{endpoint || t('mcp.noEndpoint')}</p>
-          <div className="mt-1.5 flex min-w-0 items-center gap-2 text-[0.6875rem] text-ink-faint">
+          <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[0.6875rem] text-ink-faint">
             <span>{transport === 'stdio' ? t('mcp.stdio') : t('mcp.http')}</span>
-            <span aria-hidden="true">/</span>
+            <span aria-hidden="true">&middot;</span>
             <span className="truncate">{workspaces.length === 0 ? t('mcp.allWorkspaces') : workspaces.length === 1 && server.inScope && workspaceName ? workspaceName : t('mcp.workspaceCount', { count: workspaces.length })}</span>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-1 max-sm:ml-[3.375rem] max-sm:basis-[calc(100%-3.375rem)] max-sm:justify-end">
+        <div className="flex shrink-0 items-center gap-1 max-sm:col-start-1 max-sm:col-end-3 max-sm:mt-2 max-sm:justify-end">
           <MiniSwitch checked={!server.config.disabled} loading={mutating} label={server.config.disabled ? t('mcp.enableServer', { name: server.name }) : t('mcp.disableServer', { name: server.name })} onChange={onToggle} />
           <IconButton label={t('mcp.test')} disabled={testDisabled} onClick={onTest}>
             {test?.status === 'testing' ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : <Zap className="size-4" aria-hidden="true" />}
@@ -319,44 +314,51 @@ function ServerRow({ server, test, workspaceName, mutating, onToggle, onTest, on
           <IconButton label={t('mcp.delete')} danger onClick={onDelete}><Trash2 className="size-4" aria-hidden="true" /></IconButton>
         </div>
       </div>
-      {server.diagnostic && (
-        <div className="border-t border-danger-edge/50 bg-danger-surface/45 px-4 py-2.5 text-[0.75rem] leading-5 text-danger">{server.diagnostic}</div>
-      )}
-      {test?.status === 'error' && (
-        <div className="flex items-start gap-2 border-t border-danger-edge/50 bg-danger-surface/45 px-4 py-2.5 text-[0.75rem] leading-5 text-danger">
-          <CircleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-          <span className="break-words">{test.error}</span>
+      {hasDetails && (
+        <div className="mx-1 pb-4">
+          {server.diagnostic && (
+            <div className="mt-2 flex items-start gap-1.5 text-[0.75rem] leading-5 text-danger">
+              <CircleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+              <span className="break-words">{server.diagnostic}</span>
+            </div>
+          )}
+          {test?.status === 'error' && (
+            <div className="mt-2 flex items-start gap-1.5 text-[0.75rem] leading-5 text-danger">
+              <CircleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+              <span className="break-words">{test.error}</span>
+            </div>
+          )}
+          {test?.status === 'success' && <DiscoveredTools result={test.result} />}
         </div>
       )}
-      {test?.status === 'success' && <DiscoveredTools result={test.result} />}
     </article>
   )
 }
 
 function DiscoveredTools({ result }: { result: MCPProbeResult }) {
   const { t } = useI18n()
-  const [expanded, setExpanded] = useState(true)
+  const [expanded, setExpanded] = useState(false)
 
   return (
-    <div className="border-t border-edge/75 bg-canvas-raised/25">
+    <div className="mt-2.5">
       <button
-        className="flex min-h-10 w-full cursor-pointer items-center gap-2 px-4 py-2 text-left outline-none transition-colors hover:bg-surface-hover focus-visible:bg-surface-hover"
+        className="flex max-w-full cursor-pointer items-center gap-1.5 rounded px-0.5 py-0.5 text-left text-ink-muted outline-none transition-colors hover:text-ink focus-visible:bg-canvas-sunken focus-visible:text-ink"
         type="button"
         aria-expanded={expanded}
         onClick={() => setExpanded((current) => !current)}
       >
-        <CheckCircle2 className="size-4 shrink-0 text-success" aria-hidden="true" />
-        <span className="text-[0.75rem] font-medium text-ink-soft">{t('mcp.toolsDiscovered', { count: result.tools.length })}</span>
-        <span className="mx-0.5 h-3 w-px shrink-0 bg-edge-strong" aria-hidden="true" />
+        <CheckCircle2 className="size-3.5 shrink-0 text-success" aria-hidden="true" />
+        <span className="truncate text-[0.71875rem] font-medium">{t('mcp.toolsDiscovered', { count: result.tools.length })}</span>
+        <span aria-hidden="true">&middot;</span>
         <span className="shrink-0 font-mono text-[0.6875rem] tabular-nums text-ink-faint">{formatProbeLatency(result.latencyMs)}</span>
-        <ChevronDown className={cn('ml-auto size-3.5 shrink-0 text-ink-faint transition-transform duration-150', expanded && 'rotate-180')} aria-hidden="true" />
+        <ChevronDown className={cn('size-3.5 shrink-0 text-ink-faint transition-transform duration-150', expanded && 'rotate-180')} aria-hidden="true" />
       </button>
       {expanded && result.tools.length > 0 && (
-        <ul className="grid grid-cols-2 gap-x-7 border-t border-edge/65 px-4 pb-2 max-md:grid-cols-1">
+        <ul className="mt-3 grid grid-cols-2 gap-x-8 gap-y-3 border-t border-edge/65 pt-3 pb-1 max-md:grid-cols-1">
           {result.tools.map((tool) => {
             const title = tool.title?.trim()
             return (
-              <li key={tool.name} className="min-w-0 border-b border-edge/55 py-3 last:border-b-0 md:[&:nth-last-child(-n+2)]:border-b-0">
+              <li key={tool.name} className="min-w-0">
                 <div className="flex min-w-0 items-baseline gap-2">
                   <span className="min-w-0 truncate font-mono text-[0.75rem] font-medium text-ink-soft">{title || tool.original}</span>
                   {title && title !== tool.original && (
