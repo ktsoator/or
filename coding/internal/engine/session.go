@@ -9,7 +9,6 @@ import (
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/compaction"
-	"github.com/ktsoator/or/coding/internal/mcpclient"
 	"github.com/ktsoator/or/coding/internal/modelcontext"
 	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/coding/internal/skills"
@@ -34,6 +33,9 @@ type Options struct {
 	Cwd string
 	// Tools is the tool set. Nil uses the built-in tools rooted at Cwd.
 	Tools []tools.Tool
+	// AdditionalTools are appended to either the built-in or caller-supplied
+	// tool set. Product integrations use this to inject stable tool snapshots.
+	AdditionalTools []tools.Tool
 	// Skills is the initial immutable skill snapshot. The Skill tool is advertised
 	// only while the active snapshot contains at least one Skill.
 	Skills []skills.Skill
@@ -42,10 +44,6 @@ type Options struct {
 	// Skills static. The loader is deliberately not called for provider retries,
 	// tool-loop turns, or context-overflow recovery.
 	SkillLoader func() []skills.Skill
-	// MCPConfigPath is the product-owned MCP configuration file. A missing path
-	// disables MCP. Configured connections are scoped to Cwd and owned by the
-	// session so unloading an idle conversation releases them.
-	MCPConfigPath string
 	// PermissionMode controls which tool calls require approval. Missing or
 	// unknown values use the conservative ask mode.
 	PermissionMode permission.Mode
@@ -93,7 +91,6 @@ type Session struct {
 	toolByName map[string]tools.Tool
 	authorizer *permission.Service
 	tasks      *tools.TaskManager
-	mcp        *mcpclient.Session
 
 	taskUnsubscribe func()
 	cwd             string
@@ -171,9 +168,6 @@ func (s *Session) Close() {
 	}
 	if s.tasks != nil {
 		s.tasks.Shutdown()
-	}
-	if s.mcp != nil {
-		s.mcp.Close()
 	}
 }
 

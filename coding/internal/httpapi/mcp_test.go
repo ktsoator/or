@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/ktsoator/or/coding/internal/mcpclient"
+	"github.com/ktsoator/or/coding/internal/mcpmanager"
 )
 
 func TestMCPConfigEndpointsCreateRenameListAndDelete(t *testing.T) {
@@ -115,6 +116,42 @@ func TestMCPConfigEndpointSurfacesMalformedFile(t *testing.T) {
 	response := mcpRequest(t, mcpTestRouter(path), http.MethodGet, "/api/mcp", nil)
 	if response.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+}
+
+func TestMCPSaveAndDeleteReloadManagerConfiguration(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp.json")
+	manager := mcpmanager.New(t.Context(), path)
+	t.Cleanup(manager.Close)
+	router := gin.New()
+	(&Server{mcp: manager, mcpConfigPath: path}).mountMCP(router.Group("/api"))
+
+	saved := mcpRequest(t, router, http.MethodPut, "/api/mcp/servers", mcpServerSaveRequest{
+		Name: "disabled-test",
+		Config: mcpclient.ServerConfig{
+			Disabled: true,
+			Command:  "example",
+		},
+	})
+	if saved.Code != http.StatusOK {
+		t.Fatalf("save status = %d, body = %s", saved.Code, saved.Body.String())
+	}
+	lease := manager.Acquire(t.Context(), t.TempDir())
+	statuses := lease.Statuses()
+	lease.Close()
+	if len(statuses) != 1 || statuses[0].Name != "disabled-test" || statuses[0].State != mcpclient.StateDisabled {
+		t.Fatalf("statuses after save = %#v", statuses)
+	}
+
+	deleted := mcpRequest(t, router, http.MethodDelete, "/api/mcp/servers/disabled-test", nil)
+	if deleted.Code != http.StatusNoContent {
+		t.Fatalf("delete status = %d, body = %s", deleted.Code, deleted.Body.String())
+	}
+	lease = manager.Acquire(t.Context(), t.TempDir())
+	statuses = lease.Statuses()
+	lease.Close()
+	if len(statuses) != 0 {
+		t.Fatalf("statuses after delete = %#v", statuses)
 	}
 }
 

@@ -9,6 +9,8 @@ import (
 	"sync"
 
 	"github.com/ktsoator/or/coding/internal/engine"
+	"github.com/ktsoator/or/coding/internal/mcpbridge"
+	"github.com/ktsoator/or/coding/internal/mcpmanager"
 	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/transcript"
@@ -32,7 +34,7 @@ type Manager struct {
 	// layer supplies it, so this package never names a transport type.
 	newTransport  NewTransport
 	generateTitle titleGenerator
-	mcpConfigPath string
+	mcp           *mcpmanager.Manager
 
 	mu        sync.RWMutex
 	sessions  map[string]*sessionRuntime
@@ -48,6 +50,7 @@ type Options struct {
 	Usage        *usage.Store
 	Workspaces   *workspace.Registry
 	NewTransport NewTransport
+	MCP          *mcpmanager.Manager
 }
 
 // NewManager restores and validates the session index. Restored transcripts,
@@ -65,7 +68,7 @@ func NewManager(ctx context.Context, opts Options) (*Manager, error) {
 		workspaces:    opts.Workspaces,
 		newTransport:  opts.NewTransport,
 		generateTitle: generateAITitle,
-		mcpConfigPath: filepath.Join(opts.DataDir, "mcp.json"),
+		mcp:           opts.MCP,
 		sessions:      make(map[string]*sessionRuntime),
 		usage:         opts.Usage,
 	}
@@ -244,21 +247,29 @@ func (m *Manager) build(record record) (*sessionRuntime, error) {
 	thinking := llm.ModelThinkingLevel(record.Thinking)
 	permissionMode := permission.Mode(record.PermissionMode)
 	transport := m.newTransport(record.ID)
+	var mcpLease *mcpmanager.Lease
+	var additionalTools []tools.Tool
+	if m.mcp != nil {
+		mcpLease = m.mcp.Acquire(m.ctx, record.WorkspacePath)
+		additionalTools = mcpbridge.BuildTools(mcpLease)
+	}
 	session, err := newEngineSession(m.ctx, engineSessionConfig{
-		WorkspacePath:  record.WorkspacePath,
-		TranscriptPath: record.Transcript,
-		Model:          model,
-		ThinkingLevel:  thinking,
-		PermissionMode: permissionMode,
-		MCPConfigPath:  m.mcpConfigPath,
+		WorkspacePath:   record.WorkspacePath,
+		TranscriptPath:  record.Transcript,
+		Model:           model,
+		ThinkingLevel:   thinking,
+		PermissionMode:  permissionMode,
+		AdditionalTools: additionalTools,
 	}, transport)
 	if err != nil {
+		mcpLease.Close()
 		transport.Close()
 		return nil, err
 	}
 	runtime := newSessionRuntime(record)
 	runtime.session = session
 	runtime.transport = transport
+	runtime.mcpLease = mcpLease
 	session.Subscribe(func(ev engine.Event) {
 		m.handleSessionEvent(record.ID, runtime, ev)
 	})
@@ -291,6 +302,9 @@ func (s *sessionRuntime) close() {
 	}
 	if s.transport != nil {
 		s.transport.Close()
+	}
+	if s.mcpLease != nil {
+		s.mcpLease.Close()
 	}
 }
 

@@ -1,8 +1,8 @@
 # MCP configuration
 
 Or can use tools exposed by Model Context Protocol servers over stdio or
-Streamable HTTP. MCP connections belong to one loaded coding session and close
-when that session is unloaded or the application exits.
+Streamable HTTP. MCP connections belong to the application and are leased to
+loaded conversation runtimes as immutable tool snapshots.
 
 ## Internal boundaries
 
@@ -11,10 +11,47 @@ The integration keeps MCP protocol concerns separate from Or product concerns:
 - `internal/mcpclient` owns configuration, transports, protocol sessions, tool
   discovery, and protocol-native tool calls and results. It does not depend on
   Or's agent, LLM, permission, or tool packages.
+- `internal/mcpmanager` owns application-lifetime connections, background
+  warming, workspace-sensitive reuse, configuration generations, retry
+  backoff, and conversation leases.
 - `internal/mcpbridge` adapts discovered MCP tools to Or tool definitions,
   provider-safe names, permission accesses, and model-facing results.
+- `internal/conversation` acquires one manager lease when a runtime loads and
+  injects the adapted tool snapshot into the engine. The engine does not read
+  MCP configuration or own protocol connections.
 - `internal/httpapi` and the client MCP page own configuration delivery and
-  presentation. The engine only assembles the client session and bridge output.
+  presentation.
+
+## Connection lifecycle
+
+The application creates one MCP manager at startup and loads the product-owned
+configuration once. Startup then warms connections in the background for:
+
+- unscoped Streamable HTTP servers that can be shared by every workspace;
+- each workspace already registered in Or.
+
+The manager initializes applicable servers concurrently and performs the
+initial `tools/list` discovery once per connection. Unscoped HTTP connections
+are shared across workspaces. Stdio servers and configurations containing
+`${workspace}` use separate connections for each workspace.
+
+When a conversation runtime loads, it acquires a lease for the current
+configuration generation. The lease keeps its connections alive and exposes a
+stable tool and status snapshot to the engine. Unloading the runtime releases
+the lease; reusable connections from the active generation remain cached by the
+manager until configuration changes or the application exits.
+
+Application startup never waits for MCP warming. If a conversation is opened
+before its applicable connections finish warming, that first load waits for the
+same in-progress discovery instead of opening duplicate connections. Later
+conversation loads reuse the result. Failed connections are cached briefly
+before another load retries them.
+
+Saving or deleting a server installs a new configuration generation and starts
+warming it in the background. Existing runtimes keep their old generation until
+they unload, while newly loaded runtimes use the new generation. Connections
+from an old generation close after its final lease is released. The manager also
+detects external edits to `mcp.json` when the next lease is acquired.
 
 ## Configuration file
 
@@ -75,10 +112,11 @@ working directories, and workspace scopes support:
   disables that server and appears in its diagnostic.
 - `~` at the start of `cwd` and workspace scope paths.
 
-Changes take effect the next time a conversation runtime loads. Closing and
-reopening an idle conversation is enough; the application does not need to be
-restarted. The page's connection test opens a temporary connection immediately,
-discovers its tools, and closes it without changing a loaded conversation.
+Configuration changes take effect the next time a conversation runtime loads.
+Closing and reopening an idle conversation is enough; the application does not
+need to be restarted. The page's connection test opens a temporary connection,
+discovers its tools, and closes it without changing the manager generation or a
+loaded conversation.
 
 ## Tool names and permissions
 
@@ -119,4 +157,5 @@ memory.
 
 This first integration supports MCP tools. Resources, prompts, elicitation,
 legacy HTTP+SSE servers, OAuth discovery, and live tool-list changes are not yet
-projected into Or. Reopen a conversation after a server changes its tool list.
+projected into Or. After a server changes its tool list, save its configuration
+again or restart Or to reconnect it, then reopen the conversation.
