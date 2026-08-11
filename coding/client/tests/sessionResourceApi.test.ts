@@ -47,6 +47,33 @@ describe('session resource API', () => {
     })
   })
 
+  test('serializes message fork boundaries', async () => {
+    const requests: Array<{ url: string; init: RequestInit }> = []
+    const api = createSessionResourceAPI(async (url, init) => {
+      requests.push({ url, init })
+      return Response.json({ id: `session-${requests.length}` })
+    })
+
+    await api.forkSession('source/session', {
+      messageID: 'assistant-1',
+      mode: 'after_assistant',
+    })
+    await api.forkSession('source/session', {
+      messageID: 'user-1',
+      mode: 'before_user',
+      text: 'edited question',
+    })
+
+    expect(requests.map(({ url }) => url)).toEqual([
+      '/api/sessions/source%2Fsession/forks',
+      '/api/sessions/source%2Fsession/forks',
+    ])
+    expect(requests.map(({ init }) => JSON.parse(String(init.body)))).toEqual([
+      { messageID: 'assistant-1', mode: 'after_assistant' },
+      { messageID: 'user-1', mode: 'before_user', text: 'edited question' },
+    ])
+  })
+
   test('preserves server error messages and compaction error codes', async () => {
     const api = createSessionResourceAPI(async (url) => {
       if (url.endsWith('/compact')) {

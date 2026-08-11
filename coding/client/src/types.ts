@@ -296,6 +296,8 @@ export type SessionSummary = {
   modelName: string
   thinkingLevel: ThinkingLevel
   permissionMode: PermissionMode
+  forkedFromSessionId?: string
+  forkedFromMessageId?: string
 }
 
 export type WorkspaceSummary = {

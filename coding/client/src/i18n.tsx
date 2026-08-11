@@ -616,6 +616,11 @@ const en = {
 
   'actions.copied': 'Copied',
   'actions.copyResponse': 'Copy response',
+  'actions.branchResponse': 'Branch from this response',
+  'actions.editMessage': 'Edit message in a new branch',
+  'actions.cancelEdit': 'Cancel editing',
+  'actions.sendEditedMessage': 'Send edited message',
+  'actions.branchFailed': 'Could not create the branch.',
   'actions.goodResponse': 'Good response',
   'actions.badResponse': 'Bad response',
   'actions.showUsage': 'Show run token usage details',
@@ -1243,6 +1248,11 @@ const zh: Record<TranslationKey, string> = {
 
   'actions.copied': '已复制',
   'actions.copyResponse': '复制回复',
+  'actions.branchResponse': '从此回复创建分支',
+  'actions.editMessage': '在新分支中编辑消息',
+  'actions.cancelEdit': '取消编辑',
+  'actions.sendEditedMessage': '发送编辑后的消息',
+  'actions.branchFailed': '无法创建会话分支。',
   'actions.goodResponse': '有帮助',
   'actions.badResponse': '无帮助',
   'actions.showUsage': '查看本轮 Token 用量详情',

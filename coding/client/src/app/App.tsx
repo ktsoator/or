@@ -75,6 +75,7 @@ export default function App() {
     autoCompacting,
     loading,
     creating,
+    forking,
     updatingSettings,
     compacting,
     status,
@@ -87,6 +88,7 @@ export default function App() {
     updateDraftWorkspace,
     deleteSession,
     renameSession,
+    forkMessage,
     selectSession,
     updateSettings,
     updatePermissionMode,
@@ -580,6 +582,7 @@ export default function App() {
           running,
           autoCompacting,
           loading,
+          forking,
         }}
         layout={{
           sidebarCollapsed,
@@ -599,6 +602,7 @@ export default function App() {
           expandSidebar,
           openMobileSessions,
           openTaskInWorkbench,
+          forkMessage,
           renderComposer: composer,
         }}
       />

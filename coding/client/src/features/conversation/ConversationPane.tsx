@@ -35,6 +35,7 @@ type ConversationPaneProps = {
     running: boolean
     autoCompacting: boolean
     loading: boolean
+    forking: boolean
   }
   layout: {
     sidebarCollapsed: boolean
@@ -54,6 +55,11 @@ type ConversationPaneProps = {
     expandSidebar: () => void
     openMobileSessions: () => void
     openTaskInWorkbench: (taskID: string) => void
+    forkMessage: (
+      messageID: string,
+      mode: 'before_user' | 'after_assistant',
+      text?: string,
+    ) => Promise<SessionSummary>
     renderComposer: (centered?: boolean) => ReactNode
   }
 }
@@ -74,6 +80,7 @@ export function ConversationPane({
     running,
     autoCompacting,
     loading,
+    forking,
   } = thread
   const {
     sidebarCollapsed,
@@ -93,6 +100,7 @@ export function ConversationPane({
     expandSidebar,
     openMobileSessions,
     openTaskInWorkbench,
+    forkMessage,
     renderComposer,
   } = actions
   const emptySession = !loading && items.length === 0 && !approval
@@ -207,6 +215,8 @@ export function ConversationPane({
                         key={unit.item.id}
                         item={unit.item}
                         cwd={activeSession?.workspacePath}
+                        branchingDisabled={running || forking}
+                        onForkMessage={forkMessage}
                       />
                     ),
                   )}

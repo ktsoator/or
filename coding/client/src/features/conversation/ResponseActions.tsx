@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import {
   Check,
   Copy,
+  GitFork,
+  LoaderCircle,
   ThumbsDown,
   ThumbsUp,
   type LucideIcon,
@@ -17,11 +19,17 @@ export function ResponseActions({
   modelName,
   responseText,
   completedAt,
+  onFork,
+  forkDisabled,
+  forking,
 }: {
   usage?: Usage
   modelName?: string
   responseText: string
   completedAt?: string
+  onFork?: () => void
+  forkDisabled?: boolean
+  forking?: boolean
 }) {
   const { locale, t, formatNumber } = useI18n()
   const [copied, setCopied] = useState(false)
@@ -71,6 +79,15 @@ export function ResponseActions({
             disabled={!responseText}
             onClick={() => void copyResponse()}
           />
+          {onFork && (
+            <ActionButton
+              icon={forking ? LoaderCircle : GitFork}
+              label={t('actions.branchResponse')}
+              disabled={forkDisabled || forking}
+              iconClassName={forking ? 'animate-spin' : undefined}
+              onClick={onFork}
+            />
+          )}
           <ActionButton
             icon={ThumbsUp}
             label={t('actions.goodResponse')}
@@ -179,12 +196,14 @@ function ActionButton({
   label,
   pressed,
   disabled,
+  iconClassName,
   onClick,
 }: {
   icon: LucideIcon
   label: string
   pressed?: boolean
   disabled?: boolean
+  iconClassName?: string
   onClick: () => void
 }) {
   return (
@@ -201,7 +220,7 @@ function ActionButton({
           disabled={disabled}
           onClick={onClick}
         >
-          <Icon className="size-[0.9375rem]" aria-hidden="true" />
+          <Icon className={cn('size-[0.9375rem]', iconClassName)} aria-hidden="true" />
         </button>
       </Tooltip.Trigger>
       <Tooltip.Portal>

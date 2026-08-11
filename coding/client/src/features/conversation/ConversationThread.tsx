@@ -1,4 +1,4 @@
-import { type ClipboardEvent, useEffect, useState } from 'react'
+import { type ClipboardEvent, type FormEvent, type KeyboardEvent, useEffect, useState } from 'react'
 import {
   BookOpen,
   CircleAlert,
@@ -7,7 +7,11 @@ import {
   CircleX,
   FileCode2,
   LoaderCircle,
+  Pencil,
+  SendHorizontal,
+  X,
 } from 'lucide-react'
+import { Tooltip } from 'radix-ui'
 import { formatFileSize } from '@/shared/attachments'
 import {
   parseSkillReference,
@@ -57,8 +61,72 @@ export function AutoCompactionStatus() {
   )
 }
 
-export function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
+export function ThreadItem({
+  item,
+  cwd,
+  branchingDisabled = false,
+  onForkMessage,
+}: {
+  item: Item
+  cwd?: string
+  branchingDisabled?: boolean
+  onForkMessage?: (
+    messageID: string,
+    mode: 'before_user' | 'after_assistant',
+    text?: string,
+  ) => Promise<unknown>
+}) {
   const { locale, t } = useI18n()
+  const [editing, setEditing] = useState(false)
+  const [editText, setEditText] = useState('')
+  const [branching, setBranching] = useState(false)
+  const [branchError, setBranchError] = useState('')
+
+  const startEditing = () => {
+    if (item.kind !== 'user' || !item.messageID || branchingDisabled || branching) return
+    setEditText(item.text)
+    setBranchError('')
+    setEditing(true)
+  }
+
+  const cancelEditing = () => {
+    if (branching) return
+    setEditing(false)
+    setBranchError('')
+  }
+
+  const submitEdit = async (event?: FormEvent) => {
+    event?.preventDefault()
+    if (item.kind !== 'user' || !item.messageID || !onForkMessage || branchingDisabled || branching) {
+      return
+    }
+    if (!editText.trim() && item.images.length === 0 && (item.files?.length ?? 0) === 0) return
+    setBranching(true)
+    setBranchError('')
+    try {
+      await onForkMessage(item.messageID, 'before_user', editText)
+    } catch {
+      setBranchError(t('actions.branchFailed'))
+    } finally {
+      setBranching(false)
+    }
+  }
+
+  const branchAssistant = async () => {
+    if (item.kind !== 'assistant' || !item.messageID || !onForkMessage || branchingDisabled || branching) {
+      return
+    }
+    setBranching(true)
+    setBranchError('')
+    try {
+      await onForkMessage(item.messageID, 'after_assistant')
+    } catch {
+      setBranchError(t('actions.branchFailed'))
+    } finally {
+      setBranching(false)
+    }
+  }
+
   switch (item.kind) {
     case 'user':
       return (
@@ -101,12 +169,68 @@ export function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
                 ))}
               </div>
             )}
-            {item.text && (
+            {editing ? (
+              <form
+                className="w-full min-w-[20rem] max-sm:min-w-0"
+                onSubmit={(event) => void submitEdit(event)}
+              >
+                <div className="rounded-[10px] border border-edge-strong bg-canvas-raised p-1.5 shadow-[0_8px_24px_-20px_rgba(28,25,23,0.55)] focus-within:border-ink-ghost">
+                  <textarea
+                    autoFocus
+                    className="block max-h-48 min-h-20 w-full resize-y bg-transparent px-1.5 py-1 text-[14px] leading-[22px] text-ink outline-none"
+                    value={editText}
+                    aria-label={t('actions.editMessage')}
+                    disabled={branching}
+                    onChange={(event) => setEditText(event.target.value)}
+                    onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
+                      if (event.key === 'Escape') {
+                        event.preventDefault()
+                        cancelEditing()
+                      } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                        event.preventDefault()
+                        void submitEdit()
+                      }
+                    }}
+                  />
+                  <div className="flex h-8 items-center justify-between gap-2 px-0.5 pt-1">
+                    {branchError ? (
+                      <span className="min-w-0 truncate pl-1 text-[0.75rem] text-danger-soft" role="alert">
+                        {branchError}
+                      </span>
+                    ) : (
+                      <span />
+                    )}
+                    <Tooltip.Provider delayDuration={80}>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <MessageActionButton
+                          icon={X}
+                          label={t('actions.cancelEdit')}
+                          disabled={branching}
+                          onClick={cancelEditing}
+                        />
+                        <MessageActionButton
+                          icon={branching ? LoaderCircle : SendHorizontal}
+                          iconClassName={branching ? 'animate-spin' : undefined}
+                          label={t('actions.sendEditedMessage')}
+                          disabled={
+                            branching ||
+                            branchingDisabled ||
+                            (!editText.trim() && item.images.length === 0 && (item.files?.length ?? 0) === 0)
+                          }
+                          type="submit"
+                          onClick={() => {}}
+                        />
+                      </div>
+                    </Tooltip.Provider>
+                  </div>
+                </div>
+              </form>
+            ) : item.text ? (
               <div className="rounded-[10px] bg-canvas-sunken px-3 py-2 text-[14px] leading-[22px] whitespace-pre-wrap">
                 <UserMessageText text={item.text} />
               </div>
-            )}
-            {(item.text || item.sentAt || item.deliveryStatus === 'failed') && (
+            ) : null}
+            {!editing && (item.text || item.sentAt || item.deliveryStatus === 'failed') && (
               <div className="-mt-1 flex h-7 items-center justify-end gap-2 px-0.5 text-[0.75rem] leading-4 tabular-nums">
                 {item.deliveryStatus === 'failed' && (
                   <span className="text-danger-soft">{t('app.notSent')}</span>
@@ -115,6 +239,16 @@ export function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
                   className="pointer-events-none flex max-w-0 items-center gap-1 overflow-hidden opacity-0 transition-[max-width,opacity] duration-150 ease-out group-focus-within/message:pointer-events-auto group-focus-within/message:max-w-48 group-focus-within/message:opacity-100 group-hover/message:pointer-events-auto group-hover/message:max-w-48 group-hover/message:opacity-100 motion-reduce:transition-none max-md:pointer-events-auto max-md:max-w-48 max-md:opacity-100"
                   data-testid="user-message-actions"
                 >
+                  {onForkMessage && (
+                    <Tooltip.Provider delayDuration={80}>
+                      <MessageActionButton
+                        icon={Pencil}
+                        label={t('actions.editMessage')}
+                        disabled={!item.messageID || branchingDisabled || branching}
+                        onClick={startEditing}
+                      />
+                    </Tooltip.Provider>
+                  )}
                   {item.text && (
                     <CopyButton
                       value={item.text}
@@ -145,7 +279,15 @@ export function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
               modelName={item.modelName || item.model}
               responseText={item.markdown}
               completedAt={item.completedAt}
+              onFork={onForkMessage ? () => void branchAssistant() : undefined}
+              forkDisabled={!item.messageID || branchingDisabled}
+              forking={branching}
             />
+          )}
+          {branchError && (
+            <p className="mt-0.5 text-[0.75rem] leading-5 text-danger-soft" role="alert">
+              {branchError}
+            </p>
           )}
         </section>
       )
@@ -171,6 +313,48 @@ export function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
         </div>
       )
   }
+}
+
+function MessageActionButton({
+  icon: Icon,
+  label,
+  disabled,
+  iconClassName,
+  type = 'button',
+  onClick,
+}: {
+  icon: typeof Pencil
+  label: string
+  disabled?: boolean
+  iconClassName?: string
+  type?: 'button' | 'submit'
+  onClick: () => void
+}) {
+  return (
+    <Tooltip.Root>
+      <Tooltip.Trigger asChild>
+        <button
+          className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-lg text-ink-faint outline-none transition-colors hover:bg-surface-active hover:text-ink-soft focus-visible:bg-surface-active focus-visible:text-ink-soft disabled:cursor-not-allowed disabled:opacity-30"
+          type={type}
+          aria-label={label}
+          disabled={disabled}
+          onClick={onClick}
+        >
+          <Icon className={`size-[0.9375rem] ${iconClassName ?? ''}`} aria-hidden="true" />
+        </button>
+      </Tooltip.Trigger>
+      <Tooltip.Portal>
+        <Tooltip.Content
+          side="bottom"
+          sideOffset={6}
+          collisionPadding={8}
+          className="z-[150] animate-[fade-in_100ms_ease-out] rounded-md bg-canvas-inverse px-2 py-1 text-[0.6875rem] leading-4 font-medium whitespace-nowrap text-ink-inverse shadow-lg"
+        >
+          {label}
+        </Tooltip.Content>
+      </Tooltip.Portal>
+    </Tooltip.Root>
+  )
 }
 
 function UserMessageText({ text }: Pick<Extract<Item, { kind: 'user' }>, 'text'>) {
