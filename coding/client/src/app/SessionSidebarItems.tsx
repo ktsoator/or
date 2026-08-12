@@ -71,7 +71,7 @@ export function WorkspaceSessions({
         <HoverCard.Root
           open={openHoverCardKey === `workspace:${path}`}
           onOpenChange={(open) => onHoverCardOpenChange(`workspace:${path}`, open)}
-          openDelay={500}
+          openDelay={200}
           closeDelay={100}
         >
           <HoverCard.Trigger asChild>
@@ -336,7 +336,7 @@ export function SessionRow({
       <HoverCard.Root
         open={openHoverCardKey === `session:${session.id}`}
         onOpenChange={(open) => onHoverCardOpenChange(`session:${session.id}`, open)}
-        openDelay={500}
+        openDelay={200}
         closeDelay={100}
       >
         <HoverCard.Trigger asChild>

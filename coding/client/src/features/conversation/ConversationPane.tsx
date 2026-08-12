@@ -15,7 +15,7 @@ import type {
 import type { SessionDraft } from '@/features/session'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { groupItems } from './groupItems'
+import { groupAssistantTurns, type RenderUnit } from './groupItems'
 import { ConversationActionsMenu } from './ConversationActionsMenu'
 import { ScrollToLatestButton } from './ConversationScrollControl'
 import {
@@ -154,8 +154,11 @@ export function ConversationPane({
 
     const transcript = logRef.current
     const message = Array.from(
-      transcript?.querySelectorAll<HTMLElement>('[data-message-id]') ?? [],
-    ).find((element) => element.dataset.messageId === branchPointTarget.messageID)
+      transcript?.querySelectorAll<HTMLElement>('[data-branch-point-message-id]') ?? [],
+    ).find(
+      (element) =>
+        element.dataset.branchPointMessageId === branchPointTarget.messageID,
+    )
     if (!transcript || !message) return
 
     setHighlightedBranchPoint(branchPointTarget)
@@ -302,24 +305,31 @@ export function ConversationPane({
                 </div>
               ) : (
                 <>
-                  {groupItems(items).map((unit) =>
-                    unit.kind === 'steps' ? (
-                      <StepGroup key={unit.id} items={unit.items} cwd={activeSession?.workspacePath} />
-                    ) : (
-                      <ThreadItem
-                        key={unit.item.id}
-                        item={unit.item}
-                        cwd={activeSession?.workspacePath}
-                        highlighted={
-                          (unit.item.kind === 'user' || unit.item.kind === 'assistant') &&
-                          activeSession?.id === highlightedBranchPoint?.sessionID &&
-                          unit.item.messageID === highlightedBranchPoint?.messageID
-                        }
-                        branchingDisabled={running || forking}
-                        onForkMessage={forkMessage}
-                      />
-                    ),
-                  )}
+                  {groupAssistantTurns(items).map((unit) => {
+                    if (unit.kind === 'assistant-turn') {
+                      const highlighted =
+                        activeSession?.id === highlightedBranchPoint?.sessionID &&
+                        unit.messageID === highlightedBranchPoint?.messageID
+                      return (
+                        <div
+                          key={unit.id}
+                          className={cn(highlighted && 'bg-surface-hover')}
+                          data-testid="assistant-turn"
+                          data-branch-point-message-id={unit.messageID}
+                          data-branch-point-highlighted={highlighted || undefined}
+                        >
+                          {unit.units.map((turnUnit) => renderUnit(turnUnit))}
+                        </div>
+                      )
+                    }
+
+                    const highlighted =
+                      unit.kind === 'item' &&
+                      unit.item.kind === 'user' &&
+                      activeSession?.id === highlightedBranchPoint?.sessionID &&
+                      unit.item.messageID === highlightedBranchPoint?.messageID
+                    return renderUnit(unit, highlighted)
+                  })}
                   {autoCompacting ? <AutoCompactionStatus /> : awaitingFirstOutput && <AwaitingResponse />}
                 </>
               )}
@@ -336,4 +346,19 @@ export function ConversationPane({
         {!loading && !emptySession && renderComposer()}
       </div>
   )
+
+  function renderUnit(unit: RenderUnit, highlighted = false) {
+    return unit.kind === 'steps' ? (
+      <StepGroup key={unit.id} items={unit.items} cwd={activeSession?.workspacePath} />
+    ) : (
+      <ThreadItem
+        key={unit.item.id}
+        item={unit.item}
+        cwd={activeSession?.workspacePath}
+        highlighted={highlighted}
+        branchingDisabled={running || forking}
+        onForkMessage={forkMessage}
+      />
+    )
+  }
 }

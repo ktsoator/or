@@ -138,6 +138,7 @@ export function ThreadItem({
           className="group/message my-3.5 flex animate-[fade-in_160ms_ease-out] justify-end"
           data-testid="user-message"
           data-message-id={item.messageID}
+          data-branch-point-message-id={item.messageID}
           data-branch-point-highlighted={highlighted || undefined}
         >
           <div

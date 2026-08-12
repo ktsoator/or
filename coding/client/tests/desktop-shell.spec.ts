@@ -3828,6 +3828,17 @@ test('branching from an assistant response requires confirmation', async ({ page
         images: [],
       },
       {
+        type: 'run_start',
+        id: 'run-branch',
+        startedAt: '2026-07-22T20:45:49Z',
+        durationMs: 3000,
+      },
+      {
+        type: 'delta',
+        kind: 'thinking',
+        delta: '**Thought process**\nReviewed the requested branch point.',
+      },
+      {
         type: 'message_end',
         messageID: 'assistant-branch',
         text: 'Response to branch from',
@@ -3867,8 +3878,23 @@ test('branching from an assistant response requires confirmation', async ({ page
   await branchNavigation.getByRole('button', { name: 'Return to New session' }).click()
   await expect(page.getByTestId('conversation-title')).toContainText('New session')
 
-  const branchPoint = page.locator('[data-message-id="assistant-branch"]')
+  const branchPoint = page.locator(
+    '[data-branch-point-message-id="assistant-branch"]',
+  )
   await expect(branchPoint).toHaveAttribute('data-branch-point-highlighted', 'true')
+  await expect(branchPoint).toContainText('Worked for 3s')
+  await expect(branchPoint).toContainText('Thought process')
+  await expect(branchPoint).toContainText('Response to branch from')
+  expect(
+    await branchPoint.evaluate((element) => getComputedStyle(element).backgroundColor),
+  ).toBe(
+    await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--surface-hover').trim(),
+    ),
+  )
+  await expect(
+    branchPoint.getByTestId('assistant-message'),
+  ).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
   await expect.poll(async () => {
     const messageBox = await branchPoint.boundingBox()
     const transcriptBox = await page.getByTestId('conversation-transcript').boundingBox()
