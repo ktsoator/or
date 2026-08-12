@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "id": "github",
+  "name": "GitHub",
+  "description": "Read repositories and code, manage issues and pull requests, and inspect GitHub workflows.",
+  "categories": [
+    "developer-tools",
+    "source-control"
+  ],
+  "homepage": "https://github.com/github/github-mcp-server",
+  "source": {
+    "repository": "https://github.com/github/github-mcp-server",
+    "revision": "eff4c3c041742426f417f7c2247b96bbf6d60b69",
+    "license": "MIT"
+  },
+  "server": {
+    "name": "github",
+    "config": {
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer ${env:GITHUB_PERSONAL_ACCESS_TOKEN}"
+      },
+      "timeoutSeconds": 20
+    }
+  },
+  "requirements": {
+    "environment": [
+      {
+        "name": "GITHUB_PERSONAL_ACCESS_TOKEN",
+        "secret": true,
+        "required": true,
+        "description": "A GitHub personal access token limited to the repositories and operations the user intends to expose."
+      }
+    ]
+  },
+  "capabilities": {
+    "network": true,
+    "localProcess": false,
+    "filesystem": false,
+    "remoteRead": true,
+    "remoteWrite": true
+  },
+  "review": {
+    "reviewedAt": "2026-08-12",
+    "notes": [
+      "Or does not currently support MCP OAuth, so this template uses personal access token authentication.",
+      "The tools exposed by the server depend on token permissions and may modify repositories, issues, pull requests, and workflows.",
+      "Use a fine-grained token with the minimum repository access and permissions needed."
+    ]
+  }
+}
+
