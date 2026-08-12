@@ -25,7 +25,7 @@ to one of those locations.
 ## Layout
 
 ```text
-skills/
+catalog/skills/
 `-- <name>/
     |-- SKILL.md
     |-- scripts/       # optional

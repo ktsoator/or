@@ -46,12 +46,12 @@ these packages.
 Future packages can build higher-level orchestration on the same foundations
 without turning the root package into a single large API.
 
-## Skills
+## Catalog
 
-Agent Skills curated and distributed by the project live in the
-[`skills/`](skills/README.md) collection. This is a source collection rather
-than a runtime discovery directory; install selected Skills into the standard
-user or workspace locations before using them with Or.
+The project maintains a [curated catalog](catalog/README.md) of Agent Skills,
+recommended MCP servers, and useful CLI tools. These are
+source and recommendation collections rather than runtime configuration;
+review each entry and follow its collection-specific setup before use.
 
 ## Requirements
 

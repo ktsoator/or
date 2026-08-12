@@ -10,17 +10,16 @@
 
 | 工具 | 命令 | 推荐用途 |
 |---|---|---|
-| [ripgrep](tools/ripgrep/README.md) | `rg` | 快速递归搜索文本和代码 |
+| [ripgrep](ripgrep/README.md) | `rg` | 快速递归搜索文本和代码 |
 
 ## 目录结构
 
 ```text
-cli/
+catalog/cli/
 ├── README.md
 ├── README.zh.md
-└── tools/
-    └── <id>/
-        └── README.md
+└── <id>/
+    └── README.md
 ```
 
 ## 收录要求

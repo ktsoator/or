@@ -24,7 +24,7 @@ Skill：
 ## 目录结构
 
 ```text
-skills/
+catalog/skills/
 └── <name>/
     ├── SKILL.md
     ├── scripts/       # 可选

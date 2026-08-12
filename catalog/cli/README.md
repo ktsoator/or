@@ -11,18 +11,17 @@ installation documentation.
 ## Included tools
 
 | Tool | Command | Recommended for |
-|---|---|---|---|
-| [ripgrep](tools/ripgrep/README.md) | `rg` | Fast recursive text and code search |
+|---|---|---|
+| [ripgrep](ripgrep/README.md) | `rg` | Fast recursive text and code search |
 
 ## Layout
 
 ```text
-cli/
+catalog/cli/
 |-- README.md
 |-- README.zh.md
-`-- tools/
-    `-- <id>/
-        `-- README.md
+`-- <id>/
+    `-- README.md
 ```
 
 ## Contribution requirements

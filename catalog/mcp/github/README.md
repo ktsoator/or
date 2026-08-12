@@ -1,15 +1,23 @@
-# GitHub MCP Server
+# GitHub MCP
 
 GitHub's official MCP server exposes repository, code search, issue, pull
-request, user, and workflow operations. This catalog entry uses GitHub's hosted
-Streamable HTTP endpoint, so it does not start a local process.
+request, user, and workflow operations.
 
 - Upstream: <https://github.com/github/github-mcp-server>
+- Documentation: <https://github.com/github/github-mcp-server/blob/eff4c3c041742426f417f7c2247b96bbf6d60b69/docs/remote-server.md>
 - Reviewed revision: [`eff4c3c041742426f417f7c2247b96bbf6d60b69`](https://github.com/github/github-mcp-server/tree/eff4c3c041742426f417f7c2247b96bbf6d60b69)
 - License: MIT
+- Transport: Streamable HTTP
 - Endpoint: `https://api.githubcopilot.com/mcp/`
+- Authentication: GitHub personal access token
 
-## Before adding
+## Why it belongs in the catalog
+
+GitHub is a common source of coding context and development work. The official
+server lets an agent inspect repositories and workflows, search code, and work
+with issues and pull requests without requiring a local server process.
+
+## Setup
 
 Or does not currently implement MCP OAuth. This template therefore expects a
 GitHub personal access token in the environment variable
@@ -17,8 +25,7 @@ GitHub personal access token in the environment variable
 
 Create a fine-grained token that can access only the repositories required for
 your work. Grant only the read or write permissions needed for the operations
-you intend the agent to perform. Do not put the token itself in `manifest.json`
-or `mcp.json`.
+you intend the agent to perform. Do not put the token itself in `mcp.json`.
 
 The desktop application must inherit the variable when it starts. Set
 `GITHUB_PERSONAL_ACCESS_TOKEN` in the shell or secret manager used to launch Or;
@@ -50,7 +57,7 @@ The catalog template corresponds to this entry in Or's private `mcp.json`:
 After saving the server in Or, use **Test connection** and inspect the tools it
 discovers before making it available to conversations.
 
-## Security review
+## Security notes
 
 - The server receives the configured bearer token over HTTPS.
 - Available tools and their effects are controlled by both the server and the
