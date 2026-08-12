@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('codingDesktop', {
   browserMode: 'webview',
   chooseDirectory: (initialPath: string, title: string): Promise<string> =>
     ipcRenderer.invoke('desktop:choose-directory', initialPath, title),
+  revealPath: (target: string): Promise<void> =>
+    ipcRenderer.invoke('desktop:reveal-path', target),
   openExternalURL: (url: string): Promise<void> =>
     ipcRenderer.invoke('desktop:open-external', url),
 })

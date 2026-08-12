@@ -364,6 +364,11 @@ async function openDesktopClient(
           testWindow.__directoryArgs = { initialPath, title }
           return Promise.resolve(nativeDirectory ?? '')
         },
+        revealPath(target: string) {
+          const testWindow = window as Window & { __revealedPath?: string }
+          testWindow.__revealedPath = target
+          return Promise.resolve()
+        },
       },
     })
 
@@ -4386,6 +4391,23 @@ test('sidebar workspace hover shows project details with a small row gap', async
   expect(triggerBox).not.toBeNull()
   expect(hoverCardBox).not.toBeNull()
   expect(Math.abs((triggerBox?.x ?? 0) + (triggerBox?.width ?? 0) + 6 - (hoverCardBox?.x ?? 0))).toBeLessThan(1)
+})
+
+test('sidebar workspace action reveals the project in the native file manager', async ({
+  page,
+}) => {
+  await openDesktopClient(page, { existingSession: true, sessionScope: 'project' })
+
+  const project = page.getByRole('button', { name: 'test-session', exact: true })
+  await project.hover()
+  const actions = page.getByRole('button', { name: 'Actions for test-session' })
+  await actions.click()
+  await page.getByRole('menuitem', { name: 'Reveal in Finder' }).click()
+
+  await expect.poll(() =>
+    page.evaluate(() => (window as Window & { __revealedPath?: string }).__revealedPath),
+  ).toBe('/tmp/test-session')
+  await expect(actions).not.toBeFocused()
 })
 
 test('sidebar rename selects once and preserves normal backspace editing', async ({ page }) => {

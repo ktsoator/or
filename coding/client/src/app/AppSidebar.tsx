@@ -50,6 +50,7 @@ type AppSidebarProps = {
     requestDelete: (session: SessionSummary) => void
     handleRename: (id: string, customTitle: string) => Promise<void>
     onSelectWorkspace: (path: string) => void
+    revealWorkspace: (path: string) => Promise<void>
     requestRemoveWorkspace: (path: string, name: string) => void
     onOpenSettings: () => void
     startSidebarResize: (event: ReactPointerEvent<HTMLDivElement>) => void
@@ -92,6 +93,7 @@ export function AppSidebar({ layout, content, actions }: AppSidebarProps) {
     requestDelete,
     handleRename,
     onSelectWorkspace,
+    revealWorkspace,
     requestRemoveWorkspace,
     onOpenSettings,
     startSidebarResize,
@@ -276,6 +278,7 @@ export function AppSidebar({ layout, content, actions }: AppSidebarProps) {
                   onTogglePinnedSession={togglePinnedSession}
                   onDeleteSession={requestDelete}
                   onRenameSession={handleRename}
+                  onRevealWorkspace={revealWorkspace}
                   onRemoveWorkspace={requestRemoveWorkspace}
                   openHoverCardKey={openHoverCardKey}
                   onHoverCardOpenChange={handleHoverCardOpenChange}

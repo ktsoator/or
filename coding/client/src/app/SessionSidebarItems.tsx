@@ -38,6 +38,7 @@ export function WorkspaceSessions({
   onTogglePinnedSession,
   onDeleteSession,
   onRenameSession,
+  onRevealWorkspace,
   onRemoveWorkspace,
   openHoverCardKey,
   onHoverCardOpenChange,
@@ -54,6 +55,7 @@ export function WorkspaceSessions({
   onTogglePinnedSession: (id: string) => void
   onDeleteSession: (session: SessionSummary) => void
   onRenameSession: (id: string, customTitle: string) => Promise<void>
+  onRevealWorkspace: (path: string) => Promise<void>
   onRemoveWorkspace: (path: string, name: string) => void
   openHoverCardKey?: string
   onHoverCardOpenChange: (key: string, open: boolean) => void
@@ -61,6 +63,7 @@ export function WorkspaceSessions({
   const { t } = useI18n()
   const [expanded, setExpanded] = useState(true)
   const [menuOpen, setMenuOpen] = useState(false)
+  const skipMenuFocusRestore = useRef(false)
 
   return (
     <section aria-label={name}>
@@ -169,12 +172,23 @@ export function WorkspaceSessions({
                 sideOffset={6}
                 collisionPadding={10}
                 className="z-[120] min-w-[13.75rem] animate-[fade-in_100ms_ease-out] rounded-[14px] border border-edge bg-canvas p-1 text-[0.84375rem] text-ink shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
+                onCloseAutoFocus={(event) => {
+                  if (!skipMenuFocusRestore.current) return
+                  skipMenuFocusRestore.current = false
+                  event.preventDefault()
+                }}
               >
                 <DropdownMenu.Item className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-surface-active">
                   <Pin className="size-4 text-ink-muted" aria-hidden="true" />
                   <span>{t('workspace.pinProject')}</span>
                 </DropdownMenu.Item>
-                <DropdownMenu.Item className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-surface-active">
+                <DropdownMenu.Item
+                  className="flex h-8 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-surface-active"
+                  onSelect={() => {
+                    skipMenuFocusRestore.current = true
+                    void onRevealWorkspace(path)
+                  }}
+                >
                   <FolderOpen className="size-4 text-ink-muted" aria-hidden="true" />
                   <span>{t('workspace.revealInFinder')}</span>
                 </DropdownMenu.Item>

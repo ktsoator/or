@@ -13,7 +13,7 @@ import { useSession } from '@/features/session'
 import type { SessionSummary } from '@/types'
 import { cn } from '@/lib/utils'
 import { Composer } from '@/features/composer'
-import { chooseNativeDirectory } from '@/lib/desktop'
+import { chooseNativeDirectory, revealNativePath } from '@/lib/desktop'
 import type { SettingsSection } from '@/features/settings'
 import {
   WorkbenchPanel,
@@ -524,6 +524,7 @@ export default function App() {
           requestDelete,
           handleRename,
           onSelectWorkspace: setSelectedWorkspacePath,
+          revealWorkspace: revealNativePath,
           requestRemoveWorkspace,
           onOpenSettings: () => setView({ type: 'settings', section: 'general' }),
           startSidebarResize,
