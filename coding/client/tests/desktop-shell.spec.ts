@@ -153,6 +153,8 @@ async function openDesktopClient(
     modelName?: string
     modelThinkingLevels?: Array<'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'>
     modelThinkingVisibility?: 'visible' | 'hidden'
+    sessionScope?: 'chat' | 'project'
+    sessionTitle?: string
     composerUpdateDelayMs?: number
     nativeDirectory?: string
     usageReport?: UsageReport
@@ -173,11 +175,11 @@ async function openDesktopClient(
   const modelThinkingLevel = modelThinkingLevels[0] ?? 'off'
   const createdSession = {
     id: 'test-session',
-    title: 'New session',
+    title: options.sessionTitle ?? 'New session',
     workspacePath: '/tmp/test-session',
     workspaceName: 'test-session',
-    scope: 'chat',
-    workspaceKind: 'scratch',
+    scope: options.sessionScope ?? 'chat',
+    workspaceKind: options.sessionScope === 'project' ? 'folder' : 'scratch',
     createdAt: '2026-07-22T00:00:00Z',
     updatedAt: '2026-07-22T00:00:00Z',
     running: false,
@@ -577,6 +579,11 @@ async function openDesktopClient(
         },
       }
     }
+    if (path === '/api/workspaces') {
+      body = options.sessionScope === 'project'
+        ? [{ path: createdSession.workspacePath, name: createdSession.workspaceName }]
+        : []
+    }
     if (path === '/api/skills') {
       body = {
         user: options.skills?.filter((item) => item.source === 'user') ?? [],
@@ -692,8 +699,10 @@ async function openDesktopClient(
   await expect(page.locator('html')).toHaveClass(/desktop-macos/)
   await expect(page.getByTestId('conversation-header')).toBeVisible()
   if (options.existingSession) {
-    const chats = page.getByRole('navigation', { name: 'Chats' })
-    await chats.getByRole('button', { name: createdSession.title, exact: true }).click()
+    const sessions = page.getByRole('navigation', {
+      name: options.sessionScope === 'project' ? 'Or sessions' : 'Chats',
+    })
+    await sessions.getByRole('button', { name: createdSession.title, exact: true }).click()
     await expect.poll(() =>
       page.evaluate(
         () =>
@@ -4320,6 +4329,91 @@ test('sidebar session actions leave catalog pages for the conversation', async (
   await expect(conversation).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Skills', exact: true })).toBeHidden()
 
+})
+
+test('sidebar session hover shows conversation details with a small row gap', async ({
+  page,
+}) => {
+  const title = 'Analyze message branching without changing the original conversation'
+  await openDesktopClient(page, { existingSession: true, sessionTitle: title })
+
+  const trigger = page.getByRole('button', { name: title, exact: true })
+  await trigger.hover()
+
+  const hoverCard = page.getByTestId('session-hover-card')
+  await expect(hoverCard).toBeVisible()
+  await expect(hoverCard.getByRole('heading', { name: title })).toBeVisible()
+  await expect(hoverCard).toContainText('Model')
+  await expect(hoverCard).toContainText('Test model')
+  await expect(hoverCard).toContainText('Updated')
+  await expect(hoverCard).not.toContainText('/tmp/test-session')
+
+  const [triggerBox, hoverCardBox] = await Promise.all([
+    trigger.boundingBox(),
+    hoverCard.boundingBox(),
+  ])
+  expect(triggerBox).not.toBeNull()
+  expect(hoverCardBox).not.toBeNull()
+  expect(Math.abs((triggerBox?.x ?? 0) + (triggerBox?.width ?? 0) + 6 - (hoverCardBox?.x ?? 0))).toBeLessThan(1)
+})
+
+test('sidebar workspace hover shows project details with a small row gap', async ({
+  page,
+}) => {
+  await openDesktopClient(page, { existingSession: true, sessionScope: 'project' })
+
+  const trigger = page.getByRole('button', { name: 'test-session', exact: true })
+  await trigger.hover()
+
+  const hoverCard = page.getByTestId('workspace-hover-card')
+  await expect(hoverCard).toBeVisible()
+  await expect(hoverCard.getByRole('heading', { name: 'test-session' })).toBeVisible()
+  await expect(hoverCard).toContainText('1 chat')
+  await expect(hoverCard).toContainText('/tmp/test-session')
+  await expect(page.getByTestId('session-hover-card')).toHaveCount(0)
+
+  const contentLeftEdges = await Promise.all([
+    hoverCard.getByRole('heading', { name: 'test-session' }).evaluate((element) => element.getBoundingClientRect().x),
+    hoverCard.getByText('1 chat', { exact: true }).evaluate((element) => element.getBoundingClientRect().x),
+    hoverCard.getByText('/tmp/test-session', { exact: true }).evaluate((element) => element.getBoundingClientRect().x),
+  ])
+  expect(Math.max(...contentLeftEdges) - Math.min(...contentLeftEdges)).toBeLessThan(1)
+
+  const [triggerBox, hoverCardBox] = await Promise.all([
+    trigger.boundingBox(),
+    hoverCard.boundingBox(),
+  ])
+  expect(triggerBox).not.toBeNull()
+  expect(hoverCardBox).not.toBeNull()
+  expect(Math.abs((triggerBox?.x ?? 0) + (triggerBox?.width ?? 0) + 6 - (hoverCardBox?.x ?? 0))).toBeLessThan(1)
+})
+
+test('sidebar rename selects once and preserves normal backspace editing', async ({ page }) => {
+  const title = 'Greeting session in Chinese'
+  await openDesktopClient(page, { existingSession: true, sessionTitle: title })
+
+  const sessionRow = page.getByRole('button', { name: title, exact: true })
+  await sessionRow.hover()
+  await page.getByRole('button', { name: `Actions for ${title}` }).click()
+  await page.getByRole('menuitem', { name: 'Rename' }).click()
+
+  const renameInput = page.getByRole('textbox', { name: `Rename ${title}` })
+  await expect(renameInput).toBeVisible()
+  await renameInput.press('End')
+  await renameInput.press('Backspace')
+  await expect(renameInput).toHaveValue(title.slice(0, -1))
+  await renameInput.press('Backspace')
+  await expect(renameInput).toHaveValue(title.slice(0, -2))
+  const visibleShadows = await renameInput.evaluate((element) => {
+    const shadow = getComputedStyle(element).boxShadow
+    if (shadow === 'none') return []
+    return [...shadow.matchAll(/rgba?\(([^)]+)\)/g)].filter(([, channels]) => {
+      const values = channels?.split(',').map((value) => value.trim()) ?? []
+      return values.length < 4 || Number(values[3]) > 0
+    })
+  })
+  expect(visibleShadows).toHaveLength(0)
+  await expect(renameInput).toHaveCSS('outline-style', 'none')
 })
 
 test('skill invocations render and copy as file references', async ({

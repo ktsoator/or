@@ -2,6 +2,7 @@ import type {
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
 } from 'react'
+import { useCallback, useState } from 'react'
 import {
   BookOpenText,
   Cable,
@@ -60,6 +61,10 @@ type AppSidebarProps = {
 
 export function AppSidebar({ layout, content, actions }: AppSidebarProps) {
   const { t } = useI18n()
+  const [openHoverCardKey, setOpenHoverCardKey] = useState<string>()
+  const handleHoverCardOpenChange = useCallback((key: string, open: boolean) => {
+    setOpenHoverCardKey((current) => open ? key : current === key ? undefined : current)
+  }, [])
   const {
     mobileSessionsOpen,
     sidebarCollapsed,
@@ -231,6 +236,8 @@ export function AppSidebar({ layout, content, actions }: AppSidebarProps) {
                     onTogglePin={() => togglePinnedSession(session.id)}
                     onDelete={() => requestDelete(session)}
                     onRename={(title) => handleRename(session.id, title)}
+                    openHoverCardKey={openHoverCardKey}
+                    onHoverCardOpenChange={handleHoverCardOpenChange}
                   />
                 ))
               )}
@@ -270,6 +277,8 @@ export function AppSidebar({ layout, content, actions }: AppSidebarProps) {
                   onDeleteSession={requestDelete}
                   onRenameSession={handleRename}
                   onRemoveWorkspace={requestRemoveWorkspace}
+                  openHoverCardKey={openHoverCardKey}
+                  onHoverCardOpenChange={handleHoverCardOpenChange}
                 />
               ))}
             </div>
