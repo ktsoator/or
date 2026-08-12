@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/ktsoator/or/agent"
-	"github.com/ktsoator/or/coding/internal/modelcontext"
+	"github.com/ktsoator/or/coding/internal/contextprojection"
 	"github.com/ktsoator/or/coding/internal/transcript"
 	"github.com/ktsoator/or/llm"
 )
@@ -25,13 +25,13 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 		input llm.Context,
 		options llm.StreamOptions,
 	) (<-chan llm.Event, error) {
-		prepared := s.modelContext.PrepareStep(input)
+		prepared := s.contextProjection.PrepareStep(input)
 		if err := s.persistModelInput(ctx, input.Messages, prepared.Pending); err != nil {
 			checkpointErr := fmt.Errorf("coding: persist model request checkpoint: %w", err)
 			s.recordRunPersistenceError(checkpointErr)
 			return nil, checkpointErr
 		}
-		s.modelContext.Commit(prepared)
+		s.contextProjection.Commit(prepared)
 		s.commitSkillRefresh(prepared.Pending)
 		s.commitContextRefresh(prepared.Pending)
 		return delegate(ctx, model, prepared.Input, options)
@@ -45,7 +45,7 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 func (s *Session) persistModelInput(
 	ctx context.Context,
 	input []llm.Message,
-	attachments []modelcontext.Attachment,
+	attachments []contextprojection.Attachment,
 ) error {
 	messages := make([]agent.AgentMessage, len(input))
 	for index, message := range input {

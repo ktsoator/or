@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/ktsoator/or/agent"
-	"github.com/ktsoator/or/coding/internal/modelcontext"
+	"github.com/ktsoator/or/coding/internal/contextprojection"
 	"github.com/ktsoator/or/coding/internal/skills"
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/transcript"
@@ -188,11 +188,11 @@ func TestDynamicSkillsAddUpdateAndRemoveAtTopLevelBoundary(t *testing.T) {
 			continue
 		}
 		switch entry.Context.Kind {
-		case string(modelcontext.BaseContext):
+		case string(contextprojection.BaseContext):
 			bases++
-		case string(modelcontext.SkillsUpdate):
+		case string(contextprojection.SkillsUpdate):
 			updates++
-			if entry.Context.Placement != string(modelcontext.AfterCurrent) {
+			if entry.Context.Placement != string(contextprojection.AfterCurrent) {
 				t.Fatalf("skill context entry = %#v", entry)
 			}
 		default:
@@ -318,7 +318,7 @@ func TestSkillRefreshPersistenceFailureDoesNotPublishRegistry(t *testing.T) {
 	if got := executeSkill(t, session, "review"); !strings.Contains(got, "old body") {
 		t.Fatalf("failed refresh published new registry: %q", got)
 	}
-	state := session.modelContext.State()
+	state := session.contextProjection.State()
 	if state.StagedSkillsRevision == "" || state.ActiveSkillsRevision != "" {
 		t.Fatalf("model context state = %#v, want uncommitted staged update", state)
 	}

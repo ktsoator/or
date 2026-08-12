@@ -1,7 +1,7 @@
 package engine
 
 import (
-	"github.com/ktsoator/or/coding/internal/modelcontext"
+	"github.com/ktsoator/or/coding/internal/contextprojection"
 	"github.com/ktsoator/or/coding/internal/prompt"
 	"github.com/ktsoator/or/coding/internal/skills"
 	"github.com/ktsoator/or/coding/internal/tools"
@@ -9,7 +9,7 @@ import (
 )
 
 // buildSystemPrompt assembles only the stable coding prompt. Session
-// instructions and skill listings are projected by modelContext at the request
+// instructions and skill listings are projected at the request
 // boundary and never become part of the Agent's canonical system prompt.
 func (s *Session) buildSystemPrompt(instructions string) string {
 	infos := make([]prompt.ToolInfo, len(s.tools))
@@ -50,7 +50,7 @@ func (s *Session) activateSkill(name string) {
 	if !ok {
 		return
 	}
-	s.modelContext.StageActivatedSkill(
+	s.contextProjection.StageActivatedSkill(
 		skill.Name,
 		"",
 		skills.FormatActivatedContext(skill),
@@ -85,7 +85,7 @@ func (s *Session) prepareSkillRefresh() {
 		case s.skillRevision:
 			s.pendingSkills = nil
 			s.pendingSkillRevision = ""
-			s.modelContext.CancelStagedSkillsUpdate()
+			s.contextProjection.CancelStagedSkillsUpdate()
 			s.skillRegistry.Replace(next)
 			return
 		}
@@ -102,7 +102,7 @@ func (s *Session) prepareSkillRefresh() {
 	)
 	s.pendingSkills = next
 	s.pendingSkillRevision = nextRevision
-	s.modelContext.StageSkillsUpdate(nextRevision, rendered)
+	s.contextProjection.StageSkillsUpdate(nextRevision, rendered)
 }
 
 // prepareContextRefresh restages the environment and instruction files when they
@@ -122,7 +122,7 @@ func (s *Session) prepareContextRefresh() {
 		case s.contextRevision:
 			// The files reverted before the staged block was ever sent.
 			s.pendingContextRevision = ""
-			s.modelContext.CancelStagedContextUpdate()
+			s.contextProjection.CancelStagedContextUpdate()
 			return
 		}
 	} else if nextRevision == s.contextRevision {
@@ -130,18 +130,18 @@ func (s *Session) prepareContextRefresh() {
 	}
 
 	s.pendingContextRevision = nextRevision
-	s.modelContext.StageContextUpdate(
+	s.contextProjection.StageContextUpdate(
 		nextRevision,
 		prompt.RenderContextUpdate(nextRevision, env, files),
 	)
 }
 
-func (s *Session) commitContextRefresh(attachments []modelcontext.Attachment) {
+func (s *Session) commitContextRefresh(attachments []contextprojection.Attachment) {
 	if s.pendingContextRevision == "" {
 		return
 	}
 	for _, attachment := range attachments {
-		if attachment.Kind != modelcontext.ContextUpdate ||
+		if attachment.Kind != contextprojection.ContextUpdate ||
 			attachment.Revision != s.pendingContextRevision {
 			continue
 		}
@@ -151,12 +151,12 @@ func (s *Session) commitContextRefresh(attachments []modelcontext.Attachment) {
 	}
 }
 
-func (s *Session) commitSkillRefresh(attachments []modelcontext.Attachment) {
+func (s *Session) commitSkillRefresh(attachments []contextprojection.Attachment) {
 	if s.pendingSkills == nil {
 		return
 	}
 	for _, attachment := range attachments {
-		if attachment.Kind != modelcontext.SkillsUpdate ||
+		if attachment.Kind != contextprojection.SkillsUpdate ||
 			attachment.Revision != s.pendingSkillRevision {
 			continue
 		}
@@ -180,18 +180,18 @@ func nextContextEpoch(entries []transcript.Entry) uint64 {
 	return latest + 1
 }
 
-func restoredActivatedSkills(entries []transcript.Entry) []modelcontext.Attachment {
-	result := make([]modelcontext.Attachment, 0)
+func restoredActivatedSkills(entries []transcript.Entry) []contextprojection.Attachment {
+	result := make([]contextprojection.Attachment, 0)
 	for _, entry := range entries {
 		if entry.Type != transcript.ContextEntry || entry.Context == nil ||
-			entry.Context.Kind != string(modelcontext.ActivatedSkill) {
+			entry.Context.Kind != string(contextprojection.ActivatedSkill) {
 			continue
 		}
-		result = append(result, modelcontext.Attachment{
+		result = append(result, contextprojection.Attachment{
 			ID:        entry.Context.AttachmentID,
 			Epoch:     entry.Context.Epoch,
-			Kind:      modelcontext.ActivatedSkill,
-			Placement: modelcontext.Placement(entry.Context.Placement),
+			Kind:      contextprojection.ActivatedSkill,
+			Placement: contextprojection.Placement(entry.Context.Placement),
 			Path:      entry.Context.Path,
 			Revision:  entry.Context.Revision,
 			Rendered:  entry.Context.Rendered,

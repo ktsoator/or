@@ -8,7 +8,7 @@ compaction, and events.
 app -> conversation -> engine -> agent -> llm
           |              |
           |              +-> tools, permission, prompt, skills
-          |              +-> modelcontext, transcript, compaction
+          |              +-> contextprojection, transcript, compaction
           +-> session lifecycle, queue ownership, product notifications
 ```
 
@@ -52,7 +52,7 @@ settings storage, or reusable SDK abstractions.
 - `llm` owns one provider request and provider-neutral message types.
 - `tools` owns concrete Or tools and their access descriptions.
 - `permission` owns authorization policy for concrete tool effects.
-- `modelcontext` owns staged hidden context and request projection.
+- `contextprojection` owns staged hidden context and request projection.
 - `transcript` owns durable entry types, projection, and storage contracts.
 - `compaction` owns summary generation and transcript compaction preparation.
 - `prompt` and `skills` own source material used to build model context.

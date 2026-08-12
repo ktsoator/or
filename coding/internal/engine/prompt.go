@@ -47,7 +47,7 @@ func (s *Session) promptMessage(
 	}
 	if matched {
 		if activated, ok := registry.ExplicitInvocationSkill(text); ok {
-			s.modelContext.StageActivatedSkill(
+			s.contextProjection.StageActivatedSkill(
 				activated.Name,
 				"",
 				skills.FormatActivatedContext(activated),
