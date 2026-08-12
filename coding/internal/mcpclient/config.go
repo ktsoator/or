@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 )
 
@@ -38,29 +37,6 @@ type ServerConfig struct {
 	Headers        map[string]string `json:"headers,omitempty"`
 	Workspaces     []string          `json:"workspaces,omitempty"`
 	TimeoutSeconds int               `json:"timeoutSeconds,omitempty"`
-}
-
-type namedServer struct {
-	name   string
-	config ServerConfig
-}
-
-func loadConfig(path string) ([]namedServer, error) {
-	config, err := ReadConfig(path)
-	if err != nil {
-		return nil, err
-	}
-
-	names := make([]string, 0, len(config.MCPServers))
-	for name := range config.MCPServers {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	servers := make([]namedServer, 0, len(names))
-	for _, name := range names {
-		servers = append(servers, namedServer{name: name, config: config.MCPServers[name]})
-	}
-	return servers, nil
 }
 
 // ReadConfig loads the product-owned MCP configuration without connecting to

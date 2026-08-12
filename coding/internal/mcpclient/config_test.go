@@ -7,31 +7,13 @@ import (
 	"testing"
 )
 
-func TestLoadConfigSortsServersAndRejectsUnknownFields(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "mcp.json")
-	if err := os.WriteFile(path, []byte(`{
-  "version": 1,
-  "mcpServers": {
-    "zeta": {"command": "z"},
-    "alpha": {"url": "https://example.com/mcp"}
-  }
-}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	servers, err := loadConfig(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(servers) != 2 || servers[0].name != "alpha" || servers[1].name != "zeta" {
-		t.Fatalf("servers = %#v", servers)
-	}
-
+func TestReadConfigRejectsUnknownFields(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp.json")
 	if err := os.WriteFile(path, []byte(`{"mcpServers":{"bad":{"command":"x","typo":true}}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := loadConfig(path); err == nil || !strings.Contains(err.Error(), "unknown field") {
-		t.Fatalf("loadConfig error = %v", err)
+	if _, err := ReadConfig(path); err == nil || !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("ReadConfig error = %v", err)
 	}
 }
 

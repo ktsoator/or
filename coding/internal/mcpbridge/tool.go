@@ -34,8 +34,7 @@ type callableTool interface {
 	Call(context.Context, any) (*protocol.CallToolResult, error)
 }
 
-// Source is an immutable MCP tool and status snapshot. Both legacy client
-// sessions and application-manager leases satisfy it.
+// Source is an immutable MCP tool and status snapshot.
 type Source interface {
 	Tools() []mcpclient.Tool
 	Statuses() []mcpclient.ServerStatus
