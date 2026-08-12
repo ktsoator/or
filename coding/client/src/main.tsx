@@ -8,7 +8,7 @@ import {
   hasDesktopRuntime,
   openExternalURL,
 } from './lib/desktop.ts'
-import { applyTheme, readThemePreference } from './theme.ts'
+import { applyTheme, readThemePreference } from './shared/lib/theme.ts'
 
 // Applied before the first render so a dark session never flashes the light
 // canvas while React mounts.

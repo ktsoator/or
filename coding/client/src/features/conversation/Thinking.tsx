@@ -6,7 +6,7 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from '@/components/ui/collapsible'
+} from '@/shared/ui/Collapsible'
 import { useI18n } from '@/i18n'
 import { Markdown } from '@/shared/ui/Markdown'
 import { parseThinkingContent } from './thinkingContent'

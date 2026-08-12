@@ -7,7 +7,7 @@ import {
   watchSystemTheme,
   type ResolvedTheme,
   type ThemePreference,
-} from './theme'
+} from '@/shared/lib/theme'
 
 /**
  * Owns the theme preference and keeps the document in sync with it. The

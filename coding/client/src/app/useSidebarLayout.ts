@@ -6,17 +6,19 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
-import { usePointerResize } from './shared/hooks/usePointerResize'
-import type { SessionSummary, WorkspaceSummary } from './types'
+import { usePointerResize } from '@/shared/hooks/usePointerResize'
 import {
   DEFAULT_SIDEBAR_WIDTH,
   MAX_SIDEBAR_WIDTH,
   MIN_SIDEBAR_WIDTH,
-  groupSidebarSessions,
   keyboardSidebarWidth,
-  parsePinnedSessionIDs,
   resizedSidebarWidth,
-} from './sidebarLayout'
+} from '@/shared/lib/sidebarLayout'
+import type { SessionSummary, WorkspaceSummary } from '@/types'
+import {
+  groupSidebarSessions,
+  parsePinnedSessionIDs,
+} from './sessionSidebarLayout'
 
 const PINNED_SESSIONS_KEY = 'coding.pinned-session-ids'
 

@@ -30,7 +30,7 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from '@/components/ui/collapsible'
+} from '@/shared/ui/Collapsible'
 import { useI18n } from '@/i18n'
 import { CopyButton } from './CopyButton'
 import { FileChange } from './Diff'

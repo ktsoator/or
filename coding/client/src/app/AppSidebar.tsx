@@ -11,11 +11,11 @@ import {
   SquarePen,
 } from 'lucide-react'
 import type { SessionSummary } from '@/types'
-import type { WorkspaceSessionGroup } from '@/sidebarLayout'
+import type { WorkspaceSessionGroup } from './sessionSidebarLayout'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { ProfileMenu } from '@/components/ProfileMenu'
-import { SidebarToggleButton } from '@/components/SidebarToggleButton'
+import { SidebarToggleButton } from '@/shared/ui/SidebarToggleButton'
+import { ProfileMenu } from './ProfileMenu'
 import {
   SessionRow,
   SidebarNavItem,

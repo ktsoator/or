@@ -14,7 +14,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { Dialog } from 'radix-ui'
-import { SidebarToggleButton } from '@/components/SidebarToggleButton'
+import { SidebarToggleButton } from '@/shared/ui/SidebarToggleButton'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import {
