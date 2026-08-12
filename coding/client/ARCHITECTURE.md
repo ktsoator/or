@@ -9,7 +9,6 @@ src/
 |-- features/     user-facing capabilities with private implementation files
 |-- shared/       domain-neutral utilities and reusable UI foundations
 |-- generated/    generated protocol types
-|-- components/   transitional shared and not-yet-migrated components
 `-- *.ts(x)       transitional shared and not-yet-migrated modules
 ```
 
@@ -32,8 +31,8 @@ app -> features -> shared
 
 ## Current ownership
 
-- `app` owns the shell, `AppView` navigation state, sidebars, and session
-  dialogs.
+- `app` owns the shell, `AppView` navigation state, application sidebar state,
+  profile menu, and session dialogs.
 - `features/session` owns session requests, streaming recovery, state stores,
   reducers, and the `useSession` facade.
 - `features/composer` owns message composition, attachments UI, catalogs,
@@ -51,8 +50,13 @@ app -> features -> shared
 - `shared/attachments.ts` is shared because attachment metadata is rendered by
   both the composer and the conversation transcript.
 - `shared/ui` contains provider identity and thinking controls reused by
-  Settings and Composer, plus Markdown rendering shared by Conversation and
-  the Skills catalog.
+  Settings and Composer, the sidebar toggle reused across application views,
+  plus Markdown rendering shared by Conversation and the Skills catalog.
+- `shared/lib/sidebarLayout.ts` owns sidebar sizing calculations shared by the
+  application and Settings sidebars. Application-specific session grouping
+  remains under `app`.
+- `shared/lib/theme.ts` and `shared/hooks/useTheme.ts` own theme persistence,
+  resolution, and React synchronization.
 - `shared/lib/highlightRuntime.ts` owns the syntax-highlighting dependency and
   theme. It is loaded dynamically only when rendered content contains a code
   block, tool read preview, or diff.
@@ -61,9 +65,9 @@ The generic `lib/desktop.ts` module only exposes platform, directory picker,
 and external-link capabilities. Electron webview registration and browser
 runtime state belong to `features/browser`.
 
-The remaining root modules and `components` directory are intentionally
-transitional. Move them by capability in behavior-preserving batches; do not
-mix directory migration with product changes.
+The remaining root modules are intentionally transitional. Move them by
+capability in behavior-preserving batches; do not mix directory migration with
+product changes.
 
 ## Loading boundaries
 

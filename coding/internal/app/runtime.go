@@ -8,7 +8,7 @@ import (
 
 	"github.com/ktsoator/or/coding/internal/conversation"
 	"github.com/ktsoator/or/coding/internal/httpapi"
-	"github.com/ktsoator/or/coding/internal/mcpmanager"
+	"github.com/ktsoator/or/coding/internal/mcp"
 	"github.com/ktsoator/or/coding/internal/provider"
 	"github.com/ktsoator/or/coding/internal/usage"
 	"github.com/ktsoator/or/coding/internal/workspace"
@@ -19,7 +19,7 @@ import (
 type Runtime struct {
 	handler       http.Handler
 	conversations *conversation.Manager
-	mcp           *mcpmanager.Manager
+	mcp           *mcp.Manager
 	ledger        *usage.Store
 	cancel        context.CancelFunc
 	closeOnce     sync.Once
@@ -51,7 +51,7 @@ func New(ctx context.Context, dataDir string) (*Runtime, error) {
 	}
 	providers.Apply()
 	providerTests := provider.NewConnectionTester(providers, llm.Complete)
-	mcp := mcpmanager.New(ctx, filepath.Join(dataDir, "mcp.json"))
+	mcp := mcp.New(ctx, filepath.Join(dataDir, "mcp.json"))
 	mcp.WarmGlobal()
 	for _, registered := range workspaces.List() {
 		mcp.Warm(registered.Path)

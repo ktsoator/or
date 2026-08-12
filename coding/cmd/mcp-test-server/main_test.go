@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ktsoator/or/coding/internal/mcpclient"
+	ormcp "github.com/ktsoator/or/coding/internal/mcp"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -107,7 +107,7 @@ func TestLocalMCPServer(t *testing.T) {
 func TestLocalMCPServerThroughOrProbe(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	result, err := mcpclient.Probe(ctx, "local-test", mcpclient.ServerConfig{
+	result, err := ormcp.Probe(ctx, "local-test", ormcp.ServerConfig{
 		Command:        os.Args[0],
 		Args:           []string{"-test.run=^TestMCPStdioHelper$"},
 		Env:            map[string]string{"OR_MCP_TEST_HELPER": "1"},

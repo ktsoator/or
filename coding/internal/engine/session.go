@@ -9,7 +9,7 @@ import (
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/compaction"
-	"github.com/ktsoator/or/coding/internal/modelcontext"
+	"github.com/ktsoator/or/coding/internal/contextprojection"
 	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/coding/internal/skills"
 	"github.com/ktsoator/or/coding/internal/tools"
@@ -103,7 +103,7 @@ type Session struct {
 
 	contextRevision        string
 	pendingContextRevision string
-	modelContext           *modelcontext.Manager
+	contextProjection      *contextprojection.Manager
 	instructions           string
 
 	maxRetries    int

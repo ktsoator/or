@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/ktsoator/or/coding/internal/engine"
-	"github.com/ktsoator/or/coding/internal/mcpbridge"
 	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/coding/internal/transcript"
 	"github.com/ktsoator/or/llm"
@@ -92,7 +91,7 @@ func (m *Manager) EditMessage(id, messageID, replacementText string) (Summary, e
 
 func (m *Manager) rebuildSession(runtime *sessionRuntime) (*engine.Session, error) {
 	model, _ := llm.LookupModel(runtime.record.Provider, runtime.record.Model)
-	additionalTools := mcpbridge.BuildTools(runtime.mcpLease)
+	additionalTools := runtime.mcpLease.Tools()
 	session, err := newEngineSession(m.ctx, engineSessionConfig{
 		WorkspacePath:   runtime.record.WorkspacePath,
 		TranscriptPath:  runtime.record.Transcript,

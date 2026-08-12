@@ -11,17 +11,16 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/ktsoator/or/coding/internal/mcpbridge"
-	"github.com/ktsoator/or/coding/internal/mcpclient"
+	"github.com/ktsoator/or/coding/internal/mcp"
 )
 
 var mcpServerName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
 type mcpServerInfo struct {
-	Name       string                 `json:"name"`
-	Config     mcpclient.ServerConfig `json:"config"`
-	InScope    *bool                  `json:"inScope,omitempty"`
-	Diagnostic string                 `json:"diagnostic,omitempty"`
+	Name       string           `json:"name"`
+	Config     mcp.ServerConfig `json:"config"`
+	InScope    *bool            `json:"inScope,omitempty"`
+	Diagnostic string           `json:"diagnostic,omitempty"`
 }
 
 type mcpListResponse struct {
@@ -30,9 +29,9 @@ type mcpListResponse struct {
 }
 
 type mcpServerSaveRequest struct {
-	Name         string                 `json:"name"`
-	PreviousName string                 `json:"previousName,omitempty"`
-	Config       mcpclient.ServerConfig `json:"config"`
+	Name         string           `json:"name"`
+	PreviousName string           `json:"previousName,omitempty"`
+	Config       mcp.ServerConfig `json:"config"`
 }
 
 type mcpProbeTool struct {
@@ -107,7 +106,7 @@ func (s *Server) handleSaveMCPServer(c *gin.Context) {
 		delete(config.MCPServers, request.PreviousName)
 	}
 	config.MCPServers[request.Name] = request.Config
-	if err := mcpclient.WriteConfig(s.mcpConfigPath, config); err != nil {
+	if err := mcp.WriteConfig(s.mcpConfigPath, config); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -140,7 +139,7 @@ func (s *Server) handleDeleteMCPServer(c *gin.Context) {
 		return
 	}
 	delete(config.MCPServers, name)
-	if err := mcpclient.WriteConfig(s.mcpConfigPath, config); err != nil {
+	if err := mcp.WriteConfig(s.mcpConfigPath, config); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -184,7 +183,7 @@ func (s *Server) handleTestMCPServer(c *gin.Context) {
 		return
 	}
 	started := time.Now()
-	result, err := mcpclient.Probe(c.Request.Context(), name, server, c.Query("workspace"))
+	result, err := mcp.Probe(c.Request.Context(), name, server, c.Query("workspace"))
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
@@ -196,11 +195,11 @@ func (s *Server) handleTestMCPServer(c *gin.Context) {
 	})
 }
 
-func projectMCPProbeTools(serverName string, discovered []mcpclient.ProbeTool) []mcpProbeTool {
+func projectMCPProbeTools(serverName string, discovered []mcp.ProbeTool) []mcpProbeTool {
 	tools := make([]mcpProbeTool, 0, len(discovered))
 	for _, tool := range discovered {
 		tools = append(tools, mcpProbeTool{
-			Name:        mcpbridge.ToolName(serverName, tool.Name),
+			Name:        mcp.ToolName(serverName, tool.Name),
 			Original:    tool.Name,
 			Title:       tool.Title,
 			Description: tool.Description,
@@ -210,15 +209,15 @@ func projectMCPProbeTools(serverName string, discovered []mcpclient.ProbeTool) [
 	return tools
 }
 
-func readMCPConfig(path string) (mcpclient.Config, error) {
-	config, err := mcpclient.ReadConfig(path)
+func readMCPConfig(path string) (mcp.Config, error) {
+	config, err := mcp.ReadConfig(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return mcpclient.Config{Version: 1, MCPServers: make(map[string]mcpclient.ServerConfig)}, nil
+		return mcp.Config{Version: 1, MCPServers: make(map[string]mcp.ServerConfig)}, nil
 	}
 	return config, err
 }
 
-func projectMCPConfig(path, workspace string, config mcpclient.Config) mcpListResponse {
+func projectMCPConfig(path, workspace string, config mcp.Config) mcpListResponse {
 	names := make([]string, 0, len(config.MCPServers))
 	for name := range config.MCPServers {
 		names = append(names, name)
@@ -231,7 +230,7 @@ func projectMCPConfig(path, workspace string, config mcpclient.Config) mcpListRe
 	return response
 }
 
-func projectMCPServer(name string, config mcpclient.ServerConfig, workspace string) mcpServerInfo {
+func projectMCPServer(name string, config mcp.ServerConfig, workspace string) mcpServerInfo {
 	info := mcpServerInfo{Name: name, Config: config}
 	if err := config.Validate(); err != nil {
 		info.Diagnostic = err.Error()

@@ -7,7 +7,7 @@ import (
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/compaction"
-	"github.com/ktsoator/or/coding/internal/modelcontext"
+	"github.com/ktsoator/or/coding/internal/contextprojection"
 	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/coding/internal/skills"
 	"github.com/ktsoator/or/coding/internal/tools"
@@ -95,18 +95,18 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	}
 	baseRendered, baseRevision := s.buildBaseContext()
 	s.contextRevision = baseRevision
-	s.modelContext = modelcontext.New(
+	s.contextProjection = contextprojection.New(
 		nextContextEpoch(entries),
 		baseRevision,
 		baseRendered,
 		s.skillRevision,
 		s.buildSkillListing(),
 	)
-	s.modelContext.RestoreActivatedSkills(restoredActivatedSkills(entries))
+	s.contextProjection.RestoreActivatedSkills(restoredActivatedSkills(entries))
 	if s.tasks != nil {
 		s.taskUnsubscribe = s.tasks.Subscribe(func(state tools.TaskState) {
 			if state.Status != tools.TaskRunning {
-				s.modelContext.StageTaskStatus(renderTaskStatus(s.tasks.Completed()))
+				s.contextProjection.StageTaskStatus(renderTaskStatus(s.tasks.Completed()))
 			}
 			eventType := TaskCompleted
 			if state.Status == tools.TaskRunning {

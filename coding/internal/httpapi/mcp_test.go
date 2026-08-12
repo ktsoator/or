@@ -12,8 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/ktsoator/or/coding/internal/mcpclient"
-	"github.com/ktsoator/or/coding/internal/mcpmanager"
+	"github.com/ktsoator/or/coding/internal/mcp"
 )
 
 func TestMCPConfigEndpointsCreateRenameListAndDelete(t *testing.T) {
@@ -121,14 +120,14 @@ func TestMCPConfigEndpointSurfacesMalformedFile(t *testing.T) {
 
 func TestMCPSaveAndDeleteReloadManagerConfiguration(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mcp.json")
-	manager := mcpmanager.New(t.Context(), path)
+	manager := mcp.New(t.Context(), path)
 	t.Cleanup(manager.Close)
 	router := gin.New()
 	(&Server{mcp: manager, mcpConfigPath: path}).mountMCP(router.Group("/api"))
 
 	saved := mcpRequest(t, router, http.MethodPut, "/api/mcp/servers", mcpServerSaveRequest{
 		Name: "disabled-test",
-		Config: mcpclient.ServerConfig{
+		Config: mcp.ServerConfig{
 			Disabled: true,
 			Command:  "example",
 		},
@@ -139,7 +138,7 @@ func TestMCPSaveAndDeleteReloadManagerConfiguration(t *testing.T) {
 	lease := manager.Acquire(t.Context(), t.TempDir())
 	statuses := lease.Statuses()
 	lease.Close()
-	if len(statuses) != 1 || statuses[0].Name != "disabled-test" || statuses[0].State != mcpclient.StateDisabled {
+	if len(statuses) != 1 || statuses[0].Name != "disabled-test" || statuses[0].State != mcp.StateDisabled {
 		t.Fatalf("statuses after save = %#v", statuses)
 	}
 
@@ -156,7 +155,7 @@ func TestMCPSaveAndDeleteReloadManagerConfiguration(t *testing.T) {
 }
 
 func TestProjectMCPProbeToolsKeepsProductNamingAtHTTPBoundary(t *testing.T) {
-	tools := projectMCPProbeTools("demo server", []mcpclient.ProbeTool{{
+	tools := projectMCPProbeTools("demo server", []mcp.ProbeTool{{
 		Name:        "read.file",
 		Title:       "Read file",
 		Description: "Reads one file.",

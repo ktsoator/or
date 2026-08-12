@@ -32,7 +32,7 @@ import {
   RemoveWorkspaceDialog,
 } from './SessionDialogs'
 import { useI18n } from '@/i18n'
-import { useSidebarLayout } from '@/useSidebarLayout'
+import { useSidebarLayout } from './useSidebarLayout'
 
 const SettingsPage = lazy(() =>
   import('@/features/settings/SettingsPage').then((module) => ({ default: module.SettingsPage })),

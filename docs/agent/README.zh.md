@@ -156,3 +156,6 @@ go get github.com/ktsoator/or/agent@latest
 
 完整的导出类型和函数，参见
 [pkg.go.dev](https://pkg.go.dev/github.com/ktsoator/or/agent) 上的包文档。
+
+仓库贡献者还可以阅读
+[后端架构与分层边界](https://github.com/ktsoator/or/blob/main/agent/ARCHITECTURE.md)。

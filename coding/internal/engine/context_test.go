@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/ktsoator/or/agent"
-	"github.com/ktsoator/or/coding/internal/modelcontext"
+	"github.com/ktsoator/or/coding/internal/contextprojection"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -22,11 +22,11 @@ func TestEstimateContextBreakdownCalibratesCategoriesToMeasuredTotal(t *testing.
 			agent.FromLLM(llm.AssistantText("I will inspect it.")),
 		},
 	}
-	attachments := []modelcontext.Attachment{
-		{Kind: modelcontext.BaseContext, Rendered: "workspace environment and AGENTS.md"},
-		{Kind: modelcontext.SkillListing, Rendered: "available Skills"},
-		{Kind: modelcontext.ActivatedSkill, Rendered: "activated Skill instructions"},
-		{Kind: modelcontext.TaskStatus, Rendered: "background task status"},
+	attachments := []contextprojection.Attachment{
+		{Kind: contextprojection.BaseContext, Rendered: "workspace environment and AGENTS.md"},
+		{Kind: contextprojection.SkillListing, Rendered: "available Skills"},
+		{Kind: contextprojection.ActivatedSkill, Rendered: "activated Skill instructions"},
+		{Kind: contextprojection.TaskStatus, Rendered: "background task status"},
 	}
 
 	breakdown := estimateContextBreakdown(state, attachments, 10_000)

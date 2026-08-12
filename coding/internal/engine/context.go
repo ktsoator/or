@@ -5,7 +5,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/ktsoator/or/agent"
-	"github.com/ktsoator/or/coding/internal/modelcontext"
+	"github.com/ktsoator/or/coding/internal/contextprojection"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -67,7 +67,7 @@ func (s *Session) ContextUsage() ContextUsage {
 		if result.Measured {
 			result.Breakdown = estimateContextBreakdown(
 				state,
-				s.modelContext.ProjectedAttachments(),
+				s.contextProjection.ProjectedAttachments(),
 				result.UsedTokens,
 			)
 		}
@@ -85,7 +85,7 @@ func usageTokens(usage llm.Usage) int64 {
 
 func estimateContextBreakdown(
 	state agent.State,
-	attachments []modelcontext.Attachment,
+	attachments []contextprojection.Attachment,
 	usedTokens int64,
 ) *ContextBreakdown {
 	if usedTokens <= 0 {
@@ -99,11 +99,11 @@ func estimateContextBreakdown(
 	for _, attachment := range attachments {
 		tokens := estimateTextTokens(attachment.Rendered) + messageTokenOverhead
 		switch attachment.Kind {
-		case modelcontext.SkillListing, modelcontext.SkillsUpdate, modelcontext.ActivatedSkill:
+		case contextprojection.SkillListing, contextprojection.SkillsUpdate, contextprojection.ActivatedSkill:
 			estimated.Skills += tokens
-		case modelcontext.BaseContext, modelcontext.ContextUpdate:
+		case contextprojection.BaseContext, contextprojection.ContextUpdate:
 			estimated.ProjectContext += tokens
-		case modelcontext.TaskStatus:
+		case contextprojection.TaskStatus:
 			estimated.Messages += tokens
 		}
 	}

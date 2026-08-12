@@ -3,78 +3,12 @@ package engine
 import (
 	"context"
 	"errors"
-	"sync"
 	"time"
 
 	"github.com/ktsoator/or/agent"
-	"github.com/ktsoator/or/coding/internal/skills"
 	"github.com/ktsoator/or/coding/internal/transcript"
 	"github.com/ktsoator/or/llm"
 )
-
-type sessionRunState struct {
-	mu sync.RWMutex
-
-	ctx                  context.Context
-	startedAt            time.Time
-	entryStart           int
-	autoCompactAttempted bool
-	persistenceErr       error
-}
-
-// Prompt starts a run from a text message and optional images, blocking until it
-// completes. Newly appended messages are persisted. It returns ErrBusy if a run
-// is already in progress.
-func (s *Session) Prompt(ctx context.Context, text string, images ...llm.ImageContent) error {
-	return s.PromptWithFiles(ctx, text, nil, images...)
-}
-
-// PromptWithFiles starts a run with text files that remain product-owned
-// context rather than becoming a new LLM SDK content type.
-func (s *Session) PromptWithFiles(
-	ctx context.Context,
-	text string,
-	files []AttachedFile,
-	images ...llm.ImageContent,
-) error {
-	return s.run(ctx, func(ctx context.Context) error {
-		message, err := s.promptMessage(text, files, images...)
-		if err != nil {
-			return err
-		}
-		return s.agent.Prompt(ctx, message)
-	})
-}
-
-func (s *Session) promptMessage(
-	text string,
-	files []AttachedFile,
-	images ...llm.ImageContent,
-) (agent.AgentMessage, error) {
-	registry := s.skillRegistry.Snapshot()
-	if s.pendingSkills != nil {
-		registry = s.pendingSkills
-	}
-	_, matched, err := registry.ResolveExplicitInvocation(text)
-	if err != nil {
-		return nil, err
-	}
-	if matched {
-		if activated, ok := registry.ExplicitInvocationSkill(text); ok {
-			s.modelContext.StageActivatedSkill(
-				activated.Name,
-				"",
-				skills.FormatActivatedContext(activated),
-			)
-		}
-		return userMessage(
-			registry.DisplayExplicitInvocation(text),
-			files,
-			images,
-		), nil
-	}
-	return userMessage(text, files, images), nil
-}
 
 // Continue resumes a run from the current transcript without adding a message.
 // It returns ErrBusy if a run is already in progress.
@@ -207,47 +141,4 @@ func (s *Session) persistedRunMessageIDs(startedAt time.Time) ([]string, string)
 		}
 	}
 	return userMessageIDs, assistantMessageID
-}
-
-func (s *Session) setRunState(ctx context.Context, startedAt time.Time, entryStart int) {
-	s.runState.mu.Lock()
-	s.runState.ctx = ctx
-	s.runState.startedAt = startedAt
-	s.runState.entryStart = entryStart
-	s.runState.autoCompactAttempted = false
-	s.runState.persistenceErr = nil
-	s.runState.mu.Unlock()
-}
-
-func (s *Session) clearRunState() {
-	s.runState.mu.Lock()
-	s.runState.ctx = nil
-	s.runState.startedAt = time.Time{}
-	s.runState.entryStart = 0
-	s.runState.autoCompactAttempted = false
-	s.runState.persistenceErr = nil
-	s.runState.mu.Unlock()
-}
-
-func (s *Session) recordRunPersistenceError(err error) {
-	if err == nil {
-		return
-	}
-	s.runState.mu.Lock()
-	if s.runState.persistenceErr == nil {
-		s.runState.persistenceErr = err
-	}
-	s.runState.mu.Unlock()
-}
-
-func (s *Session) runPersistenceError() error {
-	s.runState.mu.RLock()
-	defer s.runState.mu.RUnlock()
-	return s.runState.persistenceErr
-}
-
-func (s *Session) activeRunState() (context.Context, time.Time, int) {
-	s.runState.mu.RLock()
-	defer s.runState.mu.RUnlock()
-	return s.runState.ctx, s.runState.startedAt, s.runState.entryStart
 }

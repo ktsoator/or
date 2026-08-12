@@ -41,6 +41,9 @@ Electron supervises `cmd/coding-desktop`, which hosts the runtime assembled by
 `internal/app`. Product policy stays inside `coding`; `agent` and `llm` must not
 import it. The `coding` product packages must not depend on `harness`.
 
+Repository contributors can read the Coding Agent backend ownership and run
+invariants in [`internal/engine/ARCHITECTURE.md`](internal/engine/ARCHITECTURE.md).
+
 ## Agent Skills
 
 Or implements the open [Agent Skills specification](https://agentskills.io/specification).

@@ -11,7 +11,7 @@ import {
   MIN_SIDEBAR_WIDTH,
   keyboardSidebarWidth,
   resizedSidebarWidth,
-} from '@/sidebarLayout'
+} from '@/shared/lib/sidebarLayout'
 
 export function useSettingsSidebarLayout() {
   const [collapsed, setCollapsed] = useState(false)

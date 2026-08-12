@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/ktsoator/or/agent"
-	"github.com/ktsoator/or/coding/internal/modelcontext"
+	"github.com/ktsoator/or/coding/internal/contextprojection"
 	"github.com/ktsoator/or/coding/internal/skills"
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/transcript"
@@ -58,7 +58,7 @@ func TestModelActivatedSkillSurvivesCompactionAndRestore(t *testing.T) {
 	activatedEntries := 0
 	for _, entry := range session.Entries() {
 		if entry.Type == transcript.ContextEntry && entry.Context != nil &&
-			entry.Context.Kind == string(modelcontext.ActivatedSkill) {
+			entry.Context.Kind == string(contextprojection.ActivatedSkill) {
 			activatedEntries++
 			if entry.Context.Path != "review" || !strings.Contains(entry.Context.Rendered, protectedBody) {
 				t.Fatalf("activated Skill entry = %#v", entry.Context)

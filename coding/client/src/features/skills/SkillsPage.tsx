@@ -9,7 +9,7 @@ import {
   type SkillsResponse,
 } from './catalog'
 import { Markdown } from '@/shared/ui/Markdown'
-import { SidebarToggleButton } from '@/components/SidebarToggleButton'
+import { SidebarToggleButton } from '@/shared/ui/SidebarToggleButton'
 
 // relativizeHome trims the user's home prefix off an absolute path so directory
 // hints read as "~/.agents/skills/commit" rather than a long absolute path.

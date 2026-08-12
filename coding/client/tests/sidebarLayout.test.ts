@@ -1,11 +1,13 @@
 import { describe, expect, test } from 'bun:test'
 import {
   clampSidebarWidth,
-  groupSidebarSessions,
   keyboardSidebarWidth,
-  parsePinnedSessionIDs,
   resizedSidebarWidth,
-} from '../src/sidebarLayout'
+} from '../src/shared/lib/sidebarLayout'
+import {
+  groupSidebarSessions,
+  parsePinnedSessionIDs,
+} from '../src/app/sessionSidebarLayout'
 import type { SessionSummary, WorkspaceSummary } from '../src/types'
 
 function session(

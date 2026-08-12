@@ -23,7 +23,7 @@ import {
   AwaitingResponse,
   ThreadItem,
 } from './ConversationThread'
-import { SidebarToggleButton } from '@/components/SidebarToggleButton'
+import { SidebarToggleButton } from '@/shared/ui/SidebarToggleButton'
 import { StepGroup } from './StepGroup'
 import { ConversationBranchNavigation } from './ConversationBranchNavigation'
 
