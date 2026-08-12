@@ -165,3 +165,6 @@ go get github.com/ktsoator/or/agent@latest
 
 For exported types and functions, see the package documentation on
 [pkg.go.dev](https://pkg.go.dev/github.com/ktsoator/or/agent).
+
+Repository contributors can also read the
+[backend architecture and layer boundaries](https://github.com/ktsoator/or/blob/main/agent/ARCHITECTURE.md).
