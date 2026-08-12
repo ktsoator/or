@@ -64,7 +64,7 @@ func Fork(entries []Entry, messageID string, mode ForkMode, replacementText stri
 		forked = append(forked, replacement)
 
 	case ForkAfterAssistant:
-		message, ok := agent.ToLLM(entries[target].Message)
+		message, _ := agent.ToLLM(entries[target].Message)
 		assistant, ok := message.(*llm.AssistantMessage)
 		if !ok || !isCompletedAssistant(assistant) {
 			return nil, fmt.Errorf("%w: after_assistant requires a completed assistant response", ErrInvalidForkBoundary)
@@ -93,7 +93,7 @@ func validateBeforeUserBoundary(entries []Entry) error {
 		if entries[index].Type != MessageEntry {
 			continue
 		}
-		message, ok := agent.ToLLM(entries[index].Message)
+		message, _ := agent.ToLLM(entries[index].Message)
 		assistant, ok := message.(*llm.AssistantMessage)
 		if ok && isCompletedAssistant(assistant) {
 			return nil
@@ -155,7 +155,7 @@ func hasUnresolvedToolCalls(messages []agent.AgentMessage) bool {
 }
 
 func replaceUserText(entry Entry, replacementText string) (Entry, error) {
-	message, ok := agent.ToLLM(entry.Message)
+	message, _ := agent.ToLLM(entry.Message)
 	user, ok := message.(*llm.UserMessage)
 	if !ok || user == nil {
 		return Entry{}, fmt.Errorf("%w: before_user requires a user message", ErrInvalidForkBoundary)
