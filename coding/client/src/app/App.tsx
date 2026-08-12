@@ -96,6 +96,7 @@ export default function App() {
     deleteSession,
     renameSession,
     forkMessage,
+    editMessage,
     selectSession,
     updateSettings,
     updatePermissionMode,
@@ -634,6 +635,7 @@ export default function App() {
             : undefined,
           branchPointLocated: handleBranchPointLocated,
           forkMessage,
+          editMessage,
           renderComposer: composer,
         }}
       />

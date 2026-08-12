@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils'
 import { Markdown } from '@/shared/ui/Markdown'
 import { BranchSessionDialog } from './BranchSessionDialog'
 import { CopyButton } from './CopyButton'
+import { EditMessageDialog } from './EditMessageDialog'
 import { ResponseActions } from './ResponseActions'
 import { Thinking } from './Thinking'
 import { ToolCard } from './ToolCard'
@@ -67,6 +68,8 @@ export function ThreadItem({
   highlighted = false,
   branchingDisabled = false,
   onForkMessage,
+  onEditMessage,
+  editRequiresConfirmation = false,
 }: {
   item: Item
   cwd?: string
@@ -77,6 +80,8 @@ export function ThreadItem({
     mode: 'before_user' | 'after_assistant',
     text?: string,
   ) => Promise<unknown>
+  onEditMessage?: (messageID: string, text: string) => Promise<unknown>
+  editRequiresConfirmation?: boolean
 }) {
   const { locale, t } = useI18n()
   const [editing, setEditing] = useState(false)
@@ -84,6 +89,7 @@ export function ThreadItem({
   const [branching, setBranching] = useState(false)
   const [branchError, setBranchError] = useState('')
   const [branchDialogOpen, setBranchDialogOpen] = useState(false)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
 
   const startEditing = () => {
     if (item.kind !== 'user' || !item.messageID || branchingDisabled || branching) return
@@ -98,21 +104,35 @@ export function ThreadItem({
     setBranchError('')
   }
 
-  const submitEdit = async (event?: FormEvent) => {
-    event?.preventDefault()
-    if (item.kind !== 'user' || !item.messageID || !onForkMessage || branchingDisabled || branching) {
+  const applyEdit = async () => {
+    if (item.kind !== 'user' || !item.messageID || !onEditMessage || branchingDisabled || branching) {
       return
     }
-    if (!editText.trim() && item.images.length === 0 && (item.files?.length ?? 0) === 0) return
     setBranching(true)
     setBranchError('')
     try {
-      await onForkMessage(item.messageID, 'before_user', editText)
+      await onEditMessage(item.messageID, editText)
+      setEditDialogOpen(false)
+      setEditing(false)
     } catch {
-      setBranchError(t('actions.branchFailed'))
+      setBranchError(t('actions.editFailed'))
     } finally {
       setBranching(false)
     }
+  }
+
+  const submitEdit = (event?: FormEvent) => {
+    event?.preventDefault()
+    if (item.kind !== 'user' || !item.messageID || !onEditMessage || branchingDisabled || branching) {
+      return
+    }
+    if (!editText.trim() && item.images.length === 0 && (item.files?.length ?? 0) === 0) return
+    setBranchError('')
+    if (editRequiresConfirmation) {
+      setEditDialogOpen(true)
+      return
+    }
+    void applyEdit()
   }
 
   const branchAssistant = async () => {
@@ -187,7 +207,7 @@ export function ThreadItem({
             {editing ? (
               <form
                 className="w-full"
-                onSubmit={(event) => void submitEdit(event)}
+                onSubmit={submitEdit}
               >
                 <div className="flex h-[100px] flex-col rounded-[20px] bg-message-editor px-3 py-2.5">
                   <textarea
@@ -203,7 +223,7 @@ export function ThreadItem({
                         cancelEditing()
                       } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
                         event.preventDefault()
-                        void submitEdit()
+                        submitEdit()
                       }
                     }}
                   />
@@ -269,7 +289,7 @@ export function ThreadItem({
                       className="size-7 rounded-lg hover:bg-surface-active focus-visible:bg-surface-active"
                     />
                   )}
-                  {onForkMessage && (
+                  {onEditMessage && (
                     <Tooltip.Provider delayDuration={80}>
                       <MessageActionButton
                         icon={Pencil}
@@ -282,6 +302,16 @@ export function ThreadItem({
                 </div>
               </div>
             )}
+            <EditMessageDialog
+              open={editDialogOpen}
+              submitting={branching}
+              error={branchError}
+              onOpenChange={(open) => {
+                setEditDialogOpen(open)
+                if (!open) setBranchError('')
+              }}
+              onConfirm={() => void applyEdit()}
+            />
           </div>
         </section>
       )

@@ -218,6 +218,8 @@ async function openDesktopClient(
   let sessionCreated = Boolean(options.existingSession)
   let workbenchSessionCreated = false
   let branchSessionCreated = false
+  let sessionHistoryEvents = options.historyEvents ?? []
+  let sessionHistoryRunning = options.historyRunning ?? false
   let remainingHealthFailures = options.healthFailures ?? 0
   let remainingBrowserResultFailures = options.browserResultFailures ?? 0
   const usageEventRangeKeys: string[] = []
@@ -463,6 +465,49 @@ async function openDesktopClient(
       return
     }
 
+    if (path === '/api/sessions/test-session/message-edits' && method === 'POST') {
+      const edit = requestBody as { messageID: string; text: string }
+      const target = sessionHistoryEvents.findIndex((event) => {
+        if (!event || typeof event !== 'object') return false
+        const candidate = event as { type?: string; messageID?: string }
+        return candidate.type === 'user_message' && candidate.messageID === edit.messageID
+      })
+      if (target < 0) {
+        await route.fulfill({
+          status: 404,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'message not found' }),
+        })
+        return
+      }
+      const original = sessionHistoryEvents[target] as Record<string, unknown>
+      sessionHistoryEvents = [
+        ...sessionHistoryEvents.slice(0, target),
+        {
+          ...original,
+          messageID: 'edited-user-message',
+          text: edit.text,
+        },
+      ]
+      if (branchSessionCreated) {
+        delete (branchSession as { forkedFromMessageId?: string }).forkedFromMessageId
+      }
+      sessionHistoryRunning = true
+      createdSession.running = true
+      await route.fulfill({
+        status: 202,
+        contentType: 'application/json',
+        body: JSON.stringify(createdSession),
+      })
+      await page.evaluate(() => {
+        const emit = (window as Window & {
+          __emitSessionSSE?: (sessionID: string, payload: unknown) => void
+        }).__emitSessionSSE
+        emit?.('test-session', { type: 'sync_required' })
+      })
+      return
+    }
+
     if (path === '/api/workspaces' && method === 'POST') {
       const workspacePath = (requestBody as { path: string }).path
       await route.fulfill({
@@ -624,11 +669,11 @@ async function openDesktopClient(
     }
     if (path === '/api/sessions/test-session/history') {
       body = {
-        events: options.historyEvents ?? [],
+        events: sessionHistoryEvents,
         tasks: options.backgroundTasks ?? [],
         queue: [],
         context: options.contextUsage ?? {},
-        running: options.historyRunning ?? false,
+        running: sessionHistoryRunning,
         eventSeq: options.historyEventSeq ?? 0,
       }
     }
@@ -3917,6 +3962,103 @@ test('branching from an assistant response requires confirmation', async ({ page
   await branchNavigation.getByRole('button', { name: 'View 1 branch' }).click()
   await page.getByRole('menuitem', { name: 'New session (branch)' }).click()
   await expect(page.getByTestId('conversation-title')).toContainText('New session (branch)')
+})
+
+test('editing a historical message rewrites the current session after confirmation', async ({ page }) => {
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    historyEvents: [
+      {
+        type: 'user_message',
+        messageID: 'user-edit-target',
+        text: 'Original question',
+        images: [],
+      },
+      {
+        type: 'message_end',
+        messageID: 'assistant-old-answer',
+        text: 'Old answer that should be removed',
+        finalResponse: true,
+      },
+      {
+        type: 'user_message',
+        messageID: 'user-later-message',
+        text: 'Later question that should be removed',
+        images: [],
+      },
+    ],
+  })
+
+  const userMessage = page.getByTestId('user-message').filter({ hasText: 'Original question' })
+  await userMessage.hover()
+  await userMessage.getByRole('button', { name: 'Edit message' }).click()
+  const editor = userMessage.getByRole('textbox', { name: 'Edit message' })
+  await editor.fill('Rewritten question')
+  await page.getByRole('button', { name: 'Send edited message' }).click()
+
+  const dialog = page.getByRole('dialog', { name: 'Edit this message?' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog).toContainText('Workspace files will stay as they are.')
+  expect(requests.some((request) => request.path.endsWith('/message-edits'))).toBe(false)
+
+  await dialog.getByRole('button', { name: 'Edit and continue' }).click()
+  await expect.poll(() => requests.find((request) => request.path.endsWith('/message-edits'))?.body).toEqual({
+    messageID: 'user-edit-target',
+    text: 'Rewritten question',
+  })
+  await expect(dialog).toBeHidden()
+  await expect(page.getByTestId('conversation-title')).toContainText('New session')
+  await expect(page.getByText('Rewritten question')).toBeVisible()
+  await expect(page.getByText('Old answer that should be removed')).toHaveCount(0)
+  await expect(page.getByText('Later question that should be removed')).toHaveCount(0)
+  expect(requests.filter((request) => request.path.endsWith('/forks'))).toHaveLength(0)
+  expect(requests.filter((request) => request.path === '/api/sessions' && request.method === 'POST')).toHaveLength(0)
+})
+
+test('a branch returns without locating a message after its source history is edited', async ({ page }) => {
+  await openDesktopClient(page, {
+    existingSession: true,
+    historyEvents: [
+      {
+        type: 'user_message',
+        messageID: 'user-branch-origin',
+        text: 'Question before branching',
+        images: [],
+      },
+      {
+        type: 'message_end',
+        messageID: 'assistant-branch',
+        text: 'Answer used to create a branch',
+        finalResponse: true,
+      },
+    ],
+  })
+
+  await page.getByRole('button', { name: 'Branch from this response' }).click()
+  await page.getByRole('dialog', { name: 'Create a new branch?' })
+    .getByRole('button', { name: 'Create branch' })
+    .click()
+  const branchNavigation = page.getByTestId('conversation-branch-navigation')
+  await branchNavigation.getByRole('button', { name: 'Return to New session' }).click()
+
+  const userMessage = page.getByTestId('user-message').filter({ hasText: 'Question before branching' })
+  await userMessage.hover()
+  await userMessage.getByRole('button', { name: 'Edit message' }).click()
+  await userMessage.getByRole('textbox', { name: 'Edit message' }).fill('Replacement branch point')
+  await page.getByRole('button', { name: 'Send edited message' }).click()
+  await page.getByRole('dialog', { name: 'Edit this message?' })
+    .getByRole('button', { name: 'Edit and continue' })
+    .click()
+  await expect(page.getByText('Replacement branch point')).toBeVisible()
+
+  await branchNavigation.getByRole('button', { name: 'View 1 branch' }).click()
+  await page.getByRole('menuitem', { name: 'New session (branch)' }).click()
+  await expect(branchNavigation.getByText('Original branch point edited')).toBeVisible()
+  await branchNavigation.getByRole('button', { name: 'Return to New session' }).click()
+
+  const replacement = page.locator('[data-branch-point-message-id="edited-user-message"]')
+  await expect(replacement).toContainText('Replacement branch point')
+  await expect(replacement).not.toHaveAttribute('data-branch-point-highlighted', 'true')
 })
 
 test('unknown provider input is shown as unavailable', async ({ page }) => {

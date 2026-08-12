@@ -31,6 +31,7 @@ export type SessionResourceAPI = {
   removeWorkspace: (path: string) => Promise<void>
   createSession: (input: CreateSessionInput) => Promise<SessionSummary>
   forkSession: (id: string, input: ForkSessionInput) => Promise<SessionSummary>
+  editMessage: (id: string, messageID: string, text: string) => Promise<SessionSummary>
   deleteSession: (id: string) => Promise<void>
   renameSession: (id: string, customTitle: string) => Promise<SessionSummary>
   updateSettings: (
@@ -146,6 +147,13 @@ export function createSessionResourceAPI(request: Request = browserRequest): Ses
         sessionURL(id, '/forks'),
         jsonRequest('POST', input),
         (status) => `branch session failed (${status})`,
+      ),
+    editMessage: (id, messageID, text) =>
+      requestJSON(
+        request,
+        sessionURL(id, '/message-edits'),
+        jsonRequest('POST', { messageID, text }),
+        (status) => `edit message failed (${status})`,
       ),
     deleteSession: (id) =>
       requestOK(

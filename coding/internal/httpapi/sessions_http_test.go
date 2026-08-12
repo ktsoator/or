@@ -191,6 +191,78 @@ func TestForkSessionHTTPRejectsActiveSource(t *testing.T) {
 	waitForHTTPTestSessionIdle(t, manager, source.ID)
 }
 
+func TestEditMessageHTTPKeepsSessionIdentity(t *testing.T) {
+	responses := []string{"old answer", "new answer"}
+	manager, transports, model, thinking := newForkHTTPManager(t, func(
+		_ context.Context,
+		model llm.Model,
+		_ llm.Context,
+		_ llm.StreamOptions,
+	) (<-chan llm.Event, error) {
+		text := responses[0]
+		responses = responses[1:]
+		message := llm.NewAssistantMessage(model)
+		message.Content = []llm.AssistantContent{&llm.TextContent{Text: text}}
+		message.StopReason = llm.StopReasonStop
+		events := make(chan llm.Event, 1)
+		events <- llm.Event{Type: llm.EventDone, Message: &message}
+		close(events)
+		return events, nil
+	})
+	source, err := manager.Create("Source", t.TempDir(), conversation.ScopeProject, model, thinking, permission.ModeAsk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.StartPromptWithFiles(source.ID, "question", nil); err != nil {
+		t.Fatal(err)
+	}
+	waitForHTTPTestSessionIdle(t, manager, source.ID)
+	snapshot, err := manager.Snapshot(source.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var userID string
+	for _, item := range snapshot.History {
+		if item.Type == engine.HistoryUser {
+			userID = item.MessageID
+			break
+		}
+	}
+	if userID == "" {
+		t.Fatal("history has no editable user message")
+	}
+
+	handler := NewServer(Options{Conversations: manager, Transports: transports}).Handler()
+	response := sessionPostRequest(t, handler, source.ID, "/message-edits", map[string]any{
+		"messageID": userID,
+		"text":      "edited question",
+	})
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("edit status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var updated conversation.Summary
+	if err := json.Unmarshal(response.Body.Bytes(), &updated); err != nil {
+		t.Fatal(err)
+	}
+	if updated.ID != source.ID || !updated.Running || len(manager.List()) != 1 {
+		t.Fatalf("edited session = %+v, sessions = %+v", updated, manager.List())
+	}
+	waitForHTTPTestSessionIdle(t, manager, source.ID)
+	snapshot, err = manager.Snapshot(source.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var texts []string
+	for _, item := range snapshot.History {
+		if item.Type == engine.HistoryUser || item.Type == engine.HistoryAssistant {
+			texts = append(texts, item.Text)
+		}
+	}
+	if strings.Join(texts, "|") != "edited question|new answer" {
+		t.Fatalf("edited history = %q", texts)
+	}
+}
+
 func newForkHTTPManager(
 	t *testing.T,
 	streamFn agent.StreamFn,
@@ -240,6 +312,15 @@ func newForkHTTPManager(
 }
 
 func forkHTTPRequest(t *testing.T, handler http.Handler, sessionID string, body any) *httptest.ResponseRecorder {
+	return sessionPostRequest(t, handler, sessionID, "/forks", body)
+}
+
+func sessionPostRequest(
+	t *testing.T,
+	handler http.Handler,
+	sessionID, suffix string,
+	body any,
+) *httptest.ResponseRecorder {
 	t.Helper()
 	encoded, err := json.Marshal(body)
 	if err != nil {
@@ -247,7 +328,7 @@ func forkHTTPRequest(t *testing.T, handler http.Handler, sessionID string, body 
 	}
 	request := httptest.NewRequest(
 		http.MethodPost,
-		"/api/sessions/"+sessionID+"/forks",
+		"/api/sessions/"+sessionID+suffix,
 		bytes.NewReader(encoded),
 	)
 	request.Header.Set("Content-Type", "application/json")

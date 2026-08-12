@@ -71,6 +71,7 @@ type ConversationPaneProps = {
       mode: 'before_user' | 'after_assistant',
       text?: string,
     ) => Promise<SessionSummary>
+    editMessage: (messageID: string, text: string) => Promise<SessionSummary>
     renderComposer: (centered?: boolean) => ReactNode
   }
 }
@@ -118,6 +119,7 @@ export function ConversationPane({
     returnToParent,
     branchPointLocated,
     forkMessage,
+    editMessage,
     renderComposer,
   } = actions
   const [highlightedBranchPoint, setHighlightedBranchPoint] = useState<{
@@ -256,6 +258,7 @@ export function ConversationPane({
               <ConversationBranchNavigation
                 key={activeSession.id}
                 parentSession={parentSession}
+                parentBranchPointAvailable={Boolean(activeSession.forkedFromMessageId)}
                 branches={branchSessions}
                 onReturnToParent={returnToParent}
                 onSelectSession={selectSession}
@@ -358,7 +361,14 @@ export function ConversationPane({
         highlighted={highlighted}
         branchingDisabled={running || forking}
         onForkMessage={forkMessage}
+        onEditMessage={editMessage}
+        editRequiresConfirmation={hasLaterConversationContent(unit.item)}
       />
     )
+  }
+
+  function hasLaterConversationContent(item: Item) {
+    const index = items.findIndex((candidate) => candidate.id === item.id)
+    return index >= 0 && index < items.length - 1
   }
 }

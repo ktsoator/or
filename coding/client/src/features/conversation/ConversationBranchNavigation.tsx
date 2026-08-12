@@ -5,11 +5,13 @@ import { useI18n } from '@/i18n'
 
 export function ConversationBranchNavigation({
   parentSession,
+  parentBranchPointAvailable = false,
   branches,
   onReturnToParent,
   onSelectSession,
 }: {
   parentSession?: SessionSummary
+  parentBranchPointAvailable?: boolean
   branches: SessionSummary[]
   onReturnToParent?: () => void
   onSelectSession: (id: string) => void
@@ -24,17 +26,27 @@ export function ConversationBranchNavigation({
       data-testid="conversation-branch-navigation"
     >
       {parentSession && (
-        <button
-          className="window-titlebar-control flex h-7 min-w-0 max-w-[13rem] cursor-pointer items-center gap-1.5 rounded-md px-1.5 text-[0.75rem] outline-none transition-colors hover:bg-surface-active focus-visible:bg-surface-active max-sm:grid max-sm:size-7 max-sm:place-items-center max-sm:px-0"
-          type="button"
-          title={t('branchNav.returnToParent', { title: sessionTitle(parentSession) })}
-          aria-label={t('branchNav.returnToParent', { title: sessionTitle(parentSession) })}
-          onClick={onReturnToParent ?? (() => onSelectSession(parentSession.id))}
-        >
-          <CornerUpLeft className="size-3.5 shrink-0 text-ink-muted" aria-hidden="true" />
-          <span className="shrink-0 text-ink-faint max-sm:hidden">{t('branchNav.from')}</span>
-          <span className="truncate text-ink-soft max-sm:hidden">{sessionTitle(parentSession)}</span>
-        </button>
+        <div className="flex min-w-0 items-center gap-1">
+          <button
+            className="window-titlebar-control flex h-7 min-w-0 max-w-[13rem] cursor-pointer items-center gap-1.5 rounded-md px-1.5 text-[0.75rem] outline-none transition-colors hover:bg-surface-active focus-visible:bg-surface-active max-sm:grid max-sm:size-7 max-sm:place-items-center max-sm:px-0"
+            type="button"
+            title={t('branchNav.returnToParent', { title: sessionTitle(parentSession) })}
+            aria-label={t('branchNav.returnToParent', { title: sessionTitle(parentSession) })}
+            onClick={onReturnToParent ?? (() => onSelectSession(parentSession.id))}
+          >
+            <CornerUpLeft className="size-3.5 shrink-0 text-ink-muted" aria-hidden="true" />
+            <span className="shrink-0 text-ink-faint max-sm:hidden">{t('branchNav.from')}</span>
+            <span className="truncate text-ink-soft max-sm:hidden">{sessionTitle(parentSession)}</span>
+          </button>
+          {!parentBranchPointAvailable && (
+            <span
+              className="shrink-0 text-[0.6875rem] text-ink-faint max-lg:hidden"
+              title={t('branchNav.sourceEditedDescription')}
+            >
+              {t('branchNav.sourceEdited')}
+            </span>
+          )}
+        </div>
       )}
 
       {branches.length > 0 && (

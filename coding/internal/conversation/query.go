@@ -24,13 +24,12 @@ type Snapshot struct {
 // runtime that owns the engine session.
 func (m *Manager) Snapshot(id string) (Snapshot, error) {
 	m.mu.Lock()
+	defer m.mu.Unlock()
 	runtime, err := m.loadRuntimeLocked(id)
 	if err != nil {
-		m.mu.Unlock()
 		return Snapshot{}, err
 	}
 	title := runtime.displayTitle()
-	m.mu.Unlock()
 	return Snapshot{
 		History:      runtime.session.History(),
 		Queue:        runtime.pendingEvents(),
@@ -45,22 +44,30 @@ func (m *Manager) Snapshot(id string) (Snapshot, error) {
 func (m *Manager) StopTask(sessionID, taskID string) error {
 	m.mu.Lock()
 	runtime, err := m.loadRuntimeLocked(sessionID)
+	var session *engine.Session
+	if err == nil {
+		session = runtime.session
+	}
 	m.mu.Unlock()
 	if err != nil {
 		return err
 	}
-	return runtime.session.StopTask(taskID)
+	return session.StopTask(taskID)
 }
 
 // TaskOutput returns a bounded tail of one conversation task's logs.
 func (m *Manager) TaskOutput(sessionID, taskID string) (engine.TaskOutput, error) {
 	m.mu.Lock()
 	runtime, err := m.loadRuntimeLocked(sessionID)
+	var session *engine.Session
+	if err == nil {
+		session = runtime.session
+	}
 	m.mu.Unlock()
 	if err != nil {
 		return engine.TaskOutput{}, err
 	}
-	return runtime.session.TaskOutput(taskID)
+	return session.TaskOutput(taskID)
 }
 
 // WorkspacePath returns the tool root owned by one conversation.
@@ -78,12 +85,16 @@ func (m *Manager) WorkspacePath(id string) (string, error) {
 func (m *Manager) Abort(id string) error {
 	m.mu.RLock()
 	runtime, ok := m.sessions[id]
+	var session *engine.Session
+	if ok {
+		session = runtime.session
+	}
 	m.mu.RUnlock()
 	if !ok {
 		return os.ErrNotExist
 	}
-	if runtime.session != nil {
-		runtime.session.Abort()
+	if session != nil {
+		session.Abort()
 	}
 	return nil
 }

@@ -162,6 +162,31 @@ func (s *Server) handleForkSession(c *gin.Context) {
 	}
 }
 
+func (s *Server) handleEditMessage(c *gin.Context) {
+	var body struct {
+		MessageID string `json:"messageID"`
+		Text      string `json:"text"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid message edit request"})
+		return
+	}
+
+	summary, err := s.conversations.EditMessage(c.Param("sessionID"), body.MessageID, body.Text)
+	switch {
+	case errors.Is(err, os.ErrNotExist), errors.Is(err, transcript.ErrForkMessageNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": "session or message not found"})
+	case errors.Is(err, transcript.ErrInvalidForkBoundary):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	case errors.Is(err, conversation.ErrSessionActive):
+		c.JSON(http.StatusConflict, gin.H{"error": "wait for the session to become idle before editing a message"})
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	default:
+		c.JSON(http.StatusAccepted, summary)
+	}
+}
+
 func (s *Server) handleSessions(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, s.conversations.List())
@@ -603,6 +628,7 @@ func (s *Server) mountSessions(r gin.IRouter) {
 	one.GET("/events", s.handleEvents)
 	one.DELETE("", s.handleDeleteSession)
 	one.POST("/forks", s.handleForkSession)
+	one.POST("/message-edits", s.handleEditMessage)
 	one.PATCH("/settings", s.handleSessionSettings)
 	one.PATCH("/permission-mode", s.handlePermissionMode)
 	one.PATCH("/title", s.handleRenameSession)

@@ -239,7 +239,7 @@ func (m *Manager) normalizeRecord(record record) (record, error) {
 	if record.ForkedFromSessionID == record.ID {
 		return record, errors.New("session: fork source cannot be the session itself")
 	}
-	if (record.ForkedFromSessionID == "") != (record.ForkedFromMessageID == "") {
+	if record.ForkedFromSessionID == "" && record.ForkedFromMessageID != "" {
 		return record, errors.New("session: fork source metadata is incomplete")
 	}
 	if record.UsageBackfillOffset < 0 {

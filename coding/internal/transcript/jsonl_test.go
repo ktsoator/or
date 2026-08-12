@@ -92,6 +92,36 @@ func TestJSONLRoundTripsRunTiming(t *testing.T) {
 	}
 }
 
+func TestJSONLReplaceAtomicallyRewritesCompleteLog(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	store := NewJSONL(path)
+	first := NewMessage(agent.UserMessage("first"))
+	discarded := NewMessage(agent.UserMessage("discarded"))
+	if err := store.Append(context.Background(), first, discarded); err != nil {
+		t.Fatal(err)
+	}
+	replacement := NewMessage(agent.UserMessage("replacement"))
+	if err := store.Replace(context.Background(), []Entry{first, replacement}); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := NewJSONL(path).Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 2 || loaded[0].ID != first.ID || loaded[1].ID != replacement.ID {
+		t.Fatalf("replaced entries = %#v", loaded)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(data, []byte(discarded.ID)) || bytes.Contains(data, []byte("discarded")) {
+		t.Fatalf("discarded entry remains in replacement:\n%s", data)
+	}
+	assertPrivateStoragePermissions(t, filepath.Dir(path), path)
+}
+
 func TestJSONLRoundTripsToolOutcome(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session.jsonl")
 	exitCode := 17

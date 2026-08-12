@@ -79,11 +79,16 @@ type RunFailed struct{ Text string }
 // TitleChanged reports the session's current display title.
 type TitleChanged struct{ Title string }
 
+// HistoryRewritten asks viewers to replace their local projection from the
+// history endpoint before consuming the newly started run.
+type HistoryRewritten struct{}
+
 func (MessageAccepted) Event()  {}
 func (MessageDequeued) Event()  {}
 func (MessageCancelled) Event() {}
 func (RunFailed) Event()        {}
 func (TitleChanged) Event()     {}
+func (HistoryRewritten) Event() {}
 
 // emit hands one state change to the transport. It must not block: a session
 // raising an event is often mid-run.

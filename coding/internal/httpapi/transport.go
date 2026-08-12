@@ -205,6 +205,8 @@ func projectSessionWireEvent(event conversation.Event) (wireEvent, bool) {
 			Type:  wireEventTitleUpdate,
 			Title: e.Title,
 		}
+	case conversation.HistoryRewritten:
+		out = wireEvent{Type: wireEventSyncRequired}
 	default:
 		return wireEvent{}, false
 	}

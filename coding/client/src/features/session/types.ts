@@ -96,6 +96,7 @@ export type Session = ThreadView &
       mode: 'before_user' | 'after_assistant',
       text?: string,
     ) => Promise<SessionSummary>
+    editMessage: (messageID: string, text: string) => Promise<SessionSummary>
     selectSession: (id: string) => void
     queueBrowserResult: (sessionID: string, id: string, result: BrowserResult) => void
     handleBrowserTabs: (sessionID: string, id: string) => void

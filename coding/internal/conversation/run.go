@@ -133,6 +133,7 @@ func (m *Manager) reserveCompact(id string) (*sessionRuntime, error) {
 // drops queued messages that the run did not consume.
 func (m *Manager) finishRun(id string, runtime *sessionRuntime) {
 	m.mu.Lock()
+	session := runtime.session
 	if current, ok := m.sessions[id]; ok && current == runtime {
 		runtime.running.Store(false)
 		runtime.live.Store(false)
@@ -142,7 +143,7 @@ func (m *Manager) finishRun(id string, runtime *sessionRuntime) {
 	m.mu.Unlock()
 
 	cancelled := runtime.cancelPending()
-	runtime.session.ClearQueuedMessages()
+	session.ClearQueuedMessages()
 	for _, message := range cancelled {
 		runtime.emit(MessageCancelled{ID: message.ID})
 	}

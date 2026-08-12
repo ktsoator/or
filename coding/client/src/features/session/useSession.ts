@@ -301,6 +301,29 @@ export function useSession(secondarySessionID?: string): Session {
     }
   }
 
+  const editMessage = async (messageID: string, text: string) => {
+    if (!activeSessionID) throw new Error('no active session')
+    if (forkingSessionIDRef.current) {
+      throw new Error('session history is already being changed')
+    }
+    const source = sessions.find((session) => session.id === activeSessionID)
+    if (source?.running || thread?.running) throw new Error('session is not idle')
+
+    const sourceID = activeSessionID
+    forkingSessionIDRef.current = sourceID
+    setForkingSessionID(sourceID)
+    try {
+      const updated = await sessionResourceAPI.editMessage(sourceID, messageID, text)
+      dispatchSessionStore({ t: 'sessionUpdated', session: updated, front: true })
+      dispatch({ t: 'running', sessionID: sourceID, running: true })
+      await refreshSessions()
+      return updated
+    } finally {
+      forkingSessionIDRef.current = undefined
+      setForkingSessionID((current) => (current === sourceID ? undefined : current))
+    }
+  }
+
   const patchSessionSettings = async (
     sessionID: string,
     provider: string,
@@ -759,6 +782,7 @@ export function useSession(secondarySessionID?: string): Session {
     deleteSession,
     renameSession,
     forkMessage,
+    editMessage,
     selectSession,
     updateSettings,
     updatePermissionMode,
