@@ -730,6 +730,9 @@ export default function App() {
       {deleteTarget && (
         <DeleteSessionDialog
           session={deleteTarget}
+          branchCount={sessions.filter(
+            (session) => session.forkedFromSessionId === deleteTarget.id,
+          ).length}
           deleting={deleting}
           error={deleteError}
           onCancel={() => {

@@ -3880,6 +3880,14 @@ test('branching from an assistant response requires confirmation', async ({ page
     )
   }).toBe(true)
 
+  await page.getByRole('button', { name: 'Open sessions' }).click()
+  await page.getByRole('button', { name: 'Actions for New session', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Delete' }).click()
+  const deleteDialog = page.getByRole('dialog', { name: 'Delete session?' })
+  await expect(deleteDialog).toContainText('1 branch will be kept as an independent session.')
+  await deleteDialog.getByRole('button', { name: 'Cancel' }).click()
+  await page.getByRole('button', { name: 'Collapse sidebar' }).click()
+
   await branchNavigation.getByRole('button', { name: 'View 1 branch' }).click()
   await page.getByRole('menuitem', { name: 'New session (branch)' }).click()
   await expect(page.getByTestId('conversation-title')).toContainText('New session (branch)')

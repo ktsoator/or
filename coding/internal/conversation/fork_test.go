@@ -272,6 +272,67 @@ func TestManagerForkedScratchWorkspaceLivesUntilLastSessionIsDeleted(t *testing.
 	}
 }
 
+func TestManagerDeleteDetachesDirectBranchesAndPreservesNestedRelationships(t *testing.T) {
+	dataDir := t.TempDir()
+	model, thinking := testCatalogModel(t)
+	manager := newTestManager(t, dataDir)
+	manager.streamFn = forkResponses("answer")
+
+	source, err := manager.Create("Source", t.TempDir(), ScopeProject, model, thinking, permission.ModeAsk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.StartPromptWithFiles(source.ID, "question", nil); err != nil {
+		t.Fatal(err)
+	}
+	waitForSessionIdle(t, manager, source.ID)
+	assistantID := findMessageID(t, mustRuntime(t, manager, source.ID).session.Entries(), false, "answer")
+
+	first, err := manager.Fork(source.ID, ForkOptions{MessageID: assistantID, Mode: transcript.ForkAfterAssistant})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := manager.Fork(source.ID, ForkOptions{MessageID: assistantID, Mode: transcript.ForkAfterAssistant})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nested, err := manager.Fork(first.ID, ForkOptions{MessageID: assistantID, Mode: transcript.ForkAfterAssistant})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := manager.Delete(source.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, childID := range []string{first.ID, second.ID} {
+		child := mustRuntime(t, manager, childID).summary()
+		if child.ForkedFromSessionID != "" || child.ForkedFromMessageID != "" {
+			t.Fatalf("direct branch %s still has source metadata: %+v", childID, child)
+		}
+	}
+	nestedSummary := mustRuntime(t, manager, nested.ID).summary()
+	if nestedSummary.ForkedFromSessionID != first.ID || nestedSummary.ForkedFromMessageID != assistantID {
+		t.Fatalf("nested branch relationship changed: %+v", nestedSummary)
+	}
+
+	records, err := manager.loadRecords()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, stored := range records {
+		switch stored.ID {
+		case first.ID, second.ID:
+			if stored.ForkedFromSessionID != "" || stored.ForkedFromMessageID != "" {
+				t.Fatalf("stored direct branch %s still has source metadata: %+v", stored.ID, stored)
+			}
+		case nested.ID:
+			if stored.ForkedFromSessionID != first.ID || stored.ForkedFromMessageID != assistantID {
+				t.Fatalf("stored nested branch relationship changed: %+v", stored)
+			}
+		}
+	}
+}
+
 func TestManagerForkDoesNotBackfillCopiedUsageAfterRestart(t *testing.T) {
 	dataDir := t.TempDir()
 	model, thinking := testCatalogModel(t)
