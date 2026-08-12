@@ -30,7 +30,7 @@ func TestRepositorySkillCollectionIsValid(t *testing.T) {
 	if !ok {
 		t.Fatal("resolve test file path")
 	}
-	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", "..", "skills"))
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", "..", "catalog", "skills"))
 	reg, diags := Load(LoadOptions{UserDir: root})
 	if len(diags) != 0 {
 		t.Fatalf("collection diagnostics: %+v", diags)
