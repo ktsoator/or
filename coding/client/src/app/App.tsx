@@ -1,6 +1,7 @@
 import {
   lazy,
   Suspense,
+  useCallback,
   useEffect,
   useState,
   type CSSProperties,
@@ -49,9 +50,15 @@ type AppView =
   | { type: 'skills' }
   | { type: 'mcp' }
 
+type BranchPointTarget = {
+  sessionID: string
+  messageID: string
+}
+
 export default function App() {
   const { t } = useI18n()
   const [secondarySessionID, setSecondarySessionID] = useState<string>()
+  const [branchPointTarget, setBranchPointTarget] = useState<BranchPointTarget>()
   const [workbenchTaskRequest, setWorkbenchTaskRequest] =
     useState<WorkbenchTaskRequest>()
   const {
@@ -266,14 +273,23 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleSettingsShortcut)
   }, [view.type])
 
-  const chooseSession = (id: string) => {
+  const chooseSession = (id: string, messageID?: string) => {
     const session = sessions.find((candidate) => candidate.id === id)
     if (session) setSelectedWorkspacePath(session.scope === 'project' ? session.workspacePath : undefined)
+    setBranchPointTarget(messageID ? { sessionID: id, messageID } : undefined)
     selectSession(id)
     setView({ type: 'conversation' })
     setWorkbenchTaskRequest(undefined)
     closeMobileSessions()
   }
+
+  const handleBranchPointLocated = useCallback((target: BranchPointTarget) => {
+    setBranchPointTarget((current) =>
+      current?.sessionID === target.sessionID && current.messageID === target.messageID
+        ? undefined
+        : current,
+    )
+  }, [])
 
   const openSessionInWorkbench = (id: string) => {
     if (!sessions.some((session) => session.id === id)) return
@@ -585,6 +601,7 @@ export default function App() {
           activeSession,
           parentSession,
           branchSessions,
+          branchPointTarget,
           tasks,
           items,
           approval,
@@ -612,6 +629,10 @@ export default function App() {
           openMobileSessions,
           openTaskInWorkbench,
           selectSession: chooseSession,
+          returnToParent: parentSession
+            ? () => chooseSession(parentSession.id, activeSession?.forkedFromMessageId)
+            : undefined,
+          branchPointLocated: handleBranchPointLocated,
           forkMessage,
           renderComposer: composer,
         }}

@@ -3824,7 +3824,7 @@ test('branching from an assistant response requires confirmation', async ({ page
       {
         type: 'user_message',
         messageID: 'user-branch',
-        text: 'Question before branching',
+        text: `Earlier context\n${'Line before the branch point\n'.repeat(42)}`,
         images: [],
       },
       {
@@ -3832,6 +3832,12 @@ test('branching from an assistant response requires confirmation', async ({ page
         messageID: 'assistant-branch',
         text: 'Response to branch from',
         finalResponse: true,
+      },
+      {
+        type: 'user_message',
+        messageID: 'user-after-branch',
+        text: `Later context\n${'Line after the branch point\n'.repeat(42)}`,
+        images: [],
       },
     ],
   })
@@ -3860,6 +3866,19 @@ test('branching from an assistant response requires confirmation', async ({ page
   const branchNavigation = page.getByTestId('conversation-branch-navigation')
   await branchNavigation.getByRole('button', { name: 'Return to New session' }).click()
   await expect(page.getByTestId('conversation-title')).toContainText('New session')
+
+  const branchPoint = page.locator('[data-message-id="assistant-branch"]')
+  await expect(branchPoint).toHaveAttribute('data-branch-point-highlighted', 'true')
+  await expect.poll(async () => {
+    const messageBox = await branchPoint.boundingBox()
+    const transcriptBox = await page.getByTestId('conversation-transcript').boundingBox()
+    return Boolean(
+      messageBox &&
+      transcriptBox &&
+      messageBox.y >= transcriptBox.y &&
+      messageBox.y + messageBox.height <= transcriptBox.y + transcriptBox.height,
+    )
+  }).toBe(true)
 
   await branchNavigation.getByRole('button', { name: 'View 1 branch' }).click()
   await page.getByRole('menuitem', { name: 'New session (branch)' }).click()

@@ -64,11 +64,13 @@ export function AutoCompactionStatus() {
 export function ThreadItem({
   item,
   cwd,
+  highlighted = false,
   branchingDisabled = false,
   onForkMessage,
 }: {
   item: Item
   cwd?: string
+  highlighted?: boolean
   branchingDisabled?: boolean
   onForkMessage?: (
     messageID: string,
@@ -135,6 +137,8 @@ export function ThreadItem({
         <section
           className="group/message my-3.5 flex animate-[fade-in_160ms_ease-out] justify-end"
           data-testid="user-message"
+          data-message-id={item.messageID}
+          data-branch-point-highlighted={highlighted || undefined}
         >
           <div
             className={cn(
@@ -142,6 +146,7 @@ export function ThreadItem({
               editing
                 ? 'w-full max-w-full'
                 : 'max-w-[78%] max-md:max-w-[88%]',
+              highlighted && 'bg-surface-hover',
             )}
           >
             {(item.files?.length ?? 0) > 0 && (
@@ -282,8 +287,13 @@ export function ThreadItem({
     case 'assistant':
       return (
         <section
-          className="my-3 animate-[fade-in_160ms_ease-out]"
+          className={cn(
+            'my-3 animate-[fade-in_160ms_ease-out]',
+            highlighted && 'bg-surface-hover',
+          )}
           data-testid="assistant-message"
+          data-message-id={item.messageID}
+          data-branch-point-highlighted={highlighted || undefined}
         >
           <Markdown source={item.markdown} />
           {item.complete && (

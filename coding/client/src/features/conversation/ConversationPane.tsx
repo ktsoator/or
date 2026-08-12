@@ -4,6 +4,7 @@ import type {
   UIEventHandler,
   WheelEventHandler,
 } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { LoaderCircle, PanelLeft } from 'lucide-react'
 import type {
   ApprovalItem,
@@ -32,6 +33,10 @@ type ConversationPaneProps = {
     activeSession?: SessionSummary
     parentSession?: SessionSummary
     branchSessions: SessionSummary[]
+    branchPointTarget?: {
+      sessionID: string
+      messageID: string
+    }
     tasks: BackgroundTask[]
     items: Item[]
     approval?: ApprovalItem
@@ -59,6 +64,8 @@ type ConversationPaneProps = {
     openMobileSessions: () => void
     openTaskInWorkbench: (taskID: string) => void
     selectSession: (sessionID: string) => void
+    returnToParent?: () => void
+    branchPointLocated: (target: { sessionID: string; messageID: string }) => void
     forkMessage: (
       messageID: string,
       mode: 'before_user' | 'after_assistant',
@@ -80,6 +87,7 @@ export function ConversationPane({
     activeSession,
     parentSession,
     branchSessions,
+    branchPointTarget,
     tasks,
     items,
     approval,
@@ -107,11 +115,82 @@ export function ConversationPane({
     openMobileSessions,
     openTaskInWorkbench,
     selectSession,
+    returnToParent,
+    branchPointLocated,
     forkMessage,
     renderComposer,
   } = actions
+  const [highlightedBranchPoint, setHighlightedBranchPoint] = useState<{
+    sessionID: string
+    messageID: string
+  }>()
+  const highlightTimerRef = useRef<number>(undefined)
+  const branchPointItemID = branchPointTarget
+    ? items.find(
+        (item) =>
+          (item.kind === 'user' || item.kind === 'assistant') &&
+          item.messageID === branchPointTarget.messageID,
+      )?.id
+    : undefined
   const emptySession = !loading && items.length === 0 && !approval
   const awaitingFirstOutput = running && items.at(-1)?.kind === 'user'
+
+  useEffect(() => () => {
+    if (highlightTimerRef.current) window.clearTimeout(highlightTimerRef.current)
+  }, [])
+
+  useEffect(() => {
+    if (
+      loading ||
+      !branchPointTarget ||
+      branchPointTarget.sessionID !== activeSession?.id
+    ) {
+      return
+    }
+    if (!branchPointItemID) {
+      branchPointLocated(branchPointTarget)
+      return
+    }
+
+    const transcript = logRef.current
+    const message = Array.from(
+      transcript?.querySelectorAll<HTMLElement>('[data-message-id]') ?? [],
+    ).find((element) => element.dataset.messageId === branchPointTarget.messageID)
+    if (!transcript || !message) return
+
+    setHighlightedBranchPoint(branchPointTarget)
+    if (highlightTimerRef.current) window.clearTimeout(highlightTimerRef.current)
+
+    const frame = window.requestAnimationFrame(() => {
+      const transcriptBox = transcript.getBoundingClientRect()
+      const messageBox = message.getBoundingClientRect()
+      const top =
+        transcript.scrollTop +
+        messageBox.top -
+        transcriptBox.top -
+        (transcript.clientHeight - messageBox.height) / 2
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      transcript.scrollTo({ top: Math.max(0, top), behavior: reducedMotion ? 'auto' : 'smooth' })
+      branchPointLocated(branchPointTarget)
+      highlightTimerRef.current = window.setTimeout(() => {
+        setHighlightedBranchPoint((current) =>
+          current?.sessionID === branchPointTarget.sessionID &&
+          current.messageID === branchPointTarget.messageID
+            ? undefined
+            : current,
+        )
+      }, 1600)
+    })
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [
+    activeSession?.id,
+    branchPointItemID,
+    branchPointLocated,
+    branchPointTarget,
+    loading,
+    logRef,
+  ])
 
   return (
       <div
@@ -175,6 +254,7 @@ export function ConversationPane({
                 key={activeSession.id}
                 parentSession={parentSession}
                 branches={branchSessions}
+                onReturnToParent={returnToParent}
                 onSelectSession={selectSession}
               />
             )}
@@ -230,6 +310,11 @@ export function ConversationPane({
                         key={unit.item.id}
                         item={unit.item}
                         cwd={activeSession?.workspacePath}
+                        highlighted={
+                          (unit.item.kind === 'user' || unit.item.kind === 'assistant') &&
+                          activeSession?.id === highlightedBranchPoint?.sessionID &&
+                          unit.item.messageID === highlightedBranchPoint?.messageID
+                        }
                         branchingDisabled={running || forking}
                         onForkMessage={forkMessage}
                       />

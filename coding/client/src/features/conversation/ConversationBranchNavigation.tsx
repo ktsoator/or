@@ -6,10 +6,12 @@ import { useI18n } from '@/i18n'
 export function ConversationBranchNavigation({
   parentSession,
   branches,
+  onReturnToParent,
   onSelectSession,
 }: {
   parentSession?: SessionSummary
   branches: SessionSummary[]
+  onReturnToParent?: () => void
   onSelectSession: (id: string) => void
 }) {
   const { t } = useI18n()
@@ -27,7 +29,7 @@ export function ConversationBranchNavigation({
           type="button"
           title={t('branchNav.returnToParent', { title: sessionTitle(parentSession) })}
           aria-label={t('branchNav.returnToParent', { title: sessionTitle(parentSession) })}
-          onClick={() => onSelectSession(parentSession.id)}
+          onClick={onReturnToParent ?? (() => onSelectSession(parentSession.id))}
         >
           <CornerUpLeft className="size-3.5 shrink-0 text-ink-muted" aria-hidden="true" />
           <span className="shrink-0 text-ink-faint max-sm:hidden">{t('branchNav.from')}</span>
@@ -59,8 +61,7 @@ export function ConversationBranchNavigation({
               collisionPadding={10}
               className="z-[120] flex max-h-[min(22rem,var(--radix-dropdown-menu-content-available-height))] w-[min(18rem,calc(100vw-1.25rem))] animate-[fade-in_100ms_ease-out] flex-col overflow-hidden rounded-[12px] border border-edge bg-canvas p-1 text-[0.84375rem] text-ink shadow-[0_16px_40px_-24px_rgba(28,25,23,0.46)] outline-none"
             >
-              <DropdownMenu.Label className="flex h-8 items-center gap-2 px-2.5 text-[0.75rem] font-medium text-ink-faint">
-                <GitFork className="size-3.5" aria-hidden="true" />
+              <DropdownMenu.Label className="flex h-8 items-center px-2.5 text-[0.75rem] font-medium text-ink-faint">
                 <span>{t('branchNav.branches')}</span>
                 <span className="ml-auto tabular-nums">{branches.length}</span>
               </DropdownMenu.Label>
@@ -69,10 +70,9 @@ export function ConversationBranchNavigation({
                 {branches.map((branch) => (
                   <DropdownMenu.Item
                     key={branch.id}
-                    className="flex h-9 cursor-default select-none items-center gap-2.5 rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-surface-active"
+                    className="flex h-9 cursor-default select-none items-center rounded-[9px] px-2.5 outline-none data-[highlighted]:bg-surface-active"
                     onSelect={() => onSelectSession(branch.id)}
                   >
-                    <GitFork className="size-3.5 shrink-0 text-ink-muted" aria-hidden="true" />
                     <span className="min-w-0 truncate">{sessionTitle(branch)}</span>
                   </DropdownMenu.Item>
                 ))}
