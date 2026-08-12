@@ -27,6 +27,7 @@ bun run build
 
 cd ../desktop
 bun install --frozen-lockfile
+bun run test:unit
 bun run build:main
 bun run build:sidecar
 ```

@@ -14,6 +14,7 @@ import {
   shell,
   type WebContents,
 } from 'electron'
+import { resolveDesktopEnvironment } from './shellEnvironment.js'
 
 const isDevelopment = process.argv.includes('--dev')
 const sidecarReadyTimeoutMs = 15_000
@@ -221,9 +222,10 @@ async function startSidecar(): Promise<ReadyMessage & { token: string }> {
   const assets = app.isPackaged
     ? path.join(process.resourcesPath, 'client')
     : path.resolve(__dirname, '../../client', isDevelopment ? '' : 'dist')
+  const environment = await resolveDesktopEnvironment({ packaged: app.isPackaged })
 
   const child = spawn(executable, ['-assets', assets], {
-    env: { ...process.env, CODING_DESKTOP_TOKEN: token },
+    env: { ...environment, CODING_DESKTOP_TOKEN: token },
     stdio: ['pipe', 'pipe', 'pipe'],
     windowsHide: true,
   })
