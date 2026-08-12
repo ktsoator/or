@@ -178,6 +178,10 @@ jobs:
         working-directory: coding/desktop
         run: node scripts/check-artifact-names.mjs
 
+      - name: Test desktop main process
+        working-directory: coding/desktop
+        run: bun run test:unit
+
       - name: Build desktop main process
         working-directory: coding/desktop
         run: bun run build:main

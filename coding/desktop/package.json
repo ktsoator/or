@@ -9,6 +9,7 @@
     "clean": "node scripts/clean.mjs dist release client-dist",
     "clean:main": "node scripts/clean.mjs dist",
     "test": "bun run --cwd ../client test:electron",
+    "test:unit": "bun test tests",
     "build:main": "bun run clean:main && tsc -p tsconfig.json",
     "build:sidecar": "node scripts/build-sidecar.mjs",
     "build:client": "bun run --cwd ../client build",
