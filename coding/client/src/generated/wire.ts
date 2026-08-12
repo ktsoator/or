@@ -277,6 +277,8 @@ export type WireEvent = {
   preview?: PreviewRequest
   isError?: boolean
   text?: string
+  messageID?: string
+  sentAt?: string
   images?: MessageImage[]
   files?: MessageFile[]
   usage?: Usage
@@ -299,6 +301,8 @@ export type WireEvent = {
   startedAt?: string
   completedAt?: string
   durationMs?: number
+  userMessageIDs?: string[]
+  assistantMessageID?: string
   task?: BackgroundTask
 }
 

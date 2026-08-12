@@ -8,6 +8,7 @@ import (
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/skills"
+	"github.com/ktsoator/or/coding/internal/transcript"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -148,13 +149,64 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 	}
 	completedAt := time.Now().UTC()
 	persistErr := s.persistNewRun(ctx, runEntryStart, startedAt, completedAt)
+	userMessageIDs, assistantMessageID := s.persistedRunMessageIDs(startedAt)
 	s.dispatchEvent(Event{
-		Type:        RunCompleted,
-		Usage:       runUsage,
-		StartedAt:   startedAt,
-		CompletedAt: completedAt,
+		Type:               RunCompleted,
+		Usage:              runUsage,
+		StartedAt:          startedAt,
+		CompletedAt:        completedAt,
+		UserMessageIDs:     userMessageIDs,
+		AssistantMessageID: assistantMessageID,
 	})
 	return errors.Join(runErr, persistErr)
+}
+
+func (s *Session) persistedRunMessageIDs(startedAt time.Time) ([]string, string) {
+	entries := s.Entries()
+	runIndex := -1
+	firstEntryID := ""
+	for index := len(entries) - 1; index >= 0; index-- {
+		entry := entries[index]
+		if entry.Type == transcript.RunEntry && entry.Run != nil && entry.Run.StartedAt.Equal(startedAt) {
+			runIndex = index
+			firstEntryID = entry.Run.FirstEntryID
+			break
+		}
+	}
+	if runIndex < 0 || firstEntryID == "" {
+		return nil, ""
+	}
+	firstIndex := -1
+	for index := 0; index < runIndex; index++ {
+		if entries[index].ID == firstEntryID {
+			firstIndex = index
+			break
+		}
+	}
+	if firstIndex < 0 {
+		return nil, ""
+	}
+
+	var userMessageIDs []string
+	assistantMessageID := ""
+	for _, entry := range entries[firstIndex:runIndex] {
+		if entry.Type != transcript.MessageEntry {
+			continue
+		}
+		message, ok := agent.ToLLM(entry.Message)
+		if !ok {
+			continue
+		}
+		switch typed := message.(type) {
+		case *llm.UserMessage:
+			userMessageIDs = append(userMessageIDs, entry.ID)
+		case *llm.AssistantMessage:
+			if typed != nil && (typed.StopReason == llm.StopReasonStop || typed.StopReason == llm.StopReasonLength) {
+				assistantMessageID = entry.ID
+			}
+		}
+	}
+	return userMessageIDs, assistantMessageID
 }
 
 func (s *Session) setRunState(ctx context.Context, startedAt time.Time, entryStart int) {

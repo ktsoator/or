@@ -243,13 +243,16 @@ type wireEvent struct {
 	Preview          *wirePreview `json:"preview,omitempty"`
 	IsError          bool         `json:"isError,omitempty"`
 	// Message content and tool-result media. Text is also the message_end
-	// fallback used when nothing streamed.
-	Text    string            `json:"text,omitempty"`
-	Images  []wireImage       `json:"images,omitempty"`
-	Files   []wireFile        `json:"files,omitempty"`
-	Usage   *wireUsage        `json:"usage,omitempty"`
-	Context *wireContextUsage `json:"context,omitempty"`
-	Final   bool              `json:"finalResponse,omitempty"`
+	// fallback used when nothing streamed. MessageID identifies a checkpointed
+	// transcript message and stays empty for live content that is not durable yet.
+	Text      string            `json:"text,omitempty"`
+	MessageID string            `json:"messageID,omitempty"`
+	SentAt    string            `json:"sentAt,omitempty"`
+	Images    []wireImage       `json:"images,omitempty"`
+	Files     []wireFile        `json:"files,omitempty"`
+	Usage     *wireUsage        `json:"usage,omitempty"`
+	Context   *wireContextUsage `json:"context,omitempty"`
+	Final     bool              `json:"finalResponse,omitempty"`
 	// Completed-response metadata. ModelName is the stable catalog display name;
 	// Provider and Model keep the exact identity available to other clients.
 	Provider  string `json:"provider,omitempty"`
@@ -279,6 +282,10 @@ type wireEvent struct {
 	StartedAt   string `json:"startedAt,omitempty"`
 	CompletedAt string `json:"completedAt,omitempty"`
 	DurationMS  *int64 `json:"durationMs,omitempty"`
+	// done events backfill stable transcript IDs into messages first rendered
+	// from the live stream.
+	UserMessageIDs     []string `json:"userMessageIDs,omitempty"`
+	AssistantMessageID string   `json:"assistantMessageID,omitempty"`
 	// task_started / task_notification
 	Task *wireBackgroundTask `json:"task,omitempty"`
 }

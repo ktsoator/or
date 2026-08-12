@@ -81,6 +81,7 @@ export type Session = ThreadView &
     activeSession?: SessionSummary
     activeSessionID?: string
     creating: boolean
+    forking: boolean
     models: ModelOption[]
     refreshModels: () => Promise<void>
     registerWorkspace: (path: string) => Promise<WorkspaceSummary>
@@ -90,6 +91,12 @@ export type Session = ThreadView &
     updateDraftWorkspace: (workspacePath?: string, projectScoped?: boolean) => void
     deleteSession: (id: string) => Promise<void>
     renameSession: (id: string, customTitle: string) => Promise<SessionSummary>
+    forkMessage: (
+      messageID: string,
+      mode: 'before_user' | 'after_assistant',
+      text?: string,
+    ) => Promise<SessionSummary>
+    editMessage: (messageID: string, text: string) => Promise<SessionSummary>
     selectSession: (id: string) => void
     queueBrowserResult: (sessionID: string, id: string, result: BrowserResult) => void
     handleBrowserTabs: (sessionID: string, id: string) => void

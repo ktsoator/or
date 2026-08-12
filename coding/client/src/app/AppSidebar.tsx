@@ -2,6 +2,7 @@ import type {
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
 } from 'react'
+import { useCallback, useState } from 'react'
 import {
   BookOpenText,
   Cable,
@@ -49,6 +50,7 @@ type AppSidebarProps = {
     requestDelete: (session: SessionSummary) => void
     handleRename: (id: string, customTitle: string) => Promise<void>
     onSelectWorkspace: (path: string) => void
+    revealWorkspace: (path: string) => Promise<void>
     requestRemoveWorkspace: (path: string, name: string) => void
     onOpenSettings: () => void
     startSidebarResize: (event: ReactPointerEvent<HTMLDivElement>) => void
@@ -60,6 +62,10 @@ type AppSidebarProps = {
 
 export function AppSidebar({ layout, content, actions }: AppSidebarProps) {
   const { t } = useI18n()
+  const [openHoverCardKey, setOpenHoverCardKey] = useState<string>()
+  const handleHoverCardOpenChange = useCallback((key: string, open: boolean) => {
+    setOpenHoverCardKey((current) => open ? key : current === key ? undefined : current)
+  }, [])
   const {
     mobileSessionsOpen,
     sidebarCollapsed,
@@ -87,6 +93,7 @@ export function AppSidebar({ layout, content, actions }: AppSidebarProps) {
     requestDelete,
     handleRename,
     onSelectWorkspace,
+    revealWorkspace,
     requestRemoveWorkspace,
     onOpenSettings,
     startSidebarResize,
@@ -231,6 +238,8 @@ export function AppSidebar({ layout, content, actions }: AppSidebarProps) {
                     onTogglePin={() => togglePinnedSession(session.id)}
                     onDelete={() => requestDelete(session)}
                     onRename={(title) => handleRename(session.id, title)}
+                    openHoverCardKey={openHoverCardKey}
+                    onHoverCardOpenChange={handleHoverCardOpenChange}
                   />
                 ))
               )}
@@ -269,7 +278,10 @@ export function AppSidebar({ layout, content, actions }: AppSidebarProps) {
                   onTogglePinnedSession={togglePinnedSession}
                   onDeleteSession={requestDelete}
                   onRenameSession={handleRename}
+                  onRevealWorkspace={revealWorkspace}
                   onRemoveWorkspace={requestRemoveWorkspace}
+                  openHoverCardKey={openHoverCardKey}
+                  onHoverCardOpenChange={handleHoverCardOpenChange}
                 />
               ))}
             </div>

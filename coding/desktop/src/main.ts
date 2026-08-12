@@ -158,6 +158,14 @@ function registerIPC(): void {
     if (typeof target !== 'string') throw new TypeError('external URL must be a string')
     await openExternalURL(target)
   })
+  ipcMain.handle('desktop:reveal-path', async (_event, target: unknown): Promise<void> => {
+    if (typeof target !== 'string' || !path.isAbsolute(target)) {
+      throw new TypeError('path to reveal must be an absolute path')
+    }
+    const info = await stat(target)
+    if (!info.isDirectory()) throw new TypeError('path to reveal must be a directory')
+    shell.showItemInFolder(target)
+  })
 }
 
 function configureGuestWindowHandling(guest: WebContents): void {

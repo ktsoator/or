@@ -188,6 +188,7 @@ func projectSessionWireEvent(event conversation.Event) (wireEvent, bool) {
 			Type:     wireEventUserMessage,
 			ID:       e.ID,
 			Text:     e.Text,
+			SentAt:   formatEventTime(e.SentAt),
 			Images:   projectImages(e.Images),
 			Files:    projectFiles(e.Files),
 			Delivery: projectDeliveryMode(e.Delivery),
@@ -204,6 +205,8 @@ func projectSessionWireEvent(event conversation.Event) (wireEvent, bool) {
 			Type:  wireEventTitleUpdate,
 			Title: e.Title,
 		}
+	case conversation.HistoryRewritten:
+		out = wireEvent{Type: wireEventSyncRequired}
 	default:
 		return wireEvent{}, false
 	}

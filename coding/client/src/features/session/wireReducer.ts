@@ -228,14 +228,18 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
         const existingItem = idx >= 0 ? items[idx] : undefined
         const existingUser = existingItem?.kind === 'user' ? existingItem : undefined
         const openRun = openRunIndex >= 0 ? items[openRunIndex] : undefined
+        const messageID = ev.messageID ?? existingUser?.messageID
         const user = {
           kind: 'user' as const,
           id: ev.id ?? (idx >= 0 ? items[idx].id : nextId()),
+          ...(messageID ? { messageID } : {}),
           text,
           images,
           ...(files.length ? { files } : {}),
           sentAt:
-            existingUser?.sentAt ?? (openRun?.kind === 'run' ? openRun.startedAt : undefined),
+            ev.sentAt ??
+            existingUser?.sentAt ??
+            (openRun?.kind === 'run' ? openRun.startedAt : undefined),
         }
         if (idx >= 0) {
           items = replaceAt(items, idx, user)
@@ -594,7 +598,12 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
         if (ev.text) {
           if (idx >= 0) {
             const cur = items[idx] as Extract<Item, { kind: 'assistant' }>
-            items = replaceAt(items, idx, { ...cur, markdown: ev.text, open: false })
+            items = replaceAt(items, idx, {
+              ...cur,
+              ...(ev.messageID ? { messageID: ev.messageID } : {}),
+              markdown: ev.text,
+              open: false,
+            })
           } else {
             idx = items.length
             items = [
@@ -602,6 +611,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
               {
                 kind: 'assistant',
                 id: nextId(),
+                ...(ev.messageID ? { messageID: ev.messageID } : {}),
                 markdown: ev.text,
                 open: false,
                 complete: false,
@@ -610,7 +620,11 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
           }
         } else if (idx >= 0) {
           const cur = items[idx] as Extract<Item, { kind: 'assistant' }>
-          items = replaceAt(items, idx, { ...cur, open: false })
+          items = replaceAt(items, idx, {
+            ...cur,
+            ...(ev.messageID ? { messageID: ev.messageID } : {}),
+            open: false,
+          })
         }
 
         if (ev.finalResponse && idx >= 0) {
@@ -720,6 +734,41 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
     case 'done':
       removePreparingTools()
       completeRun(ev.durationMs, ev.startedAt)
+      {
+        const runIndex = ev.startedAt
+          ? lastIndex(items, (item) => item.kind === 'run' && item.startedAt === ev.startedAt)
+          : lastIndex(items, (item) => item.kind === 'run')
+        if (runIndex >= 0 && ev.userMessageIDs?.length) {
+          const userIndexes: number[] = []
+          for (let index = runIndex - 1; index >= 0 && items[index].kind === 'user'; index--) {
+            userIndexes.unshift(index)
+          }
+          const offset = Math.max(0, userIndexes.length - ev.userMessageIDs.length)
+          for (let index = 0; index < ev.userMessageIDs.length; index++) {
+            const itemIndex = userIndexes[offset + index]
+            const user = itemIndex === undefined ? undefined : items[itemIndex]
+            if (user?.kind === 'user') {
+              items = replaceAt(items, itemIndex, {
+                ...user,
+                messageID: ev.userMessageIDs[index],
+              })
+            }
+          }
+        }
+        if (runIndex >= 0 && ev.assistantMessageID) {
+          const assistantIndex = lastIndex(
+            items,
+            (item) => item.kind === 'assistant' && item.complete,
+          )
+          const assistant = assistantIndex > runIndex ? items[assistantIndex] : undefined
+          if (assistant?.kind === 'assistant') {
+            items = replaceAt(items, assistantIndex, {
+              ...assistant,
+              messageID: ev.assistantMessageID,
+            })
+          }
+        }
+      }
       running = false
       autoCompacting = false
       closeAssistant()

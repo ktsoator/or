@@ -668,6 +668,19 @@ func TestManagerDeleteRestoresFilesWhenIndexWriteFails(t *testing.T) {
 	}
 	transport := runtime.transport.(*testTransport)
 	transcriptPath := runtime.record.Transcript
+	child, err := manager.Create("Child", t.TempDir(), ScopeProject, model, thinking, permission.ModeAsk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	childRuntime := mustRuntime(t, manager, child.ID)
+	manager.mu.Lock()
+	childRuntime.record.ForkedFromSessionID = created.ID
+	childRuntime.record.ForkedFromMessageID = "source-message"
+	if err := manager.saveLocked(); err != nil {
+		manager.mu.Unlock()
+		t.Fatal(err)
+	}
+	manager.mu.Unlock()
 	if err := os.WriteFile(transcriptPath, []byte("transcript"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -684,6 +697,10 @@ func TestManagerDeleteRestoresFilesWhenIndexWriteFails(t *testing.T) {
 	}
 	if transport.closed.Load() {
 		t.Fatal("failed delete closed the restored conversation transport")
+	}
+	childSummary := mustRuntime(t, manager, child.ID).summary()
+	if childSummary.ForkedFromSessionID != created.ID || childSummary.ForkedFromMessageID != "source-message" {
+		t.Fatalf("failed delete did not restore child relationship: %+v", childSummary)
 	}
 	if _, err := os.Stat(transcriptPath); err != nil {
 		t.Fatalf("transcript was not restored: %v", err)

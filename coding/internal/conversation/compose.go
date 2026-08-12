@@ -3,6 +3,7 @@ package conversation
 import (
 	"context"
 
+	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/coding/internal/skills"
@@ -18,6 +19,7 @@ type engineSessionConfig struct {
 	ThinkingLevel   llm.ModelThinkingLevel
 	PermissionMode  permission.Mode
 	AdditionalTools []tools.Tool
+	StreamFn        agent.StreamFn
 }
 
 // This is the one place an engine.Session is assembled. Every conversation the
@@ -46,6 +48,7 @@ func newEngineSession(
 			return loadSkills(cfg.WorkspacePath)
 		},
 		AdditionalTools: cfg.AdditionalTools,
+		StreamFn:        cfg.StreamFn,
 	})
 }
 

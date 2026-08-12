@@ -10,12 +10,14 @@ import { useI18n } from '@/i18n'
 
 export function DeleteSessionDialog({
   session,
+  branchCount,
   deleting,
   error,
   onCancel,
   onConfirm,
 }: {
   session: SessionSummary
+  branchCount: number
   deleting: boolean
   error: string
   onCancel: () => void
@@ -80,6 +82,11 @@ export function DeleteSessionDialog({
           <div className="mt-1 truncate text-[0.90625rem] leading-5 font-medium text-ink-soft">
             {title}
           </div>
+          {branchCount > 0 && (
+            <p className="mt-2 text-[0.8125rem] leading-5 text-ink-muted">
+              {t('delete.branchesKept', { count: branchCount })}
+            </p>
+          )}
         </div>
 
         {blocked && (

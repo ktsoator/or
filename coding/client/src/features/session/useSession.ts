@@ -49,6 +49,8 @@ export function useSession(secondarySessionID?: string): Session {
   )
   const { sessions, workspaces, draft, pendingDraftSend, activeSessionID } = sessionStore
   const [creating, setCreating] = useState(false)
+  const forkingSessionIDRef = useRef<string | undefined>(undefined)
+  const [forkingSessionID, setForkingSessionID] = useState<string>()
   const updatingSettingsSessionIDsRef = useRef<ReadonlySet<string>>(new Set())
   const [updatingSettingsSessionIDs, setUpdatingSettingsSessionIDs] =
     useState<ReadonlySet<string>>(() => new Set())
@@ -267,6 +269,59 @@ export function useSession(secondarySessionID?: string): Session {
     const updated = await sessionResourceAPI.renameSession(id, customTitle)
     dispatchSessionStore({ t: 'sessionUpdated', session: updated, front: false })
     return updated
+  }
+
+  const forkMessage = async (
+    messageID: string,
+    mode: 'before_user' | 'after_assistant',
+    text?: string,
+  ) => {
+    if (!activeSessionID) throw new Error('no active session')
+    if (forkingSessionIDRef.current) {
+      throw new Error('session branching is already in progress')
+    }
+    const source = sessions.find((session) => session.id === activeSessionID)
+    if (source?.running || thread?.running) throw new Error('session is not idle')
+
+    const sourceID = activeSessionID
+    forkingSessionIDRef.current = sourceID
+    setForkingSessionID(sourceID)
+    try {
+      const created = await sessionResourceAPI.forkSession(
+        sourceID,
+        mode === 'before_user'
+          ? { messageID, mode, text: text ?? '' }
+          : { messageID, mode },
+      )
+      dispatchSessionStore({ t: 'sessionCreated', session: created, select: true })
+      return created
+    } finally {
+      forkingSessionIDRef.current = undefined
+      setForkingSessionID((current) => (current === sourceID ? undefined : current))
+    }
+  }
+
+  const editMessage = async (messageID: string, text: string) => {
+    if (!activeSessionID) throw new Error('no active session')
+    if (forkingSessionIDRef.current) {
+      throw new Error('session history is already being changed')
+    }
+    const source = sessions.find((session) => session.id === activeSessionID)
+    if (source?.running || thread?.running) throw new Error('session is not idle')
+
+    const sourceID = activeSessionID
+    forkingSessionIDRef.current = sourceID
+    setForkingSessionID(sourceID)
+    try {
+      const updated = await sessionResourceAPI.editMessage(sourceID, messageID, text)
+      dispatchSessionStore({ t: 'sessionUpdated', session: updated, front: true })
+      dispatch({ t: 'running', sessionID: sourceID, running: true })
+      await refreshSessions()
+      return updated
+    } finally {
+      forkingSessionIDRef.current = undefined
+      setForkingSessionID((current) => (current === sourceID ? undefined : current))
+    }
   }
 
   const patchSessionSettings = async (
@@ -711,6 +766,7 @@ export function useSession(secondarySessionID?: string): Session {
     autoCompacting: thread?.autoCompacting ?? false,
     loading: initializing || (Boolean(activeSessionID) && !thread?.loaded),
     creating,
+    forking: Boolean(activeSessionID && forkingSessionID === activeSessionID),
     updatingSettings: Boolean(
       activeSessionID && updatingSettingsSessionIDs.has(activeSessionID),
     ),
@@ -725,6 +781,8 @@ export function useSession(secondarySessionID?: string): Session {
     updateDraftWorkspace,
     deleteSession,
     renameSession,
+    forkMessage,
+    editMessage,
     selectSession,
     updateSettings,
     updatePermissionMode,

@@ -70,6 +70,7 @@ func projectEvent(ev engine.Event) (wireEvent, bool) {
 		out = wireEvent{
 			Type:   wireEventUserMessage,
 			Text:   ev.Text,
+			SentAt: formatEventTime(ev.SentAt),
 			Images: projectImages(ev.Images),
 			Files:  projectFiles(ev.Files),
 		}
@@ -141,10 +142,12 @@ func projectEvent(ev engine.Event) (wireEvent, bool) {
 
 	case engine.RunCompleted:
 		out = wireEvent{
-			Type:       wireEventDone,
-			Usage:      projectUsage(ev.Usage),
-			StartedAt:  formatEventTime(ev.StartedAt),
-			DurationMS: elapsedMilliseconds(ev.StartedAt, ev.CompletedAt),
+			Type:               wireEventDone,
+			Usage:              projectUsage(ev.Usage),
+			StartedAt:          formatEventTime(ev.StartedAt),
+			DurationMS:         elapsedMilliseconds(ev.StartedAt, ev.CompletedAt),
+			UserMessageIDs:     ev.UserMessageIDs,
+			AssistantMessageID: ev.AssistantMessageID,
 		}
 
 	default:
@@ -193,16 +196,19 @@ func ProjectHistory(items []engine.HistoryItem) []wireEvent {
 
 		case engine.HistoryUser:
 			out = append(out, wireEvent{
-				Type:   wireEventUserMessage,
-				Text:   item.Text,
-				Images: projectImages(item.Images),
-				Files:  projectFiles(item.Files),
+				Type:      wireEventUserMessage,
+				Text:      item.Text,
+				MessageID: item.MessageID,
+				SentAt:    formatEventTime(item.SentAt),
+				Images:    projectImages(item.Images),
+				Files:     projectFiles(item.Files),
 			})
 
 		case engine.HistoryAssistant:
 			out = append(out, wireEvent{
 				Type:        wireEventMessageEnd,
 				Text:        item.Text,
+				MessageID:   item.MessageID,
 				Final:       item.FinalResponse,
 				Provider:    item.Provider,
 				Model:       item.Model,

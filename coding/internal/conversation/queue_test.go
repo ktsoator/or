@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/permission"
@@ -50,9 +51,11 @@ func TestHandleSessionEventConsumesPendingByQueueHandle(t *testing.T) {
 
 	events := make(chan Event, 4)
 	runtime.transport = &recordingTransport{events: events}
+	sentAt := time.Date(2026, time.August, 11, 8, 15, 0, 0, time.UTC)
 	manager.handleSessionEvent(created.ID, runtime, engine.Event{
 		Type:        engine.UserMessageCompleted,
 		Text:        "same content",
+		SentAt:      sentAt,
 		QueueHandle: steerHandle,
 	})
 
@@ -63,6 +66,9 @@ func TestHandleSessionEventConsumesPendingByQueueHandle(t *testing.T) {
 	}
 	if accepted.ID != "steer" || accepted.Delivery != DeliverySteer || accepted.Queued {
 		t.Fatalf("accepted event = %#v, want completed steer", accepted)
+	}
+	if !accepted.SentAt.Equal(sentAt) {
+		t.Fatalf("accepted sent time = %v, want %v", accepted.SentAt, sentAt)
 	}
 
 	runtime.pendingMu.Lock()

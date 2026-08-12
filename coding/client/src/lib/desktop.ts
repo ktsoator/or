@@ -2,6 +2,7 @@ export type CodingDesktop = {
   platform: string
   browserMode: 'webview'
   chooseDirectory: (initialPath: string, title: string) => Promise<string>
+  revealPath: (target: string) => Promise<void>
   openExternalURL: (url: string) => Promise<void> | void
 }
 
@@ -39,4 +40,10 @@ export async function chooseNativeDirectory(
   const choose = window.codingDesktop?.chooseDirectory
   if (typeof choose !== 'function') return undefined
   return choose(initialPath ?? '', title)
+}
+
+export async function revealNativePath(target: string): Promise<void> {
+  const reveal = window.codingDesktop?.revealPath
+  if (typeof reveal !== 'function') throw new Error('native file manager is unavailable')
+  await reveal(target)
 }

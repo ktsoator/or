@@ -45,6 +45,10 @@ func TestSessionPersistsAndReplaysRunTiming(t *testing.T) {
 	if entries[3].Run.FirstEntryID != entries[1].ID {
 		t.Fatalf("run first entry = %q, want %q", entries[3].Run.FirstEntryID, entries[1].ID)
 	}
+	if len(completed.UserMessageIDs) != 1 || completed.UserMessageIDs[0] != entries[1].ID ||
+		completed.AssistantMessageID != entries[2].ID {
+		t.Fatalf("completed message ids = users %v, assistant %q", completed.UserMessageIDs, completed.AssistantMessageID)
+	}
 
 	history := session.History()
 	want := []HistoryItemType{HistoryUser, HistoryRun, HistoryAssistant}
@@ -62,6 +66,18 @@ func TestSessionPersistsAndReplaysRunTiming(t *testing.T) {
 	if !history[2].CompletedAt.Equal(history[1].CompletedAt) {
 		t.Fatalf("response completion = %v, want run completion %v", history[2].CompletedAt, history[1].CompletedAt)
 	}
+	if history[0].MessageID != entries[1].ID {
+		t.Fatalf("user message id = %q, want transcript entry %q", history[0].MessageID, entries[1].ID)
+	}
+	if !history[0].SentAt.Equal(entries[1].Timestamp) {
+		t.Fatalf("user message time = %v, want transcript entry time %v", history[0].SentAt, entries[1].Timestamp)
+	}
+	if history[1].MessageID != "" {
+		t.Fatalf("run message id = %q, want empty", history[1].MessageID)
+	}
+	if history[2].MessageID != entries[2].ID {
+		t.Fatalf("assistant message id = %q, want transcript entry %q", history[2].MessageID, entries[2].ID)
+	}
 
 	restored, err := New(ctx, Options{
 		Model:    llm.Model{Provider: "test", ID: "model"},
@@ -78,6 +94,13 @@ func TestSessionPersistsAndReplaysRunTiming(t *testing.T) {
 	}
 	if !replayed[2].CompletedAt.Equal(replayed[1].CompletedAt) {
 		t.Fatalf("restored response completion = %v, want run completion %v", replayed[2].CompletedAt, replayed[1].CompletedAt)
+	}
+	if replayed[0].MessageID != entries[1].ID || replayed[2].MessageID != entries[2].ID {
+		t.Fatalf("restored message ids = %q/%q, want %q/%q",
+			replayed[0].MessageID, replayed[2].MessageID, entries[1].ID, entries[2].ID)
+	}
+	if !replayed[0].SentAt.Equal(entries[1].Timestamp) {
+		t.Fatalf("restored user message time = %v, want %v", replayed[0].SentAt, entries[1].Timestamp)
 	}
 }
 

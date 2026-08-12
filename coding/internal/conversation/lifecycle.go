@@ -131,9 +131,23 @@ func (m *Manager) Delete(id string) error {
 		return err
 	}
 
+	detachedChildren := make(map[*sessionRuntime]record)
+	for _, child := range m.sessions {
+		if child.record.ForkedFromSessionID != id {
+			continue
+		}
+		detachedChildren[child] = child.record
+		child.record.ForkedFromSessionID = ""
+		child.record.ForkedFromMessageID = ""
+	}
 	delete(m.sessions, id)
+	removeScratch := runtime.record.WorkspaceKind == KindScratch &&
+		!m.workspaceReferencedLocked(runtime.record.WorkspacePath)
 	if err := m.saveLocked(); err != nil {
 		m.sessions[id] = runtime
+		for child, previous := range detachedChildren {
+			child.record = previous
+		}
 		restoreFiles(staged)
 		m.mu.Unlock()
 		return err
@@ -147,10 +161,19 @@ func (m *Manager) Delete(id string) error {
 		_ = removeStagedPath(path.staged)
 	}
 	// Folder workspaces belong to the user and are never touched.
-	if runtime.record.WorkspaceKind == KindScratch {
+	if removeScratch {
 		_ = m.scratch.Remove(runtime.record.WorkspacePath)
 	}
 	return nil
+}
+
+func (m *Manager) workspaceReferencedLocked(path string) bool {
+	for _, runtime := range m.sessions {
+		if runtime.record.WorkspacePath == path {
+			return true
+		}
+	}
+	return false
 }
 
 // UpdateSettings changes the model and reasoning effort used by the session's

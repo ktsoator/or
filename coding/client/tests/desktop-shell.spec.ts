@@ -153,6 +153,8 @@ async function openDesktopClient(
     modelName?: string
     modelThinkingLevels?: Array<'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'>
     modelThinkingVisibility?: 'visible' | 'hidden'
+    sessionScope?: 'chat' | 'project'
+    sessionTitle?: string
     composerUpdateDelayMs?: number
     nativeDirectory?: string
     usageReport?: UsageReport
@@ -173,11 +175,11 @@ async function openDesktopClient(
   const modelThinkingLevel = modelThinkingLevels[0] ?? 'off'
   const createdSession = {
     id: 'test-session',
-    title: 'New session',
+    title: options.sessionTitle ?? 'New session',
     workspacePath: '/tmp/test-session',
     workspaceName: 'test-session',
-    scope: 'chat',
-    workspaceKind: 'scratch',
+    scope: options.sessionScope ?? 'chat',
+    workspaceKind: options.sessionScope === 'project' ? 'folder' : 'scratch',
     createdAt: '2026-07-22T00:00:00Z',
     updatedAt: '2026-07-22T00:00:00Z',
     running: false,
@@ -205,8 +207,19 @@ async function openDesktopClient(
     createdAt: '2026-07-23T00:00:00Z',
     updatedAt: '2026-07-23T00:00:00Z',
   }
+  const branchSession = {
+    ...createdSession,
+    id: 'branch-session',
+    title: 'New session (branch)',
+    forkedFromSessionId: createdSession.id,
+    forkedFromMessageId: 'assistant-branch',
+    updatedAt: '2026-07-24T00:00:00Z',
+  }
   let sessionCreated = Boolean(options.existingSession)
   let workbenchSessionCreated = false
+  let branchSessionCreated = false
+  let sessionHistoryEvents = options.historyEvents ?? []
+  let sessionHistoryRunning = options.historyRunning ?? false
   let remainingHealthFailures = options.healthFailures ?? 0
   let remainingBrowserResultFailures = options.browserResultFailures ?? 0
   const usageEventRangeKeys: string[] = []
@@ -353,6 +366,11 @@ async function openDesktopClient(
           testWindow.__directoryArgs = { initialPath, title }
           return Promise.resolve(nativeDirectory ?? '')
         },
+        revealPath(target: string) {
+          const testWindow = window as Window & { __revealedPath?: string }
+          testWindow.__revealedPath = target
+          return Promise.resolve()
+        },
       },
     })
 
@@ -433,6 +451,59 @@ async function openDesktopClient(
         status: 201,
         contentType: 'application/json',
         body: JSON.stringify(created),
+      })
+      return
+    }
+
+    if (path === '/api/sessions/test-session/forks' && method === 'POST') {
+      branchSessionCreated = true
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify(branchSession),
+      })
+      return
+    }
+
+    if (path === '/api/sessions/test-session/message-edits' && method === 'POST') {
+      const edit = requestBody as { messageID: string; text: string }
+      const target = sessionHistoryEvents.findIndex((event) => {
+        if (!event || typeof event !== 'object') return false
+        const candidate = event as { type?: string; messageID?: string }
+        return candidate.type === 'user_message' && candidate.messageID === edit.messageID
+      })
+      if (target < 0) {
+        await route.fulfill({
+          status: 404,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'message not found' }),
+        })
+        return
+      }
+      const original = sessionHistoryEvents[target] as Record<string, unknown>
+      sessionHistoryEvents = [
+        ...sessionHistoryEvents.slice(0, target),
+        {
+          ...original,
+          messageID: 'edited-user-message',
+          text: edit.text,
+        },
+      ]
+      if (branchSessionCreated) {
+        delete (branchSession as { forkedFromMessageId?: string }).forkedFromMessageId
+      }
+      sessionHistoryRunning = true
+      createdSession.running = true
+      await route.fulfill({
+        status: 202,
+        contentType: 'application/json',
+        body: JSON.stringify(createdSession),
+      })
+      await page.evaluate(() => {
+        const emit = (window as Window & {
+          __emitSessionSSE?: (sessionID: string, payload: unknown) => void
+        }).__emitSessionSSE
+        emit?.('test-session', { type: 'sync_required' })
       })
       return
     }
@@ -558,6 +629,11 @@ async function openDesktopClient(
         },
       }
     }
+    if (path === '/api/workspaces') {
+      body = options.sessionScope === 'project'
+        ? [{ path: createdSession.workspacePath, name: createdSession.workspaceName }]
+        : []
+    }
     if (path === '/api/skills') {
       body = {
         user: options.skills?.filter((item) => item.source === 'user') ?? [],
@@ -584,6 +660,7 @@ async function openDesktopClient(
     if (path === '/api/sessions') {
       body = sessionCreated
         ? [
+            ...(branchSessionCreated ? [branchSession] : []),
             ...(workbenchSessionCreated ? [workbenchSession] : []),
             createdSession,
             ...(options.secondarySession ? [secondarySession] : []),
@@ -592,11 +669,11 @@ async function openDesktopClient(
     }
     if (path === '/api/sessions/test-session/history') {
       body = {
-        events: options.historyEvents ?? [],
+        events: sessionHistoryEvents,
         tasks: options.backgroundTasks ?? [],
         queue: [],
         context: options.contextUsage ?? {},
-        running: options.historyRunning ?? false,
+        running: sessionHistoryRunning,
         eventSeq: options.historyEventSeq ?? 0,
       }
     }
@@ -614,6 +691,15 @@ async function openDesktopClient(
         events: [],
         queue: [],
         context: {},
+        running: false,
+        eventSeq: 0,
+      }
+    }
+    if (path === '/api/sessions/branch-session/history') {
+      body = {
+        events: options.historyEvents ?? [],
+        queue: [],
+        context: options.contextUsage ?? {},
         running: false,
         eventSeq: 0,
       }
@@ -663,8 +749,10 @@ async function openDesktopClient(
   await expect(page.locator('html')).toHaveClass(/desktop-macos/)
   await expect(page.getByTestId('conversation-header')).toBeVisible()
   if (options.existingSession) {
-    const chats = page.getByRole('navigation', { name: 'Chats' })
-    await chats.getByRole('button', { name: createdSession.title, exact: true }).click()
+    const sessions = page.getByRole('navigation', {
+      name: options.sessionScope === 'project' ? 'Or sessions' : 'Chats',
+    })
+    await sessions.getByRole('button', { name: createdSession.title, exact: true }).click()
     await expect.poll(() =>
       page.evaluate(
         () =>
@@ -3675,14 +3763,15 @@ test('user actions appear on hover while assistant actions stay visible', async 
   const userActions = todayUser.getByTestId('user-message-actions')
 
   await expect(userActions).toHaveCSS('opacity', '0')
+  await expect(userActions).toHaveCSS('transition-duration', '0s')
+  await expect(userActions.locator('time')).toHaveText(expectedToday)
   await todayUser.hover()
   await expect(userActions).toHaveCSS('opacity', '1')
-  await expect(userActions.locator('time')).toHaveText(expectedToday)
+  await expect(userActions.locator('time')).toBeVisible()
   await todayUser.getByRole('button', { name: 'Copy', exact: true }).click()
   await expect.poll(() => page.evaluate(() => localStorage.getItem('test.clipboard'))).toBe(
     'Copy this user message',
   )
-
   await earlierUser.hover()
   await expect(earlierUser.getByTestId('user-message-actions').locator('time')).toHaveText(
     expectedEarlier,
@@ -3771,6 +3860,205 @@ test('response usage stays on one line and truncates when Chat is narrow', async
   expect(layout.textOverflow).toBe('ellipsis')
   expect(layout.scrollWidth).toBeGreaterThan(layout.clientWidth)
   await expect(actions).toHaveCSS('overflow', 'hidden')
+})
+
+test('branching from an assistant response requires confirmation', async ({ page }) => {
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    historyEvents: [
+      {
+        type: 'user_message',
+        messageID: 'user-branch',
+        text: `Earlier context\n${'Line before the branch point\n'.repeat(42)}`,
+        images: [],
+      },
+      {
+        type: 'run_start',
+        id: 'run-branch',
+        startedAt: '2026-07-22T20:45:49Z',
+        durationMs: 3000,
+      },
+      {
+        type: 'delta',
+        kind: 'thinking',
+        delta: '**Thought process**\nReviewed the requested branch point.',
+      },
+      {
+        type: 'message_end',
+        messageID: 'assistant-branch',
+        text: 'Response to branch from',
+        finalResponse: true,
+      },
+      {
+        type: 'user_message',
+        messageID: 'user-after-branch',
+        text: `Later context\n${'Line after the branch point\n'.repeat(42)}`,
+        images: [],
+      },
+    ],
+  })
+  await page.setViewportSize({ width: 390, height: 720 })
+
+  const branchButton = page.getByRole('button', { name: 'Branch from this response' })
+  await branchButton.click()
+
+  const dialog = page.getByRole('dialog', { name: 'Create a new branch?' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByTestId('branch-session-details')).toContainText('Conversation history')
+  expect(requests.some((request) => request.path.endsWith('/forks'))).toBe(false)
+
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+  await expect(dialog).toBeHidden()
+  expect(requests.some((request) => request.path.endsWith('/forks'))).toBe(false)
+
+  await branchButton.click()
+  await dialog.getByRole('button', { name: 'Create branch' }).click()
+  await expect.poll(() => requests.find((request) => request.path.endsWith('/forks'))?.body).toEqual({
+    messageID: 'assistant-branch',
+    mode: 'after_assistant',
+  })
+  await expect(page.getByTestId('conversation-title')).toContainText('New session (branch)')
+
+  const branchNavigation = page.getByTestId('conversation-branch-navigation')
+  await branchNavigation.getByRole('button', { name: 'Return to New session' }).click()
+  await expect(page.getByTestId('conversation-title')).toContainText('New session')
+
+  const branchPoint = page.locator(
+    '[data-branch-point-message-id="assistant-branch"]',
+  )
+  await expect(branchPoint).toHaveAttribute('data-branch-point-highlighted', 'true')
+  await expect(branchPoint).toContainText('Worked for 3s')
+  await expect(branchPoint).toContainText('Thought process')
+  await expect(branchPoint).toContainText('Response to branch from')
+  expect(
+    await branchPoint.evaluate((element) => getComputedStyle(element).backgroundColor),
+  ).toBe(
+    await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--surface-hover').trim(),
+    ),
+  )
+  await expect(
+    branchPoint.getByTestId('assistant-message'),
+  ).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  await expect.poll(async () => {
+    const messageBox = await branchPoint.boundingBox()
+    const transcriptBox = await page.getByTestId('conversation-transcript').boundingBox()
+    return Boolean(
+      messageBox &&
+      transcriptBox &&
+      messageBox.y >= transcriptBox.y &&
+      messageBox.y + messageBox.height <= transcriptBox.y + transcriptBox.height,
+    )
+  }).toBe(true)
+
+  await page.getByRole('button', { name: 'Open sessions' }).click()
+  await page.getByRole('button', { name: 'Actions for New session', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Delete' }).click()
+  const deleteDialog = page.getByRole('dialog', { name: 'Delete session?' })
+  await expect(deleteDialog).toContainText('1 branch will be kept as an independent session.')
+  await deleteDialog.getByRole('button', { name: 'Cancel' }).click()
+  await page.getByRole('button', { name: 'Collapse sidebar' }).click()
+
+  await branchNavigation.getByRole('button', { name: 'View 1 branch' }).click()
+  await page.getByRole('menuitem', { name: 'New session (branch)' }).click()
+  await expect(page.getByTestId('conversation-title')).toContainText('New session (branch)')
+})
+
+test('editing a historical message rewrites the current session after confirmation', async ({ page }) => {
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    historyEvents: [
+      {
+        type: 'user_message',
+        messageID: 'user-edit-target',
+        text: 'Original question',
+        images: [],
+      },
+      {
+        type: 'message_end',
+        messageID: 'assistant-old-answer',
+        text: 'Old answer that should be removed',
+        finalResponse: true,
+      },
+      {
+        type: 'user_message',
+        messageID: 'user-later-message',
+        text: 'Later question that should be removed',
+        images: [],
+      },
+    ],
+  })
+
+  const userMessage = page.getByTestId('user-message').filter({ hasText: 'Original question' })
+  await userMessage.hover()
+  await userMessage.getByRole('button', { name: 'Edit message' }).click()
+  const editor = userMessage.getByRole('textbox', { name: 'Edit message' })
+  await editor.fill('Rewritten question')
+  await page.getByRole('button', { name: 'Send edited message' }).click()
+
+  const dialog = page.getByRole('dialog', { name: 'Edit this message?' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog).toContainText('Workspace files will stay as they are.')
+  expect(requests.some((request) => request.path.endsWith('/message-edits'))).toBe(false)
+
+  await dialog.getByRole('button', { name: 'Edit and continue' }).click()
+  await expect.poll(() => requests.find((request) => request.path.endsWith('/message-edits'))?.body).toEqual({
+    messageID: 'user-edit-target',
+    text: 'Rewritten question',
+  })
+  await expect(dialog).toBeHidden()
+  await expect(page.getByTestId('conversation-title')).toContainText('New session')
+  await expect(page.getByText('Rewritten question')).toBeVisible()
+  await expect(page.getByText('Old answer that should be removed')).toHaveCount(0)
+  await expect(page.getByText('Later question that should be removed')).toHaveCount(0)
+  expect(requests.filter((request) => request.path.endsWith('/forks'))).toHaveLength(0)
+  expect(requests.filter((request) => request.path === '/api/sessions' && request.method === 'POST')).toHaveLength(0)
+})
+
+test('a branch returns without locating a message after its source history is edited', async ({ page }) => {
+  await openDesktopClient(page, {
+    existingSession: true,
+    historyEvents: [
+      {
+        type: 'user_message',
+        messageID: 'user-branch-origin',
+        text: 'Question before branching',
+        images: [],
+      },
+      {
+        type: 'message_end',
+        messageID: 'assistant-branch',
+        text: 'Answer used to create a branch',
+        finalResponse: true,
+      },
+    ],
+  })
+
+  await page.getByRole('button', { name: 'Branch from this response' }).click()
+  await page.getByRole('dialog', { name: 'Create a new branch?' })
+    .getByRole('button', { name: 'Create branch' })
+    .click()
+  const branchNavigation = page.getByTestId('conversation-branch-navigation')
+  await branchNavigation.getByRole('button', { name: 'Return to New session' }).click()
+
+  const userMessage = page.getByTestId('user-message').filter({ hasText: 'Question before branching' })
+  await userMessage.hover()
+  await userMessage.getByRole('button', { name: 'Edit message' }).click()
+  await userMessage.getByRole('textbox', { name: 'Edit message' }).fill('Replacement branch point')
+  await page.getByRole('button', { name: 'Send edited message' }).click()
+  await page.getByRole('dialog', { name: 'Edit this message?' })
+    .getByRole('button', { name: 'Edit and continue' })
+    .click()
+  await expect(page.getByText('Replacement branch point')).toBeVisible()
+
+  await branchNavigation.getByRole('button', { name: 'View 1 branch' }).click()
+  await page.getByRole('menuitem', { name: 'New session (branch)' }).click()
+  await expect(branchNavigation.getByText('Original branch point edited')).toBeVisible()
+  await branchNavigation.getByRole('button', { name: 'Return to New session' }).click()
+
+  const replacement = page.locator('[data-branch-point-message-id="edited-user-message"]')
+  await expect(replacement).toContainText('Replacement branch point')
+  await expect(replacement).not.toHaveAttribute('data-branch-point-highlighted', 'true')
 })
 
 test('unknown provider input is shown as unavailable', async ({ page }) => {
@@ -4249,6 +4537,108 @@ test('sidebar session actions leave catalog pages for the conversation', async (
   await expect(conversation).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Skills', exact: true })).toBeHidden()
 
+})
+
+test('sidebar session hover shows conversation details with a small row gap', async ({
+  page,
+}) => {
+  const title = 'Analyze message branching without changing the original conversation'
+  await openDesktopClient(page, { existingSession: true, sessionTitle: title })
+
+  const trigger = page.getByRole('button', { name: title, exact: true })
+  await trigger.hover()
+
+  const hoverCard = page.getByTestId('session-hover-card')
+  await expect(hoverCard).toBeVisible()
+  await expect(hoverCard.getByRole('heading', { name: title })).toBeVisible()
+  await expect(hoverCard).toContainText('Model')
+  await expect(hoverCard).toContainText('Test model')
+  await expect(hoverCard).toContainText('Updated')
+  await expect(hoverCard).not.toContainText('/tmp/test-session')
+
+  const [triggerBox, hoverCardBox] = await Promise.all([
+    trigger.boundingBox(),
+    hoverCard.boundingBox(),
+  ])
+  expect(triggerBox).not.toBeNull()
+  expect(hoverCardBox).not.toBeNull()
+  expect(Math.abs((triggerBox?.x ?? 0) + (triggerBox?.width ?? 0) + 6 - (hoverCardBox?.x ?? 0))).toBeLessThan(1)
+})
+
+test('sidebar workspace hover shows project details with a small row gap', async ({
+  page,
+}) => {
+  await openDesktopClient(page, { existingSession: true, sessionScope: 'project' })
+
+  const trigger = page.getByRole('button', { name: 'test-session', exact: true })
+  await trigger.hover()
+
+  const hoverCard = page.getByTestId('workspace-hover-card')
+  await expect(hoverCard).toBeVisible()
+  await expect(hoverCard.getByRole('heading', { name: 'test-session' })).toBeVisible()
+  await expect(hoverCard).toContainText('1 chat')
+  await expect(hoverCard).toContainText('/tmp/test-session')
+  await expect(page.getByTestId('session-hover-card')).toHaveCount(0)
+
+  const contentLeftEdges = await Promise.all([
+    hoverCard.getByRole('heading', { name: 'test-session' }).evaluate((element) => element.getBoundingClientRect().x),
+    hoverCard.getByText('1 chat', { exact: true }).evaluate((element) => element.getBoundingClientRect().x),
+    hoverCard.getByText('/tmp/test-session', { exact: true }).evaluate((element) => element.getBoundingClientRect().x),
+  ])
+  expect(Math.max(...contentLeftEdges) - Math.min(...contentLeftEdges)).toBeLessThan(1)
+
+  const [triggerBox, hoverCardBox] = await Promise.all([
+    trigger.boundingBox(),
+    hoverCard.boundingBox(),
+  ])
+  expect(triggerBox).not.toBeNull()
+  expect(hoverCardBox).not.toBeNull()
+  expect(Math.abs((triggerBox?.x ?? 0) + (triggerBox?.width ?? 0) + 6 - (hoverCardBox?.x ?? 0))).toBeLessThan(1)
+})
+
+test('sidebar workspace action reveals the project in the native file manager', async ({
+  page,
+}) => {
+  await openDesktopClient(page, { existingSession: true, sessionScope: 'project' })
+
+  const project = page.getByRole('button', { name: 'test-session', exact: true })
+  await project.hover()
+  const actions = page.getByRole('button', { name: 'Actions for test-session' })
+  await actions.click()
+  await page.getByRole('menuitem', { name: 'Reveal in Finder' }).click()
+
+  await expect.poll(() =>
+    page.evaluate(() => (window as Window & { __revealedPath?: string }).__revealedPath),
+  ).toBe('/tmp/test-session')
+  await expect(actions).not.toBeFocused()
+})
+
+test('sidebar rename selects once and preserves normal backspace editing', async ({ page }) => {
+  const title = 'Greeting session in Chinese'
+  await openDesktopClient(page, { existingSession: true, sessionTitle: title })
+
+  const sessionRow = page.getByRole('button', { name: title, exact: true })
+  await sessionRow.hover()
+  await page.getByRole('button', { name: `Actions for ${title}` }).click()
+  await page.getByRole('menuitem', { name: 'Rename' }).click()
+
+  const renameInput = page.getByRole('textbox', { name: `Rename ${title}` })
+  await expect(renameInput).toBeVisible()
+  await renameInput.press('End')
+  await renameInput.press('Backspace')
+  await expect(renameInput).toHaveValue(title.slice(0, -1))
+  await renameInput.press('Backspace')
+  await expect(renameInput).toHaveValue(title.slice(0, -2))
+  const visibleShadows = await renameInput.evaluate((element) => {
+    const shadow = getComputedStyle(element).boxShadow
+    if (shadow === 'none') return []
+    return [...shadow.matchAll(/rgba?\(([^)]+)\)/g)].filter(([, channels]) => {
+      const values = channels?.split(',').map((value) => value.trim()) ?? []
+      return values.length < 4 || Number(values[3]) > 0
+    })
+  })
+  expect(visibleShadows).toHaveLength(0)
+  await expect(renameInput).toHaveCSS('outline-style', 'none')
 })
 
 test('skill invocations render and copy as file references', async ({

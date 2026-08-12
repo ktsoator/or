@@ -19,6 +19,96 @@ function thread(state: ThreadsState) {
 }
 
 describe('threadsReducer event sequences', () => {
+  test('preserves durable message metadata from a history snapshot', () => {
+    const sentAt = '2026-08-11T16:30:00Z'
+    const state = reduce([
+      {
+        t: 'reset',
+        sessionID,
+        history: {
+          running: false,
+          events: [
+            {
+              type: 'user_message',
+              messageID: 'transcript-user-1',
+              sentAt,
+              text: 'question',
+            },
+            {
+              type: 'message_end',
+              messageID: 'transcript-assistant-1',
+              text: 'answer',
+              finalResponse: true,
+            },
+          ],
+        },
+      },
+    ])
+
+    expect(thread(state).items).toEqual([
+      expect.objectContaining({
+        kind: 'user',
+        id: 'i-0',
+        messageID: 'transcript-user-1',
+        sentAt,
+        text: 'question',
+      }),
+      expect.objectContaining({
+        kind: 'assistant',
+        id: 'i-1',
+        messageID: 'transcript-assistant-1',
+        markdown: 'answer',
+      }),
+    ])
+  })
+
+  test('backfills durable message IDs when a live run completes', () => {
+    const state = reduce([
+      {
+        t: 'sendUser',
+        sessionID,
+        id: 'local-user',
+        text: 'question',
+        images: [],
+        startedAt,
+      },
+      {
+        t: 'wire',
+        sessionID,
+        ev: { type: 'run_start', startedAt },
+      },
+      {
+        t: 'wire',
+        sessionID,
+        ev: { type: 'message_end', text: 'answer', finalResponse: true },
+      },
+      {
+        t: 'wire',
+        sessionID,
+        ev: {
+          type: 'done',
+          startedAt,
+          userMessageIDs: ['transcript-user-1'],
+          assistantMessageID: 'transcript-assistant-1',
+        },
+      },
+    ])
+
+    expect(thread(state).items).toEqual([
+      expect.objectContaining({
+        kind: 'user',
+        id: 'local-user',
+        messageID: 'transcript-user-1',
+      }),
+      expect.objectContaining({ kind: 'run', startedAt }),
+      expect.objectContaining({
+        kind: 'assistant',
+        messageID: 'transcript-assistant-1',
+        complete: true,
+      }),
+    ])
+  })
+
   test('tracks the server event cursor and ignores duplicate replay', () => {
     const state = reduce([
       {

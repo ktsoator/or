@@ -2,12 +2,14 @@ package conversation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 
+	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/mcpbridge"
 	"github.com/ktsoator/or/coding/internal/mcpmanager"
@@ -34,6 +36,7 @@ type Manager struct {
 	// layer supplies it, so this package never names a transport type.
 	newTransport  NewTransport
 	generateTitle titleGenerator
+	streamFn      agent.StreamFn
 	mcp           *mcpmanager.Manager
 
 	mu        sync.RWMutex
@@ -51,6 +54,9 @@ type Options struct {
 	Workspaces   *workspace.Registry
 	NewTransport NewTransport
 	MCP          *mcpmanager.Manager
+	// StreamFn overrides model streaming for every managed session. Production
+	// leaves it nil; tests and embedded adapters can supply a deterministic model.
+	StreamFn agent.StreamFn
 }
 
 // NewManager restores and validates the session index. Restored transcripts,
@@ -68,6 +74,7 @@ func NewManager(ctx context.Context, opts Options) (*Manager, error) {
 		workspaces:    opts.Workspaces,
 		newTransport:  opts.NewTransport,
 		generateTitle: generateAITitle,
+		streamFn:      opts.StreamFn,
 		mcp:           opts.MCP,
 		sessions:      make(map[string]*sessionRuntime),
 		usage:         opts.Usage,
@@ -177,7 +184,17 @@ func (m *Manager) loadRuntimeLocked(id string) (*sessionRuntime, error) {
 	if err != nil {
 		return nil, fmt.Errorf("session: load session %s: %w", id, err)
 	}
-	if err := m.usage.BackfillEntries(id, loaded.session.Entries()); err != nil {
+	entries := loaded.session.Entries()
+	if loaded.record.UsageBackfillOffset < 0 || loaded.record.UsageBackfillOffset > len(entries) {
+		loaded.close()
+		return nil, fmt.Errorf(
+			"session: invalid usage backfill offset %d for session %s with %d entries",
+			loaded.record.UsageBackfillOffset,
+			id,
+			len(entries),
+		)
+	}
+	if err := m.usage.BackfillEntries(id, entries[loaded.record.UsageBackfillOffset:]); err != nil {
 		loaded.close()
 		return nil, fmt.Errorf("session: backfill usage for session %s: %w", id, err)
 	}
@@ -218,6 +235,15 @@ func (m *Manager) normalizeRecord(record record) (record, error) {
 		if err != nil {
 			return record, err
 		}
+	}
+	if record.ForkedFromSessionID == record.ID {
+		return record, errors.New("session: fork source cannot be the session itself")
+	}
+	if record.ForkedFromSessionID == "" && record.ForkedFromMessageID != "" {
+		return record, errors.New("session: fork source metadata is incomplete")
+	}
+	if record.UsageBackfillOffset < 0 {
+		return record, errors.New("session: usage backfill offset cannot be negative")
 	}
 	record.WorkspacePath = workspacePath
 	model, ok := llm.LookupModel(record.Provider, record.Model)
@@ -260,6 +286,7 @@ func (m *Manager) build(record record) (*sessionRuntime, error) {
 		ThinkingLevel:   thinking,
 		PermissionMode:  permissionMode,
 		AdditionalTools: additionalTools,
+		StreamFn:        m.streamFn,
 	}, transport)
 	if err != nil {
 		mcpLease.Close()
@@ -334,6 +361,7 @@ func (m *Manager) handleSessionEvent(sessionID string, runtime *sessionRuntime, 
 				Text:     ev.Text,
 				Images:   ev.Images,
 				Files:    ev.Files,
+				SentAt:   ev.SentAt,
 				Delivery: queued.Delivery,
 			})
 			// Message acceptance is observable before its background title state.

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 )
 
@@ -79,6 +80,56 @@ func (s *JSONL) Append(_ context.Context, entries ...Entry) error {
 	if err := file.Close(); err != nil {
 		return fmt.Errorf("store: close %s: %w", s.path, err)
 	}
+	return nil
+}
+
+// Replace atomically installs entries as the complete session log. It is used
+// for explicit history rewrites while the owning session is idle.
+func (s *JSONL) Replace(_ context.Context, entries []Entry) error {
+	if err := validateEntries(entries); err != nil {
+		return err
+	}
+	encoded, err := encodeSession(entries)
+	if err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := ensurePrivateDirectory(s.path); err != nil {
+		return fmt.Errorf("store: create session dir: %w", err)
+	}
+	temporary, err := os.CreateTemp(filepath.Dir(s.path), ".transcript-*.tmp")
+	if err != nil {
+		return fmt.Errorf("store: create replacement for %s: %w", s.path, err)
+	}
+	temporaryPath := temporary.Name()
+	removeTemporary := true
+	defer func() {
+		if removeTemporary {
+			_ = os.Remove(temporaryPath)
+		}
+	}()
+	if err := temporary.Chmod(privateFileMode); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("store: secure replacement for %s: %w", s.path, err)
+	}
+	if _, err := temporary.Write(encoded); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("store: write replacement for %s: %w", s.path, err)
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("store: sync replacement for %s: %w", s.path, err)
+	}
+	if err := temporary.Close(); err != nil {
+		return fmt.Errorf("store: close replacement for %s: %w", s.path, err)
+	}
+	if err := os.Rename(temporaryPath, s.path); err != nil {
+		return fmt.Errorf("store: replace %s: %w", s.path, err)
+	}
+	removeTemporary = false
+	s.ready = true
 	return nil
 }
 
@@ -161,6 +212,18 @@ func encodeEntries(entries []Entry) ([]byte, error) {
 		buffer.WriteByte('\n')
 	}
 	return buffer.Bytes(), nil
+}
+
+func encodeSession(entries []Entry) ([]byte, error) {
+	header, err := json.Marshal(NewHeader())
+	if err != nil {
+		return nil, err
+	}
+	encoded, err := encodeEntries(entries)
+	if err != nil {
+		return nil, err
+	}
+	return append(append(header, '\n'), encoded...), nil
 }
 
 func validateEntries(entries []Entry) error {

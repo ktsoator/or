@@ -4,6 +4,7 @@ import type {
   UIEventHandler,
   WheelEventHandler,
 } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { LoaderCircle, PanelLeft } from 'lucide-react'
 import type {
   ApprovalItem,
@@ -14,7 +15,7 @@ import type {
 import type { SessionDraft } from '@/features/session'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { groupItems } from './groupItems'
+import { groupAssistantTurns, type RenderUnit } from './groupItems'
 import { ConversationActionsMenu } from './ConversationActionsMenu'
 import { ScrollToLatestButton } from './ConversationScrollControl'
 import {
@@ -24,17 +25,25 @@ import {
 } from './ConversationThread'
 import { SidebarToggleButton } from '@/components/SidebarToggleButton'
 import { StepGroup } from './StepGroup'
+import { ConversationBranchNavigation } from './ConversationBranchNavigation'
 
 type ConversationPaneProps = {
   thread: {
     draft?: SessionDraft
     activeSession?: SessionSummary
+    parentSession?: SessionSummary
+    branchSessions: SessionSummary[]
+    branchPointTarget?: {
+      sessionID: string
+      messageID: string
+    }
     tasks: BackgroundTask[]
     items: Item[]
     approval?: ApprovalItem
     running: boolean
     autoCompacting: boolean
     loading: boolean
+    forking: boolean
   }
   layout: {
     sidebarCollapsed: boolean
@@ -54,6 +63,15 @@ type ConversationPaneProps = {
     expandSidebar: () => void
     openMobileSessions: () => void
     openTaskInWorkbench: (taskID: string) => void
+    selectSession: (sessionID: string) => void
+    returnToParent?: () => void
+    branchPointLocated: (target: { sessionID: string; messageID: string }) => void
+    forkMessage: (
+      messageID: string,
+      mode: 'before_user' | 'after_assistant',
+      text?: string,
+    ) => Promise<SessionSummary>
+    editMessage: (messageID: string, text: string) => Promise<SessionSummary>
     renderComposer: (centered?: boolean) => ReactNode
   }
 }
@@ -68,12 +86,16 @@ export function ConversationPane({
   const {
     draft,
     activeSession,
+    parentSession,
+    branchSessions,
+    branchPointTarget,
     tasks,
     items,
     approval,
     running,
     autoCompacting,
     loading,
+    forking,
   } = thread
   const {
     sidebarCollapsed,
@@ -93,10 +115,87 @@ export function ConversationPane({
     expandSidebar,
     openMobileSessions,
     openTaskInWorkbench,
+    selectSession,
+    returnToParent,
+    branchPointLocated,
+    forkMessage,
+    editMessage,
     renderComposer,
   } = actions
+  const [highlightedBranchPoint, setHighlightedBranchPoint] = useState<{
+    sessionID: string
+    messageID: string
+  }>()
+  const highlightTimerRef = useRef<number>(undefined)
+  const branchPointItemID = branchPointTarget
+    ? items.find(
+        (item) =>
+          (item.kind === 'user' || item.kind === 'assistant') &&
+          item.messageID === branchPointTarget.messageID,
+      )?.id
+    : undefined
   const emptySession = !loading && items.length === 0 && !approval
   const awaitingFirstOutput = running && items.at(-1)?.kind === 'user'
+
+  useEffect(() => () => {
+    if (highlightTimerRef.current) window.clearTimeout(highlightTimerRef.current)
+  }, [])
+
+  useEffect(() => {
+    if (
+      loading ||
+      !branchPointTarget ||
+      branchPointTarget.sessionID !== activeSession?.id
+    ) {
+      return
+    }
+    if (!branchPointItemID) {
+      branchPointLocated(branchPointTarget)
+      return
+    }
+
+    const transcript = logRef.current
+    const message = Array.from(
+      transcript?.querySelectorAll<HTMLElement>('[data-branch-point-message-id]') ?? [],
+    ).find(
+      (element) =>
+        element.dataset.branchPointMessageId === branchPointTarget.messageID,
+    )
+    if (!transcript || !message) return
+
+    setHighlightedBranchPoint(branchPointTarget)
+    if (highlightTimerRef.current) window.clearTimeout(highlightTimerRef.current)
+
+    const frame = window.requestAnimationFrame(() => {
+      const transcriptBox = transcript.getBoundingClientRect()
+      const messageBox = message.getBoundingClientRect()
+      const top =
+        transcript.scrollTop +
+        messageBox.top -
+        transcriptBox.top -
+        (transcript.clientHeight - messageBox.height) / 2
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      transcript.scrollTo({ top: Math.max(0, top), behavior: reducedMotion ? 'auto' : 'smooth' })
+      branchPointLocated(branchPointTarget)
+      highlightTimerRef.current = window.setTimeout(() => {
+        setHighlightedBranchPoint((current) =>
+          current?.sessionID === branchPointTarget.sessionID &&
+          current.messageID === branchPointTarget.messageID
+            ? undefined
+            : current,
+        )
+      }, 1600)
+    })
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [
+    activeSession?.id,
+    branchPointItemID,
+    branchPointLocated,
+    branchPointTarget,
+    loading,
+    logRef,
+  ])
 
   return (
       <div
@@ -132,7 +231,7 @@ export function ConversationPane({
               <PanelLeft className="size-4" aria-hidden="true" />
               <span className="sr-only">{t('app.openSessions')}</span>
             </button>
-            <div className="flex min-w-0 items-center gap-1.5">
+            <div className="flex min-w-0 flex-1 items-center gap-1.5">
               {!draft && activeSession?.scope === 'project' && activeSession.workspaceName && (
                 <>
                   <span
@@ -155,6 +254,16 @@ export function ConversationPane({
                   : (activeSession?.title ?? 'Or')}
               </span>
             </div>
+            {!draft && activeSession && (parentSession || branchSessions.length > 0) && (
+              <ConversationBranchNavigation
+                key={activeSession.id}
+                parentSession={parentSession}
+                parentBranchPointAvailable={Boolean(activeSession.forkedFromMessageId)}
+                branches={branchSessions}
+                onReturnToParent={returnToParent}
+                onSelectSession={selectSession}
+              />
+            )}
           </div>
           {!draft && activeSession && (
             <ConversationActionsMenu
@@ -199,17 +308,31 @@ export function ConversationPane({
                 </div>
               ) : (
                 <>
-                  {groupItems(items).map((unit) =>
-                    unit.kind === 'steps' ? (
-                      <StepGroup key={unit.id} items={unit.items} cwd={activeSession?.workspacePath} />
-                    ) : (
-                      <ThreadItem
-                        key={unit.item.id}
-                        item={unit.item}
-                        cwd={activeSession?.workspacePath}
-                      />
-                    ),
-                  )}
+                  {groupAssistantTurns(items).map((unit) => {
+                    if (unit.kind === 'assistant-turn') {
+                      const highlighted =
+                        activeSession?.id === highlightedBranchPoint?.sessionID &&
+                        unit.messageID === highlightedBranchPoint?.messageID
+                      return (
+                        <div
+                          key={unit.id}
+                          className={cn(highlighted && 'bg-surface-hover')}
+                          data-testid="assistant-turn"
+                          data-branch-point-message-id={unit.messageID}
+                          data-branch-point-highlighted={highlighted || undefined}
+                        >
+                          {unit.units.map((turnUnit) => renderUnit(turnUnit))}
+                        </div>
+                      )
+                    }
+
+                    const highlighted =
+                      unit.kind === 'item' &&
+                      unit.item.kind === 'user' &&
+                      activeSession?.id === highlightedBranchPoint?.sessionID &&
+                      unit.item.messageID === highlightedBranchPoint?.messageID
+                    return renderUnit(unit, highlighted)
+                  })}
                   {autoCompacting ? <AutoCompactionStatus /> : awaitingFirstOutput && <AwaitingResponse />}
                 </>
               )}
@@ -226,4 +349,26 @@ export function ConversationPane({
         {!loading && !emptySession && renderComposer()}
       </div>
   )
+
+  function renderUnit(unit: RenderUnit, highlighted = false) {
+    return unit.kind === 'steps' ? (
+      <StepGroup key={unit.id} items={unit.items} cwd={activeSession?.workspacePath} />
+    ) : (
+      <ThreadItem
+        key={unit.item.id}
+        item={unit.item}
+        cwd={activeSession?.workspacePath}
+        highlighted={highlighted}
+        branchingDisabled={running || forking}
+        onForkMessage={forkMessage}
+        onEditMessage={editMessage}
+        editRequiresConfirmation={hasLaterConversationContent(unit.item)}
+      />
+    )
+  }
+
+  function hasLaterConversationContent(item: Item) {
+    const index = items.findIndex((candidate) => candidate.id === item.id)
+    return index >= 0 && index < items.length - 1
+  }
 }

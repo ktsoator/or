@@ -64,6 +64,26 @@ func TestProjectEventIncludesResponseCompletionTime(t *testing.T) {
 	}
 }
 
+func TestProjectEventIncludesPersistedRunMessageIDs(t *testing.T) {
+	data, ok := ProjectEvent(engine.Event{
+		Type:               engine.RunCompleted,
+		UserMessageIDs:     []string{"user-1", "user-2"},
+		AssistantMessageID: "assistant-1",
+	})
+	if !ok {
+		t.Fatal("run completion event was not projected")
+	}
+
+	var event wireEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(event.UserMessageIDs, ",") != "user-1,user-2" ||
+		event.AssistantMessageID != "assistant-1" {
+		t.Fatalf("message ids = users %v, assistant %q", event.UserMessageIDs, event.AssistantMessageID)
+	}
+}
+
 func TestProjectEventPreservesUnknownInputUsage(t *testing.T) {
 	data, ok := ProjectEvent(engine.Event{
 		Type:  engine.MessageCompleted,
@@ -112,6 +132,7 @@ func TestProjectHistoryIncludesResponseCompletionTime(t *testing.T) {
 	completedAt := time.Date(2026, time.July, 22, 16, 43, 0, 0, time.UTC)
 	events := ProjectHistory([]engine.HistoryItem{{
 		Type:          engine.HistoryAssistant,
+		MessageID:     "message-1",
 		Text:          "answer",
 		FinalResponse: true,
 		CompletedAt:   completedAt,
@@ -122,6 +143,46 @@ func TestProjectHistoryIncludesResponseCompletionTime(t *testing.T) {
 	}
 	if want := completedAt.Format(time.RFC3339Nano); events[0].CompletedAt != want {
 		t.Fatalf("completedAt = %q, want %q", events[0].CompletedAt, want)
+	}
+	if events[0].MessageID != "message-1" {
+		t.Fatalf("messageID = %q, want message-1", events[0].MessageID)
+	}
+}
+
+func TestProjectHistoryIncludesUserMessageMetadata(t *testing.T) {
+	sentAt := time.Date(2026, time.August, 11, 9, 30, 0, 0, time.FixedZone("PDT", -7*60*60))
+	events := ProjectHistory([]engine.HistoryItem{{
+		Type:      engine.HistoryUser,
+		MessageID: "message-2",
+		SentAt:    sentAt,
+		Text:      "question",
+	}})
+
+	if len(events) != 1 || events[0].MessageID != "message-2" {
+		t.Fatalf("events = %#v, want persisted user message ID", events)
+	}
+	if want := sentAt.UTC().Format(time.RFC3339Nano); events[0].SentAt != want {
+		t.Fatalf("sentAt = %q, want %q", events[0].SentAt, want)
+	}
+}
+
+func TestProjectEventIncludesUserMessageTime(t *testing.T) {
+	sentAt := time.Date(2026, time.August, 11, 9, 45, 0, 0, time.UTC)
+	data, ok := ProjectEvent(engine.Event{
+		Type:   engine.UserMessageCompleted,
+		Text:   "question",
+		SentAt: sentAt,
+	})
+	if !ok {
+		t.Fatal("user message event was not projected")
+	}
+
+	var event wireEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		t.Fatal(err)
+	}
+	if event.SentAt != sentAt.Format(time.RFC3339Nano) {
+		t.Fatalf("sentAt = %q, want %q", event.SentAt, sentAt.Format(time.RFC3339Nano))
 	}
 }
 

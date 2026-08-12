@@ -17,6 +17,7 @@ import (
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/coding/internal/tools"
+	"github.com/ktsoator/or/coding/internal/transcript"
 	"github.com/ktsoator/or/coding/internal/workspace"
 	"github.com/ktsoator/or/llm"
 )
@@ -128,6 +129,61 @@ func (s *Server) handleDeleteSession(c *gin.Context) {
 	default:
 		s.transports.previews.revokeSession(c.Param("sessionID"))
 		c.Status(http.StatusNoContent)
+	}
+}
+
+func (s *Server) handleForkSession(c *gin.Context) {
+	var body struct {
+		MessageID string              `json:"messageID"`
+		Mode      transcript.ForkMode `json:"mode"`
+		Text      string              `json:"text"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid fork request"})
+		return
+	}
+
+	summary, err := s.conversations.Fork(c.Param("sessionID"), conversation.ForkOptions{
+		MessageID:       body.MessageID,
+		Mode:            body.Mode,
+		ReplacementText: body.Text,
+	})
+	switch {
+	case errors.Is(err, os.ErrNotExist), errors.Is(err, transcript.ErrForkMessageNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": "session or message not found"})
+	case errors.Is(err, transcript.ErrInvalidForkBoundary):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	case errors.Is(err, conversation.ErrSessionActive):
+		c.JSON(http.StatusConflict, gin.H{"error": "wait for the session to become idle before branching"})
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	default:
+		c.JSON(http.StatusCreated, summary)
+	}
+}
+
+func (s *Server) handleEditMessage(c *gin.Context) {
+	var body struct {
+		MessageID string `json:"messageID"`
+		Text      string `json:"text"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid message edit request"})
+		return
+	}
+
+	summary, err := s.conversations.EditMessage(c.Param("sessionID"), body.MessageID, body.Text)
+	switch {
+	case errors.Is(err, os.ErrNotExist), errors.Is(err, transcript.ErrForkMessageNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": "session or message not found"})
+	case errors.Is(err, transcript.ErrInvalidForkBoundary):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	case errors.Is(err, conversation.ErrSessionActive):
+		c.JSON(http.StatusConflict, gin.H{"error": "wait for the session to become idle before editing a message"})
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	default:
+		c.JSON(http.StatusAccepted, summary)
 	}
 }
 
@@ -571,6 +627,8 @@ func (s *Server) mountSessions(r gin.IRouter) {
 	one.GET("/history", s.handleHistory)
 	one.GET("/events", s.handleEvents)
 	one.DELETE("", s.handleDeleteSession)
+	one.POST("/forks", s.handleForkSession)
+	one.POST("/message-edits", s.handleEditMessage)
 	one.PATCH("/settings", s.handleSessionSettings)
 	one.PATCH("/permission-mode", s.handlePermissionMode)
 	one.PATCH("/title", s.handleRenameSession)

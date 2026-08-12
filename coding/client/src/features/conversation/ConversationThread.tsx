@@ -1,4 +1,4 @@
-import { type ClipboardEvent, useEffect, useState } from 'react'
+import { type ClipboardEvent, type FormEvent, type KeyboardEvent, useEffect, useState } from 'react'
 import {
   BookOpen,
   CircleAlert,
@@ -7,7 +7,9 @@ import {
   CircleX,
   FileCode2,
   LoaderCircle,
+  Pencil,
 } from 'lucide-react'
+import { Tooltip } from 'radix-ui'
 import { formatFileSize } from '@/shared/attachments'
 import {
   parseSkillReference,
@@ -17,8 +19,11 @@ import {
 import type { Item } from '@/types'
 import { useI18n } from '@/i18n'
 import { formatMessageTime } from '@/lib/time'
+import { cn } from '@/lib/utils'
 import { Markdown } from '@/shared/ui/Markdown'
+import { BranchSessionDialog } from './BranchSessionDialog'
 import { CopyButton } from './CopyButton'
+import { EditMessageDialog } from './EditMessageDialog'
 import { ResponseActions } from './ResponseActions'
 import { Thinking } from './Thinking'
 import { ToolCard } from './ToolCard'
@@ -57,16 +62,114 @@ export function AutoCompactionStatus() {
   )
 }
 
-export function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
+export function ThreadItem({
+  item,
+  cwd,
+  highlighted = false,
+  branchingDisabled = false,
+  onForkMessage,
+  onEditMessage,
+  editRequiresConfirmation = false,
+}: {
+  item: Item
+  cwd?: string
+  highlighted?: boolean
+  branchingDisabled?: boolean
+  onForkMessage?: (
+    messageID: string,
+    mode: 'before_user' | 'after_assistant',
+    text?: string,
+  ) => Promise<unknown>
+  onEditMessage?: (messageID: string, text: string) => Promise<unknown>
+  editRequiresConfirmation?: boolean
+}) {
   const { locale, t } = useI18n()
+  const [editing, setEditing] = useState(false)
+  const [editText, setEditText] = useState('')
+  const [branching, setBranching] = useState(false)
+  const [branchError, setBranchError] = useState('')
+  const [branchDialogOpen, setBranchDialogOpen] = useState(false)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+
+  const startEditing = () => {
+    if (item.kind !== 'user' || !item.messageID || branchingDisabled || branching) return
+    setEditText(item.text)
+    setBranchError('')
+    setEditing(true)
+  }
+
+  const cancelEditing = () => {
+    if (branching) return
+    setEditing(false)
+    setBranchError('')
+  }
+
+  const applyEdit = async () => {
+    if (item.kind !== 'user' || !item.messageID || !onEditMessage || branchingDisabled || branching) {
+      return
+    }
+    setBranching(true)
+    setBranchError('')
+    try {
+      await onEditMessage(item.messageID, editText)
+      setEditDialogOpen(false)
+      setEditing(false)
+    } catch {
+      setBranchError(t('actions.editFailed'))
+    } finally {
+      setBranching(false)
+    }
+  }
+
+  const submitEdit = (event?: FormEvent) => {
+    event?.preventDefault()
+    if (item.kind !== 'user' || !item.messageID || !onEditMessage || branchingDisabled || branching) {
+      return
+    }
+    if (!editText.trim() && item.images.length === 0 && (item.files?.length ?? 0) === 0) return
+    setBranchError('')
+    if (editRequiresConfirmation) {
+      setEditDialogOpen(true)
+      return
+    }
+    void applyEdit()
+  }
+
+  const branchAssistant = async () => {
+    if (item.kind !== 'assistant' || !item.messageID || !onForkMessage || branchingDisabled || branching) {
+      return
+    }
+    setBranching(true)
+    setBranchError('')
+    try {
+      await onForkMessage(item.messageID, 'after_assistant')
+      setBranchDialogOpen(false)
+    } catch {
+      setBranchError(t('actions.branchFailed'))
+    } finally {
+      setBranching(false)
+    }
+  }
+
   switch (item.kind) {
     case 'user':
       return (
         <section
           className="group/message my-3.5 flex animate-[fade-in_160ms_ease-out] justify-end"
           data-testid="user-message"
+          data-message-id={item.messageID}
+          data-branch-point-message-id={item.messageID}
+          data-branch-point-highlighted={highlighted || undefined}
         >
-          <div className="flex max-w-[78%] flex-col items-end gap-2 max-md:max-w-[88%]">
+          <div
+            className={cn(
+              'flex flex-col items-end gap-2',
+              editing
+                ? 'w-full max-w-full'
+                : 'max-w-[78%] max-md:max-w-[88%]',
+              highlighted && 'bg-surface-hover',
+            )}
+          >
             {(item.files?.length ?? 0) > 0 && (
               <div className="flex max-w-full flex-wrap justify-end gap-1.5">
                 {item.files?.map((file, index) => (
@@ -101,42 +204,127 @@ export function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
                 ))}
               </div>
             )}
-            {item.text && (
+            {editing ? (
+              <form
+                className="w-full"
+                onSubmit={submitEdit}
+              >
+                <div className="flex h-[100px] flex-col rounded-[20px] bg-message-editor px-3 py-2.5">
+                  <textarea
+                    autoFocus
+                    className="block min-h-0 w-full flex-1 resize-none overflow-y-auto bg-transparent px-1 py-0.5 text-[14px] leading-[22px] text-ink outline-none"
+                    value={editText}
+                    aria-label={t('actions.editMessage')}
+                    disabled={branching}
+                    onChange={(event) => setEditText(event.target.value)}
+                    onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
+                      if (event.key === 'Escape') {
+                        event.preventDefault()
+                        cancelEditing()
+                      } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                        event.preventDefault()
+                        submitEdit()
+                      }
+                    }}
+                  />
+                  {branchError && (
+                    <p className="mt-1 px-1 text-[0.75rem] leading-4 text-danger-soft" role="alert">
+                      {branchError}
+                    </p>
+                  )}
+                  <div className="mt-1.5 flex min-h-8 items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      className="inline-flex h-8 min-w-[4.5rem] cursor-pointer items-center justify-center rounded-full border border-edge bg-canvas px-3.5 text-[0.8125rem] font-medium text-ink-soft outline-none transition-[background-color,border-color,color] hover:border-edge-strong hover:bg-canvas-raised hover:text-ink focus-visible:ring-2 focus-visible:ring-edge-stronger focus-visible:ring-offset-1 focus-visible:ring-offset-message-editor disabled:cursor-wait disabled:opacity-50"
+                      aria-label={t('actions.cancelEdit')}
+                      disabled={branching}
+                      onClick={cancelEditing}
+                    >
+                      {t('actions.cancelEditButton')}
+                    </button>
+                    <button
+                      type="submit"
+                      className="inline-flex h-8 min-w-[4.5rem] cursor-pointer items-center justify-center gap-1.5 rounded-full bg-canvas-inverse px-3.5 text-[0.8125rem] font-medium text-ink-inverse outline-none transition-[opacity,transform] hover:opacity-90 active:translate-y-px focus-visible:ring-2 focus-visible:ring-edge-stronger focus-visible:ring-offset-2 focus-visible:ring-offset-message-editor disabled:cursor-not-allowed disabled:opacity-30 motion-reduce:transition-none"
+                      aria-label={t('actions.sendEditedMessage')}
+                      disabled={
+                        branching ||
+                        branchingDisabled ||
+                        (!editText.trim() && item.images.length === 0 && (item.files?.length ?? 0) === 0)
+                      }
+                    >
+                      {branching && (
+                        <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+                      )}
+                      {t(
+                        branching
+                          ? 'actions.sendingEditedMessage'
+                          : 'actions.sendEditedMessageButton',
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            ) : item.text ? (
               <div className="rounded-[10px] bg-canvas-sunken px-3 py-2 text-[14px] leading-[22px] whitespace-pre-wrap">
                 <UserMessageText text={item.text} />
               </div>
-            )}
-            {(item.text || item.sentAt || item.deliveryStatus === 'failed') && (
+            ) : null}
+            {!editing && (item.text || item.sentAt || item.deliveryStatus === 'failed') && (
               <div className="-mt-1 flex h-7 items-center justify-end gap-2 px-0.5 text-[0.75rem] leading-4 tabular-nums">
                 {item.deliveryStatus === 'failed' && (
                   <span className="text-danger-soft">{t('app.notSent')}</span>
                 )}
                 <div
-                  className="pointer-events-none flex max-w-0 items-center gap-1 overflow-hidden opacity-0 transition-[max-width,opacity] duration-150 ease-out group-focus-within/message:pointer-events-auto group-focus-within/message:max-w-48 group-focus-within/message:opacity-100 group-hover/message:pointer-events-auto group-hover/message:max-w-48 group-hover/message:opacity-100 motion-reduce:transition-none max-md:pointer-events-auto max-md:max-w-48 max-md:opacity-100"
+                  className="pointer-events-none flex max-w-0 items-center gap-1 overflow-hidden opacity-0 group-focus-within/message:pointer-events-auto group-focus-within/message:max-w-48 group-focus-within/message:opacity-100 group-hover/message:pointer-events-auto group-hover/message:max-w-48 group-hover/message:opacity-100 max-md:pointer-events-auto max-md:max-w-48 max-md:opacity-100"
                   data-testid="user-message-actions"
                 >
+                  {item.sentAt && (
+                    <time className="mr-1 shrink-0 text-ink-faint" dateTime={item.sentAt}>
+                      {formatMessageTime(item.sentAt, locale)}
+                    </time>
+                  )}
                   {item.text && (
                     <CopyButton
                       value={item.text}
                       className="size-7 rounded-lg hover:bg-surface-active focus-visible:bg-surface-active"
                     />
                   )}
-                  {item.sentAt && (
-                    <time className="shrink-0 text-ink-faint" dateTime={item.sentAt}>
-                      {formatMessageTime(item.sentAt, locale)}
-                    </time>
+                  {onEditMessage && (
+                    <Tooltip.Provider delayDuration={80}>
+                      <MessageActionButton
+                        icon={Pencil}
+                        label={t('actions.editMessage')}
+                        disabled={!item.messageID || branchingDisabled || branching}
+                        onClick={startEditing}
+                      />
+                    </Tooltip.Provider>
                   )}
                 </div>
               </div>
             )}
+            <EditMessageDialog
+              open={editDialogOpen}
+              submitting={branching}
+              error={branchError}
+              onOpenChange={(open) => {
+                setEditDialogOpen(open)
+                if (!open) setBranchError('')
+              }}
+              onConfirm={() => void applyEdit()}
+            />
           </div>
         </section>
       )
     case 'assistant':
       return (
         <section
-          className="my-3 animate-[fade-in_160ms_ease-out]"
+          className={cn(
+            'my-3 animate-[fade-in_160ms_ease-out]',
+            highlighted && 'bg-surface-hover',
+          )}
           data-testid="assistant-message"
+          data-message-id={item.messageID}
+          data-branch-point-highlighted={highlighted || undefined}
         >
           <Markdown source={item.markdown} />
           {item.complete && (
@@ -145,8 +333,24 @@ export function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
               modelName={item.modelName || item.model}
               responseText={item.markdown}
               completedAt={item.completedAt}
+              onFork={onForkMessage ? () => {
+                setBranchError('')
+                setBranchDialogOpen(true)
+              } : undefined}
+              forkDisabled={!item.messageID || branchingDisabled}
+              forking={branching}
             />
           )}
+          <BranchSessionDialog
+            open={branchDialogOpen}
+            creating={branching}
+            error={branchError}
+            onOpenChange={(open) => {
+              setBranchDialogOpen(open)
+              if (!open) setBranchError('')
+            }}
+            onConfirm={() => void branchAssistant()}
+          />
         </section>
       )
     case 'run':
@@ -171,6 +375,48 @@ export function ThreadItem({ item, cwd }: { item: Item; cwd?: string }) {
         </div>
       )
   }
+}
+
+function MessageActionButton({
+  icon: Icon,
+  label,
+  disabled,
+  iconClassName,
+  type = 'button',
+  onClick,
+}: {
+  icon: typeof Pencil
+  label: string
+  disabled?: boolean
+  iconClassName?: string
+  type?: 'button' | 'submit'
+  onClick: () => void
+}) {
+  return (
+    <Tooltip.Root>
+      <Tooltip.Trigger asChild>
+        <button
+          className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-lg text-ink-faint outline-none transition-colors hover:bg-surface-active hover:text-ink-soft focus-visible:bg-surface-active focus-visible:text-ink-soft disabled:cursor-not-allowed disabled:opacity-30"
+          type={type}
+          aria-label={label}
+          disabled={disabled}
+          onClick={onClick}
+        >
+          <Icon className={`size-[0.9375rem] ${iconClassName ?? ''}`} aria-hidden="true" />
+        </button>
+      </Tooltip.Trigger>
+      <Tooltip.Portal>
+        <Tooltip.Content
+          side="bottom"
+          sideOffset={6}
+          collisionPadding={8}
+          className="z-[150] animate-[fade-in_100ms_ease-out] rounded-md bg-canvas-inverse px-2 py-1 text-[0.6875rem] leading-4 font-medium whitespace-nowrap text-ink-inverse shadow-lg"
+        >
+          {label}
+        </Tooltip.Content>
+      </Tooltip.Portal>
+    </Tooltip.Root>
+  )
 }
 
 function UserMessageText({ text }: Pick<Extract<Item, { kind: 'user' }>, 'text'>) {

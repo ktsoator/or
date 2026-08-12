@@ -1,6 +1,7 @@
 import {
   lazy,
   Suspense,
+  useCallback,
   useEffect,
   useState,
   type CSSProperties,
@@ -13,7 +14,7 @@ import { useSession } from '@/features/session'
 import type { SessionSummary } from '@/types'
 import { cn } from '@/lib/utils'
 import { Composer } from '@/features/composer'
-import { chooseNativeDirectory } from '@/lib/desktop'
+import { chooseNativeDirectory, revealNativePath } from '@/lib/desktop'
 import type { SettingsSection } from '@/features/settings'
 import {
   WorkbenchPanel,
@@ -49,9 +50,15 @@ type AppView =
   | { type: 'skills' }
   | { type: 'mcp' }
 
+type BranchPointTarget = {
+  sessionID: string
+  messageID: string
+}
+
 export default function App() {
   const { t } = useI18n()
   const [secondarySessionID, setSecondarySessionID] = useState<string>()
+  const [branchPointTarget, setBranchPointTarget] = useState<BranchPointTarget>()
   const [workbenchTaskRequest, setWorkbenchTaskRequest] =
     useState<WorkbenchTaskRequest>()
   const {
@@ -75,6 +82,7 @@ export default function App() {
     autoCompacting,
     loading,
     creating,
+    forking,
     updatingSettings,
     compacting,
     status,
@@ -87,6 +95,8 @@ export default function App() {
     updateDraftWorkspace,
     deleteSession,
     renameSession,
+    forkMessage,
+    editMessage,
     selectSession,
     updateSettings,
     updatePermissionMode,
@@ -178,6 +188,12 @@ export default function App() {
 
   const workspacePickerPath =
     selectedWorkspacePath || draft?.workspacePath || activeSession?.workspacePath || workspaceGroups[0]?.path
+  const parentSession = activeSession?.forkedFromSessionId
+    ? sessions.find((session) => session.id === activeSession.forkedFromSessionId)
+    : undefined
+  const branchSessions = activeSession
+    ? sessions.filter((session) => session.forkedFromSessionId === activeSession.id)
+    : []
   const workbenchPreview =
     secondaryThread && workbenchPreviewSessionID === secondaryThread.session.id
       ? secondaryThread.preview
@@ -258,14 +274,23 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleSettingsShortcut)
   }, [view.type])
 
-  const chooseSession = (id: string) => {
+  const chooseSession = (id: string, messageID?: string) => {
     const session = sessions.find((candidate) => candidate.id === id)
     if (session) setSelectedWorkspacePath(session.scope === 'project' ? session.workspacePath : undefined)
+    setBranchPointTarget(messageID ? { sessionID: id, messageID } : undefined)
     selectSession(id)
     setView({ type: 'conversation' })
     setWorkbenchTaskRequest(undefined)
     closeMobileSessions()
   }
+
+  const handleBranchPointLocated = useCallback((target: BranchPointTarget) => {
+    setBranchPointTarget((current) =>
+      current?.sessionID === target.sessionID && current.messageID === target.messageID
+        ? undefined
+        : current,
+    )
+  }, [])
 
   const openSessionInWorkbench = (id: string) => {
     if (!sessions.some((session) => session.id === id)) return
@@ -522,6 +547,7 @@ export default function App() {
           requestDelete,
           handleRename,
           onSelectWorkspace: setSelectedWorkspacePath,
+          revealWorkspace: revealNativePath,
           requestRemoveWorkspace,
           onOpenSettings: () => setView({ type: 'settings', section: 'general' }),
           startSidebarResize,
@@ -574,12 +600,16 @@ export default function App() {
         thread={{
           draft,
           activeSession,
+          parentSession,
+          branchSessions,
+          branchPointTarget,
           tasks,
           items,
           approval,
           running,
           autoCompacting,
           loading,
+          forking,
         }}
         layout={{
           sidebarCollapsed,
@@ -599,6 +629,13 @@ export default function App() {
           expandSidebar,
           openMobileSessions,
           openTaskInWorkbench,
+          selectSession: chooseSession,
+          returnToParent: parentSession
+            ? () => chooseSession(parentSession.id, activeSession?.forkedFromMessageId)
+            : undefined,
+          branchPointLocated: handleBranchPointLocated,
+          forkMessage,
+          editMessage,
           renderComposer: composer,
         }}
       />
@@ -695,6 +732,9 @@ export default function App() {
       {deleteTarget && (
         <DeleteSessionDialog
           session={deleteTarget}
+          branchCount={sessions.filter(
+            (session) => session.forkedFromSessionId === deleteTarget.id,
+          ).length}
           deleting={deleting}
           error={deleteError}
           onCancel={() => {
