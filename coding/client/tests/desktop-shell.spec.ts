@@ -3856,6 +3856,14 @@ test('branching from an assistant response requires confirmation', async ({ page
     mode: 'after_assistant',
   })
   await expect(page.getByTestId('conversation-title')).toContainText('New session (branch)')
+
+  const branchNavigation = page.getByTestId('conversation-branch-navigation')
+  await branchNavigation.getByRole('button', { name: 'Return to New session' }).click()
+  await expect(page.getByTestId('conversation-title')).toContainText('New session')
+
+  await branchNavigation.getByRole('button', { name: 'View 1 branch' }).click()
+  await page.getByRole('menuitem', { name: 'New session (branch)' }).click()
+  await expect(page.getByTestId('conversation-title')).toContainText('New session (branch)')
 })
 
 test('unknown provider input is shown as unavailable', async ({ page }) => {

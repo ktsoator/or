@@ -180,6 +180,12 @@ export default function App() {
 
   const workspacePickerPath =
     selectedWorkspacePath || draft?.workspacePath || activeSession?.workspacePath || workspaceGroups[0]?.path
+  const parentSession = activeSession?.forkedFromSessionId
+    ? sessions.find((session) => session.id === activeSession.forkedFromSessionId)
+    : undefined
+  const branchSessions = activeSession
+    ? sessions.filter((session) => session.forkedFromSessionId === activeSession.id)
+    : []
   const workbenchPreview =
     secondaryThread && workbenchPreviewSessionID === secondaryThread.session.id
       ? secondaryThread.preview
@@ -577,6 +583,8 @@ export default function App() {
         thread={{
           draft,
           activeSession,
+          parentSession,
+          branchSessions,
           tasks,
           items,
           approval,
@@ -603,6 +611,7 @@ export default function App() {
           expandSidebar,
           openMobileSessions,
           openTaskInWorkbench,
+          selectSession: chooseSession,
           forkMessage,
           renderComposer: composer,
         }}

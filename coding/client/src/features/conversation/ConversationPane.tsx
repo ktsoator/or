@@ -24,11 +24,14 @@ import {
 } from './ConversationThread'
 import { SidebarToggleButton } from '@/components/SidebarToggleButton'
 import { StepGroup } from './StepGroup'
+import { ConversationBranchNavigation } from './ConversationBranchNavigation'
 
 type ConversationPaneProps = {
   thread: {
     draft?: SessionDraft
     activeSession?: SessionSummary
+    parentSession?: SessionSummary
+    branchSessions: SessionSummary[]
     tasks: BackgroundTask[]
     items: Item[]
     approval?: ApprovalItem
@@ -55,6 +58,7 @@ type ConversationPaneProps = {
     expandSidebar: () => void
     openMobileSessions: () => void
     openTaskInWorkbench: (taskID: string) => void
+    selectSession: (sessionID: string) => void
     forkMessage: (
       messageID: string,
       mode: 'before_user' | 'after_assistant',
@@ -74,6 +78,8 @@ export function ConversationPane({
   const {
     draft,
     activeSession,
+    parentSession,
+    branchSessions,
     tasks,
     items,
     approval,
@@ -100,6 +106,7 @@ export function ConversationPane({
     expandSidebar,
     openMobileSessions,
     openTaskInWorkbench,
+    selectSession,
     forkMessage,
     renderComposer,
   } = actions
@@ -140,7 +147,7 @@ export function ConversationPane({
               <PanelLeft className="size-4" aria-hidden="true" />
               <span className="sr-only">{t('app.openSessions')}</span>
             </button>
-            <div className="flex min-w-0 items-center gap-1.5">
+            <div className="flex min-w-0 flex-1 items-center gap-1.5">
               {!draft && activeSession?.scope === 'project' && activeSession.workspaceName && (
                 <>
                   <span
@@ -163,6 +170,14 @@ export function ConversationPane({
                   : (activeSession?.title ?? 'Or')}
               </span>
             </div>
+            {!draft && activeSession && (parentSession || branchSessions.length > 0) && (
+              <ConversationBranchNavigation
+                key={activeSession.id}
+                parentSession={parentSession}
+                branches={branchSessions}
+                onSelectSession={selectSession}
+              />
+            )}
           </div>
           {!draft && activeSession && (
             <ConversationActionsMenu
