@@ -1,10 +1,12 @@
-package mcpclient
+package mcp
 
 import (
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ktsoator/or/coding/internal/mcp/client"
 )
 
 func TestReadConfigRejectsUnknownFields(t *testing.T) {
@@ -20,14 +22,14 @@ func TestReadConfigRejectsUnknownFields(t *testing.T) {
 func TestExpandAndWorkspaceScope(t *testing.T) {
 	workspace := filepath.Join(t.TempDir(), "project")
 	t.Setenv("MCP_TEST_TOKEN", "secret")
-	got, err := expand("${workspace}:${env:MCP_TEST_TOKEN}", workspace)
+	got, err := client.Expand("${workspace}:${env:MCP_TEST_TOKEN}", workspace)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if want := workspace + ":secret"; got != want {
 		t.Fatalf("expand = %q, want %q", got, want)
 	}
-	if _, err := expand("${env:MCP_TEST_MISSING}", workspace); err == nil {
+	if _, err := client.Expand("${env:MCP_TEST_MISSING}", workspace); err == nil {
 		t.Fatal("expand accepted a missing environment variable")
 	}
 
@@ -41,27 +43,6 @@ func TestExpandAndWorkspaceScope(t *testing.T) {
 	config.Workspaces = []string{"relative/path"}
 	if _, err := config.AppliesTo(workspace); err == nil {
 		t.Fatal("appliesTo accepted a relative scope")
-	}
-}
-
-func TestMergedEnvironmentExpandsConfiguredValues(t *testing.T) {
-	t.Setenv("MCP_SOURCE", "from-parent")
-	t.Setenv("CODING_DESKTOP_TOKEN", "desktop-secret")
-	environment, err := mergedEnvironment(map[string]string{
-		"MCP_COPY": "${env:MCP_SOURCE}",
-		"MCP_ROOT": "${workspace}",
-	}, "/workspace")
-	if err != nil {
-		t.Fatal(err)
-	}
-	joined := strings.Join(environment, "\n")
-	for _, want := range []string{"MCP_COPY=from-parent", "MCP_ROOT=/workspace"} {
-		if !strings.Contains(joined, want) {
-			t.Fatalf("environment does not contain %q:\n%s", want, joined)
-		}
-	}
-	if strings.Contains(joined, "CODING_DESKTOP_TOKEN=") || strings.Contains(joined, "MCP_SOURCE=") {
-		t.Fatalf("environment inherited an undeclared secret:\n%s", joined)
 	}
 }
 

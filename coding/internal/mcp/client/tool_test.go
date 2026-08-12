@@ -1,4 +1,4 @@
-package mcpclient
+package client
 
 import (
 	"context"

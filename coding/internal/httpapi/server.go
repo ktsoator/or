@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/ktsoator/or/coding/internal/conversation"
-	"github.com/ktsoator/or/coding/internal/mcpmanager"
+	"github.com/ktsoator/or/coding/internal/mcp"
 	"github.com/ktsoator/or/coding/internal/provider"
 	"github.com/ktsoator/or/coding/internal/usage"
 	"github.com/ktsoator/or/coding/internal/workspace"
@@ -31,7 +31,7 @@ type Server struct {
 	registry      *llm.ProviderRegistry
 	providers     *provider.Store
 	providerTests *provider.ConnectionTester
-	mcp           *mcpmanager.Manager
+	mcp           *mcp.Manager
 	mcpConfigPath string
 	mcpConfigMu   sync.Mutex
 }
@@ -47,7 +47,7 @@ type Options struct {
 	Registry      *llm.ProviderRegistry
 	Providers     *provider.Store
 	ProviderTests *provider.ConnectionTester
-	MCP           *mcpmanager.Manager
+	MCP           *mcp.Manager
 	MCPConfigPath string
 }
 

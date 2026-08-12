@@ -1,13 +1,9 @@
-// Package mcpmanager owns application-lifetime MCP connections and leases
-// immutable tool snapshots to conversation runtimes.
-package mcpmanager
+package mcp
 
 import (
 	"context"
 	"sync"
 	"time"
-
-	"github.com/ktsoator/or/coding/internal/mcpclient"
 )
 
 const defaultFailureRetryDelay = 15 * time.Second
@@ -22,7 +18,7 @@ type Manager struct {
 
 	mu          sync.Mutex
 	reloadMu    sync.Mutex
-	config      mcpclient.Config
+	config      Config
 	configErr   error
 	configStamp configStamp
 	generation  uint64

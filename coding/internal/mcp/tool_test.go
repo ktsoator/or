@@ -1,4 +1,4 @@
-package mcpbridge
+package mcp
 
 import (
 	"context"
@@ -7,20 +7,10 @@ import (
 	"testing"
 
 	"github.com/ktsoator/or/agent"
-	"github.com/ktsoator/or/coding/internal/mcpclient"
 	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/llm"
 	protocol "github.com/modelcontextprotocol/go-sdk/mcp"
 )
-
-type fakeSource struct {
-	statuses []mcpclient.ServerStatus
-}
-
-func (*fakeSource) Tools() []mcpclient.Tool { return nil }
-func (source *fakeSource) Statuses() []mcpclient.ServerStatus {
-	return append([]mcpclient.ServerStatus(nil), source.statuses...)
-}
 
 type fakeTool struct {
 	server     string
@@ -78,12 +68,12 @@ func TestAdaptToolCallsMCPClientAndProjectsResult(t *testing.T) {
 	}
 }
 
-func TestBuildToolsAcceptsManagerStyleSnapshot(t *testing.T) {
-	tools := BuildTools(&fakeSource{statuses: []mcpclient.ServerStatus{{
+func TestToolSetAddsManagerStatusSnapshot(t *testing.T) {
+	tools := buildTools(nil, []ServerStatus{{
 		Name:  "broken",
-		State: mcpclient.StateError,
+		State: StateError,
 		Error: "unavailable",
-	}}})
+	}})
 	if len(tools) != 1 || tools[0].Name() != "mcp_status" {
 		t.Fatalf("tools = %#v", tools)
 	}

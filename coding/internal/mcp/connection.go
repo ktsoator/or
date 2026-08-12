@@ -1,23 +1,23 @@
-package mcpmanager
+package mcp
 
 import (
 	"context"
 	"errors"
 	"time"
 
-	"github.com/ktsoator/or/coding/internal/mcpclient"
+	"github.com/ktsoator/or/coding/internal/mcp/client"
 )
 
 var errGenerationChanged = errors.New("MCP configuration changed while acquiring connections")
 
 type managedConnection interface {
 	Transport() string
-	Tools() []mcpclient.Tool
+	Tools() []client.Tool
 	Diagnostic() string
 	Close()
 }
 
-type connectFunc func(context.Context, string, mcpclient.ServerConfig, string) (managedConnection, error)
+type connectFunc func(context.Context, string, ServerConfig, string) (managedConnection, error)
 
 type connectionKey struct {
 	generation uint64
@@ -28,7 +28,7 @@ type connectionKey struct {
 type connectionEntry struct {
 	key       connectionKey
 	ready     chan struct{}
-	config    mcpclient.ServerConfig
+	config    ServerConfig
 	workspace string
 
 	connection managedConnection
@@ -39,14 +39,14 @@ type connectionEntry struct {
 	references int
 }
 
-func connectServer(ctx context.Context, name string, config mcpclient.ServerConfig, workspace string) (managedConnection, error) {
-	return mcpclient.Connect(ctx, name, config, workspace)
+func connectServer(ctx context.Context, name string, config ServerConfig, workspace string) (managedConnection, error) {
+	return client.Connect(ctx, name, config.connectionConfig(), workspace)
 }
 
 func (manager *Manager) acquireConnection(
 	ctx context.Context,
 	key connectionKey,
-	config mcpclient.ServerConfig,
+	config ServerConfig,
 	workspace string,
 ) (managedConnection, *connectionEntry, error) {
 	manager.mu.Lock()

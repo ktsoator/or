@@ -1,11 +1,9 @@
-package mcpmanager
+package mcp
 
 import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/ktsoator/or/coding/internal/mcpclient"
 )
 
 func normalizeWorkspace(workspace string) (string, error) {
@@ -23,14 +21,14 @@ func normalizeWorkspace(workspace string) (string, error) {
 	return filepath.Clean(abs), nil
 }
 
-func connectionScope(config mcpclient.ServerConfig, workspace string) string {
+func connectionScope(config ServerConfig, workspace string) string {
 	if strings.TrimSpace(config.Command) != "" || referencesWorkspace(config) {
 		return workspace
 	}
 	return "global"
 }
 
-func referencesWorkspace(config mcpclient.ServerConfig) bool {
+func referencesWorkspace(config ServerConfig) bool {
 	values := []string{config.Command, config.Cwd, config.URL}
 	values = append(values, config.Args...)
 	for _, value := range config.Env {
@@ -47,7 +45,7 @@ func referencesWorkspace(config mcpclient.ServerConfig) bool {
 	return false
 }
 
-func transportName(config mcpclient.ServerConfig) string {
+func transportName(config ServerConfig) string {
 	if strings.TrimSpace(config.Command) != "" {
 		return "stdio"
 	}

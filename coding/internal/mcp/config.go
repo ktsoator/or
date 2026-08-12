@@ -1,4 +1,4 @@
-package mcpclient
+package mcp
 
 import (
 	"bytes"
@@ -8,13 +8,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
+
+	"github.com/ktsoator/or/coding/internal/mcp/client"
 )
 
 const configVersion = 1
-
-var environmentReference = regexp.MustCompile(`\$\{env:([A-Za-z_][A-Za-z0-9_]*)\}`)
 
 // Config is the on-disk MCP server configuration. It intentionally lives in
 // Or's private data directory rather than in a workspace: opening an untrusted
@@ -123,15 +122,7 @@ func WriteConfig(path string, config Config) error {
 // Validate checks the transport-level fields that do not require expanding
 // environment references or opening a connection.
 func (config ServerConfig) Validate() error {
-	hasCommand := strings.TrimSpace(config.Command) != ""
-	hasURL := strings.TrimSpace(config.URL) != ""
-	if hasCommand == hasURL {
-		return fmt.Errorf("configure exactly one of command or url")
-	}
-	if config.TimeoutSeconds < 0 {
-		return fmt.Errorf("timeoutSeconds must not be negative")
-	}
-	return nil
+	return config.connectionConfig().Validate()
 }
 
 // AppliesTo reports whether this server is visible to one exact workspace.
@@ -145,11 +136,11 @@ func (config ServerConfig) AppliesTo(workspace string) (bool, error) {
 	}
 	want = filepath.Clean(want)
 	for _, configured := range config.Workspaces {
-		expanded, err := expand(configured, workspace)
+		expanded, err := client.Expand(configured, workspace)
 		if err != nil {
 			return false, err
 		}
-		expanded, err = expandHome(expanded)
+		expanded, err = client.ExpandHome(expanded)
 		if err != nil {
 			return false, err
 		}
@@ -163,33 +154,25 @@ func (config ServerConfig) AppliesTo(workspace string) (bool, error) {
 	return false, nil
 }
 
-func expand(value, workspace string) (string, error) {
-	value = strings.ReplaceAll(value, "${workspace}", workspace)
-	var missing string
-	value = environmentReference.ReplaceAllStringFunc(value, func(match string) string {
-		parts := environmentReference.FindStringSubmatch(match)
-		if replacement, ok := os.LookupEnv(parts[1]); ok {
-			return replacement
-		}
-		missing = parts[1]
-		return ""
-	})
-	if missing != "" {
-		return "", fmt.Errorf("environment variable %s is not set", missing)
+func (config ServerConfig) connectionConfig() client.Config {
+	return client.Config{
+		Command:        config.Command,
+		Args:           append([]string(nil), config.Args...),
+		Env:            cloneMap(config.Env),
+		Cwd:            config.Cwd,
+		URL:            config.URL,
+		Headers:        cloneMap(config.Headers),
+		TimeoutSeconds: config.TimeoutSeconds,
 	}
-	return value, nil
 }
 
-func expandHome(path string) (string, error) {
-	if path != "~" && !strings.HasPrefix(path, "~/") && !strings.HasPrefix(path, `~\`) {
-		return path, nil
+func cloneMap(values map[string]string) map[string]string {
+	if values == nil {
+		return nil
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
+	cloned := make(map[string]string, len(values))
+	for key, value := range values {
+		cloned[key] = value
 	}
-	if path == "~" {
-		return home, nil
-	}
-	return filepath.Join(home, strings.TrimLeft(path[1:], `/\`)), nil
+	return cloned
 }

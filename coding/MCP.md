@@ -8,14 +8,13 @@ loaded conversation runtimes as immutable tool snapshots.
 
 The integration keeps MCP protocol concerns separate from Or product concerns:
 
-- `internal/mcpclient` owns configuration, transports, protocol sessions, tool
-  discovery, and protocol-native tool calls and results. It does not depend on
-  Or's agent, LLM, permission, or tool packages.
-- `internal/mcpmanager` owns application-lifetime connections, background
-  warming, workspace-sensitive reuse, configuration generations, retry
-  backoff, and conversation leases.
-- `internal/mcpbridge` adapts discovered MCP tools to Or tool definitions,
-  provider-safe names, permission accesses, and model-facing results.
+- `internal/mcp/client` is the protocol layer. It owns transports, protocol
+  sessions, tool discovery, and protocol-native tool calls and results. It does
+  not depend on Or's agent, LLM, permission, or tool packages.
+- `internal/mcp` is the product layer. It owns configuration, application-
+  lifetime connections, background warming, workspace-sensitive reuse,
+  configuration generations, retry backoff, conversation leases, and
+  adaptation to Or's tool, permission, and model-result contracts.
 - `internal/conversation` acquires one manager lease when a runtime loads and
   injects the adapted tool snapshot into the engine. The engine does not read
   MCP configuration or own protocol connections.

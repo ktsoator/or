@@ -11,8 +11,7 @@ import (
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/engine"
-	"github.com/ktsoator/or/coding/internal/mcpbridge"
-	"github.com/ktsoator/or/coding/internal/mcpmanager"
+	"github.com/ktsoator/or/coding/internal/mcp"
 	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/transcript"
@@ -37,7 +36,7 @@ type Manager struct {
 	newTransport  NewTransport
 	generateTitle titleGenerator
 	streamFn      agent.StreamFn
-	mcp           *mcpmanager.Manager
+	mcp           *mcp.Manager
 
 	mu        sync.RWMutex
 	sessions  map[string]*sessionRuntime
@@ -53,7 +52,7 @@ type Options struct {
 	Usage        *usage.Store
 	Workspaces   *workspace.Registry
 	NewTransport NewTransport
-	MCP          *mcpmanager.Manager
+	MCP          *mcp.Manager
 	// StreamFn overrides model streaming for every managed session. Production
 	// leaves it nil; tests and embedded adapters can supply a deterministic model.
 	StreamFn agent.StreamFn
@@ -273,11 +272,11 @@ func (m *Manager) build(record record) (*sessionRuntime, error) {
 	thinking := llm.ModelThinkingLevel(record.Thinking)
 	permissionMode := permission.Mode(record.PermissionMode)
 	transport := m.newTransport(record.ID)
-	var mcpLease *mcpmanager.Lease
+	var mcpLease *mcp.Lease
 	var additionalTools []tools.Tool
 	if m.mcp != nil {
 		mcpLease = m.mcp.Acquire(m.ctx, record.WorkspacePath)
-		additionalTools = mcpbridge.BuildTools(mcpLease)
+		additionalTools = mcpLease.Tools()
 	}
 	session, err := newEngineSession(m.ctx, engineSessionConfig{
 		WorkspacePath:   record.WorkspacePath,

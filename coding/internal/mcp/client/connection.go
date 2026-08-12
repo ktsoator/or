@@ -1,15 +1,8 @@
-package mcpclient
+package client
 
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"net/url"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -32,7 +25,7 @@ type Connection struct {
 
 // Connect initializes one server and discovers its complete tools/list result.
 // Workspace scoping is a product concern and must be checked by the caller.
-func Connect(ctx context.Context, name string, config ServerConfig, workspace string) (*Connection, error) {
+func Connect(ctx context.Context, name string, config Config, workspace string) (*Connection, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
@@ -160,133 +153,6 @@ func listTools(ctx context.Context, session *protocol.ClientSession) ([]*protoco
 		cursor = result.NextCursor
 	}
 	return nil, fmt.Errorf("tool list exceeded 100 pages")
-}
-
-func buildTransport(config ServerConfig, workspace string) (protocol.Transport, error) {
-	if strings.TrimSpace(config.Command) != "" {
-		command, err := expand(config.Command, workspace)
-		if err != nil {
-			return nil, err
-		}
-		args := make([]string, len(config.Args))
-		for index, arg := range config.Args {
-			args[index], err = expand(arg, workspace)
-			if err != nil {
-				return nil, err
-			}
-		}
-		cmd := exec.Command(command, args...)
-		cwd := workspace
-		if strings.TrimSpace(config.Cwd) != "" {
-			cwd, err = expand(config.Cwd, workspace)
-			if err != nil {
-				return nil, err
-			}
-			cwd, err = expandHome(cwd)
-			if err != nil {
-				return nil, err
-			}
-		}
-		if !filepath.IsAbs(cwd) {
-			cwd = filepath.Join(workspace, cwd)
-		}
-		cmd.Dir = filepath.Clean(cwd)
-		cmd.Env, err = mergedEnvironment(config.Env, workspace)
-		if err != nil {
-			return nil, err
-		}
-		return &protocol.CommandTransport{Command: cmd}, nil
-	}
-
-	endpoint, err := expand(config.URL, workspace)
-	if err != nil {
-		return nil, err
-	}
-	parsed, err := url.Parse(endpoint)
-	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-		return nil, fmt.Errorf("invalid Streamable HTTP URL %q", endpoint)
-	}
-	headers := make(http.Header, len(config.Headers))
-	for key, value := range config.Headers {
-		expanded, err := expand(value, workspace)
-		if err != nil {
-			return nil, err
-		}
-		headers.Set(key, expanded)
-	}
-	client := &http.Client{Transport: &headerTransport{base: http.DefaultTransport, origin: parsed.Scheme + "://" + parsed.Host, headers: headers}}
-	return &protocol.StreamableClientTransport{Endpoint: endpoint, HTTPClient: client}, nil
-}
-
-func mergedEnvironment(configured map[string]string, workspace string) ([]string, error) {
-	values := make(map[string]string)
-	for _, entry := range os.Environ() {
-		if key, value, found := strings.Cut(entry, "="); found {
-			if inheritedMCPEnvironment[strings.ToUpper(key)] {
-				values[key] = value
-			}
-		}
-	}
-	for key, value := range configured {
-		expanded, err := expand(value, workspace)
-		if err != nil {
-			return nil, err
-		}
-		values[key] = expanded
-	}
-	keys := make([]string, 0, len(values))
-	for key := range values {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	environment := make([]string, 0, len(keys))
-	for _, key := range keys {
-		environment = append(environment, key+"="+values[key])
-	}
-	return environment, nil
-}
-
-// MCP commands are executable configuration, but they should not receive every
-// credential carried by the desktop sidecar. Servers opt into additional
-// values through their explicit env map and ${env:NAME} references.
-var inheritedMCPEnvironment = map[string]bool{
-	"APPDATA": true, "COLORTERM": true, "COMSPEC": true,
-	"HOME": true, "LANG": true, "LC_ALL": true, "LC_CTYPE": true,
-	"LOCALAPPDATA": true, "LOGNAME": true, "PATH": true, "PATHEXT": true,
-	"SHELL": true, "SYSTEMROOT": true, "TEMP": true, "TERM": true,
-	"TMP": true, "TMPDIR": true, "USER": true, "USERPROFILE": true,
-	"WINDIR": true, "XDG_CACHE_HOME": true, "XDG_CONFIG_HOME": true,
-	"XDG_DATA_HOME": true,
-}
-
-type headerTransport struct {
-	base    http.RoundTripper
-	origin  string
-	headers http.Header
-}
-
-func (transport *headerTransport) RoundTrip(request *http.Request) (*http.Response, error) {
-	clone := request.Clone(request.Context())
-	clone.Header = request.Header.Clone()
-	if clone.URL.Scheme+"://"+clone.URL.Host == transport.origin {
-		for key, values := range transport.headers {
-			clone.Header.Del(key)
-			for _, value := range values {
-				clone.Header.Add(key, value)
-			}
-		}
-	}
-	return transport.base.RoundTrip(clone)
-}
-
-func transportName(config ServerConfig) string {
-	if strings.TrimSpace(config.Command) != "" {
-		return "stdio"
-	}
-	if strings.TrimSpace(config.URL) != "" {
-		return "streamable_http"
-	}
-	return ""
 }
 
 func appendDiagnostic(current, next string) string {

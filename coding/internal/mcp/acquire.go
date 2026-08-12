@@ -1,11 +1,9 @@
-package mcpmanager
+package mcp
 
 import (
 	"context"
 	"errors"
 	"sort"
-
-	"github.com/ktsoator/or/coding/internal/mcpclient"
 )
 
 // Acquire waits for every applicable server in the current generation and
@@ -21,15 +19,15 @@ func (manager *Manager) acquire(ctx context.Context, workspace string, globalOnl
 	config, generation, closed, configErr := manager.snapshotConfig()
 	lease := &Lease{manager: manager}
 	if closed {
-		lease.statuses = []mcpclient.ServerStatus{{Name: "configuration", State: mcpclient.StateError, Error: "MCP manager is closed"}}
+		lease.statuses = []ServerStatus{{Name: "configuration", State: StateError, Error: "MCP manager is closed"}}
 		return lease
 	}
 	if workspaceErr != nil {
-		lease.statuses = []mcpclient.ServerStatus{{Name: "configuration", State: mcpclient.StateError, Error: workspaceErr.Error()}}
+		lease.statuses = []ServerStatus{{Name: "configuration", State: StateError, Error: workspaceErr.Error()}}
 		return lease
 	}
 	if configErr != nil {
-		lease.statuses = []mcpclient.ServerStatus{{Name: "configuration", State: mcpclient.StateError, Error: configErr.Error()}}
+		lease.statuses = []ServerStatus{{Name: "configuration", State: StateError, Error: configErr.Error()}}
 		return lease
 	}
 
@@ -40,24 +38,24 @@ func (manager *Manager) acquire(ctx context.Context, workspace string, globalOnl
 	sort.Strings(names)
 	type resolution struct {
 		index      int
-		status     mcpclient.ServerStatus
+		status     ServerStatus
 		connection managedConnection
 		entry      *connectionEntry
 		err        error
 	}
 	resolved := make(chan resolution, len(names))
 	pending := 0
-	lease.statuses = make([]mcpclient.ServerStatus, len(names))
+	lease.statuses = make([]ServerStatus, len(names))
 	for index, name := range names {
 		config := config.MCPServers[name]
-		status := mcpclient.ServerStatus{Name: name, Transport: transportName(config)}
+		status := ServerStatus{Name: name, Transport: transportName(config)}
 		if config.Disabled {
-			status.State = mcpclient.StateDisabled
+			status.State = StateDisabled
 			lease.statuses[index] = status
 			continue
 		}
 		if err := config.Validate(); err != nil {
-			status.State = mcpclient.StateError
+			status.State = StateError
 			status.Error = err.Error()
 			lease.statuses[index] = status
 			continue
@@ -67,32 +65,32 @@ func (manager *Manager) acquire(ctx context.Context, workspace string, globalOnl
 		}
 		applies, err := config.AppliesTo(workspace)
 		if err != nil {
-			status.State = mcpclient.StateError
+			status.State = StateError
 			status.Error = err.Error()
 			lease.statuses[index] = status
 			continue
 		}
 		if !applies {
-			status.State = mcpclient.StateOutOfScope
+			status.State = StateOutOfScope
 			lease.statuses[index] = status
 			continue
 		}
 		pending++
-		go func(index int, name string, config mcpclient.ServerConfig, status mcpclient.ServerStatus) {
+		go func(index int, name string, config ServerConfig, status ServerStatus) {
 			key := connectionKey{generation: generation, server: name, scope: connectionScope(config, workspace)}
 			connection, entry, err := manager.acquireConnection(ctx, key, config, workspace)
 			if err != nil {
-				status.State = mcpclient.StateError
+				status.State = StateError
 				status.Error = err.Error()
 				resolved <- resolution{index: index, status: status, err: err}
 				return
 			}
 			status.ToolCount = len(connection.Tools())
 			if diagnostic := connection.Diagnostic(); diagnostic != "" {
-				status.State = mcpclient.StateError
+				status.State = StateError
 				status.Error = diagnostic
 			} else {
-				status.State = mcpclient.StateConnected
+				status.State = StateConnected
 			}
 			resolved <- resolution{index: index, status: status, connection: connection, entry: entry}
 		}(index, name, config, status)
@@ -106,7 +104,7 @@ func (manager *Manager) acquire(ctx context.Context, workspace string, globalOnl
 		lease.statuses[result.index] = result.status
 		if result.connection != nil {
 			lease.entries = append(lease.entries, result.entry)
-			lease.tools = append(lease.tools, result.connection.Tools()...)
+			lease.protocolTools = append(lease.protocolTools, result.connection.Tools()...)
 		}
 	}
 	if retryGeneration && ctx.Err() == nil {

@@ -1,4 +1,4 @@
-package mcpclient
+package mcp
 
 type ServerState string
 

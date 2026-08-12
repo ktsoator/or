@@ -1,12 +1,10 @@
-package mcpmanager
+package mcp
 
 import (
 	"context"
 	"crypto/sha256"
 	"errors"
 	"os"
-
-	"github.com/ktsoator/or/coding/internal/mcpclient"
 )
 
 type configStamp struct {
@@ -72,22 +70,22 @@ func (manager *Manager) reloadIfChanged() error {
 	return manager.reload()
 }
 
-func (manager *Manager) snapshotConfig() (mcpclient.Config, uint64, bool, error) {
+func (manager *Manager) snapshotConfig() (Config, uint64, bool, error) {
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
 	return cloneConfig(manager.config), manager.generation, manager.closed, manager.configErr
 }
 
-func loadConfig(path string) (mcpclient.Config, configStamp, error) {
+func loadConfig(path string) (Config, configStamp, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return mcpclient.Config{Version: 1, MCPServers: make(map[string]mcpclient.ServerConfig)}, configStamp{}, nil
+		return Config{Version: 1, MCPServers: make(map[string]ServerConfig)}, configStamp{}, nil
 	}
 	if err != nil {
-		return mcpclient.Config{}, configStamp{}, err
+		return Config{}, configStamp{}, err
 	}
 	stamp := configStamp{exists: true, digest: sha256.Sum256(data)}
-	config, err := mcpclient.ParseConfig(data)
+	config, err := ParseConfig(data)
 	return config, stamp, err
 }
 
@@ -99,25 +97,14 @@ func readConfigStamp(path string) configStamp {
 	return configStamp{exists: true, digest: sha256.Sum256(data)}
 }
 
-func cloneConfig(config mcpclient.Config) mcpclient.Config {
-	cloned := mcpclient.Config{Version: config.Version, MCPServers: make(map[string]mcpclient.ServerConfig, len(config.MCPServers))}
+func cloneConfig(config Config) Config {
+	cloned := Config{Version: config.Version, MCPServers: make(map[string]ServerConfig, len(config.MCPServers))}
 	for name, server := range config.MCPServers {
 		server.Args = append([]string(nil), server.Args...)
 		server.Workspaces = append([]string(nil), server.Workspaces...)
 		server.Env = cloneMap(server.Env)
 		server.Headers = cloneMap(server.Headers)
 		cloned.MCPServers[name] = server
-	}
-	return cloned
-}
-
-func cloneMap(values map[string]string) map[string]string {
-	if values == nil {
-		return nil
-	}
-	cloned := make(map[string]string, len(values))
-	for key, value := range values {
-		cloned[key] = value
 	}
 	return cloned
 }

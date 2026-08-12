@@ -1,4 +1,4 @@
-package mcpmanager
+package mcp
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ktsoator/or/coding/internal/mcpclient"
+	"github.com/ktsoator/or/coding/internal/mcp/client"
 )
 
 type fakeConnection struct {
@@ -19,12 +19,12 @@ type fakeConnection struct {
 }
 
 func (connection *fakeConnection) Transport() string { return connection.transport }
-func (*fakeConnection) Tools() []mcpclient.Tool      { return nil }
+func (*fakeConnection) Tools() []client.Tool         { return nil }
 func (*fakeConnection) Diagnostic() string           { return "" }
 func (connection *fakeConnection) Close()            { connection.closed.Add(1) }
 
 func TestAcquireConnectsServersConcurrentlyAndReusesConnections(t *testing.T) {
-	path := writeTestConfig(t, map[string]mcpclient.ServerConfig{
+	path := writeTestConfig(t, map[string]ServerConfig{
 		"alpha": {URL: "https://alpha.example/mcp"},
 		"beta":  {URL: "https://beta.example/mcp"},
 	})
@@ -33,7 +33,7 @@ func TestAcquireConnectsServersConcurrentlyAndReusesConnections(t *testing.T) {
 	started := make(chan string, 2)
 	release := make(chan struct{})
 	var calls atomic.Int32
-	manager.connect = func(_ context.Context, name string, _ mcpclient.ServerConfig, _ string) (managedConnection, error) {
+	manager.connect = func(_ context.Context, name string, _ ServerConfig, _ string) (managedConnection, error) {
 		calls.Add(1)
 		started <- name
 		<-release
@@ -68,7 +68,7 @@ func TestAcquireConnectsServersConcurrentlyAndReusesConnections(t *testing.T) {
 }
 
 func TestAcquireSharesGlobalHTTPAndIsolatesWorkspaceConnections(t *testing.T) {
-	path := writeTestConfig(t, map[string]mcpclient.ServerConfig{
+	path := writeTestConfig(t, map[string]ServerConfig{
 		"global":    {URL: "https://global.example/mcp"},
 		"templated": {URL: "https://workspace.example/mcp?root=${workspace}"},
 		"stdio":     {Command: "example"},
@@ -77,7 +77,7 @@ func TestAcquireSharesGlobalHTTPAndIsolatesWorkspaceConnections(t *testing.T) {
 	t.Cleanup(manager.Close)
 	var mu sync.Mutex
 	calls := make(map[string]int)
-	manager.connect = func(_ context.Context, name string, _ mcpclient.ServerConfig, _ string) (managedConnection, error) {
+	manager.connect = func(_ context.Context, name string, _ ServerConfig, _ string) (managedConnection, error) {
 		mu.Lock()
 		calls[name]++
 		mu.Unlock()
@@ -100,7 +100,7 @@ func TestGlobalWarmSkipsWorkspaceDependentServers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := writeTestConfig(t, map[string]mcpclient.ServerConfig{
+	path := writeTestConfig(t, map[string]ServerConfig{
 		"global":        {URL: "https://global.example/mcp"},
 		"selected-only": {URL: "https://selected.example/mcp", Workspaces: []string{processWorkspace}},
 		"templated":     {URL: "https://workspace.example/mcp?root=${workspace}"},
@@ -110,7 +110,7 @@ func TestGlobalWarmSkipsWorkspaceDependentServers(t *testing.T) {
 	t.Cleanup(manager.Close)
 	var mu sync.Mutex
 	var names []string
-	manager.connect = func(_ context.Context, name string, _ mcpclient.ServerConfig, _ string) (managedConnection, error) {
+	manager.connect = func(_ context.Context, name string, _ ServerConfig, _ string) (managedConnection, error) {
 		mu.Lock()
 		names = append(names, name)
 		mu.Unlock()
@@ -126,14 +126,14 @@ func TestGlobalWarmSkipsWorkspaceDependentServers(t *testing.T) {
 }
 
 func TestReloadKeepsLeasedGenerationAlive(t *testing.T) {
-	path := writeTestConfig(t, map[string]mcpclient.ServerConfig{
+	path := writeTestConfig(t, map[string]ServerConfig{
 		"demo": {URL: "https://old.example/mcp"},
 	})
 	manager := New(t.Context(), path)
 	t.Cleanup(manager.Close)
 	var mu sync.Mutex
 	var connections []*fakeConnection
-	manager.connect = func(_ context.Context, _ string, _ mcpclient.ServerConfig, _ string) (managedConnection, error) {
+	manager.connect = func(_ context.Context, _ string, _ ServerConfig, _ string) (managedConnection, error) {
 		connection := &fakeConnection{transport: "streamable_http"}
 		mu.Lock()
 		connections = append(connections, connection)
@@ -142,7 +142,7 @@ func TestReloadKeepsLeasedGenerationAlive(t *testing.T) {
 	}
 
 	oldLease := manager.Acquire(t.Context(), t.TempDir())
-	if err := mcpclient.WriteConfig(path, mcpclient.Config{MCPServers: map[string]mcpclient.ServerConfig{
+	if err := WriteConfig(path, Config{MCPServers: map[string]ServerConfig{
 		"demo": {URL: "https://new.example/mcp"},
 	}}); err != nil {
 		t.Fatal(err)
@@ -172,7 +172,7 @@ func TestReloadKeepsLeasedGenerationAlive(t *testing.T) {
 }
 
 func TestAcquireRejectsSnapshotFromPreviousGeneration(t *testing.T) {
-	path := writeTestConfig(t, map[string]mcpclient.ServerConfig{
+	path := writeTestConfig(t, map[string]ServerConfig{
 		"demo": {URL: "https://demo.example/mcp"},
 	})
 	manager := New(t.Context(), path)
@@ -185,19 +185,19 @@ func TestAcquireRejectsSnapshotFromPreviousGeneration(t *testing.T) {
 		generation: generation,
 		server:     "demo",
 		scope:      "global",
-	}, mcpclient.ServerConfig{URL: "https://demo.example/mcp"}, t.TempDir())
+	}, ServerConfig{URL: "https://demo.example/mcp"}, t.TempDir())
 	if !errors.Is(err, errGenerationChanged) {
 		t.Fatalf("acquire error = %v, want generation change", err)
 	}
 }
 
 func TestAcquireReloadsExternallyChangedConfiguration(t *testing.T) {
-	path := writeTestConfig(t, map[string]mcpclient.ServerConfig{
+	path := writeTestConfig(t, map[string]ServerConfig{
 		"before": {Disabled: true, Command: "before"},
 	})
 	manager := New(t.Context(), path)
 	t.Cleanup(manager.Close)
-	if err := mcpclient.WriteConfig(path, mcpclient.Config{MCPServers: map[string]mcpclient.ServerConfig{
+	if err := WriteConfig(path, Config{MCPServers: map[string]ServerConfig{
 		"after": {Disabled: true, Command: "after"},
 	}}); err != nil {
 		t.Fatal(err)
@@ -205,13 +205,13 @@ func TestAcquireReloadsExternallyChangedConfiguration(t *testing.T) {
 	lease := manager.Acquire(t.Context(), t.TempDir())
 	defer lease.Close()
 	statuses := lease.Statuses()
-	if len(statuses) != 1 || statuses[0].Name != "after" || statuses[0].State != mcpclient.StateDisabled {
+	if len(statuses) != 1 || statuses[0].Name != "after" || statuses[0].State != StateDisabled {
 		t.Fatalf("statuses = %#v", statuses)
 	}
 }
 
 func TestAcquireDetectsSameSizeConfigurationRewrite(t *testing.T) {
-	path := writeTestConfig(t, map[string]mcpclient.ServerConfig{
+	path := writeTestConfig(t, map[string]ServerConfig{
 		"alpha": {Disabled: true, Command: "first"},
 	})
 	manager := New(t.Context(), path)
@@ -220,7 +220,7 @@ func TestAcquireDetectsSameSizeConfigurationRewrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := mcpclient.WriteConfig(path, mcpclient.Config{MCPServers: map[string]mcpclient.ServerConfig{
+	if err := WriteConfig(path, Config{MCPServers: map[string]ServerConfig{
 		"bravo": {Disabled: true, Command: "other"},
 	}}); err != nil {
 		t.Fatal(err)
@@ -245,14 +245,14 @@ func TestAcquireDetectsSameSizeConfigurationRewrite(t *testing.T) {
 }
 
 func TestAcquireCachesFailuresUntilRetryWindow(t *testing.T) {
-	path := writeTestConfig(t, map[string]mcpclient.ServerConfig{
+	path := writeTestConfig(t, map[string]ServerConfig{
 		"broken": {URL: "https://broken.example/mcp"},
 	})
 	manager := New(t.Context(), path)
 	t.Cleanup(manager.Close)
 	manager.retryDelay = time.Hour
 	var calls atomic.Int32
-	manager.connect = func(context.Context, string, mcpclient.ServerConfig, string) (managedConnection, error) {
+	manager.connect = func(context.Context, string, ServerConfig, string) (managedConnection, error) {
 		calls.Add(1)
 		return nil, errors.New("unavailable")
 	}
@@ -261,7 +261,7 @@ func TestAcquireCachesFailuresUntilRetryWindow(t *testing.T) {
 		lease := manager.Acquire(t.Context(), t.TempDir())
 		statuses := lease.Statuses()
 		lease.Close()
-		if len(statuses) != 1 || statuses[0].State != mcpclient.StateError || statuses[0].Error != "unavailable" {
+		if len(statuses) != 1 || statuses[0].State != StateError || statuses[0].Error != "unavailable" {
 			t.Fatalf("statuses = %#v", statuses)
 		}
 	}
@@ -271,12 +271,12 @@ func TestAcquireCachesFailuresUntilRetryWindow(t *testing.T) {
 }
 
 func TestManagerCloseDoesNotDoubleCloseLeasedConnection(t *testing.T) {
-	path := writeTestConfig(t, map[string]mcpclient.ServerConfig{
+	path := writeTestConfig(t, map[string]ServerConfig{
 		"demo": {URL: "https://demo.example/mcp"},
 	})
 	manager := New(t.Context(), path)
 	connection := &fakeConnection{}
-	manager.connect = func(context.Context, string, mcpclient.ServerConfig, string) (managedConnection, error) {
+	manager.connect = func(context.Context, string, ServerConfig, string) (managedConnection, error) {
 		return connection, nil
 	}
 	lease := manager.Acquire(t.Context(), t.TempDir())
@@ -297,27 +297,27 @@ func TestAcquireSurfacesConfigurationErrors(t *testing.T) {
 	lease := manager.Acquire(t.Context(), t.TempDir())
 	defer lease.Close()
 	statuses := lease.Statuses()
-	if len(statuses) != 1 || statuses[0].Name != "configuration" || statuses[0].State != mcpclient.StateError {
+	if len(statuses) != 1 || statuses[0].Name != "configuration" || statuses[0].State != StateError {
 		t.Fatalf("statuses = %#v", statuses)
 	}
 }
 
-func writeTestConfig(t *testing.T, servers map[string]mcpclient.ServerConfig) string {
+func writeTestConfig(t *testing.T, servers map[string]ServerConfig) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "mcp.json")
-	if err := mcpclient.WriteConfig(path, mcpclient.Config{MCPServers: servers}); err != nil {
+	if err := WriteConfig(path, Config{MCPServers: servers}); err != nil {
 		t.Fatal(err)
 	}
 	return path
 }
 
-func assertConnectedStatuses(t *testing.T, statuses []mcpclient.ServerStatus, count int) {
+func assertConnectedStatuses(t *testing.T, statuses []ServerStatus, count int) {
 	t.Helper()
 	if len(statuses) != count {
 		t.Fatalf("statuses = %#v", statuses)
 	}
 	for _, status := range statuses {
-		if status.State != mcpclient.StateConnected {
+		if status.State != StateConnected {
 			t.Fatalf("status = %#v", status)
 		}
 	}

@@ -1,4 +1,4 @@
-package mcpclient
+package mcp
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/ktsoator/or/coding/internal/mcp/client"
 	protocol "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -50,7 +51,7 @@ func Probe(ctx context.Context, name string, config ServerConfig, workspace stri
 		return ProbeResult{}, fmt.Errorf("server is not available in workspace %s", workspace)
 	}
 
-	connection, err := Connect(ctx, name, config, workspace)
+	connection, err := client.Connect(ctx, name, config.connectionConfig(), workspace)
 	if err != nil {
 		return ProbeResult{}, err
 	}
