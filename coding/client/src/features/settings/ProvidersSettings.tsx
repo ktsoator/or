@@ -47,6 +47,7 @@ export function ProvidersSettings({ onChanged }: { onChanged?: () => void }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selectedProviderId, setSelectedProviderId] = useState<string>()
+  const [modelCatalogVersion, setModelCatalogVersion] = useState(0)
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -81,6 +82,7 @@ export function ProvidersSettings({ onChanged }: { onChanged?: () => void }) {
 
   const afterChange = useCallback(async () => {
     await load()
+    setModelCatalogVersion((current) => current + 1)
     onChanged?.()
   }, [load, onChanged])
 
@@ -104,7 +106,7 @@ export function ProvidersSettings({ onChanged }: { onChanged?: () => void }) {
           </div>
         </div>
       )}
-      <DefaultModelSection onChanged={afterChange} />
+      <DefaultModelSection onChanged={afterChange} refreshToken={modelCatalogVersion} />
 
       {loading ? (
         <div className="flex items-center gap-2 py-6 text-[0.8125rem] text-ink-faint">
@@ -188,7 +190,13 @@ type ModelsResponse = {
 // thinking mode that new sessions start with. It reads the model catalog and
 // current default from /api/models and persists changes to /api/model-selection.
 // The UI uses provider, model, and model-specific thinking controls.
-function DefaultModelSection({ onChanged }: { onChanged?: () => void }) {
+function DefaultModelSection({
+  onChanged,
+  refreshToken = 0,
+}: {
+  onChanged?: () => void
+  refreshToken?: number
+}) {
   const { t } = useI18n()
   const [models, setModels] = useState<ModelOption[]>([])
   const [provider, setProvider] = useState('')
@@ -223,7 +231,7 @@ function DefaultModelSection({ onChanged }: { onChanged?: () => void }) {
     const controller = new AbortController()
     void loadModels(controller.signal)
     return () => controller.abort()
-  }, [loadModels])
+  }, [loadModels, refreshToken])
 
   // Unique providers from the model catalog.
   const providers = useMemo(() => [...new Set(models.map((m) => m.provider))], [models])
