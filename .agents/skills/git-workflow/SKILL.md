@@ -15,10 +15,12 @@ conventions to other repositories unless the user explicitly says so.
 1. Confirm the working tree is clean and local `main` is up to date.
 2. Create a focused branch from `main`.
 3. Make the change and run the local checks below.
-4. Show the user the commit/PR draft and wait for approval.
-5. Commit, push, and open the PR.
-6. Wait for CI, and address review feedback on the same branch if needed.
-7. Squash-merge to `main`, then return to `main` and `git pull --ff-only`.
+4. Show the user the commit draft and wait for approval.
+5. Commit.
+6. Show the user the final PR title/body and wait for approval.
+7. Push and open the PR.
+8. Wait for CI, and address review feedback on the same branch if needed.
+9. Squash-merge to `main`, then return to `main` and `git pull --ff-only`.
 
 ## Branches
 
@@ -64,9 +66,9 @@ configuration so newly added providers appear without leaving Settings.
 
 ## Before committing
 
-Always show the user the planned branch name, commit subject, commit body, and
-PR title/body before running `git commit`. Wait for explicit approval before
-committing. Do not commit, push, or open the PR until the user has reviewed it.
+Always show the user the planned branch name, commit subject, and commit body
+before running `git commit`. Wait for explicit approval before committing. Do
+not commit until the user has reviewed it.
 
 ## Issues
 
@@ -79,11 +81,14 @@ committing. Do not commit, push, or open the PR until the user has reviewed it.
 
 ## Pull requests
 
+Before opening a PR, show the user the final PR title and body and wait for
+explicit approval. Do not push or open the PR until the user has reviewed it.
+
+Then push the branch and open the PR against `main`:
+
 ```bash
 git push -u origin <branch>
 ```
-
-Then open a PR against `main`.
 
 Use the repository PR template, which has these sections:
 
