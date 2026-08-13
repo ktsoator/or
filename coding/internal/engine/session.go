@@ -10,6 +10,7 @@ import (
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/compaction"
 	"github.com/ktsoator/or/coding/internal/contextprojection"
+	"github.com/ktsoator/or/coding/internal/observability"
 	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/coding/internal/skills"
 	"github.com/ktsoator/or/coding/internal/tools"
@@ -24,6 +25,12 @@ var ErrBusy = errors.New("coding: a run is already in progress")
 // Options configures a Session. Only Model is required; the rest have working
 // defaults.
 type Options struct {
+	// SessionID is the product conversation identity attached to diagnostic
+	// events. Empty keeps embedded and test sessions anonymous.
+	SessionID string
+	// Recorder receives bounded, privacy-safe lifecycle records. Nil disables
+	// observability without changing session behavior.
+	Recorder observability.Recorder
 	// Model is the model used for turns. Required.
 	Model llm.Model
 	// ThinkingLevel sets the reasoning effort for each turn.
@@ -86,6 +93,8 @@ type Options struct {
 type Session struct {
 	agent      *agent.Agent
 	journal    *sessionJournal
+	sessionID  string
+	recorder   observability.Recorder
 	tools      []tools.Tool
 	allTools   []tools.Tool
 	toolByName map[string]tools.Tool

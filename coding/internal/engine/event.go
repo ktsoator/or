@@ -97,6 +97,7 @@ type Event struct {
 	// Run timing is populated on RunStarted and RunCompleted. It measures the
 	// full invocation, including model calls, tools, approvals, retries, and any
 	// steering or follow-up work consumed before the run ends.
+	RunID       string
 	StartedAt   time.Time
 	CompletedAt time.Time
 	// RunCompleted identifies the messages made durable by the finished run.

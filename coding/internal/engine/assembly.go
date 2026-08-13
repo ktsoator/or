@@ -8,6 +8,7 @@ import (
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/compaction"
 	"github.com/ktsoator/or/coding/internal/contextprojection"
+	"github.com/ktsoator/or/coding/internal/observability"
 	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/coding/internal/skills"
 	"github.com/ktsoator/or/coding/internal/tools"
@@ -73,6 +74,8 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 
 	s := &Session{
 		journal:       journal,
+		sessionID:     opts.SessionID,
+		recorder:      observability.OrDiscard(opts.Recorder),
 		tools:         activeToolSet,
 		allTools:      toolSet,
 		toolByName:    toolsByName(toolSet),

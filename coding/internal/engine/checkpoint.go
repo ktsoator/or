@@ -67,6 +67,7 @@ func (s *Session) persistModelInput(
 		ctx,
 		messages,
 		contextEntries,
+		"",
 		0,
 		time.Time{},
 		time.Time{},

@@ -9,6 +9,7 @@ import (
 	"github.com/ktsoator/or/coding/internal/conversation"
 	"github.com/ktsoator/or/coding/internal/httpapi"
 	"github.com/ktsoator/or/coding/internal/mcp"
+	"github.com/ktsoator/or/coding/internal/observability"
 	"github.com/ktsoator/or/coding/internal/provider"
 	"github.com/ktsoator/or/coding/internal/usage"
 	"github.com/ktsoator/or/coding/internal/workspace"
@@ -21,6 +22,7 @@ type Runtime struct {
 	conversations *conversation.Manager
 	mcp           *mcp.Manager
 	ledger        *usage.Store
+	recorder      observability.Recorder
 	cancel        context.CancelFunc
 	closeOnce     sync.Once
 }
@@ -56,6 +58,16 @@ func New(ctx context.Context, dataDir string) (*Runtime, error) {
 	for _, registered := range workspaces.List() {
 		mcp.Warm(registered.Path)
 	}
+	recorder, recorderErr := observability.NewJSONL(
+		filepath.Join(dataDir, "logs", "observability.jsonl"),
+		observability.FileOptions{},
+	)
+	var eventRecorder observability.Recorder = recorder
+	if recorderErr != nil {
+		// Diagnostics are best-effort: an unavailable log path must not prevent
+		// the coding runtime from starting.
+		eventRecorder = observability.DiscardRecorder{}
+	}
 
 	manager, err := conversation.NewManager(ctx, conversation.Options{
 		DataDir:      dataDir,
@@ -63,8 +75,10 @@ func New(ctx context.Context, dataDir string) (*Runtime, error) {
 		Workspaces:   workspaces,
 		NewTransport: transports.New,
 		MCP:          mcp,
+		Recorder:     eventRecorder,
 	})
 	if err != nil {
+		_ = eventRecorder.Close()
 		mcp.Close()
 		_ = ledger.Close()
 		cancel()
@@ -81,13 +95,16 @@ func New(ctx context.Context, dataDir string) (*Runtime, error) {
 		ProviderTests: providerTests,
 		MCP:           mcp,
 	})
-	return &Runtime{
+	runtime := &Runtime{
 		handler:       server.Handler(),
 		conversations: manager,
 		mcp:           mcp,
 		ledger:        ledger,
+		recorder:      eventRecorder,
 		cancel:        cancel,
-	}, nil
+	}
+	eventRecorder.Record(observability.Event{Name: observability.ApplicationStarted})
+	return runtime, nil
 }
 
 // Handler returns the complete desktop /api HTTP surface.
@@ -100,5 +117,7 @@ func (r *Runtime) Close() {
 		r.conversations.Close()
 		r.mcp.Close()
 		_ = r.ledger.Close()
+		r.recorder.Record(observability.Event{Name: observability.ApplicationStopped})
+		_ = r.recorder.Close()
 	})
 }

@@ -120,19 +120,21 @@ func (j *sessionJournal) messages(active []agent.AgentMessage) []agent.AgentMess
 // persistNew appends the messages added since the last persist to the Store. It
 // runs only while runMu is held, so persistedLen is not racing a run.
 func (s *Session) persistNew(ctx context.Context) error {
-	return s.persistNewMessages(ctx, 0, time.Time{}, time.Time{})
+	return s.persistNewMessages(ctx, "", 0, time.Time{}, time.Time{})
 }
 
 func (s *Session) persistNewRun(
 	ctx context.Context,
+	runID string,
 	runEntryStart int,
 	startedAt, completedAt time.Time,
 ) error {
-	return s.persistNewMessages(ctx, runEntryStart, startedAt, completedAt)
+	return s.persistNewMessages(ctx, runID, runEntryStart, startedAt, completedAt)
 }
 
 func (s *Session) persistNewMessages(
 	ctx context.Context,
+	runID string,
 	runEntryStart int,
 	startedAt, completedAt time.Time,
 ) error {
@@ -140,6 +142,7 @@ func (s *Session) persistNewMessages(
 		ctx,
 		s.agent.Snapshot().Messages,
 		nil,
+		runID,
 		runEntryStart,
 		startedAt,
 		completedAt,
@@ -150,6 +153,7 @@ func (j *sessionJournal) persistMessages(
 	ctx context.Context,
 	all []agent.AgentMessage,
 	contextEntries []transcript.Entry,
+	runID string,
 	runEntryStart int,
 	startedAt, completedAt time.Time,
 ) error {
@@ -192,7 +196,7 @@ func (j *sessionJournal) persistMessages(
 	if !startedAt.IsZero() && !completedAt.IsZero() {
 		candidate := append(existing, entries...)
 		firstEntryID := firstMessageFrom(candidate, runEntryStart)
-		entries = append(entries, transcript.NewRun(firstEntryID, startedAt, completedAt))
+		entries = append(entries, transcript.NewRunWithID(runID, firstEntryID, startedAt, completedAt))
 	}
 	if len(entries) == 0 {
 		return nil

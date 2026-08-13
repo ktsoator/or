@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ktsoator/or/agent"
+	"github.com/ktsoator/or/coding/internal/observability"
 	"github.com/ktsoator/or/coding/internal/transcript"
 	"github.com/ktsoator/or/llm"
 )
@@ -37,11 +38,16 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 	s.prepareSkillRefresh()
 	s.setSkillToolAvailable(s.currentSkillRegistry().Len() > 0)
 	s.prepareContextRefresh()
+	runID := observability.NewID("run")
 	startedAt := time.Now().UTC()
 	runEntryStart := len(s.snapshotTranscript())
-	s.setRunState(ctx, startedAt, runEntryStart)
+	s.setRunState(ctx, runID, startedAt, runEntryStart)
 	defer s.clearRunState()
-	s.dispatchEvent(Event{Type: RunStarted, StartedAt: startedAt})
+	s.dispatchEvent(Event{Type: RunStarted, RunID: runID, StartedAt: startedAt})
+	s.recorder.Record(observability.Event{
+		Name: observability.RunStarted, SessionID: s.sessionID, RunID: runID,
+		StartedAt: startedAt, Status: "running",
+	})
 
 	if s.shouldAutoCompact(s.ContextUsage().UsedTokens) {
 		_, _ = s.autoCompact(ctx)
@@ -82,26 +88,29 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 		runErr = checkpointErr
 	}
 	completedAt := time.Now().UTC()
-	persistErr := s.persistNewRun(ctx, runEntryStart, startedAt, completedAt)
-	userMessageIDs, assistantMessageID := s.persistedRunMessageIDs(startedAt)
+	persistErr := s.persistNewRun(ctx, runID, runEntryStart, startedAt, completedAt)
+	userMessageIDs, assistantMessageID := s.persistedRunMessageIDs(runID)
 	s.dispatchEvent(Event{
 		Type:               RunCompleted,
+		RunID:              runID,
 		Usage:              runUsage,
 		StartedAt:          startedAt,
 		CompletedAt:        completedAt,
 		UserMessageIDs:     userMessageIDs,
 		AssistantMessageID: assistantMessageID,
 	})
-	return errors.Join(runErr, persistErr)
+	finalErr := errors.Join(runErr, persistErr)
+	s.recordRunTerminal(runID, startedAt, completedAt, runErr, checkpointErr, persistErr)
+	return finalErr
 }
 
-func (s *Session) persistedRunMessageIDs(startedAt time.Time) ([]string, string) {
+func (s *Session) persistedRunMessageIDs(runID string) ([]string, string) {
 	entries := s.Entries()
 	runIndex := -1
 	firstEntryID := ""
 	for index := len(entries) - 1; index >= 0; index-- {
 		entry := entries[index]
-		if entry.Type == transcript.RunEntry && entry.Run != nil && entry.Run.StartedAt.Equal(startedAt) {
+		if entry.ID == runID && entry.Type == transcript.RunEntry && entry.Run != nil {
 			runIndex = index
 			firstEntryID = entry.Run.FirstEntryID
 			break
@@ -141,4 +150,35 @@ func (s *Session) persistedRunMessageIDs(startedAt time.Time) ([]string, string)
 		}
 	}
 	return userMessageIDs, assistantMessageID
+}
+
+func (s *Session) recordRunTerminal(
+	runID string,
+	startedAt, completedAt time.Time,
+	runErr, checkpointErr, persistErr error,
+) {
+	event := observability.Event{
+		Name: observability.RunCompleted, SessionID: s.sessionID, RunID: runID,
+		Status: "completed", StartedAt: startedAt, Duration: completedAt.Sub(startedAt),
+	}
+	if finalErr := errors.Join(runErr, persistErr); finalErr != nil {
+		event.Name = observability.RunFailed
+		event.Status, event.ErrorCode = runFailure(finalErr, checkpointErr, persistErr)
+	}
+	s.recorder.Record(event)
+}
+
+func runFailure(finalErr, checkpointErr, persistErr error) (status, code string) {
+	switch {
+	case errors.Is(finalErr, context.Canceled):
+		return "cancelled", "context_cancelled"
+	case errors.Is(finalErr, context.DeadlineExceeded):
+		return "failed", "deadline_exceeded"
+	case checkpointErr != nil:
+		return "failed", "checkpoint_failed"
+	case persistErr != nil:
+		return "failed", "persistence_failed"
+	default:
+		return "failed", "run_failed"
+	}
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/mcp"
+	"github.com/ktsoator/or/coding/internal/observability"
 	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/transcript"
@@ -37,6 +38,7 @@ type Manager struct {
 	generateTitle titleGenerator
 	streamFn      agent.StreamFn
 	mcp           *mcp.Manager
+	recorder      observability.Recorder
 
 	mu        sync.RWMutex
 	sessions  map[string]*sessionRuntime
@@ -53,6 +55,7 @@ type Options struct {
 	Workspaces   *workspace.Registry
 	NewTransport NewTransport
 	MCP          *mcp.Manager
+	Recorder     observability.Recorder
 	// StreamFn overrides model streaming for every managed session. Production
 	// leaves it nil; tests and embedded adapters can supply a deterministic model.
 	StreamFn agent.StreamFn
@@ -75,6 +78,7 @@ func NewManager(ctx context.Context, opts Options) (*Manager, error) {
 		generateTitle: generateAITitle,
 		streamFn:      opts.StreamFn,
 		mcp:           opts.MCP,
+		recorder:      observability.OrDiscard(opts.Recorder),
 		sessions:      make(map[string]*sessionRuntime),
 		usage:         opts.Usage,
 	}
@@ -279,6 +283,7 @@ func (m *Manager) build(record record) (*sessionRuntime, error) {
 		additionalTools = mcpLease.Tools()
 	}
 	session, err := newEngineSession(m.ctx, engineSessionConfig{
+		SessionID:       record.ID,
 		WorkspacePath:   record.WorkspacePath,
 		TranscriptPath:  record.Transcript,
 		Model:           model,
@@ -286,6 +291,7 @@ func (m *Manager) build(record record) (*sessionRuntime, error) {
 		PermissionMode:  permissionMode,
 		AdditionalTools: additionalTools,
 		StreamFn:        m.streamFn,
+		Recorder:        m.recorder,
 	}, transport)
 	if err != nil {
 		mcpLease.Close()

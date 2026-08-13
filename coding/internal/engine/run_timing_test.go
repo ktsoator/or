@@ -120,13 +120,14 @@ func TestHistoryDoesNotDuplicateRunAfterCompletedEntryIsPersisted(t *testing.T) 
 	}
 
 	entries := session.Entries()
-	completedRun := entries[len(entries)-1].Run
+	completedRunEntry := entries[len(entries)-1]
+	completedRun := completedRunEntry.Run
 	if completedRun == nil {
 		t.Fatalf("last entry = %#v, want completed run", entries[len(entries)-1])
 	}
 	// Recreate the interval after persistNewRun and before the deferred active
 	// run state is cleared.
-	session.setRunState(ctx, completedRun.StartedAt, 0)
+	session.setRunState(ctx, completedRunEntry.ID, completedRun.StartedAt, 0)
 	defer session.clearRunState()
 
 	history := session.History()

@@ -5,6 +5,7 @@ import (
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/engine"
+	"github.com/ktsoator/or/coding/internal/observability"
 	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/coding/internal/skills"
 	"github.com/ktsoator/or/coding/internal/tools"
@@ -13,6 +14,7 @@ import (
 )
 
 type engineSessionConfig struct {
+	SessionID       string
 	WorkspacePath   string
 	TranscriptPath  string
 	Model           llm.Model
@@ -20,6 +22,7 @@ type engineSessionConfig struct {
 	PermissionMode  permission.Mode
 	AdditionalTools []tools.Tool
 	StreamFn        agent.StreamFn
+	Recorder        observability.Recorder
 }
 
 // This is the one place an engine.Session is assembled. Every conversation the
@@ -36,6 +39,8 @@ func newEngineSession(
 	transport Transport,
 ) (*engine.Session, error) {
 	return engine.New(ctx, engine.Options{
+		SessionID:      cfg.SessionID,
+		Recorder:       cfg.Recorder,
 		Model:          cfg.Model,
 		ThinkingLevel:  cfg.ThinkingLevel,
 		Cwd:            cfg.WorkspacePath,

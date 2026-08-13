@@ -10,15 +10,17 @@ type sessionRunState struct {
 	mu sync.RWMutex
 
 	ctx                  context.Context
+	runID                string
 	startedAt            time.Time
 	entryStart           int
 	autoCompactAttempted bool
 	persistenceErr       error
 }
 
-func (s *Session) setRunState(ctx context.Context, startedAt time.Time, entryStart int) {
+func (s *Session) setRunState(ctx context.Context, runID string, startedAt time.Time, entryStart int) {
 	s.runState.mu.Lock()
 	s.runState.ctx = ctx
+	s.runState.runID = runID
 	s.runState.startedAt = startedAt
 	s.runState.entryStart = entryStart
 	s.runState.autoCompactAttempted = false
@@ -29,6 +31,7 @@ func (s *Session) setRunState(ctx context.Context, startedAt time.Time, entrySta
 func (s *Session) clearRunState() {
 	s.runState.mu.Lock()
 	s.runState.ctx = nil
+	s.runState.runID = ""
 	s.runState.startedAt = time.Time{}
 	s.runState.entryStart = 0
 	s.runState.autoCompactAttempted = false
