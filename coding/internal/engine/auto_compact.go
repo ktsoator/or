@@ -96,6 +96,7 @@ func (s *Session) dropTrailingOverflowTurn() {
 	}
 	assistant := asAssistant(messages[len(messages)-1])
 	if assistant != nil && llm.IsContextOverflow(*assistant, s.contextWindow) {
+		s.recordTurnDiscarded("context_overflow")
 		s.dispatchEvent(Event{Type: TurnDiscarded})
 		s.agent.SetMessages(messages[:len(messages)-1])
 	}

@@ -76,6 +76,60 @@ func TestJSONLRecorderWritesPrivateStructuredEvents(t *testing.T) {
 	}
 }
 
+func TestJSONLRecorderWritesProviderPerformanceSchema(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "observability.jsonl")
+	recorder, err := NewJSONL(path, FileOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	startedAt := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
+	recorder.Record(Event{
+		Name: ProviderCompleted, Timestamp: startedAt.Add(2500 * time.Millisecond),
+		SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", RequestID: "request-1",
+		Status: "completed", StartedAt: startedAt, Duration: 2500 * time.Millisecond,
+		TimeToFirstOutput: 1250 * time.Millisecond,
+		Provider:          "provider-1", Model: "model-1", ResponseModel: "model-1-2026-08",
+		ProviderResponseID: "response-1", StopReason: "stop",
+		Attempt: 2, HTTPStatus: 200, MessageCount: 4, AttachmentCount: 1,
+		InputTokens: 11, InputUnknown: true, OutputTokens: 7,
+		CacheReadTokens: 3, CacheWriteTokens: 2, TotalTokens: 23,
+		CostInput: 0.01, CostOutput: 0.14, CostCacheRead: 0.01,
+		CostCacheWrite: 0.04, CostTotal: 0.20,
+	})
+	if err := recorder.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	records := readJSONLRecords(t, path)
+	if len(records) != 1 {
+		t.Fatalf("records = %d, want 1", len(records))
+	}
+	record := records[0]
+	want := map[string]any{
+		"event": ProviderCompleted, "session_id": "session-1", "run_id": "run-1",
+		"turn_id": "turn-1", "provider_request_id": "request-1", "status": "completed",
+		"duration_ms": float64(2500), "time_to_first_output_ms": float64(1250),
+		"provider": "provider-1", "model": "model-1", "response_model": "model-1-2026-08",
+		"provider_response_id": "response-1", "stop_reason": "stop",
+		"attempt": float64(2), "http_status": float64(200),
+		"message_count": float64(4), "attachment_count": float64(1),
+		"input_tokens": float64(11), "input_unknown": true, "output_tokens": float64(7),
+		"cache_read_tokens": float64(3), "cache_write_tokens": float64(2),
+		"total_tokens": float64(23), "cost_input_usd": 0.01, "cost_output_usd": 0.14,
+		"cost_cache_read_usd": 0.01, "cost_cache_write_usd": 0.04, "cost_total_usd": 0.20,
+	}
+	for key, wantValue := range want {
+		if got := record[key]; got != wantValue {
+			t.Fatalf("record[%q] = %#v, want %#v; record = %#v", key, got, wantValue, record)
+		}
+	}
+	for _, forbidden := range []string{"url", "body", "headers", "error", "prompt"} {
+		if _, found := record[forbidden]; found {
+			t.Fatalf("record contains forbidden field %q: %#v", forbidden, record)
+		}
+	}
+}
+
 func TestJSONLRecorderRotatesBoundedFiles(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "observability.jsonl")
 	recorder, err := NewJSONL(path, FileOptions{MaxBytes: 220, MaxFiles: 3})
@@ -110,4 +164,26 @@ func TestNewIDUsesRequestedPrefix(t *testing.T) {
 	if !strings.HasPrefix(first, "run_") || first == second {
 		t.Fatalf("ids = %q, %q", first, second)
 	}
+}
+
+func readJSONLRecords(t *testing.T, path string) []map[string]any {
+	t.Helper()
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	var records []map[string]any
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		var record map[string]any
+		if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
+			t.Fatal(err)
+		}
+		records = append(records, record)
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return records
 }

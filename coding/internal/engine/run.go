@@ -84,7 +84,7 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 		// reusable agent. This error belongs to the persistence layer, not the
 		// conversation, so remove it before the final flush and never feed it into
 		// model retry or context-overflow recovery.
-		s.dropTrailingErrorTurn()
+		s.dropTrailingErrorTurn("persistence_failure")
 		runErr = checkpointErr
 	}
 	completedAt := time.Now().UTC()
