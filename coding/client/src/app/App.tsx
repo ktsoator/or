@@ -432,7 +432,11 @@ export default function App() {
       centered={centered}
       projectPickerVisible={Boolean(draft)}
       workspaces={workspaces}
-      workspacePath={draft?.projectScoped ? draft.workspacePath : undefined}
+      workspacePath={draft
+        ? draft.projectScoped
+          ? draft.workspacePath
+          : undefined
+        : activeSession?.workspacePath}
       workspaceError={workspaceOpenError}
       models={models}
       modelProvider={draft?.modelProvider ?? activeSession?.modelProvider}

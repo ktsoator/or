@@ -8,6 +8,7 @@ import {
 } from '../src/features/skills'
 import {
   composerPreviewCommands,
+  moveSuggestionIndex,
   parseExecutableComposerCommand,
   previewSkillCommandCount,
 } from '../src/features/composer/panelStyles'
@@ -70,6 +71,13 @@ describe('Composer preview commands', () => {
     expect(composerPreviewCommands[1]).toBe('compact')
     expect(previewSkillCommandCount('')).toBe(composerPreviewCommands.length)
     expect(previewSkillCommandCount('compact')).toBe(0)
+  })
+
+  test('wraps keyboard navigation across both catalog boundaries', () => {
+    expect(moveSuggestionIndex(0, 12, 'previous')).toBe(11)
+    expect(moveSuggestionIndex(11, 12, 'next')).toBe(0)
+    expect(moveSuggestionIndex(5, 12, 'previous')).toBe(4)
+    expect(moveSuggestionIndex(5, 12, 'next')).toBe(6)
   })
 
   test('recognizes only the executable compact command', () => {

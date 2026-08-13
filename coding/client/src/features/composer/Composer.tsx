@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import {
   ArrowUp,
   BookOpen,
@@ -37,11 +37,11 @@ import { ComposerSkillSuggestions } from './ComposerSkillSuggestions'
 import {
   composerPreviewCommands,
   type ComposerPreviewCommand,
+  moveSuggestionIndex,
   parseComposerCatalogQuery,
   parseExecutableComposerCommand,
   previewSkillCommandCount,
   skillSuggestionOptionID,
-  skillSuggestionsID,
 } from './panelStyles'
 import { Question } from './Question'
 import { ModelSettingsMenu } from './ModelSettingsMenu'
@@ -124,6 +124,7 @@ export function Composer({
   const { t } = useI18n()
   const ref = useRef<HTMLTextAreaElement>(null)
   const surfaceRef = useRef<HTMLDivElement>(null)
+  const skillSuggestionsID = `composer-skill-suggestions-${useId()}`
   const composingRef = useRef(false)
   const submittingRef = useRef(false)
   const [settingsError, setSettingsError] = useState('')
@@ -175,6 +176,8 @@ export function Composer({
     : undefined
   const {
     skills: availableSkills,
+    projectSkills,
+    systemSkills,
     skillsLoaded,
     skillsLoading,
     skillsFailed,
@@ -187,9 +190,16 @@ export function Composer({
     dismiss: dismissCompactFeedback,
     compact: compactContext,
   } = useComposerCompaction(onCompact)
-  const suggestedSkills = slashQuery
-    ? filterSkills(availableSkills, slashQuery.query).slice(0, maxSkillSuggestions)
+  const suggestedProjectSkills = slashQuery
+    ? filterSkills(projectSkills, slashQuery.query).slice(0, maxSkillSuggestions)
     : []
+  const suggestedSystemSkills = slashQuery
+    ? filterSkills(systemSkills, slashQuery.query).slice(
+        0,
+        maxSkillSuggestions - suggestedProjectSkills.length,
+      )
+    : []
+  const suggestedSkills = [...suggestedProjectSkills, ...suggestedSystemSkills]
   const previewCommandCount = slashQuery
     ? previewSkillCommandCount(slashQuery.query)
     : 0
@@ -379,11 +389,13 @@ export function Composer({
           )}
         >
           <ComposerSkillSuggestions
+            id={skillSuggestionsID}
             visible={skillSuggestionsVisible}
             query={slashQuery?.query ?? ''}
             commandsEnabled={Boolean(slashQuery)}
             skillsEnabled={Boolean(slashQuery)}
-            skills={suggestedSkills}
+            projectSkills={suggestedProjectSkills}
+            systemSkills={suggestedSystemSkills}
             activeIndex={activeSuggestionIndex}
             keyboardNavigating={skillKeyboardNavigating}
             loading={Boolean(slashQuery && skillsLoading)}
@@ -471,6 +483,7 @@ export function Composer({
                   aria-activedescendant={
                     skillSuggestionsVisible && suggestionCount > 0
                       ? skillSuggestionOptionID(
+                          skillSuggestionsID,
                           Math.min(activeSuggestionIndex, suggestionCount - 1),
                         )
                       : undefined
@@ -526,7 +539,7 @@ export function Composer({
                       event.preventDefault()
                       setSkillKeyboardNavigating(true)
                       setActiveSuggestionIndex(
-                        (index) => (index + 1) % suggestionCount,
+                        (index) => moveSuggestionIndex(index, suggestionCount, 'next'),
                       )
                       return
                     }
@@ -538,8 +551,7 @@ export function Composer({
                       event.preventDefault()
                       setSkillKeyboardNavigating(true)
                       setActiveSuggestionIndex(
-                        (index) =>
-                          (index - 1 + suggestionCount) % suggestionCount,
+                        (index) => moveSuggestionIndex(index, suggestionCount, 'previous'),
                       )
                       return
                     }
