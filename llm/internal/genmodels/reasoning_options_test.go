@@ -138,6 +138,11 @@ func TestApplyReasoningOptionMetadataRequiresNamedEffort(t *testing.T) {
 			want:  true,
 		},
 		{
+			name:  "OpenAI Responses",
+			model: model{Protocol: "openai-responses"},
+			want:  true,
+		},
+		{
 			name:  "explicit effort opt-out",
 			model: model{Protocol: "openai-completions", Compat: compatibility{Kind: "openai", SupportsReasoningEffort: boolp(false)}},
 		},

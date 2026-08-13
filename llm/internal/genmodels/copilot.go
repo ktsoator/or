@@ -22,14 +22,18 @@ func fromCopilot(catalog map[string]sourceProvider) []model {
 			protocol = "anthropic-messages"
 			compat = compatibility{Kind: "anthropic"}
 		}
-		models = append(models, normalize(id, source, providerRule{
+		candidate := normalize(id, source, providerRule{
 			Provider: githubCopilotProvider, Protocol: protocol, BaseURL: githubCopilotBaseURL,
 			Compat: compat,
 			Headers: map[string]string{
 				"User-Agent": "GitHubCopilotChat/0.35.0", "Editor-Version": "vscode/1.107.0",
 				"Editor-Plugin-Version": "copilot-chat/0.35.0", "Copilot-Integration-Id": "vscode-chat",
 			},
-		}))
+		})
+		if candidate.Reasoning && candidate.Protocol == "openai-completions" {
+			applyThinkingProfile(&candidate, fixedProviderDefault())
+		}
+		models = append(models, candidate)
 	}
 	return models
 }

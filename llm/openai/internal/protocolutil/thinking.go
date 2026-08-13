@@ -31,6 +31,17 @@ func MappedEffort(model llm.Model, level llm.ModelThinkingLevel) string {
 	return string(level)
 }
 
+// ExplicitMappedEffort returns an effort only when the model catalog explicitly
+// maps the level. A supported but absent mapping represents the provider's fixed
+// default and must not be serialized as a tunable effort.
+func ExplicitMappedEffort(model llm.Model, level llm.ModelThinkingLevel) (string, bool) {
+	value, ok := model.ThinkingLevelMap[level]
+	if !ok || value == nil {
+		return "", false
+	}
+	return *value, true
+}
+
 // OffEffort returns the provider value for disabled thinking.
 func OffEffort(model llm.Model) string {
 	if value, ok := model.ThinkingLevelMap[llm.ModelThinkingOff]; ok && value != nil {

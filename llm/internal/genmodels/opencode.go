@@ -86,6 +86,10 @@ func applyOpenCodeOverrides(candidate *model) {
 	if candidate.ID == "claude-sonnet-4" || candidate.ID == "claude-sonnet-4-5" {
 		candidate.ContextWindow = 200_000
 	}
+	if candidate.Protocol == "openai-responses" && candidate.Reasoning && candidate.ThinkingLevelMap == nil {
+		applyThinkingProfile(candidate, fixedProviderDefault())
+		return
+	}
 	if candidate.Protocol != "openai-completions" {
 		return
 	}

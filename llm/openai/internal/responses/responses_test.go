@@ -296,6 +296,31 @@ func TestResponsesThinkingDisplayOmittedSkipsSummaryRequest(t *testing.T) {
 	}
 }
 
+func TestResponsesFixedProviderThinkingOmitsEffort(t *testing.T) {
+	model := responsesTestModel("")
+	model.Reasoning = true
+	model.ThinkingLevelMap = map[llm.ModelThinkingLevel]*string{
+		llm.ModelThinkingOff:     nil,
+		llm.ModelThinkingMinimal: nil,
+		llm.ModelThinkingLow:     nil,
+		llm.ModelThinkingMedium:  nil,
+	}
+	params := buildResponsesParams(model, "", nil, nil, llm.StreamOptions{
+		Reasoning: llm.ModelThinkingHigh,
+	})
+	raw, err := json.Marshal(params)
+	if err != nil {
+		t.Fatalf("marshal params: %v", err)
+	}
+	wire := string(raw)
+	if strings.Contains(wire, `"effort"`) {
+		t.Fatalf("fixed provider thinking must omit effort: %s", wire)
+	}
+	if !strings.Contains(wire, `"summary":"auto"`) {
+		t.Fatalf("fixed provider thinking must still request a summary: %s", wire)
+	}
+}
+
 func TestResponsesReplaysEncryptedReasoningWithoutVisibleSummary(t *testing.T) {
 	signature := encodeResponsesSignature(responsesSignature{
 		Kind: "reasoning", ID: "rs_redacted", EncryptedContent: "encrypted_redacted",

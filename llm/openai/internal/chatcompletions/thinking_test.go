@@ -293,17 +293,6 @@ func TestBuildParamsProviderThinkingWireMatrix(t *testing.T) {
 			},
 		},
 		{
-			name:     "opencode grok server default",
-			provider: "opencode",
-			modelID:  "grok-build-0.1",
-			cases: []thinkingWireCase{
-				{name: "unset", want: map[string]any{}},
-				{name: "off clamps high", reasoning: llm.ModelThinkingOff, want: map[string]any{}},
-				{name: "high", reasoning: llm.ModelThinkingHigh, want: map[string]any{}},
-				{name: "max clamps high", reasoning: llm.ModelThinkingMax, want: map[string]any{}},
-			},
-		},
-		{
 			name:     "together fixed reasoning",
 			provider: "together",
 			modelID:  "MiniMaxAI/MiniMax-M2.7",
@@ -785,7 +774,6 @@ func TestOpenCodeAlwaysThinkingModelsExcludeOff(t *testing.T) {
 	}{
 		{provider: "opencode-go", modelID: "glm-5.2"},
 		{provider: "opencode-go", modelID: "mimo-v2.5-pro"},
-		{provider: "opencode", modelID: "grok-build-0.1"},
 		{provider: "opencode", modelID: "glm-5"},
 		{provider: "opencode", modelID: "deepseek-v4-flash"},
 	}

@@ -84,6 +84,9 @@ func applyReasoningOptionMetadata(candidate *model, options []sourceReasoningOpt
 // Anthropic-compatible adaptive thinking. Other thinking formats remain under
 // their provider rules instead of accepting generic models.dev effort values.
 func supportsEffortThinkingLevels(candidate model) bool {
+	if candidate.Protocol == "openai-responses" {
+		return true
+	}
 	if candidate.Protocol == "anthropic-messages" {
 		return candidate.Compat.ForceAdaptiveThinking != nil && *candidate.Compat.ForceAdaptiveThinking
 	}
