@@ -2,6 +2,7 @@ import {
   BookOpenText,
   LogOut,
   Megaphone,
+  Activity,
   Settings,
   type LucideIcon,
 } from 'lucide-react'
@@ -13,9 +14,11 @@ import { useI18n } from '@/i18n'
 export function ProfileMenu({
   collapsed,
   onOpenSettings,
+  onOpenDiagnostics,
 }: {
   collapsed: boolean
   onOpenSettings: () => void
+  onOpenDiagnostics: () => void
 }) {
   const { t } = useI18n()
 
@@ -66,6 +69,11 @@ export function ProfileMenu({
 
               <ProfileItem icon={BookOpenText} label={t('profile.documentation')} />
               <ProfileItem icon={Megaphone} label={t('profile.changelog')} />
+              <ProfileItem
+                icon={Activity}
+                label={t('profile.diagnostics')}
+                onSelect={onOpenDiagnostics}
+              />
               <ProfileItem
                 icon={Settings}
                 label={t('profile.settings')}

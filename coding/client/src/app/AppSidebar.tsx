@@ -53,6 +53,7 @@ type AppSidebarProps = {
     revealWorkspace: (path: string) => Promise<void>
     requestRemoveWorkspace: (path: string, name: string) => void
     onOpenSettings: () => void
+    onOpenDiagnostics: () => void
     startSidebarResize: (event: ReactPointerEvent<HTMLDivElement>) => void
     resizeSidebar: (event: ReactPointerEvent<HTMLDivElement>) => void
     stopSidebarResize: (event: ReactPointerEvent<HTMLDivElement>) => void
@@ -96,6 +97,7 @@ export function AppSidebar({ layout, content, actions }: AppSidebarProps) {
     revealWorkspace,
     requestRemoveWorkspace,
     onOpenSettings,
+    onOpenDiagnostics,
     startSidebarResize,
     resizeSidebar,
     stopSidebarResize,
@@ -290,6 +292,7 @@ export function AppSidebar({ layout, content, actions }: AppSidebarProps) {
 
         <ProfileMenu
           collapsed={sidebarCollapsed}
+          onOpenDiagnostics={onOpenDiagnostics}
           onOpenSettings={() => {
             onOpenSettings()
           }}

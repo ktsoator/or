@@ -58,8 +58,9 @@ func New(ctx context.Context, dataDir string) (*Runtime, error) {
 	for _, registered := range workspaces.List() {
 		mcp.Warm(registered.Path)
 	}
+	observabilityLogPath := filepath.Join(dataDir, "logs", "observability.jsonl")
 	recorder, recorderErr := observability.NewJSONL(
-		filepath.Join(dataDir, "logs", "observability.jsonl"),
+		observabilityLogPath,
 		observability.FileOptions{},
 	)
 	var eventRecorder observability.Recorder = recorder
@@ -86,14 +87,15 @@ func New(ctx context.Context, dataDir string) (*Runtime, error) {
 	}
 
 	server := httpapi.NewServer(httpapi.Options{
-		Conversations: manager,
-		Transports:    transports,
-		Ledger:        ledger,
-		Workspaces:    workspaces,
-		Registry:      registry,
-		Providers:     providers,
-		ProviderTests: providerTests,
-		MCP:           mcp,
+		Conversations:        manager,
+		Transports:           transports,
+		Ledger:               ledger,
+		Workspaces:           workspaces,
+		Registry:             registry,
+		Providers:            providers,
+		ProviderTests:        providerTests,
+		MCP:                  mcp,
+		ObservabilityLogPath: observabilityLogPath,
 	})
 	runtime := &Runtime{
 		handler:       server.Handler(),

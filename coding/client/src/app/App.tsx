@@ -43,12 +43,16 @@ const SkillsPage = lazy(() =>
 const MCPPage = lazy(() =>
   import('@/features/mcp/MCPPage').then((module) => ({ default: module.MCPPage })),
 )
+const DiagnosticsPage = lazy(() =>
+  import('@/features/diagnostics/DiagnosticsPage').then((module) => ({ default: module.DiagnosticsPage })),
+)
 
 type AppView =
   | { type: 'conversation' }
   | { type: 'settings'; section: SettingsSection }
   | { type: 'skills' }
   | { type: 'mcp' }
+  | { type: 'diagnostics' }
 
 type BranchPointTarget = {
   sessionID: string
@@ -554,6 +558,7 @@ export default function App() {
           revealWorkspace: revealNativePath,
           requestRemoveWorkspace,
           onOpenSettings: () => setView({ type: 'settings', section: 'general' }),
+          onOpenDiagnostics: () => setView({ type: 'diagnostics' }),
           startSidebarResize,
           resizeSidebar,
           stopSidebarResize,
@@ -579,6 +584,15 @@ export default function App() {
             onExpandSidebar={expandSidebar}
             workspacePath={activeSession?.workspacePath}
             workspaceName={activeSession?.workspaceName}
+          />
+        </Suspense>
+      ) : view.type === 'diagnostics' ? (
+        <Suspense fallback={<AppViewFallback />}>
+          <DiagnosticsPage
+            onBack={() => setView({ type: 'conversation' })}
+            sidebarCollapsed={sidebarCollapsed}
+            onExpandSidebar={expandSidebar}
+            sessionID={activeSessionID}
           />
         </Suspense>
       ) : (
