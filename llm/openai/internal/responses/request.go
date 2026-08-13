@@ -330,7 +330,13 @@ func applyResponsesThinking(params *responses.ResponseNewParams, model llm.Model
 	}
 	thinking := protocolutil.ResolveThinking(model, options.Reasoning)
 	if thinking.Enabled() {
-		params.Reasoning.Effort = shared.ReasoningEffort(protocolutil.MappedEffort(model, thinking.Level))
+		effort, mapped := protocolutil.ExplicitMappedEffort(model, thinking.Level)
+		if mapped || len(model.ThinkingLevelMap) == 0 {
+			if !mapped {
+				effort = string(thinking.Level)
+			}
+			params.Reasoning.Effort = shared.ReasoningEffort(effort)
+		}
 	} else if options.Reasoning == llm.ModelThinkingOff {
 		params.Reasoning.Effort = shared.ReasoningEffort(protocolutil.OffEffort(model))
 	}

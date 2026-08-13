@@ -257,14 +257,20 @@ func TestFromOpenCodeKeepsMiniMaxRoutesDistinct(t *testing.T) {
 }
 
 func TestFromOpenCodeRoutesOpenAIModelsThroughResponses(t *testing.T) {
-	luna := sourceModel{Name: "GPT-5.6 Luna", ToolCall: true, Reasoning: true}
-	luna.Provider.NPM = "@ai-sdk/openai"
+	low, medium, high := "low", "medium", "high"
+	grok := sourceModel{
+		Name:             "Grok 4.5",
+		ToolCall:         true,
+		Reasoning:        true,
+		ReasoningOptions: reasoningValues(&low, &medium, &high),
+	}
+	grok.Provider.NPM = "@ai-sdk/openai"
 	google := sourceModel{Name: "Gemini", ToolCall: true}
 	google.Provider.NPM = "@ai-sdk/google"
 	catalog := map[string]sourceProvider{
-		"opencode-go": {Models: map[string]sourceModel{
-			"gpt-5.6-luna": luna,
-			"gemini":       google,
+		"opencode": {Models: map[string]sourceModel{
+			"grok-4.5": grok,
+			"gemini":   google,
 		}},
 	}
 
@@ -273,12 +279,34 @@ func TestFromOpenCodeRoutesOpenAIModelsThroughResponses(t *testing.T) {
 		t.Fatalf("generated %d models, want only the OpenAI Responses model", len(models))
 	}
 	got := models[0]
-	if got.ID != "gpt-5.6-luna" || got.Provider != "opencode-go" ||
-		got.Protocol != "openai-responses" || got.BaseURL != "https://opencode.ai/zen/go/v1" {
-		t.Fatalf("Luna route = %#v, want opencode-go OpenAI Responses /v1", got)
+	if got.ID != "grok-4.5" || got.Provider != "opencode" ||
+		got.Protocol != "openai-responses" || got.BaseURL != "https://opencode.ai/zen/v1" {
+		t.Fatalf("Grok route = %#v, want opencode OpenAI Responses /v1", got)
+	}
+	wantLevels := explicitThinkingLevels([]string{"low", "medium", "high"})
+	if !reflect.DeepEqual(got.ThinkingLevelMap, wantLevels) {
+		t.Fatalf("Grok thinking levels = %#v, want %#v", got.ThinkingLevelMap, wantLevels)
 	}
 	if got.Compat != (compatibility{}) {
-		t.Fatalf("Luna compatibility = %#v, want none for Responses", got.Compat)
+		t.Fatalf("Grok compatibility = %#v, want none for Responses", got.Compat)
+	}
+}
+
+func TestFromOpenCodeResponsesWithoutControlsUsesProviderDefault(t *testing.T) {
+	grok := sourceModel{Name: "Grok Build 0.1", ToolCall: true, Reasoning: true}
+	grok.Provider.NPM = "@ai-sdk/openai"
+	catalog := map[string]sourceProvider{
+		"opencode": {Models: map[string]sourceModel{"grok-build-0.1": grok}},
+	}
+
+	models := fromOpenCode(catalog)
+	applyOverrides(models)
+	if len(models) != 1 {
+		t.Fatalf("generated %d models, want 1", len(models))
+	}
+	want := unsupportedThinkingLevels("off", "minimal", "low", "medium")
+	if !reflect.DeepEqual(models[0].ThinkingLevelMap, want) {
+		t.Fatalf("ThinkingLevelMap = %#v, want fixed provider default %#v", models[0].ThinkingLevelMap, want)
 	}
 }
 

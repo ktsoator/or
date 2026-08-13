@@ -606,6 +606,52 @@ func TestBuiltInOpenCodeGoMiniMaxThinkingMetadata(t *testing.T) {
 	}
 }
 
+func TestBuiltInResponsesThinkingMetadata(t *testing.T) {
+	tests := []struct {
+		provider string
+		modelID  string
+		want     []ModelThinkingLevel
+	}{
+		{
+			provider: "openai",
+			modelID:  "gpt-5",
+			want: []ModelThinkingLevel{
+				ModelThinkingMinimal,
+				ModelThinkingLow,
+				ModelThinkingMedium,
+				ModelThinkingHigh,
+			},
+		},
+		{provider: "openai", modelID: "gpt-5-pro", want: []ModelThinkingLevel{ModelThinkingHigh}},
+		{
+			provider: "opencode",
+			modelID:  "grok-4.6",
+			want: []ModelThinkingLevel{
+				ModelThinkingLow,
+				ModelThinkingMedium,
+				ModelThinkingHigh,
+				ModelThinkingXHigh,
+			},
+		},
+		{provider: "opencode", modelID: "grok-build-0.1", want: []ModelThinkingLevel{ModelThinkingHigh}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.provider+"/"+test.modelID, func(t *testing.T) {
+			model, ok := LookupModel(test.provider, test.modelID)
+			if !ok {
+				t.Fatalf("model is missing from the built-in catalog")
+			}
+			if model.Protocol != ProtocolOpenAIResponses {
+				t.Fatalf("protocol = %q, want OpenAI Responses", model.Protocol)
+			}
+			if got := SupportedThinkingLevels(model); !slices.Equal(got, test.want) {
+				t.Fatalf("thinking levels = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
 func TestBuiltInOpenCodeClaudeContextCorrections(t *testing.T) {
 	for _, modelID := range []string{"claude-sonnet-4", "claude-sonnet-4-5"} {
 		model, ok := LookupModel("opencode", modelID)
