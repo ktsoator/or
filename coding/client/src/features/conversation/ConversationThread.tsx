@@ -69,6 +69,7 @@ export function ThreadItem({
   branchingDisabled = false,
   onForkMessage,
   onEditMessage,
+  onOpenRunDiagnostics,
   editRequiresConfirmation = false,
 }: {
   item: Item
@@ -81,6 +82,7 @@ export function ThreadItem({
     text?: string,
   ) => Promise<unknown>
   onEditMessage?: (messageID: string, text: string) => Promise<unknown>
+  onOpenRunDiagnostics?: (runId: string) => void
   editRequiresConfirmation?: boolean
 }) {
   const { locale, t } = useI18n()
@@ -333,6 +335,9 @@ export function ThreadItem({
               modelName={item.modelName || item.model}
               responseText={item.markdown}
               completedAt={item.completedAt}
+              onOpenDiagnostics={item.runId && onOpenRunDiagnostics
+                ? () => onOpenRunDiagnostics(item.runId as string)
+                : undefined}
               onFork={onForkMessage ? () => {
                 setBranchError('')
                 setBranchDialogOpen(true)

@@ -67,6 +67,7 @@ func TestProjectEventIncludesResponseCompletionTime(t *testing.T) {
 func TestProjectEventIncludesPersistedRunMessageIDs(t *testing.T) {
 	data, ok := ProjectEvent(engine.Event{
 		Type:               engine.RunCompleted,
+		RunID:              "run-1",
 		UserMessageIDs:     []string{"user-1", "user-2"},
 		AssistantMessageID: "assistant-1",
 	})
@@ -78,9 +79,10 @@ func TestProjectEventIncludesPersistedRunMessageIDs(t *testing.T) {
 	if err := json.Unmarshal(data, &event); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(event.UserMessageIDs, ",") != "user-1,user-2" ||
+	if event.RunID != "run-1" ||
+		strings.Join(event.UserMessageIDs, ",") != "user-1,user-2" ||
 		event.AssistantMessageID != "assistant-1" {
-		t.Fatalf("message ids = users %v, assistant %q", event.UserMessageIDs, event.AssistantMessageID)
+		t.Fatalf("run %q message ids = users %v, assistant %q", event.RunID, event.UserMessageIDs, event.AssistantMessageID)
 	}
 }
 
@@ -146,6 +148,17 @@ func TestProjectHistoryIncludesResponseCompletionTime(t *testing.T) {
 	}
 	if events[0].MessageID != "message-1" {
 		t.Fatalf("messageID = %q, want message-1", events[0].MessageID)
+	}
+}
+
+func TestProjectHistoryIncludesDiagnosticRunID(t *testing.T) {
+	events := ProjectHistory([]engine.HistoryItem{{
+		Type:  engine.HistoryRun,
+		RunID: "run-1",
+	}})
+
+	if len(events) != 1 || events[0].RunID != "run-1" || events[0].ID != "run-1" {
+		t.Fatalf("events = %#v, want run-1 identity", events)
 	}
 }
 

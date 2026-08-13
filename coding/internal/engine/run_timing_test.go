@@ -75,6 +75,9 @@ func TestSessionPersistsAndReplaysRunTiming(t *testing.T) {
 	if history[1].MessageID != "" {
 		t.Fatalf("run message id = %q, want empty", history[1].MessageID)
 	}
+	if history[1].RunID != entries[3].ID {
+		t.Fatalf("run id = %q, want transcript run %q", history[1].RunID, entries[3].ID)
+	}
 	if history[2].MessageID != entries[2].ID {
 		t.Fatalf("assistant message id = %q, want transcript entry %q", history[2].MessageID, entries[2].ID)
 	}

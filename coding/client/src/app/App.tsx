@@ -52,7 +52,7 @@ type AppView =
   | { type: 'settings'; section: SettingsSection }
   | { type: 'skills' }
   | { type: 'mcp' }
-  | { type: 'diagnostics' }
+  | { type: 'diagnostics'; runId?: string }
 
 type BranchPointTarget = {
   sessionID: string
@@ -593,6 +593,7 @@ export default function App() {
             sidebarCollapsed={sidebarCollapsed}
             onExpandSidebar={expandSidebar}
             sessionID={activeSessionID}
+            initialRunID={view.runId}
           />
         </Suspense>
       ) : (
@@ -652,6 +653,7 @@ export default function App() {
             ? () => chooseSession(parentSession.id, activeSession?.forkedFromMessageId)
             : undefined,
           branchPointLocated: handleBranchPointLocated,
+          openRunDiagnostics: (runId) => setView({ type: 'diagnostics', runId }),
           forkMessage,
           editMessage,
           renderComposer: composer,

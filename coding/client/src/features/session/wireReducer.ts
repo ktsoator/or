@@ -119,6 +119,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
         const run = items[idx] as Extract<Item, { kind: 'run' }>
         items = replaceAt(items, idx, {
           ...run,
+          runId: ev.runId ?? ev.id ?? run.runId,
           startedAt: ev.startedAt ?? run.startedAt,
           durationMs: ev.durationMs ?? run.durationMs,
         })
@@ -126,6 +127,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
         const run = {
           kind: 'run' as const,
           id: ev.id ?? nextId(),
+          runId: ev.runId ?? ev.id,
           startedAt: ev.startedAt ?? new Date().toISOString(),
           durationMs: ev.durationMs,
         }
@@ -629,8 +631,11 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
 
         if (ev.finalResponse && idx >= 0) {
           const cur = items[idx] as Extract<Item, { kind: 'assistant' }>
+          const runIndex = lastIndex(items, (item) => item.kind === 'run')
+          const run = runIndex >= 0 ? items[runIndex] : undefined
           items = replaceAt(items, idx, {
             ...cur,
+            runId: cur.runId ?? (run?.kind === 'run' ? run.runId : undefined),
             open: false,
             complete: true,
             usage: hasUsage(responseUsage) ? responseUsage : undefined,
@@ -762,9 +767,11 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
           )
           const assistant = assistantIndex > runIndex ? items[assistantIndex] : undefined
           if (assistant?.kind === 'assistant') {
+            const run = items[runIndex]
             items = replaceAt(items, assistantIndex, {
               ...assistant,
               messageID: ev.assistantMessageID,
+              runId: ev.runId ?? (run?.kind === 'run' ? run.runId : undefined),
             })
           }
         }

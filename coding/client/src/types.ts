@@ -133,6 +133,7 @@ export type UserItem = {
 export type AssistantItem = {
   kind: 'assistant'
   id: string
+  runId?: string
   messageID?: string
   markdown: string
   open: boolean
@@ -146,6 +147,7 @@ export type AssistantItem = {
 export type RunItem = {
   kind: 'run'
   id: string
+  runId?: string
   startedAt: string
   durationMs?: number
 }

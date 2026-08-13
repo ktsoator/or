@@ -64,7 +64,7 @@ func projectEvent(ev engine.Event) (wireEvent, bool) {
 	var out wireEvent
 	switch ev.Type {
 	case engine.RunStarted:
-		out = wireEvent{Type: wireEventRunStart, StartedAt: formatEventTime(ev.StartedAt)}
+		out = wireEvent{Type: wireEventRunStart, ID: ev.RunID, RunID: ev.RunID, StartedAt: formatEventTime(ev.StartedAt)}
 
 	case engine.UserMessageCompleted:
 		out = wireEvent{
@@ -143,6 +143,7 @@ func projectEvent(ev engine.Event) (wireEvent, bool) {
 	case engine.RunCompleted:
 		out = wireEvent{
 			Type:               wireEventDone,
+			RunID:              ev.RunID,
 			Usage:              projectUsage(ev.Usage),
 			StartedAt:          formatEventTime(ev.StartedAt),
 			DurationMS:         elapsedMilliseconds(ev.StartedAt, ev.CompletedAt),
@@ -190,6 +191,8 @@ func ProjectHistory(items []engine.HistoryItem) []wireEvent {
 		case engine.HistoryRun:
 			out = append(out, wireEvent{
 				Type:       wireEventRunStart,
+				ID:         item.RunID,
+				RunID:      item.RunID,
 				StartedAt:  formatEventTime(item.StartedAt),
 				DurationMS: elapsedMilliseconds(item.StartedAt, item.CompletedAt),
 			})

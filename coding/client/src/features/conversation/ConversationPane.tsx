@@ -66,6 +66,7 @@ type ConversationPaneProps = {
     selectSession: (sessionID: string) => void
     returnToParent?: () => void
     branchPointLocated: (target: { sessionID: string; messageID: string }) => void
+    openRunDiagnostics: (runId: string) => void
     forkMessage: (
       messageID: string,
       mode: 'before_user' | 'after_assistant',
@@ -118,6 +119,7 @@ export function ConversationPane({
     selectSession,
     returnToParent,
     branchPointLocated,
+    openRunDiagnostics,
     forkMessage,
     editMessage,
     renderComposer,
@@ -362,6 +364,7 @@ export function ConversationPane({
         branchingDisabled={running || forking}
         onForkMessage={forkMessage}
         onEditMessage={editMessage}
+        onOpenRunDiagnostics={openRunDiagnostics}
         editRequiresConfirmation={hasLaterConversationContent(unit.item)}
       />
     )

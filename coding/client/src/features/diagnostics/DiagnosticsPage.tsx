@@ -2,20 +2,14 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   ArrowLeft,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   CircleAlert,
   CircleDot,
-  Clock3,
-  Coins,
   Gauge,
   LoaderCircle,
   RefreshCw,
   RotateCcw,
-  ShieldCheck,
-  TerminalSquare,
-  Timer,
-  Wrench,
-  type LucideIcon,
 } from 'lucide-react'
 import { useI18n, type Locale } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -26,6 +20,7 @@ import {
   type DiagnosticRun,
   type DiagnosticReport,
 } from './catalog'
+import { buildDiagnosticTurns, type DiagnosticStep, type DiagnosticTurn } from './viewModel'
 
 type Scope = 'session' | 'all'
 
@@ -34,16 +29,18 @@ export function DiagnosticsPage({
   sidebarCollapsed,
   onExpandSidebar,
   sessionID,
+  initialRunID,
 }: {
   onBack: () => void
   sidebarCollapsed?: boolean
   onExpandSidebar?: () => void
   sessionID?: string
+  initialRunID?: string
 }) {
   const { locale, t, formatNumber } = useI18n()
   const [scope, setScope] = useState<Scope>(sessionID ? 'session' : 'all')
   const [report, setReport] = useState<DiagnosticReport>()
-  const [selectedRunID, setSelectedRunID] = useState('')
+  const [selectedRunID, setSelectedRunID] = useState(initialRunID ?? '')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const scopedSessionID = scope === 'session' ? sessionID : undefined
@@ -172,7 +169,7 @@ export function DiagnosticsPage({
               </p>
             </div>
           ) : (
-            <div className="grid min-h-0 flex-1 grid-cols-[19rem_minmax(0,1fr)] max-md:grid-cols-1 max-md:grid-rows-[12rem_minmax(0,1fr)]">
+            <div className="grid min-h-0 flex-1 grid-cols-[19rem_minmax(0,1fr)] max-lg:grid-cols-[15rem_minmax(0,1fr)] max-md:grid-cols-1 max-md:grid-rows-[12rem_minmax(0,1fr)]">
               <aside className="min-h-0 overflow-y-auto border-r border-edge/80 pr-3 pt-3 max-md:border-r-0 max-md:border-b max-md:pr-0">
                 <div className="mb-2 flex h-7 items-center justify-between px-2">
                   <span className="text-[0.71875rem] font-medium text-ink-faint">
@@ -284,30 +281,42 @@ function RunDetail({
   formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string
 }) {
   const { t } = useI18n()
-  const metrics: Array<{ label: string; value: string; icon: LucideIcon }> = [
-    { label: t('diagnostics.totalDuration'), value: formatDuration(run.durationMs), icon: Clock3 },
-    { label: t('diagnostics.firstToken'), value: formatDuration(run.timeToFirstOutputMs), icon: Timer },
-    { label: t('diagnostics.checkpoint'), value: formatDuration(run.checkpointDurationMs), icon: ShieldCheck },
-    { label: t('diagnostics.toolTime'), value: formatDuration(run.toolDurationMs), icon: Wrench },
-    { label: t('diagnostics.approvalWait'), value: formatDuration(run.approvalDurationMs), icon: Gauge },
-    { label: t('diagnostics.tokens'), value: formatNumber(run.totalTokens ?? 0), icon: TerminalSquare },
-    { label: t('diagnostics.cost'), value: formatCost(run.costTotalUsd ?? 0), icon: Coins },
+  const turns = buildDiagnosticTurns(run.events)
+  const providerDurationMs = run.events.reduce((total, event) =>
+    event.name === 'provider.request.completed' || event.name === 'provider.request.failed'
+      ? total + (event.durationMs ?? 0)
+      : total, 0)
+  const metrics: Array<{ label: string; value: string }> = [
+    { label: t('diagnostics.totalDuration'), value: formatDuration(run.durationMs) },
+    { label: t('diagnostics.firstToken'), value: formatDuration(run.timeToFirstOutputMs) },
+    { label: t('diagnostics.tokens'), value: t('diagnostics.tokenCount', { count: formatNumber(run.totalTokens ?? 0) }) },
+    { label: t('diagnostics.cost'), value: formatCost(run.costTotalUsd ?? 0) },
   ]
+  const durations = [
+    { label: t('diagnostics.modelTime'), value: providerDurationMs, tone: 'bg-info' },
+    { label: t('diagnostics.toolTime'), value: run.toolDurationMs ?? 0, tone: 'bg-ink-muted' },
+    { label: t('diagnostics.approvalWait'), value: run.approvalDurationMs ?? 0, tone: 'bg-warning' },
+    { label: t('diagnostics.checkpoint'), value: run.checkpointDurationMs ?? 0, tone: 'bg-success' },
+  ].filter((duration) => duration.value > 0)
   return (
-    <section className="min-h-0 overflow-y-auto pl-5 pt-5 max-md:pl-0 max-md:pt-4" aria-label={t('diagnostics.runDetail')}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <section className="min-h-0 overflow-y-auto pl-8 pt-7 max-lg:pl-6 max-md:pl-0 max-md:pt-5" aria-label={t('diagnostics.runDetail')}>
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <StatusDot status={run.status} />
-            <h2 className="truncate font-mono text-[0.875rem] font-medium text-ink">{run.id}</h2>
+            <h2 className="truncate text-[1.125rem] font-semibold leading-6 text-ink" title={run.id}>
+              {t('diagnostics.runLabel', { id: shortID(run.id).replace(/^run_/, '') })}
+            </h2>
+            <span className="text-[0.8125rem] text-ink-muted">{runStatusLabel(run.status, t)}</span>
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.71875rem] text-ink-muted">
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 pl-6 text-[0.8125rem] text-ink-muted">
             <span>{formatTimestamp(run.startedAt, locale)}</span>
-            <span className="font-mono text-ink-faint">{shortID(run.sessionId)}</span>
+            <span aria-hidden="true" className="text-ink-faint">·</span>
+            <span>{t('diagnostics.turnCount', { count: turns.length })}</span>
             {run.errorCode && <span className="font-mono text-danger">{run.errorCode}</span>}
           </div>
         </div>
-        <div className="flex items-center gap-2 text-[0.71875rem] text-ink-muted">
+        <div className="flex items-center gap-2 text-[0.75rem] text-ink-muted">
           {run.retries > 0 && (
             <span className="inline-flex items-center gap-1 rounded-[6px] bg-warning-surface px-2 py-1 text-warning">
               <RotateCcw className="size-3" aria-hidden="true" />
@@ -322,45 +331,163 @@ function RunDetail({
         </div>
       </div>
 
-      <div className="mt-5 grid grid-cols-4 border-y border-edge/80 max-xl:grid-cols-3 max-lg:grid-cols-2 max-sm:grid-cols-1">
+      <div className="mt-7 grid grid-cols-4 gap-x-8 gap-y-5 rounded-[8px] bg-canvas-sunken/65 px-5 py-4 max-lg:grid-cols-2 max-sm:gap-x-4 max-sm:px-4">
         {metrics.map((metric) => (
           <Metric key={metric.label} {...metric} />
         ))}
       </div>
 
-      <div className="mt-6 flex items-center justify-between gap-4">
-        <h3 className="text-[0.8125rem] font-medium text-ink-soft">{t('diagnostics.timeline')}</h3>
-        <span className="text-[0.6875rem] text-ink-faint">
-          {t('diagnostics.eventCount', { count: run.events.length })}
-        </span>
-      </div>
-      <div className="mt-2 pb-8">
-        {run.omittedEvents ? (
-          <div className="ml-[4.85rem] border-l border-edge py-2 pl-5 text-[0.71875rem] text-ink-faint">
-            {t('diagnostics.omittedEvents', { count: run.omittedEvents })}
+      {durations.length > 0 && (
+        <section className="mt-8">
+          <h3 className="text-[0.875rem] font-semibold text-ink-soft">{t('diagnostics.durationBreakdown')}</h3>
+          <div className="mt-4 max-w-[52rem] space-y-4">
+            {durations.map((duration) => (
+              <DurationBar
+                key={duration.label}
+                label={duration.label}
+                value={duration.value}
+                total={run.durationMs ?? 0}
+                tone={duration.tone}
+              />
+            ))}
           </div>
-        ) : null}
-        {run.events.map((event, index) => (
-          <EventRow
-            key={`${event.timestamp}-${event.name}-${index}`}
-            event={event}
-            runStartedAt={run.startedAt}
-            last={index === run.events.length - 1}
-          />
-        ))}
+        </section>
+      )}
+
+      <div className="mt-8 border-t border-edge-soft pt-6">
+        <div className="flex items-center justify-between gap-4">
+          <h3 className="text-[0.875rem] font-semibold text-ink-soft">{t('diagnostics.turns')}</h3>
+          <span className="text-[0.75rem] text-ink-muted">{t('diagnostics.turnCount', { count: turns.length })}</span>
+        </div>
+        <div className="mt-3 space-y-3">
+          {turns.map((turn, index) => (
+            <TurnSection key={turn.id} turn={turn} index={index} />
+          ))}
+        </div>
       </div>
+
+      <RawEvents run={run} />
     </section>
   )
 }
 
-function Metric({ label, value, icon: Icon }: { label: string; value: string; icon: LucideIcon }) {
+function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex min-w-0 items-center gap-2.5 border-r border-edge/70 px-3 py-3 last:border-r-0 max-sm:border-r-0 max-sm:border-b max-sm:last:border-b-0">
-      <Icon className="size-3.5 shrink-0 text-ink-faint" aria-hidden="true" />
-      <div className="min-w-0">
-        <div className="truncate text-[0.65625rem] font-medium text-ink-faint">{label}</div>
-        <div className="mt-0.5 truncate font-mono text-[0.8125rem] text-ink-soft">{value}</div>
+    <div className="min-w-0">
+      <div className="truncate text-[0.75rem] font-medium text-ink-muted">{label}</div>
+      <div className="mt-1 truncate font-mono text-[1.125rem] font-semibold leading-6 text-ink">{value}</div>
+    </div>
+  )
+}
+
+function DurationBar({ label, value, total, tone }: { label: string; value: number; total: number; tone: string }) {
+  const width = total > 0 ? Math.max(1.5, Math.min(100, (value / total) * 100)) : 0
+  return (
+    <div className="grid grid-cols-[7.5rem_minmax(5rem,1fr)_5rem] items-center gap-4 text-[0.8125rem] max-sm:grid-cols-[6.25rem_minmax(4rem,1fr)_4rem] max-sm:gap-2.5">
+      <span className="truncate font-medium text-ink-muted">{label}</span>
+      <div className="h-2 overflow-hidden rounded-full bg-canvas-sunken" aria-hidden="true">
+        <div className={cn('h-full rounded-full', tone)} style={{ width: `${width}%` }} />
       </div>
+      <span className="text-right font-mono text-[0.75rem] font-medium text-ink-soft">{formatDuration(value)}</span>
+    </div>
+  )
+}
+
+function TurnSection({ turn, index }: { turn: DiagnosticTurn; index: number }) {
+  const { t } = useI18n()
+  return (
+    <section className="rounded-[8px] bg-canvas-sunken/55 px-4 py-3.5" aria-label={t('diagnostics.turnLabel', { count: index + 1 })}>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="text-[0.8125rem] font-semibold text-ink-soft">{t('diagnostics.turnLabel', { count: index + 1 })}</span>
+          {isAbnormalStatus(turn.status) && (
+            <span className="text-[0.75rem] font-medium text-danger">{statusLabel(turn.status ?? '', t)}</span>
+          )}
+        </div>
+        <span className="shrink-0 font-mono text-[0.75rem] font-medium text-ink-muted">{formatDuration(turn.durationMs)}</span>
+      </div>
+      {turn.steps.length > 0 ? (
+        <div className="mt-3 space-y-1.5">
+          {turn.steps.map((step, stepIndex) => (
+            <StepRow key={`${step.timestamp}-${step.kind}-${stepIndex}`} step={step} />
+          ))}
+        </div>
+      ) : (
+        <p className="mt-2 text-[0.8125rem] text-ink-muted">{t('diagnostics.noMeasuredSteps')}</p>
+      )}
+    </section>
+  )
+}
+
+function StepRow({ step }: { step: DiagnosticStep }) {
+  const { t, formatNumber } = useI18n()
+  const label = step.kind === 'provider'
+    ? t('diagnostics.modelResponse')
+    : step.kind === 'tool'
+      ? (step.toolName || t('diagnostics.toolCall'))
+      : t('diagnostics.checkpoint')
+  const abnormal = isAbnormalStatus(step.status) || Boolean(step.errorCode)
+  return (
+    <div className="grid min-h-11 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 py-1">
+      <div className="min-w-0">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className="truncate text-[0.8125rem] font-semibold text-ink-soft">{label}</span>
+          {step.kind === 'provider' && step.model && (
+            <span className="truncate font-mono text-[0.75rem] text-ink-muted">{step.model}</span>
+          )}
+          {abnormal && step.status && (
+            <span className="text-[0.75rem] font-medium text-danger">{statusLabel(step.status, t)}</span>
+          )}
+        </div>
+        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[0.75rem] text-ink-muted">
+          {step.timeToFirstOutputMs ? <span>{t('diagnostics.outputStartedAfter', { duration: formatDuration(step.timeToFirstOutputMs) })}</span> : null}
+          {step.approvalDurationMs ? <span>{t('diagnostics.approvalInline', { duration: formatDuration(step.approvalDurationMs) })}</span> : null}
+          {step.attempts && step.attempts > 1 ? <span className="text-warning">{t('diagnostics.attemptCount', { count: step.attempts })}</span> : null}
+          {step.totalTokens ? <span>{t('diagnostics.requestTokenUsage', { count: formatNumber(step.totalTokens) })}</span> : null}
+          {step.errorCode ? <span className="font-mono text-danger">{step.errorCode}</span> : null}
+        </div>
+      </div>
+      <span className="pl-2 font-mono text-[0.75rem] font-medium text-ink-soft">
+        {step.durationMs ? formatDuration(step.durationMs) : statusLabel(step.status ?? 'running', t)}
+      </span>
+    </div>
+  )
+}
+
+function RawEvents({ run }: { run: DiagnosticRun }) {
+  const { t } = useI18n()
+  const [expanded, setExpanded] = useState(false)
+  return (
+    <div className="mt-7 border-t border-edge-soft pt-3 pb-8">
+      <button
+        type="button"
+        className="flex h-10 w-full cursor-pointer items-center justify-between rounded-[6px] px-1 text-left outline-none hover:bg-canvas-sunken focus-visible:bg-canvas-sunken"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((current) => !current)}
+      >
+        <span className="text-[0.8125rem] font-medium text-ink-muted">{t('diagnostics.rawEvents')}</span>
+        <span className="flex items-center gap-2 text-[0.75rem] text-ink-muted">
+          {t('diagnostics.eventCount', { count: run.events.length })}
+          <ChevronDown className={cn('size-3.5 transition-transform duration-150', expanded && 'rotate-180')} aria-hidden="true" />
+        </span>
+      </button>
+      {expanded && (
+        <div className="mt-1 border-t border-edge-soft">
+          {run.omittedEvents ? (
+            <div className="ml-[4.85rem] border-l border-edge py-2 pl-5 text-[0.71875rem] text-ink-faint">
+              {t('diagnostics.omittedEvents', { count: run.omittedEvents })}
+            </div>
+          ) : null}
+          {run.events.map((event, index) => (
+            <EventRow
+              key={`${event.timestamp}-${event.name}-${index}`}
+              event={event}
+              runStartedAt={run.startedAt}
+              last={index === run.events.length - 1}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -470,6 +597,10 @@ function statusLabel(status: string, t: Translate): string {
     discarded: t('diagnostics.status.discarded'),
   }
   return labels[status] ?? status
+}
+
+function isAbnormalStatus(status?: string): boolean {
+  return status === 'failed' || status === 'cancelled' || status === 'denied' || status === 'discarded'
 }
 
 function runStatusLabel(status: string, t: Translate): string {

@@ -75,7 +75,7 @@ describe('threadsReducer event sequences', () => {
       {
         t: 'wire',
         sessionID,
-        ev: { type: 'run_start', startedAt },
+        ev: { type: 'run_start', runId: 'run-1', startedAt },
       },
       {
         t: 'wire',
@@ -87,6 +87,7 @@ describe('threadsReducer event sequences', () => {
         sessionID,
         ev: {
           type: 'done',
+          runId: 'run-1',
           startedAt,
           userMessageIDs: ['transcript-user-1'],
           assistantMessageID: 'transcript-assistant-1',
@@ -100,9 +101,10 @@ describe('threadsReducer event sequences', () => {
         id: 'local-user',
         messageID: 'transcript-user-1',
       }),
-      expect.objectContaining({ kind: 'run', startedAt }),
+      expect.objectContaining({ kind: 'run', runId: 'run-1', startedAt }),
       expect.objectContaining({
         kind: 'assistant',
+        runId: 'run-1',
         messageID: 'transcript-assistant-1',
         complete: true,
       }),

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   Check,
   Copy,
+  Gauge,
   GitFork,
   LoaderCircle,
   ThumbsDown,
@@ -19,6 +20,7 @@ export function ResponseActions({
   modelName,
   responseText,
   completedAt,
+  onOpenDiagnostics,
   onFork,
   forkDisabled,
   forking,
@@ -27,6 +29,7 @@ export function ResponseActions({
   modelName?: string
   responseText: string
   completedAt?: string
+  onOpenDiagnostics?: () => void
   onFork?: () => void
   forkDisabled?: boolean
   forking?: boolean
@@ -100,6 +103,13 @@ export function ResponseActions({
             pressed={feedback === 'down'}
             onClick={() => setFeedback((current) => (current === 'down' ? undefined : 'down'))}
           />
+          {onOpenDiagnostics && (
+            <ActionButton
+              icon={Gauge}
+              label={t('actions.openRunDiagnostics')}
+              onClick={onOpenDiagnostics}
+            />
+          )}
 
           {completedTime && (
             <time
@@ -119,7 +129,7 @@ export function ResponseActions({
           <Tooltip.Root>
             <Tooltip.Trigger asChild>
               <button
-                className="group inline-flex h-7 min-w-0 max-w-full shrink cursor-pointer items-center rounded-lg px-2 text-[0.75rem] leading-5 text-ink-faint tabular-nums outline-none transition-colors hover:bg-surface-active hover:text-ink-muted focus-visible:bg-surface-active focus-visible:text-ink-muted data-[state=delayed-open]:bg-surface-active data-[state=delayed-open]:text-ink-muted"
+                className="inline-flex h-7 min-w-0 max-w-full shrink items-center rounded-lg px-2 text-[0.75rem] leading-5 text-ink-faint tabular-nums outline-none transition-colors hover:bg-surface-active hover:text-ink-muted focus-visible:bg-surface-active focus-visible:text-ink-muted data-[state=delayed-open]:bg-surface-active data-[state=delayed-open]:text-ink-muted"
                 type="button"
                 aria-label={t('actions.showUsage')}
                 data-testid="response-usage-trigger"

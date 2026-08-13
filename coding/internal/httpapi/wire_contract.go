@@ -279,6 +279,7 @@ type wireEvent struct {
 	// title_update
 	Title string `json:"title,omitempty"`
 	// run timing
+	RunID       string `json:"runId,omitempty"`
 	StartedAt   string `json:"startedAt,omitempty"`
 	CompletedAt string `json:"completedAt,omitempty"`
 	DurationMS  *int64 `json:"durationMs,omitempty"`
