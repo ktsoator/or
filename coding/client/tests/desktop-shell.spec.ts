@@ -170,7 +170,7 @@ async function openDesktopClient(
     }>
   } = {},
 ) {
-  const requests: Array<{ method: string; path: string; body?: unknown }> = []
+  const requests: Array<{ method: string; path: string; url: string; body?: unknown }> = []
   const modelThinkingLevels = options.modelThinkingLevels ?? ['medium']
   const modelThinkingLevel = modelThinkingLevels[0] ?? 'off'
   const createdSession = {
@@ -423,7 +423,7 @@ async function openDesktopClient(
     const method = request.method()
     const postData = request.postData()
     const requestBody = postData ? JSON.parse(postData) : undefined
-    requests.push({ method, path, body: requestBody })
+    requests.push({ method, path, url: request.url(), body: requestBody })
 
     if (path === '/api/health') {
       if (remainingHealthFailures > 0) {
@@ -4729,6 +4729,43 @@ test('composer slash catalog lists skills, refreshes, and follows keyboard navig
     await scrollArea.evaluate((element) => element.clientHeight),
   )
 
+  const selectedOption = suggestions.locator('[role="option"][aria-selected="true"]')
+  await expect(selectedOption).toContainText('Code review')
+  await input.press('ArrowUp')
+  await expect(selectedOption).toContainText('skill-8')
+  await expect(selectedOption).toBeInViewport()
+  expect(await scrollArea.evaluate((element) => element.scrollTop)).toBe(
+    await scrollArea.evaluate((element) => element.scrollHeight - element.clientHeight),
+  )
+  expect(
+    await selectedOption.evaluate((element) => getComputedStyle(element).transitionDuration),
+  ).toBe('0s')
+  expect(await suggestions.evaluate((element) => getComputedStyle(element).cursor)).toBe('default')
+  expect(await selectedOption.evaluate((element) => getComputedStyle(element).cursor)).toBe(
+    'pointer',
+  )
+  await selectedOption.dispatchEvent('mousemove', {
+    bubbles: true,
+    clientX: 400,
+    clientY: 300,
+    movementX: 0,
+    movementY: 0,
+  })
+  expect(
+    await selectedOption.evaluate((element) => getComputedStyle(element).transitionDuration),
+  ).toBe('0s')
+  await input.press('ArrowDown')
+  await expect(selectedOption).toContainText('Code review')
+  expect(await scrollArea.evaluate((element) => element.scrollTop)).toBe(0)
+  for (const label of ['Compact', 'Continue in new chat', 'Plan mode', 'skill-1']) {
+    await input.press('ArrowDown')
+    await expect(selectedOption).toContainText(label)
+  }
+  for (const label of ['Plan mode', 'Continue in new chat', 'Compact', 'Code review']) {
+    await input.press('ArrowUp')
+    await expect(selectedOption).toContainText(label)
+  }
+
   for (let index = 0; index < 11; index++) await input.press('ArrowDown')
 
   await expect.poll(() => scrollArea.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
@@ -4742,6 +4779,61 @@ test('composer slash catalog lists skills, refreshes, and follows keyboard navig
   await expect(suggestions).toBeHidden()
   await input.fill('/')
   await expect.poll(skillRequests).toBe(skillsBeforeOpen + 2)
+})
+
+test('composer slash catalog groups project skills before system skills without horizontal scroll', async ({
+  page,
+}) => {
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    skills: [
+      {
+        name: 'system-skill',
+        description: 'A system skill with a description that should truncate inside the panel',
+        source: 'user',
+        dir: '/tmp/system-skills/system-skill',
+      },
+      {
+        name: 'project-skill',
+        description: 'A project skill with a description that should truncate inside the panel',
+        source: 'project',
+        dir: '/tmp/test-session/.agents/skills/project-skill',
+      },
+    ],
+  })
+  const input = page.getByTestId('composer').locator('textarea')
+  await input.fill('/')
+
+  const suggestions = page.getByRole('listbox', { name: 'Commands and resources' })
+  const projectGroup = suggestions.getByRole('group', { name: 'Project skills' })
+  const systemGroup = suggestions.getByRole('group', { name: 'System skills' })
+  await expect(projectGroup.getByRole('option', { name: /project-skill/ })).toBeVisible()
+  await expect(systemGroup.getByRole('option', { name: /system-skill/ })).toBeVisible()
+  await expect.poll(() =>
+    requests.some((request) =>
+      request.url.includes('/api/skills?workspace=%2Ftmp%2Ftest-session'),
+    ),
+  ).toBe(true)
+  expect(
+    await suggestions.getByRole('group').evaluateAll((groups) =>
+      groups.map((group) => group.getAttribute('aria-label')),
+    ),
+  ).toEqual(['Project skills', 'System skills'])
+
+  const scrollArea = suggestions.locator(':scope > div').first()
+  expect(await scrollArea.evaluate((element) => element.scrollWidth)).toBe(
+    await scrollArea.evaluate((element) => element.clientWidth),
+  )
+  const commandRects = await suggestions
+    .getByRole('option')
+    .evaluateAll((options) => options.slice(0, 4).map((option) => {
+      const rect = option.getBoundingClientRect()
+      return { top: rect.top, bottom: rect.bottom, height: rect.height }
+    }))
+  expect(commandRects.every((rect) => Math.abs(rect.height - 30) < 0.1)).toBe(true)
+  expect(commandRects.slice(1).every((rect, index) => rect.top >= commandRects[index].bottom)).toBe(
+    true,
+  )
 })
 
 test('failed first send keeps the draft and shows the server error', async ({ page }) => {

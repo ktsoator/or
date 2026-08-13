@@ -41,6 +41,8 @@ export function useComposerCatalogs({
   )
   return {
     skills,
+    projectSkills: skillsData?.project ?? [],
+    systemSkills: skillsData?.user ?? [],
     skillsLoaded: Boolean(skillsData),
     skillsLoading,
     skillsFailed,
