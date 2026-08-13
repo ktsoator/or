@@ -13,6 +13,7 @@ import (
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/observability"
+	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/transcript"
 	"github.com/ktsoator/or/llm"
@@ -249,6 +250,250 @@ func TestProviderObservabilityCorrelatesPerformanceUsageAndAttempts(t *testing.T
 }
 
 type observabilityToolArgs struct{}
+
+type observabilityApprovalArgs struct {
+	Command string `json:"command"`
+}
+
+type engineApproverFunc func(
+	context.Context,
+	permission.ApprovalRequest,
+) (permission.ApprovalResponse, error)
+
+func (f engineApproverFunc) Decide(
+	ctx context.Context,
+	request permission.ApprovalRequest,
+) (permission.ApprovalResponse, error) {
+	return f(ctx, request)
+}
+
+func TestToolObservabilityRecordsApprovalAndExecutionLatency(t *testing.T) {
+	recorder := &memoryRecorder{}
+	const (
+		toolCallID      = "call-sensitive"
+		sensitiveArg    = "secret command payload"
+		sensitiveResult = "secret tool result"
+	)
+	var approvalRequest permission.ApprovalRequest
+	executed := false
+	tool := tools.Tool{
+		AgentTool: agent.AgentTool{
+			Definition: llm.MustTool[observabilityApprovalArgs]("shell", "run command"),
+			Execute: func(
+				_ context.Context,
+				_ string,
+				_ json.RawMessage,
+				_ func(agent.ToolProgress),
+			) (agent.ToolResult, error) {
+				executed = true
+				time.Sleep(2 * time.Millisecond)
+				return agent.ToolResult{
+					Content: []llm.ToolResultContent{&llm.TextContent{Text: sensitiveResult}},
+					Outcome: agent.ToolOutcome{Status: agent.ToolOutcomeSuccess},
+				}, nil
+			},
+		},
+		AccessFor: func(map[string]any) []permission.Access {
+			return []permission.Access{{Action: permission.Execute}}
+		},
+	}
+	call := 0
+	session, err := New(context.Background(), Options{
+		SessionID:      "session-tool",
+		Recorder:       recorder,
+		Model:          llm.Model{Provider: "test", ID: "model"},
+		Tools:          []tools.Tool{tool},
+		PermissionMode: permission.ModeAsk,
+		Approver: engineApproverFunc(func(
+			_ context.Context,
+			request permission.ApprovalRequest,
+		) (permission.ApprovalResponse, error) {
+			approvalRequest = request
+			time.Sleep(2 * time.Millisecond)
+			return permission.ApprovalResponse{Choice: permission.AllowOnce}, nil
+		}),
+		StreamFn: func(
+			_ context.Context,
+			model llm.Model,
+			_ llm.Context,
+			_ llm.StreamOptions,
+		) (<-chan llm.Event, error) {
+			call++
+			message := llm.NewAssistantMessage(model)
+			if call == 1 {
+				message.StopReason = llm.StopReasonToolUse
+				message.Content = []llm.AssistantContent{&llm.ToolCall{
+					ID: toolCallID, Name: "shell",
+					Arguments: map[string]any{"command": sensitiveArg},
+				}}
+			} else {
+				message.StopReason = llm.StopReasonStop
+				message.Content = []llm.AssistantContent{&llm.TextContent{Text: "done"}}
+			}
+			return finalEvents(llm.EventDone, &message), nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := session.Prompt(context.Background(), "use shell"); err != nil {
+		t.Fatal(err)
+	}
+	if !executed || approvalRequest.Request.ToolCallID != toolCallID ||
+		approvalRequest.Request.Args["command"] != sensitiveArg {
+		t.Fatalf("approval transparency = executed %t, request %#v", executed, approvalRequest)
+	}
+
+	events := recorder.snapshot()
+	turn := eventsNamed(events, observability.TurnStarted)[0]
+	provider := eventsNamed(events, observability.ProviderCompleted)[0]
+	toolStarted := onlyEvent(t, events, observability.ToolStarted)
+	toolCompleted := onlyEvent(t, events, observability.ToolCompleted)
+	approvalStarted := onlyEvent(t, events, observability.ApprovalStarted)
+	approvalCompleted := onlyEvent(t, events, observability.ApprovalCompleted)
+	for _, event := range []observability.Event{
+		toolStarted, toolCompleted, approvalStarted, approvalCompleted,
+	} {
+		if event.SessionID != "session-tool" || event.RunID != turn.RunID ||
+			event.TurnID != turn.TurnID || event.RequestID != provider.RequestID ||
+			event.ToolCallID != toolCallID || event.ToolName != "shell" {
+			t.Fatalf("tool correlation = %#v", event)
+		}
+	}
+	if toolStarted.Status != "running" || toolCompleted.Status != "success" ||
+		toolCompleted.Duration <= 0 || approvalStarted.Status != "waiting" ||
+		approvalCompleted.Status != "allowed" || approvalCompleted.Duration <= 0 ||
+		toolCompleted.Duration < approvalCompleted.Duration {
+		t.Fatalf(
+			"tool timings = start %#v, completed %#v, approval start %#v, approval completed %#v",
+			toolStarted, toolCompleted, approvalStarted, approvalCompleted,
+		)
+	}
+	serialized := fmt.Sprintf("%#v", events)
+	for _, forbidden := range []string{sensitiveArg, sensitiveResult, approvalRequest.Reason} {
+		if forbidden != "" && strings.Contains(serialized, forbidden) {
+			t.Fatalf("tool events contain sensitive value %q: %s", forbidden, serialized)
+		}
+	}
+}
+
+func TestToolObservabilityRecordsDeniedApprovalWithoutExecution(t *testing.T) {
+	recorder := &memoryRecorder{}
+	executed := false
+	tool := tools.Tool{
+		AgentTool: agent.AgentTool{
+			Definition: llm.MustTool[observabilityToolArgs]("blocked", "blocked tool"),
+			Execute: func(
+				context.Context,
+				string,
+				json.RawMessage,
+				func(agent.ToolProgress),
+			) (agent.ToolResult, error) {
+				executed = true
+				return agent.ToolResult{}, nil
+			},
+		},
+		AccessFor: func(map[string]any) []permission.Access {
+			return []permission.Access{{Action: permission.Write, Path: "private/path"}}
+		},
+	}
+	call := 0
+	session, err := New(context.Background(), Options{
+		SessionID: "session-denied", Recorder: recorder,
+		Model: llm.Model{Provider: "test", ID: "model"}, Tools: []tools.Tool{tool},
+		PermissionMode: permission.ModeAsk,
+		Approver: engineApproverFunc(func(
+			context.Context,
+			permission.ApprovalRequest,
+		) (permission.ApprovalResponse, error) {
+			return permission.ApprovalResponse{Choice: permission.Reject}, nil
+		}),
+		StreamFn: toolThenStopStream(&call, llm.ToolCall{
+			ID: "call-denied", Name: "blocked", Arguments: map[string]any{},
+		}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := session.Prompt(context.Background(), "try blocked tool"); err != nil {
+		t.Fatal(err)
+	}
+	if executed {
+		t.Fatal("denied tool executed")
+	}
+	events := recorder.snapshot()
+	approval := onlyEvent(t, events, observability.ApprovalCompleted)
+	toolFailure := onlyEvent(t, events, observability.ToolFailed)
+	if approval.Status != "denied" || approval.ErrorCode != "" {
+		t.Fatalf("denied approval = %#v", approval)
+	}
+	if toolFailure.Status != "failed" || toolFailure.ErrorCode != "tool_blocked" ||
+		toolFailure.ToolCallID != approval.ToolCallID {
+		t.Fatalf("blocked tool = %#v, approval = %#v", toolFailure, approval)
+	}
+	if strings.Contains(fmt.Sprintf("%#v", events), "private/path") {
+		t.Fatalf("tool events leaked access path: %#v", events)
+	}
+}
+
+func TestToolObservabilitySanitizesExternalFailureCode(t *testing.T) {
+	recorder := &memoryRecorder{}
+	const sensitiveCode = "secret-provider-error-detail"
+	tool := tools.Tool{
+		AgentTool: agent.AgentTool{
+			Definition: llm.MustTool[observabilityToolArgs]("external", "external tool"),
+			Execute: func(
+				context.Context,
+				string,
+				json.RawMessage,
+				func(agent.ToolProgress),
+			) (agent.ToolResult, error) {
+				return agent.ToolResult{Outcome: agent.ToolOutcome{
+					Status: agent.ToolOutcomeFailed, ErrorCode: sensitiveCode,
+				}}, nil
+			},
+		},
+		AccessFor: tools.InternalAccess,
+	}
+	call := 0
+	session, err := New(context.Background(), Options{
+		SessionID: "session-external", Recorder: recorder,
+		Model: llm.Model{Provider: "test", ID: "model"}, Tools: []tools.Tool{tool},
+		StreamFn: toolThenStopStream(&call, llm.ToolCall{
+			ID: "call-external", Name: "external", Arguments: map[string]any{},
+		}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := session.Prompt(context.Background(), "use external tool"); err != nil {
+		t.Fatal(err)
+	}
+	failure := onlyEvent(t, recorder.snapshot(), observability.ToolFailed)
+	if failure.ErrorCode != "tool_failed" || strings.Contains(fmt.Sprintf("%#v", failure), sensitiveCode) {
+		t.Fatalf("sanitized tool failure = %#v", failure)
+	}
+}
+
+func toolThenStopStream(call *int, toolCall llm.ToolCall) agent.StreamFn {
+	return func(
+		_ context.Context,
+		model llm.Model,
+		_ llm.Context,
+		_ llm.StreamOptions,
+	) (<-chan llm.Event, error) {
+		*call = *call + 1
+		message := llm.NewAssistantMessage(model)
+		if *call == 1 {
+			message.StopReason = llm.StopReasonToolUse
+			message.Content = []llm.AssistantContent{&toolCall}
+		} else {
+			message.StopReason = llm.StopReasonStop
+			message.Content = []llm.AssistantContent{&llm.TextContent{Text: "done"}}
+		}
+		return finalEvents(llm.EventDone, &message), nil
+	}
+}
 
 func TestObservabilityUsesDistinctCorrelationForToolLoopTurns(t *testing.T) {
 	recorder := &memoryRecorder{}

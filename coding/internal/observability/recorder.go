@@ -28,6 +28,12 @@ const (
 	HTTPAttemptResponse = "provider.http_attempt.response"
 	CheckpointCompleted = "checkpoint.completed"
 	CheckpointFailed    = "checkpoint.failed"
+	ToolStarted         = "tool.call.started"
+	ToolCompleted       = "tool.call.completed"
+	ToolFailed          = "tool.call.failed"
+	ApprovalStarted     = "tool.approval.started"
+	ApprovalCompleted   = "tool.approval.completed"
+	ApprovalFailed      = "tool.approval.failed"
 )
 
 // Event is one bounded, privacy-safe observability record. It intentionally
@@ -55,6 +61,8 @@ type Event struct {
 	ResponseModel      string
 	ProviderResponseID string
 	StopReason         string
+	ToolCallID         string
+	ToolName           string
 	Attempt            int
 	HTTPStatus         int
 	MessageCount       int
@@ -166,6 +174,12 @@ func recordWithHandler(handler slog.Handler, event Event) {
 	}
 	if event.StopReason != "" {
 		record.AddAttrs(slog.String("stop_reason", event.StopReason))
+	}
+	if event.ToolCallID != "" {
+		record.AddAttrs(slog.String("tool_call_id", event.ToolCallID))
+	}
+	if event.ToolName != "" {
+		record.AddAttrs(slog.String("tool_name", event.ToolName))
 	}
 	if event.Attempt > 0 {
 		record.AddAttrs(slog.Int("attempt", event.Attempt))

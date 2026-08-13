@@ -130,6 +130,61 @@ func TestJSONLRecorderWritesProviderPerformanceSchema(t *testing.T) {
 	}
 }
 
+func TestJSONLRecorderWritesToolAndApprovalSchema(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "observability.jsonl")
+	recorder, err := NewJSONL(path, FileOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	startedAt := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
+	for _, event := range []Event{
+		{
+			Name: ToolCompleted, Timestamp: startedAt.Add(1250 * time.Millisecond),
+			SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", RequestID: "request-1",
+			ToolCallID: "call-1", ToolName: "shell", Status: "success",
+			StartedAt: startedAt, Duration: 1250 * time.Millisecond,
+		},
+		{
+			Name: ApprovalCompleted, Timestamp: startedAt.Add(750 * time.Millisecond),
+			SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", RequestID: "request-1",
+			ToolCallID: "call-1", ToolName: "shell", Status: "allowed",
+			StartedAt: startedAt, Duration: 750 * time.Millisecond,
+		},
+	} {
+		recorder.Record(event)
+	}
+	if err := recorder.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	records := readJSONLRecords(t, path)
+	if len(records) != 2 {
+		t.Fatalf("records = %d, want 2", len(records))
+	}
+	for index, record := range records {
+		if record["session_id"] != "session-1" || record["run_id"] != "run-1" ||
+			record["turn_id"] != "turn-1" || record["provider_request_id"] != "request-1" ||
+			record["tool_call_id"] != "call-1" || record["tool_name"] != "shell" {
+			t.Fatalf("record %d correlation = %#v", index, record)
+		}
+	}
+	if records[0]["event"] != ToolCompleted || records[0]["status"] != "success" ||
+		records[0]["duration_ms"] != float64(1250) {
+		t.Fatalf("tool record = %#v", records[0])
+	}
+	if records[1]["event"] != ApprovalCompleted || records[1]["status"] != "allowed" ||
+		records[1]["duration_ms"] != float64(750) {
+		t.Fatalf("approval record = %#v", records[1])
+	}
+	for _, record := range records {
+		for _, forbidden := range []string{"arguments", "result", "path", "reason", "error"} {
+			if _, found := record[forbidden]; found {
+				t.Fatalf("record contains forbidden field %q: %#v", forbidden, record)
+			}
+		}
+	}
+}
+
 func TestJSONLRecorderRotatesBoundedFiles(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "observability.jsonl")
 	recorder, err := NewJSONL(path, FileOptions{MaxBytes: 220, MaxFiles: 3})

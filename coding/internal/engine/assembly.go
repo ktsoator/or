@@ -58,10 +58,6 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	}
 	activeToolSet := toolsWithSkillAvailability(toolSet, initialRegistry.Len() > 0)
 
-	authorizer, err := permission.NewService(cwd, opts.PermissionMode, opts.Approver)
-	if err != nil {
-		return nil, err
-	}
 	journal, seed, entries, err := newSessionJournal(ctx, opts.Store)
 	if err != nil {
 		return nil, err
@@ -79,7 +75,6 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		tools:         activeToolSet,
 		allTools:      toolSet,
 		toolByName:    toolsByName(toolSet),
-		authorizer:    authorizer,
 		tasks:         tasks,
 		cwd:           cwd,
 		instructions:  opts.Instructions,
@@ -90,6 +85,15 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		contextWindow: opts.Model.ContextWindow,
 		compactor:     opts.Compactor,
 	}
+	authorizer, err := permission.NewService(
+		cwd,
+		opts.PermissionMode,
+		s.observedApprover(opts.Approver),
+	)
+	if err != nil {
+		return nil, err
+	}
+	s.authorizer = authorizer
 	if s.compactor == nil {
 		s.compactor = compaction.LLM{
 			StreamFn: opts.StreamFn, StreamOptions: opts.StreamOptions,
@@ -132,6 +136,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		StreamFn:      s.modelStreamFn(opts.StreamFn),
 		GetAPIKey:     opts.GetAPIKey,
 		BeforeToolCall: func(bc agent.BeforeToolCallCtx) (bool, string) {
+			s.beginObservedTool(bc.ToolCall.ID, bc.ToolCall.Name)
 			args, _ := bc.Args.(map[string]any)
 			var accesses []permission.Access
 			if t, ok := s.toolByName[bc.ToolCall.Name]; ok {

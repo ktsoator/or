@@ -14,6 +14,7 @@ type sessionRunState struct {
 	startedAt            time.Time
 	entryStart           int
 	pendingTurns         []turnCorrelationState
+	toolCalls            map[string]toolCorrelationState
 	lastTurnID           string
 	lastRequestID        string
 	autoCompactAttempted bool
@@ -27,6 +28,7 @@ func (s *Session) setRunState(ctx context.Context, runID string, startedAt time.
 	s.runState.startedAt = startedAt
 	s.runState.entryStart = entryStart
 	s.runState.pendingTurns = nil
+	s.runState.toolCalls = nil
 	s.runState.lastTurnID = ""
 	s.runState.lastRequestID = ""
 	s.runState.autoCompactAttempted = false
@@ -41,6 +43,7 @@ func (s *Session) clearRunState() {
 	s.runState.startedAt = time.Time{}
 	s.runState.entryStart = 0
 	s.runState.pendingTurns = nil
+	s.runState.toolCalls = nil
 	s.runState.lastTurnID = ""
 	s.runState.lastRequestID = ""
 	s.runState.autoCompactAttempted = false
@@ -81,6 +84,13 @@ type turnCorrelationState struct {
 	turnID    string
 	requestID string
 	startedAt time.Time
+}
+
+type toolCorrelationState struct {
+	correlation requestCorrelation
+	toolCallID  string
+	toolName    string
+	startedAt   time.Time
 }
 
 func (s *Session) beginTurn(turnID string, startedAt time.Time) (runID string) {
@@ -134,4 +144,49 @@ func (s *Session) lastTurnCorrelation() requestCorrelation {
 		turnID:    s.runState.lastTurnID,
 		requestID: s.runState.lastRequestID,
 	}
+}
+
+func (s *Session) beginTool(
+	toolCallID, toolName string,
+	startedAt time.Time,
+) (toolCorrelationState, bool) {
+	s.runState.mu.Lock()
+	defer s.runState.mu.Unlock()
+	if existing, ok := s.runState.toolCalls[toolCallID]; ok {
+		return existing, false
+	}
+	correlation := requestCorrelation{runID: s.runState.runID}
+	if len(s.runState.pendingTurns) > 0 {
+		turn := s.runState.pendingTurns[0]
+		correlation.turnID = turn.turnID
+		correlation.requestID = turn.requestID
+	}
+	state := toolCorrelationState{
+		correlation: correlation,
+		toolCallID:  toolCallID,
+		toolName:    toolName,
+		startedAt:   startedAt,
+	}
+	if s.runState.toolCalls == nil {
+		s.runState.toolCalls = make(map[string]toolCorrelationState)
+	}
+	s.runState.toolCalls[toolCallID] = state
+	return state, true
+}
+
+func (s *Session) finishTool(toolCallID string) (toolCorrelationState, bool) {
+	s.runState.mu.Lock()
+	defer s.runState.mu.Unlock()
+	state, ok := s.runState.toolCalls[toolCallID]
+	if ok {
+		delete(s.runState.toolCalls, toolCallID)
+	}
+	return state, ok
+}
+
+func (s *Session) toolState(toolCallID string) (toolCorrelationState, bool) {
+	s.runState.mu.RLock()
+	defer s.runState.mu.RUnlock()
+	state, ok := s.runState.toolCalls[toolCallID]
+	return state, ok
 }
