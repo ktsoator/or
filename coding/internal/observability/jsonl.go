@@ -1,12 +1,16 @@
 package observability
 
 import (
+	"bufio"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -64,6 +68,18 @@ func (r *JSONLRecorder) Close() error {
 		return nil
 	}
 	return r.writer.Close()
+}
+
+// DeleteSession removes matching records from the active log and every
+// rotation while keeping the recorder open for subsequent events.
+func (r *JSONLRecorder) DeleteSession(sessionID string) error {
+	if r == nil || r.writer == nil {
+		return nil
+	}
+	if strings.TrimSpace(sessionID) == "" {
+		return errors.New("observability: session ID is empty")
+	}
+	return r.writer.deleteSession(sessionID)
 }
 
 type rotatingWriter struct {
@@ -175,6 +191,94 @@ func (w *rotatingWriter) rotateFiles() error {
 	return nil
 }
 
+func (w *rotatingWriter) deleteSession(sessionID string) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.closed {
+		return os.ErrClosed
+	}
+	if w.file != nil {
+		if err := w.file.Close(); err != nil {
+			return err
+		}
+		w.file = nil
+	}
+	w.size = 0
+	var rewriteErr error
+	for _, path := range diagnosticLogPaths(w.path) {
+		if err := rewriteJSONLWithoutSession(path, sessionID); err != nil {
+			rewriteErr = err
+			break
+		}
+	}
+	return errors.Join(rewriteErr, w.open())
+}
+
+func rewriteJSONLWithoutSession(path, sessionID string) error {
+	source, err := os.Open(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	temporary, err := os.CreateTemp(filepath.Dir(path), ".observability-cleanup-*.tmp")
+	if err != nil {
+		_ = source.Close()
+		return err
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if err := temporary.Chmod(0o600); err != nil {
+		_ = source.Close()
+		_ = temporary.Close()
+		return err
+	}
+
+	scanner := bufio.NewScanner(source)
+	scanner.Buffer(make([]byte, 64<<10), 1<<20)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		var identity struct {
+			SessionID string `json:"session_id"`
+		}
+		if err := json.Unmarshal(line, &identity); err == nil && identity.SessionID == sessionID {
+			continue
+		}
+		if _, err := temporary.Write(line); err != nil {
+			_ = source.Close()
+			_ = temporary.Close()
+			return err
+		}
+		if _, err := temporary.Write([]byte{'\n'}); err != nil {
+			_ = source.Close()
+			_ = temporary.Close()
+			return err
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		_ = source.Close()
+		_ = temporary.Close()
+		return fmt.Errorf("scan observability log: %w", err)
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = source.Close()
+		_ = temporary.Close()
+		return err
+	}
+	if err := source.Close(); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(temporaryPath, path); err != nil {
+		return err
+	}
+	return os.Chmod(path, 0o600)
+}
+
 func (w *rotatingWriter) Close() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -193,3 +297,4 @@ func backupPath(path string, index int) string {
 }
 
 var _ io.Writer = (*rotatingWriter)(nil)
+var _ SessionCleaner = (*JSONLRecorder)(nil)

@@ -22,6 +22,16 @@ type testTransport struct{ closed atomic.Bool }
 
 type idleClosingTestTransport struct{ *testTransport }
 
+type testSessionDataCleaner struct {
+	deleted []string
+	err     error
+}
+
+func (cleaner *testSessionDataCleaner) DeleteSession(sessionID string) error {
+	cleaner.deleted = append(cleaner.deleted, sessionID)
+	return cleaner.err
+}
+
 func (t *idleClosingTestTransport) TryCloseIfIdle() bool {
 	t.Close()
 	return true
@@ -442,6 +452,43 @@ func TestManagerRunReservationProtectsConversation(t *testing.T) {
 	}
 	if err := manager.Delete(created.ID); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestManagerDeleteCascadesSessionDataCleanup(t *testing.T) {
+	dataDir := t.TempDir()
+	model, thinking := testCatalogModel(t)
+	manager := newTestManager(t, dataDir)
+	cleaner := &testSessionDataCleaner{}
+	manager.sessionData = cleaner
+	created, err := manager.Create("", t.TempDir(), ScopeProject, model, thinking, permission.ModeAsk)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := manager.Delete(created.ID); err != nil {
+		t.Fatal(err)
+	}
+	if len(cleaner.deleted) != 1 || cleaner.deleted[0] != created.ID {
+		t.Fatalf("deleted session data = %v, want %q", cleaner.deleted, created.ID)
+	}
+}
+
+func TestManagerDeleteRestoresSessionWhenDataCleanupFails(t *testing.T) {
+	dataDir := t.TempDir()
+	model, thinking := testCatalogModel(t)
+	manager := newTestManager(t, dataDir)
+	manager.sessionData = &testSessionDataCleaner{err: errors.New("cleanup failed")}
+	created, err := manager.Create("", t.TempDir(), ScopeProject, model, thinking, permission.ModeAsk)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := manager.Delete(created.ID); err == nil || !strings.Contains(err.Error(), "cleanup failed") {
+		t.Fatalf("Delete error = %v, want cleanup failure", err)
+	}
+	if _, err := manager.Snapshot(created.ID); err != nil {
+		t.Fatalf("session was removed after cleanup failure: %v", err)
 	}
 }
 

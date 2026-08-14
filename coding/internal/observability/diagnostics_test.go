@@ -25,7 +25,7 @@ func TestReadDiagnosticReportAggregatesAndFiltersRuns(t *testing.T) {
 		{Name: ToolStarted, Timestamp: startedAt.Add(5 * time.Millisecond), SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", RequestID: "request-1", ToolCallID: "call-1", ToolName: "shell", Status: "running"},
 		{Name: ToolCompleted, Timestamp: startedAt.Add(6 * time.Millisecond), SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", RequestID: "request-1", ToolCallID: "call-1", ToolName: "shell", Status: "success", Duration: 45 * time.Millisecond},
 		{Name: TurnDiscarded, Timestamp: startedAt.Add(7 * time.Millisecond), SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", RequestID: "request-1", Status: "discarded", Reason: "retry"},
-		{Name: ProviderCompleted, Timestamp: startedAt.Add(8 * time.Millisecond), SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", RequestID: "request-1", Status: "completed", Duration: 80 * time.Millisecond, TimeToFirstOutput: 25 * time.Millisecond, InputTokens: 10, OutputTokens: 5, TotalTokens: 15, CostTotal: 0.12},
+		{Name: ProviderCompleted, Timestamp: startedAt.Add(8 * time.Millisecond), SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", RequestID: "request-1", Status: "completed", Duration: 80 * time.Millisecond, TimeToFirstOutput: 25 * time.Millisecond, InputTokens: 10, OutputTokens: 5, CacheReadTokens: 3, CacheWriteTokens: 2, TotalTokens: 20, CostTotal: 0.12},
 		{Name: RunCompleted, Timestamp: startedAt.Add(100 * time.Millisecond), SessionID: "session-1", RunID: "run-1", Status: "completed", StartedAt: startedAt, Duration: 100 * time.Millisecond},
 		{Name: RunCompleted, Timestamp: startedAt.Add(time.Second), SessionID: "session-2", RunID: "run-2", Status: "completed", StartedAt: startedAt, Duration: time.Second},
 	} {
@@ -47,11 +47,19 @@ func TestReadDiagnosticReportAggregatesAndFiltersRuns(t *testing.T) {
 		run.TimeToFirstOutputMS != 25 || run.CheckpointDurationMS != 12 ||
 		run.ToolDurationMS != 45 || run.ApprovalDurationMS != 20 ||
 		run.ProviderRequests != 1 || run.ToolCalls != 1 || run.ApprovalRequests != 1 ||
-		run.Retries != 1 || run.TotalTokens != 15 || run.CostTotalUSD != 0.12 {
+		run.Retries != 1 || run.InputTokens != 10 || run.OutputTokens != 5 ||
+		run.CacheReadTokens != 3 || run.CacheWriteTokens != 2 ||
+		run.TotalTokens != 20 || run.CostTotalUSD != 0.12 {
 		t.Fatalf("run = %#v", run)
 	}
 	if len(run.Events) != 10 || run.Events[3].ToolCallID != "call-1" || run.Events[3].ToolName != "shell" {
 		t.Fatalf("events = %#v", run.Events)
+	}
+	provider := run.Events[8]
+	if provider.InputTokens != 10 || provider.OutputTokens != 5 ||
+		provider.CacheReadTokens != 3 || provider.CacheWriteTokens != 2 ||
+		provider.TotalTokens != 20 {
+		t.Fatalf("provider event usage = %#v", provider)
 	}
 }
 

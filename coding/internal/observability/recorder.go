@@ -88,11 +88,17 @@ type Recorder interface {
 	Close() error
 }
 
+// SessionCleaner removes every persisted observability event for one session.
+type SessionCleaner interface {
+	DeleteSession(sessionID string) error
+}
+
 // DiscardRecorder ignores every event.
 type DiscardRecorder struct{}
 
-func (DiscardRecorder) Record(Event) {}
-func (DiscardRecorder) Close() error { return nil }
+func (DiscardRecorder) Record(Event)               {}
+func (DiscardRecorder) Close() error               { return nil }
+func (DiscardRecorder) DeleteSession(string) error { return nil }
 
 // OrDiscard replaces a nil recorder with a no-op implementation.
 func OrDiscard(recorder Recorder) Recorder {

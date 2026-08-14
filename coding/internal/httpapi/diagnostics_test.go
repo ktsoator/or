@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/ktsoator/or/coding/internal/observability"
+	"github.com/ktsoator/or/coding/internal/requestsnapshot"
+	"github.com/ktsoator/or/llm"
 )
 
 func TestDiagnosticRunsEndpoint(t *testing.T) {
@@ -50,5 +52,71 @@ func TestDiagnosticRunsEndpointRejectsInvalidLimit(t *testing.T) {
 	NewServer(Options{}).Handler().ServeHTTP(response, request)
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusBadRequest)
+	}
+}
+
+func TestDiagnosticRequestReturnsCorrelatedSnapshot(t *testing.T) {
+	store, err := requestsnapshot.NewFileStore(t.TempDir(), requestsnapshot.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := requestsnapshot.NewSnapshot(
+		"session-1", "run-1", "turn-1", "request-1", "test", "model",
+		llm.Context{SystemPrompt: "system", Messages: []llm.Message{llm.UserText("question")}}, nil,
+	)
+	if err := store.Save(snapshot); err != nil {
+		t.Fatal(err)
+	}
+	server := NewServer(Options{RequestSnapshots: store})
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/diagnostics/requests/request-1?sessionId=session-1&runId=run-1",
+		nil,
+	)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var got requestsnapshot.Snapshot
+	if err := json.Unmarshal(response.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.ProviderRequestID != "request-1" || got.RunID != "run-1" ||
+		got.Input.SystemPrompt != "system" || got.Input.Messages[0].Content[0].Text != "question" {
+		t.Fatalf("snapshot = %#v", got)
+	}
+}
+
+func TestDiagnosticRequestRejectsMismatchedRun(t *testing.T) {
+	store, err := requestsnapshot.NewFileStore(t.TempDir(), requestsnapshot.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Save(requestsnapshot.NewSnapshot(
+		"session-1", "run-1", "turn-1", "request-1", "test", "model", llm.Context{}, nil,
+	)); err != nil {
+		t.Fatal(err)
+	}
+	server := NewServer(Options{RequestSnapshots: store})
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/diagnostics/requests/request-1?sessionId=session-1&runId=run-other",
+		nil,
+	)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+}
+
+func TestDiagnosticRequestReturnsUnavailableForHistoricalRequest(t *testing.T) {
+	server := NewServer(Options{})
+	request := httptest.NewRequest(http.MethodGet, "/api/diagnostics/requests/request-old", nil)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
 }

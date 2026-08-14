@@ -213,6 +213,50 @@ func TestJSONLRecorderRotatesBoundedFiles(t *testing.T) {
 	}
 }
 
+func TestJSONLRecorderDeletesSessionAcrossRotationsAndRemainsWritable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "observability.jsonl")
+	recorder, err := NewJSONL(path, FileOptions{MaxBytes: 260, MaxFiles: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index := 0; index < 12; index++ {
+		sessionID := "session-preserved"
+		if index%2 == 0 {
+			sessionID = "session-deleted"
+		}
+		recorder.Record(Event{
+			Name: RunCompleted, SessionID: sessionID, RunID: NewID("run"),
+			Status: "completed", Duration: time.Second,
+		})
+	}
+	if err := recorder.DeleteSession("session-deleted"); err != nil {
+		t.Fatal(err)
+	}
+	recorder.Record(Event{
+		Name: RunCompleted, SessionID: "session-after-cleanup", RunID: "run-after-cleanup",
+		Status: "completed", Duration: time.Second,
+	})
+	if err := recorder.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	var retained []byte
+	for _, candidate := range diagnosticLogPaths(path) {
+		encoded, err := os.ReadFile(candidate)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(encoded), "session-deleted") {
+			t.Fatalf("deleted session remains in %s: %s", candidate, encoded)
+		}
+		retained = append(retained, encoded...)
+	}
+	if !strings.Contains(string(retained), "session-preserved") ||
+		!strings.Contains(string(retained), "session-after-cleanup") {
+		t.Fatalf("retained logs = %s", retained)
+	}
+}
+
 func TestNewIDUsesRequestedPrefix(t *testing.T) {
 	first := NewID("run")
 	second := NewID("run")

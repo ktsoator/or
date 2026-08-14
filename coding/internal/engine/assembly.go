@@ -10,6 +10,7 @@ import (
 	"github.com/ktsoator/or/coding/internal/contextprojection"
 	"github.com/ktsoator/or/coding/internal/observability"
 	"github.com/ktsoator/or/coding/internal/permission"
+	"github.com/ktsoator/or/coding/internal/requestsnapshot"
 	"github.com/ktsoator/or/coding/internal/skills"
 	"github.com/ktsoator/or/coding/internal/tools"
 )
@@ -69,21 +70,22 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	}
 
 	s := &Session{
-		journal:       journal,
-		sessionID:     opts.SessionID,
-		recorder:      observability.OrDiscard(opts.Recorder),
-		tools:         activeToolSet,
-		allTools:      toolSet,
-		toolByName:    toolsByName(toolSet),
-		tasks:         tasks,
-		cwd:           cwd,
-		instructions:  opts.Instructions,
-		skillRegistry: dynamicSkills,
-		skillLoader:   opts.SkillLoader,
-		skillRevision: initialRegistry.Revision(),
-		maxRetries:    maxRetries,
-		contextWindow: opts.Model.ContextWindow,
-		compactor:     opts.Compactor,
+		journal:          journal,
+		sessionID:        opts.SessionID,
+		recorder:         observability.OrDiscard(opts.Recorder),
+		requestSnapshots: requestsnapshot.OrDiscard(opts.RequestSnapshots),
+		tools:            activeToolSet,
+		allTools:         toolSet,
+		toolByName:       toolsByName(toolSet),
+		tasks:            tasks,
+		cwd:              cwd,
+		instructions:     opts.Instructions,
+		skillRegistry:    dynamicSkills,
+		skillLoader:      opts.SkillLoader,
+		skillRevision:    initialRegistry.Revision(),
+		maxRetries:       maxRetries,
+		contextWindow:    opts.Model.ContextWindow,
+		compactor:        opts.Compactor,
 	}
 	authorizer, err := permission.NewService(
 		cwd,

@@ -77,6 +77,11 @@ type DiagnosticEvent struct {
 	Model               string    `json:"model,omitempty"`
 	Attempt             int       `json:"attempt,omitempty"`
 	HTTPStatus          int       `json:"httpStatus,omitempty"`
+	InputTokens         int64     `json:"inputTokens,omitempty"`
+	InputUnknown        bool      `json:"inputUnknown,omitempty"`
+	OutputTokens        int64     `json:"outputTokens,omitempty"`
+	CacheReadTokens     int64     `json:"cacheReadTokens,omitempty"`
+	CacheWriteTokens    int64     `json:"cacheWriteTokens,omitempty"`
 	TotalTokens         int64     `json:"totalTokens,omitempty"`
 	CostTotalUSD        float64   `json:"costTotalUsd,omitempty"`
 }
@@ -101,6 +106,7 @@ type storedEvent struct {
 	Attempt             int       `json:"attempt"`
 	HTTPStatus          int       `json:"http_status"`
 	InputTokens         int64     `json:"input_tokens"`
+	InputUnknown        bool      `json:"input_unknown"`
 	OutputTokens        int64     `json:"output_tokens"`
 	CacheReadTokens     int64     `json:"cache_read_tokens"`
 	CacheWriteTokens    int64     `json:"cache_write_tokens"`
@@ -282,6 +288,9 @@ func addStoredEvent(runs map[string]*DiagnosticRun, event storedEvent) {
 		DurationMS: event.DurationMS, TimeToFirstOutputMS: event.TimeToFirstOutputMS,
 		Provider: event.Provider, Model: event.Model,
 		Attempt: event.Attempt, HTTPStatus: event.HTTPStatus,
+		InputTokens: event.InputTokens, InputUnknown: event.InputUnknown,
+		OutputTokens:    event.OutputTokens,
+		CacheReadTokens: event.CacheReadTokens, CacheWriteTokens: event.CacheWriteTokens,
 		TotalTokens: event.TotalTokens, CostTotalUSD: event.CostTotalUSD,
 	})
 }

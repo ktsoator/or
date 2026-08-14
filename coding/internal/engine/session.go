@@ -12,6 +12,7 @@ import (
 	"github.com/ktsoator/or/coding/internal/contextprojection"
 	"github.com/ktsoator/or/coding/internal/observability"
 	"github.com/ktsoator/or/coding/internal/permission"
+	"github.com/ktsoator/or/coding/internal/requestsnapshot"
 	"github.com/ktsoator/or/coding/internal/skills"
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/transcript"
@@ -31,6 +32,9 @@ type Options struct {
 	// Recorder receives bounded, privacy-safe lifecycle records. Nil disables
 	// observability without changing session behavior.
 	Recorder observability.Recorder
+	// RequestSnapshots stores inspectable provider-neutral model inputs apart
+	// from the privacy-safe performance log. Nil disables content capture.
+	RequestSnapshots requestsnapshot.Writer
 	// Model is the model used for turns. Required.
 	Model llm.Model
 	// ThinkingLevel sets the reasoning effort for each turn.
@@ -91,15 +95,16 @@ type Options struct {
 // run completes and are mutually exclusive; a concurrent call returns ErrBusy.
 // Steer, FollowUp, Abort, Subscribe, and Snapshot are safe during a run.
 type Session struct {
-	agent      *agent.Agent
-	journal    *sessionJournal
-	sessionID  string
-	recorder   observability.Recorder
-	tools      []tools.Tool
-	allTools   []tools.Tool
-	toolByName map[string]tools.Tool
-	authorizer *permission.Service
-	tasks      *tools.TaskManager
+	agent            *agent.Agent
+	journal          *sessionJournal
+	sessionID        string
+	recorder         observability.Recorder
+	requestSnapshots requestsnapshot.Writer
+	tools            []tools.Tool
+	allTools         []tools.Tool
+	toolByName       map[string]tools.Tool
+	authorizer       *permission.Service
+	tasks            *tools.TaskManager
 
 	taskUnsubscribe func()
 	cwd             string

@@ -14,6 +14,7 @@ import (
 	"github.com/ktsoator/or/coding/internal/mcp"
 	"github.com/ktsoator/or/coding/internal/observability"
 	"github.com/ktsoator/or/coding/internal/permission"
+	"github.com/ktsoator/or/coding/internal/requestsnapshot"
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/transcript"
 	"github.com/ktsoator/or/coding/internal/usage"
@@ -34,11 +35,13 @@ type Manager struct {
 	workspaces *workspace.Registry
 	// newTransport builds each session's link to its viewers. The delivery
 	// layer supplies it, so this package never names a transport type.
-	newTransport  NewTransport
-	generateTitle titleGenerator
-	streamFn      agent.StreamFn
-	mcp           *mcp.Manager
-	recorder      observability.Recorder
+	newTransport     NewTransport
+	generateTitle    titleGenerator
+	streamFn         agent.StreamFn
+	mcp              *mcp.Manager
+	recorder         observability.Recorder
+	requestSnapshots requestsnapshot.Writer
+	sessionData      SessionDataCleaner
 
 	mu        sync.RWMutex
 	sessions  map[string]*sessionRuntime
@@ -50,12 +53,14 @@ type Manager struct {
 
 // Options supplies the product services and storage root owned by a Manager.
 type Options struct {
-	DataDir      string
-	Usage        *usage.Store
-	Workspaces   *workspace.Registry
-	NewTransport NewTransport
-	MCP          *mcp.Manager
-	Recorder     observability.Recorder
+	DataDir          string
+	Usage            *usage.Store
+	Workspaces       *workspace.Registry
+	NewTransport     NewTransport
+	MCP              *mcp.Manager
+	Recorder         observability.Recorder
+	RequestSnapshots requestsnapshot.Writer
+	SessionData      SessionDataCleaner
 	// StreamFn overrides model streaming for every managed session. Production
 	// leaves it nil; tests and embedded adapters can supply a deterministic model.
 	StreamFn agent.StreamFn
@@ -69,18 +74,20 @@ func NewManager(ctx context.Context, opts Options) (*Manager, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	dir := filepath.Join(opts.DataDir, "sessions")
 	m := &Manager{
-		ctx:           ctx,
-		cancel:        cancel,
-		indexPath:     filepath.Join(dir, "index.json"),
-		scratch:       workspace.NewScratch(opts.DataDir),
-		workspaces:    opts.Workspaces,
-		newTransport:  opts.NewTransport,
-		generateTitle: generateAITitle,
-		streamFn:      opts.StreamFn,
-		mcp:           opts.MCP,
-		recorder:      observability.OrDiscard(opts.Recorder),
-		sessions:      make(map[string]*sessionRuntime),
-		usage:         opts.Usage,
+		ctx:              ctx,
+		cancel:           cancel,
+		indexPath:        filepath.Join(dir, "index.json"),
+		scratch:          workspace.NewScratch(opts.DataDir),
+		workspaces:       opts.Workspaces,
+		newTransport:     opts.NewTransport,
+		generateTitle:    generateAITitle,
+		streamFn:         opts.StreamFn,
+		mcp:              opts.MCP,
+		recorder:         observability.OrDiscard(opts.Recorder),
+		requestSnapshots: requestsnapshot.OrDiscard(opts.RequestSnapshots),
+		sessionData:      orDiscardSessionDataCleaner(opts.SessionData),
+		sessions:         make(map[string]*sessionRuntime),
+		usage:            opts.Usage,
 	}
 	if err := transcript.SecurePrivatePermissions(dir); err != nil {
 		cancel()
@@ -105,6 +112,23 @@ func NewManager(ctx context.Context, opts Options) (*Manager, error) {
 		return nil, err
 	}
 	return m, nil
+}
+
+// SessionDataCleaner removes secondary data that is owned by a conversation
+// but stored outside its transcript and metadata files.
+type SessionDataCleaner interface {
+	DeleteSession(sessionID string) error
+}
+
+type discardSessionDataCleaner struct{}
+
+func (discardSessionDataCleaner) DeleteSession(string) error { return nil }
+
+func orDiscardSessionDataCleaner(cleaner SessionDataCleaner) SessionDataCleaner {
+	if cleaner == nil {
+		return discardSessionDataCleaner{}
+	}
+	return cleaner
 }
 
 // Close stops accepting new work, cancels active runs and title generation,
@@ -283,15 +307,16 @@ func (m *Manager) build(record record) (*sessionRuntime, error) {
 		additionalTools = mcpLease.Tools()
 	}
 	session, err := newEngineSession(m.ctx, engineSessionConfig{
-		SessionID:       record.ID,
-		WorkspacePath:   record.WorkspacePath,
-		TranscriptPath:  record.Transcript,
-		Model:           model,
-		ThinkingLevel:   thinking,
-		PermissionMode:  permissionMode,
-		AdditionalTools: additionalTools,
-		StreamFn:        m.streamFn,
-		Recorder:        m.recorder,
+		SessionID:        record.ID,
+		WorkspacePath:    record.WorkspacePath,
+		TranscriptPath:   record.Transcript,
+		Model:            model,
+		ThinkingLevel:    thinking,
+		PermissionMode:   permissionMode,
+		AdditionalTools:  additionalTools,
+		StreamFn:         m.streamFn,
+		Recorder:         m.recorder,
+		RequestSnapshots: m.requestSnapshots,
 	}, transport)
 	if err != nil {
 		mcpLease.Close()
