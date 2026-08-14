@@ -41,6 +41,7 @@ export function DiagnosticsPage({
   const [bundle, setBundle] = useState<TraceBundle>()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
+  const [view, setView] = useState<TraceView>('trajectory')
 
   const load = useCallback(async (signal?: AbortSignal, quiet = false) => {
     if (!quiet) setLoading(true)
@@ -78,7 +79,7 @@ export function DiagnosticsPage({
           sidebarCollapsed && 'sidebar-is-collapsed',
         )}
       >
-        <div className="flex min-w-0 items-center gap-1">
+        <div className="flex min-w-0 self-stretch items-center gap-1">
           {sidebarCollapsed && onExpandSidebar && (
             <SidebarToggleButton
               expanded={false}
@@ -94,6 +95,12 @@ export function DiagnosticsPage({
             <ArrowLeft className="size-4" aria-hidden="true" />
             <span>{t('diagnostics.back')}</span>
           </button>
+          {bundle && bundle.tasks.length > 0 && (
+            <div className="ml-2 flex self-stretch items-stretch gap-1" role="tablist">
+              <DetailTab active={view === 'overview'} label={t('diagnostics.overview')} onClick={() => setView('overview')} />
+              <DetailTab active={view === 'trajectory'} label={t('diagnostics.trajectory')} onClick={() => setView('trajectory')} />
+            </div>
+          )}
         </div>
         <button
           className="window-titlebar-control grid size-8 cursor-pointer place-items-center rounded-[8px] text-ink-muted outline-none transition-colors hover:bg-canvas-strong/65 hover:text-ink focus-visible:bg-canvas-strong/65 focus-visible:text-ink disabled:cursor-wait disabled:opacity-50"
@@ -126,7 +133,7 @@ export function DiagnosticsPage({
             </button>
           </div>
         ) : bundle && bundle.tasks.length > 0 ? (
-          <ConversationTrace bundle={bundle} />
+          <ConversationTrace bundle={bundle} view={view} onViewChange={setView} />
         ) : (
           <div className="flex h-full flex-col items-center justify-center text-center">
             <Gauge className="size-6 text-ink-faint" aria-hidden="true" />
@@ -169,9 +176,16 @@ type TrajectoryItem = {
   raw: unknown
 }
 
-function ConversationTrace({ bundle }: { bundle: TraceBundle }) {
+function ConversationTrace({
+  bundle,
+  view,
+  onViewChange,
+}: {
+  bundle: TraceBundle
+  view: TraceView
+  onViewChange: (view: TraceView) => void
+}) {
   const { t } = useI18n()
-  const [view, setView] = useState<TraceView>('trajectory')
   const items = useMemo(() => buildTrajectoryItems(bundle.tasks, t), [bundle.tasks, t])
   const requests = useMemo(() => bundle.tasks.flatMap((task) => task.requests), [bundle.tasks])
   const initialRequest = selectedTask(bundle)?.requests.at(-1) ?? requests.at(-1)
@@ -199,14 +213,10 @@ function ConversationTrace({ bundle }: { bundle: TraceBundle }) {
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden px-7 pb-3 max-lg:px-5 max-md:px-3" aria-label={t('diagnostics.runDetail')}>
-      <div className="flex h-9 shrink-0 items-end gap-5 border-b border-edge-soft" role="tablist">
-        <DetailTab active={view === 'overview'} label={t('diagnostics.overview')} onClick={() => setView('overview')} />
-        <DetailTab active={view === 'trajectory'} label={t('diagnostics.trajectory')} onClick={() => setView('trajectory')} />
-      </div>
       {view === 'overview' ? (
         <ConversationOverview bundle={bundle} onOpenRequest={(requestID) => {
           selectRequest(requestID)
-          setView('trajectory')
+          onViewChange('trajectory')
         }} />
       ) : items.length === 0 ? (
         <TraceEmpty title={t('diagnostics.noProviderRequests')} description={t('diagnostics.noProviderRequestsDescription')} />
@@ -219,7 +229,7 @@ function ConversationTrace({ bundle }: { bundle: TraceBundle }) {
           />
           <div
             className={cn(
-              'grid min-h-0 flex-1 overflow-hidden border-t border-edge',
+              'grid min-h-0 flex-1 overflow-hidden',
               inspectorOpen && selectedItem
                 ? 'grid-cols-[minmax(0,1.6fr)_minmax(22rem,0.9fr)] max-md:grid-cols-1 max-md:grid-rows-[minmax(12rem,1fr)_minmax(12rem,0.9fr)]'
                 : 'grid-cols-1',
@@ -256,7 +266,7 @@ function DetailTab({ active, label, onClick }: { active: boolean; label: string;
       role="tab"
       aria-selected={active}
       className={cn(
-        'relative h-9 cursor-pointer px-0.5 text-[0.8125rem] font-medium outline-none transition-colors',
+        'window-titlebar-control relative self-stretch cursor-pointer px-2.5 text-[0.8125rem] font-medium outline-none transition-colors',
         active ? 'text-ink' : 'text-ink-muted hover:text-ink-soft',
       )}
       onClick={onClick}
@@ -285,11 +295,7 @@ function TrajectoryTimeline({
   const contentWidth = Math.max(640, items.length * 50)
   return (
     <section className="shrink-0 py-2" aria-label={t('diagnostics.executionTimeline')}>
-      <div className="mb-1.5 flex min-w-0 items-baseline gap-3">
-        <h2 className="text-[0.75rem] font-normal text-ink-muted">{t('diagnostics.executionTimeline')}</h2>
-        <span className="text-[0.6875rem] text-ink-faint">{t('diagnostics.traceItemCount', { count: items.length })}</span>
-      </div>
-      <div className="code-scroll-area overflow-x-auto border-y border-edge-soft py-1">
+      <div className="code-scroll-area overflow-x-auto border-b border-edge-soft py-1">
         <div className="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-x-2" style={{ minWidth: `${contentWidth + 64}px` }}>
           {lanes.map((lane) => (
             <div key={lane.id} className="contents">
@@ -659,7 +665,7 @@ function SummaryRow({
   return (
     <>
       <dt className={cn('text-ink-muted', nested && 'pl-5 text-ink-faint')} title={title}>{label}</dt>
-      <dd className="m-0 min-w-0 break-words font-medium text-ink">{value}</dd>
+      <dd className="m-0 min-w-0 break-words font-normal text-ink">{value}</dd>
     </>
   )
 }
@@ -865,7 +871,7 @@ function DefinitionList({ rows }: { rows: Array<[string, string]> }) {
       {rows.map(([label, value]) => (
         <div key={label} className="contents">
           <dt className="text-ink-muted">{label}</dt>
-          <dd className="m-0 min-w-0 break-words font-medium text-ink">{value}</dd>
+          <dd className="m-0 min-w-0 break-words font-normal text-ink">{value}</dd>
         </div>
       ))}
     </dl>

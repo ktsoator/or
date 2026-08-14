@@ -1054,6 +1054,11 @@ test('conversation diagnostics uses one session-scoped header entry', async ({ p
 
   await diagnosticsButton.click()
   await expect(page.getByRole('heading', { name: 'Run diagnostics' })).toBeVisible()
+  const diagnosticsTitlebar = page.locator('.window-titlebar')
+  await expect(diagnosticsTitlebar.getByRole('tab', { name: 'Overview' })).toBeVisible()
+  await expect(diagnosticsTitlebar.getByRole('tab', { name: 'Trajectory' })).toBeVisible()
+  await expect(page.getByRole('main').getByRole('tab', { name: 'Overview' })).toHaveCount(0)
+  await expect(page.getByRole('main').getByRole('tab', { name: 'Trajectory' })).toHaveCount(0)
   await expect(page.getByText('Create a short release note')).toBeVisible()
   await expect(page.getByText('Check the release status')).toBeVisible()
   await expect(page.getByRole('combobox', { name: 'Select run' })).toHaveCount(0)
@@ -1093,6 +1098,7 @@ test('conversation diagnostics uses one session-scoped header entry', async ({ p
   await expect(responseInspector.getByText('Source', { exact: true })).toBeVisible()
   await expect(responseInspector.getByText('Status', { exact: true })).toBeVisible()
   await expect(responseInspector.getByText('250 tok', { exact: true })).toBeVisible()
+  await expect(responseInspector.getByText('250 tok', { exact: true })).toHaveCSS('font-weight', '400')
   await expect(responseInspector.getByText('180 tok', { exact: true })).toBeVisible()
   await expect(responseInspector.getByText('70 tok', { exact: true })).toBeVisible()
   await expect(responseInspector.getByText('I will write the release note.')).toBeVisible()
@@ -1109,7 +1115,7 @@ test('conversation diagnostics uses one session-scoped header entry', async ({ p
   await expect(page.getByText('Session timestamps', { exact: true })).toBeVisible()
 
   await page.setViewportSize({ width: 700, height: 820 })
-  await expect(page.getByText('Execution timeline', { exact: true })).toBeVisible()
+  await expect(executionTimeline).toBeVisible()
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
