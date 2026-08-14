@@ -599,6 +599,9 @@ async function openDesktopClient(
         })),
       }
     }
+    if (path === '/api/diagnostics/runs') {
+      body = { runs: [], generatedAt: '2026-07-22T00:00:00Z' }
+    }
     if (path === '/api/providers') {
       body = {
         providers: [
@@ -842,6 +845,41 @@ test('desktop headers expose native drag regions while controls remain interacti
   await expect(workbenchToggle).toHaveAccessibleName('Hide workbench')
   await workbenchToggle.click()
   await expect(workbenchToggle).toHaveAccessibleName('Show workbench')
+})
+
+test('conversation diagnostics uses one session-scoped header entry', async ({ page }) => {
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    historyEvents: [
+      {
+        type: 'run_start',
+        id: 'run-diagnostics',
+        startedAt: '2026-07-22T00:00:00Z',
+        durationMs: 1000,
+      },
+      {
+        type: 'message_end',
+        text: 'Response with diagnostics',
+        finalResponse: true,
+      },
+    ],
+  })
+
+  const diagnosticsButton = page.getByTestId('conversation-diagnostics-button')
+  await expect(diagnosticsButton).toBeVisible()
+  await expect(diagnosticsButton).toHaveAccessibleName('View conversation usage and diagnostics')
+  await expect(page.getByRole('button', { name: 'View diagnostics for this run' })).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Open profile menu' }).click()
+  await expect(page.getByRole('menuitem', { name: 'Run diagnostics' })).toHaveCount(0)
+  await page.keyboard.press('Escape')
+
+  await diagnosticsButton.click()
+  await expect(page.getByRole('heading', { name: 'Run diagnostics' })).toBeVisible()
+  await expect.poll(() => {
+    const request = requests.find((candidate) => candidate.path === '/api/diagnostics/runs')
+    return request ? new URL(request.url).searchParams.get('sessionId') : undefined
+  }).toBe('test-session')
 })
 
 test('dark theme uses the cool neutral canvas', async ({ page }) => {

@@ -5,7 +5,8 @@ import type {
   WheelEventHandler,
 } from 'react'
 import { useEffect, useRef, useState } from 'react'
-import { LoaderCircle, PanelLeft } from 'lucide-react'
+import { Gauge, LoaderCircle, PanelLeft } from 'lucide-react'
+import { Tooltip } from 'radix-ui'
 import type {
   ApprovalItem,
   BackgroundTask,
@@ -66,7 +67,7 @@ type ConversationPaneProps = {
     selectSession: (sessionID: string) => void
     returnToParent?: () => void
     branchPointLocated: (target: { sessionID: string; messageID: string }) => void
-    openRunDiagnostics: (runId: string) => void
+    openSessionDiagnostics: () => void
     forkMessage: (
       messageID: string,
       mode: 'before_user' | 'after_assistant',
@@ -119,7 +120,7 @@ export function ConversationPane({
     selectSession,
     returnToParent,
     branchPointLocated,
-    openRunDiagnostics,
+    openSessionDiagnostics,
     forkMessage,
     editMessage,
     renderComposer,
@@ -274,6 +275,33 @@ export function ConversationPane({
               onSelectTask={openTaskInWorkbench}
             />
           )}
+          {!draft && activeSession && (
+            <Tooltip.Provider delayDuration={120}>
+              <Tooltip.Root>
+                <Tooltip.Trigger asChild>
+                  <button
+                    type="button"
+                    className="window-titlebar-control grid size-8 shrink-0 cursor-pointer place-items-center rounded-[8px] text-ink-muted outline-none transition-colors hover:bg-canvas-strong/65 hover:text-ink focus-visible:bg-canvas-strong/65 focus-visible:text-ink"
+                    aria-label={t('diagnostics.openCurrentSession')}
+                    data-testid="conversation-diagnostics-button"
+                    onClick={openSessionDiagnostics}
+                  >
+                    <Gauge className="size-4" aria-hidden="true" />
+                  </button>
+                </Tooltip.Trigger>
+                <Tooltip.Portal>
+                  <Tooltip.Content
+                    side="bottom"
+                    sideOffset={6}
+                    collisionPadding={8}
+                    className="z-[150] animate-[fade-in_100ms_ease-out] rounded-md bg-canvas-inverse px-2 py-1 text-[0.6875rem] leading-4 font-medium whitespace-nowrap text-ink-inverse shadow-lg"
+                  >
+                    {t('diagnostics.openCurrentSession')}
+                  </Tooltip.Content>
+                </Tooltip.Portal>
+              </Tooltip.Root>
+            </Tooltip.Provider>
+          )}
           {!workbenchOwnsToggle && workbenchToggleControl}
         </header>
 
@@ -364,7 +392,6 @@ export function ConversationPane({
         branchingDisabled={running || forking}
         onForkMessage={forkMessage}
         onEditMessage={editMessage}
-        onOpenRunDiagnostics={openRunDiagnostics}
         editRequiresConfirmation={hasLaterConversationContent(unit.item)}
       />
     )

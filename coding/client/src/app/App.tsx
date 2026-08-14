@@ -52,7 +52,7 @@ type AppView =
   | { type: 'settings'; section: SettingsSection }
   | { type: 'skills' }
   | { type: 'mcp' }
-  | { type: 'diagnostics'; runId?: string }
+  | { type: 'diagnostics' }
 
 type BranchPointTarget = {
   sessionID: string
@@ -558,7 +558,6 @@ export default function App() {
           revealWorkspace: revealNativePath,
           requestRemoveWorkspace,
           onOpenSettings: () => setView({ type: 'settings', section: 'general' }),
-          onOpenDiagnostics: () => setView({ type: 'diagnostics' }),
           startSidebarResize,
           resizeSidebar,
           stopSidebarResize,
@@ -593,7 +592,6 @@ export default function App() {
             sidebarCollapsed={sidebarCollapsed}
             onExpandSidebar={expandSidebar}
             sessionID={activeSessionID}
-            initialRunID={view.runId}
           />
         </Suspense>
       ) : (
@@ -653,7 +651,7 @@ export default function App() {
             ? () => chooseSession(parentSession.id, activeSession?.forkedFromMessageId)
             : undefined,
           branchPointLocated: handleBranchPointLocated,
-          openRunDiagnostics: (runId) => setView({ type: 'diagnostics', runId }),
+          openSessionDiagnostics: () => setView({ type: 'diagnostics' }),
           forkMessage,
           editMessage,
           renderComposer: composer,

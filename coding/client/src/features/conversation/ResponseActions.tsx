@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import {
   Check,
   Copy,
-  Gauge,
   GitFork,
   LoaderCircle,
   ThumbsDown,
@@ -20,7 +19,6 @@ export function ResponseActions({
   modelName,
   responseText,
   completedAt,
-  onOpenDiagnostics,
   onFork,
   forkDisabled,
   forking,
@@ -29,7 +27,6 @@ export function ResponseActions({
   modelName?: string
   responseText: string
   completedAt?: string
-  onOpenDiagnostics?: () => void
   onFork?: () => void
   forkDisabled?: boolean
   forking?: boolean
@@ -103,14 +100,6 @@ export function ResponseActions({
             pressed={feedback === 'down'}
             onClick={() => setFeedback((current) => (current === 'down' ? undefined : 'down'))}
           />
-          {onOpenDiagnostics && (
-            <ActionButton
-              icon={Gauge}
-              label={t('actions.openRunDiagnostics')}
-              onClick={onOpenDiagnostics}
-            />
-          )}
-
           {completedTime && (
             <time
               className="ml-1.5 shrink-0 pr-1 text-[0.75rem] leading-5 text-ink-faint tabular-nums"
