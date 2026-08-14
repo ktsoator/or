@@ -10,6 +10,7 @@ import (
 
 	"github.com/ktsoator/or/coding/internal/observability"
 	"github.com/ktsoator/or/coding/internal/requestsnapshot"
+	"github.com/ktsoator/or/coding/internal/tracebundle"
 )
 
 func (s *Server) handleDiagnosticRuns(c *gin.Context) {
@@ -63,6 +64,38 @@ func (s *Server) handleDiagnosticRequest(c *gin.Context) {
 	c.JSON(http.StatusOK, snapshot)
 }
 
+func (s *Server) handleDiagnosticTrace(c *gin.Context) {
+	sessionID := strings.TrimSpace(c.Query("sessionId"))
+	if sessionID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "diagnostic session ID is required"})
+		return
+	}
+	report, err := observability.ReadDiagnosticReport(
+		s.observabilityLogPath,
+		observability.DiagnosticQuery{
+			SessionID: sessionID,
+			RunLimit:  observability.DefaultDiagnosticRunLimit,
+		},
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not read diagnostics"})
+		return
+	}
+	bundle, err := tracebundle.Build(
+		report, sessionID, strings.TrimSpace(c.Query("runId")), s.requestSnapshots,
+	)
+	if errors.Is(err, tracebundle.ErrTaskNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "diagnostic task unavailable"})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not assemble diagnostic trace"})
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, bundle)
+}
+
 func diagnosticLimit(value string) (int, error) {
 	if value == "" {
 		return observability.DefaultDiagnosticRunLimit, nil
@@ -77,4 +110,5 @@ func diagnosticLimit(value string) (int, error) {
 func (s *Server) mountDiagnostics(r gin.IRouter) {
 	r.GET("/diagnostics/runs", s.handleDiagnosticRuns)
 	r.GET("/diagnostics/requests/:providerRequestID", s.handleDiagnosticRequest)
+	r.GET("/diagnostics/trace", s.handleDiagnosticTrace)
 }

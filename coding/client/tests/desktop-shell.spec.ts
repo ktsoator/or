@@ -599,8 +599,186 @@ async function openDesktopClient(
         })),
       }
     }
-    if (path === '/api/diagnostics/runs') {
-      body = { runs: [], generatedAt: '2026-07-22T00:00:00Z' }
+    if (path === '/api/diagnostics/trace') {
+      body = {
+        version: 1,
+        generatedAt: '2026-07-22T00:00:05Z',
+        sessionId: 'test-session',
+        selectedTaskId: 'run-diagnostics',
+        tasks: [{
+          id: 'run-diagnostics',
+          status: 'completed',
+          prompt: 'Create a short release note',
+          startedAt: '2026-07-22T00:00:00Z',
+          updatedAt: '2026-07-22T00:00:05Z',
+          durationMs: 5000,
+          timeToFirstOutputMs: 1200,
+          totalTokens: 420,
+          retries: 0,
+          contextRecoveries: 0,
+          rawEvents: [],
+          requests: [
+            {
+              id: 'request-1',
+              number: 1,
+              status: 'completed',
+              lifecycle: 'complete',
+              startedAt: '2026-07-22T00:00:00Z',
+              completedAt: '2026-07-22T00:00:02Z',
+              durationMs: 2000,
+              timeToFirstOutputMs: 900,
+              model: 'test-model',
+              inputTokens: 180,
+              outputTokens: 70,
+              totalTokens: 250,
+              attempts: [],
+              checkpoints: [],
+              snapshotState: 'available',
+              rawEvents: [],
+              input: {
+                systemPrompt: 'You are a coding agent.',
+                messages: [
+                  { role: 'user', content: [{ type: 'text', text: '<or-context kind="base">\nCurrent runtime context.\n</or-context>' }] },
+                  { role: 'user', content: [{ type: 'text', text: '<or-context kind="skill_listing">\nAvailable release skills.\n</or-context>' }] },
+                  { role: 'user', content: [{ type: 'text', text: 'Create a short release note' }] },
+                ],
+                tools: [{ name: 'write', description: 'Write one file', parameters: { type: 'object' } }],
+              },
+              attachments: [
+                { id: 'context-base-1', kind: 'base', placement: 'prefix', messageIndex: 0 },
+                { id: 'skill-listing-1', kind: 'skill_listing', placement: 'prefix', messageIndex: 1 },
+              ],
+              output: {
+                capturedAt: '2026-07-22T00:00:02Z',
+                stopReason: 'tool_use',
+                message: {
+                  role: 'assistant',
+                  content: [
+                    { type: 'thinking', thinking: 'Prepare the release note before writing it.' },
+                    { type: 'text', text: 'I will write the release note.' },
+                    { type: 'toolCall', toolCallId: 'call-1', toolName: 'write', arguments: { path: 'RELEASE.md' } },
+                  ],
+                },
+              },
+              tools: [{
+                id: 'call-1',
+                name: 'write',
+                status: 'success',
+                lifecycle: 'complete',
+                startedAt: '2026-07-22T00:00:02Z',
+                completedAt: '2026-07-22T00:00:02.2Z',
+                durationMs: 200,
+                executionDurationMs: 200,
+                arguments: { path: 'RELEASE.md' },
+                result: { role: 'toolResult', toolCallId: 'call-1', toolName: 'write', content: [{ type: 'text', text: 'Created RELEASE.md' }] },
+                rawEvents: [{
+                  name: 'tool.call.started',
+                  timestamp: '2026-07-22T00:00:02Z',
+                  toolCallId: 'call-1',
+                  toolName: 'write',
+                }],
+              }],
+            },
+            {
+              id: 'request-2',
+              number: 2,
+              status: 'completed',
+              lifecycle: 'complete',
+              startedAt: '2026-07-22T00:00:02.3Z',
+              completedAt: '2026-07-22T00:00:05Z',
+              durationMs: 2700,
+              timeToFirstOutputMs: 1200,
+              model: 'test-model',
+              totalTokens: 170,
+              attempts: [],
+              checkpoints: [],
+              tools: [{
+                id: 'call-2',
+                name: 'bash',
+                status: 'success',
+                lifecycle: 'complete',
+                startedAt: '2026-07-22T00:00:04Z',
+                completedAt: '2026-07-22T00:00:04.1Z',
+                durationMs: 100,
+                executionDurationMs: 100,
+                arguments: { command: 'git status' },
+                result: { role: 'toolResult', toolCallId: 'call-2', toolName: 'bash', content: [{ type: 'text', text: 'clean' }] },
+                rawEvents: [],
+              }],
+              snapshotState: 'available',
+              rawEvents: [],
+              input: {
+                systemPrompt: 'You are a coding agent.',
+                messages: [
+                  { role: 'user', content: [{ type: 'text', text: '<or-context kind="base">\nCurrent runtime context.\n</or-context>' }] },
+                  { role: 'user', content: [{ type: 'text', text: '<or-context kind="skill_listing">\nAvailable release skills.\n</or-context>' }] },
+                  { role: 'user', content: [{ type: 'text', text: '<or-context kind="context_update">\nThe git branch changed to release.\n</or-context>' }] },
+                ],
+              },
+              attachments: [
+                { id: 'context-base-1', kind: 'base', placement: 'prefix', messageIndex: 0 },
+                { id: 'skill-listing-1', kind: 'skill_listing', placement: 'prefix', messageIndex: 1 },
+                { id: 'context-update-1', kind: 'context_update', placement: 'after-current', revision: 'revision-2', messageIndex: 2 },
+              ],
+              output: {
+                capturedAt: '2026-07-22T00:00:05Z',
+                stopReason: 'stop',
+                message: {
+                  role: 'assistant',
+                  content: [
+                    { type: 'thinking', thinking: 'The file was created successfully.' },
+                    { type: 'toolCall', toolCallId: 'call-2', toolName: 'bash', arguments: { command: 'git status' } },
+                  ],
+                },
+              },
+            },
+          ],
+        }, {
+          id: 'run-diagnostics-followup',
+          status: 'completed',
+          prompt: 'Check the release status',
+          startedAt: '2026-07-22T00:01:00Z',
+          updatedAt: '2026-07-22T00:01:02Z',
+          durationMs: 2000,
+          totalTokens: 120,
+          retries: 0,
+          contextRecoveries: 0,
+          rawEvents: [],
+          requests: [{
+            id: 'request-3',
+            number: 3,
+            status: 'completed',
+            lifecycle: 'complete',
+            startedAt: '2026-07-22T00:01:00Z',
+            completedAt: '2026-07-22T00:01:02Z',
+            durationMs: 2000,
+            model: 'test-model',
+            totalTokens: 120,
+            attempts: [],
+            checkpoints: [],
+            tools: [],
+            snapshotState: 'available',
+            rawEvents: [],
+            input: {
+              systemPrompt: 'You are a coding agent.',
+              messages: [
+                { role: 'user', content: [{ type: 'text', text: '<or-context kind="base">\nCurrent runtime context.\n</or-context>' }] },
+                { role: 'user', content: [{ type: 'text', text: '<or-context kind="skill_listing">\nAvailable release skills.\n</or-context>' }] },
+                { role: 'user', content: [{ type: 'text', text: 'Check the release status' }] },
+              ],
+            },
+            attachments: [
+              { id: 'context-base-1', kind: 'base', placement: 'prefix', messageIndex: 0 },
+              { id: 'skill-listing-1', kind: 'skill_listing', placement: 'prefix', messageIndex: 1 },
+            ],
+            output: {
+              capturedAt: '2026-07-22T00:01:02Z',
+              stopReason: 'stop',
+              message: { role: 'assistant', content: [{ type: 'text', text: 'The release is available.' }] },
+            },
+          }],
+        }],
+      }
     }
     if (path === '/api/providers') {
       body = {
@@ -876,10 +1054,63 @@ test('conversation diagnostics uses one session-scoped header entry', async ({ p
 
   await diagnosticsButton.click()
   await expect(page.getByRole('heading', { name: 'Run diagnostics' })).toBeVisible()
+  await expect(page.getByText('Create a short release note')).toBeVisible()
+  await expect(page.getByText('Check the release status')).toBeVisible()
+  await expect(page.getByRole('combobox', { name: 'Select run' })).toHaveCount(0)
+  const firstRequestBar = page.getByRole('button', { name: 'Assistant · Request #1', exact: true })
+  const secondRequestBar = page.getByRole('button', { name: 'Assistant · Request #2', exact: true })
+  await expect(firstRequestBar).toBeVisible()
+  await expect(secondRequestBar).toBeVisible()
+  await expect(page.getByRole('button', { name: 'System · Initial system prompt', exact: true })).toBeVisible()
+  await expect(page.getByText('Initial system prompt', { exact: true })).toHaveCount(1)
+  await expect(page.getByRole('button', { name: 'Context · Runtime context', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Context · Available skills', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Context · Runtime context update', exact: true })).toBeVisible()
+  await expect(page.getByText('Runtime context', { exact: true })).toHaveCount(1)
+  await expect(page.getByText('Available skills', { exact: true })).toHaveCount(1)
+  const executionTimeline = page.locator('section[aria-label="Execution timeline"]')
+  await expect(executionTimeline.getByText('Input', { exact: true })).toBeVisible()
+  await expect(executionTimeline.getByText('Context', { exact: true })).toHaveCount(0)
+  const systemRow = page.getByRole('button', { name: /System Initial system prompt/ })
+  await systemRow.click()
+  const systemInspector = page.getByRole('complementary', { name: 'System · Initial system prompt' })
+  await expect(systemInspector.getByText('You are a coding agent.', { exact: true })).toBeVisible()
+  const runtimeContextRow = page.getByRole('button', { name: /Context Runtime context.*Current runtime context/ })
+  await runtimeContextRow.click()
+  const contextInspector = page.getByRole('complementary', { name: 'Context · Runtime context' })
+  await expect(contextInspector.getByText('Current runtime context.', { exact: false })).toBeVisible()
+  const thinkingOnlyRow = page.getByRole('button', { name: /Assistant Thinking · The file was created successfully\./ })
+  await expect(thinkingOnlyRow).toBeVisible()
+  await expect(thinkingOnlyRow.getByText('Thinking ·', { exact: true })).toBeVisible()
+  await expect(thinkingOnlyRow).not.toContainText('bash')
+  await expect(page.getByText(/Turn \d/)).toHaveCount(0)
   await expect.poll(() => {
-    const request = requests.find((candidate) => candidate.path === '/api/diagnostics/runs')
+    const request = requests.find((candidate) => candidate.path === '/api/diagnostics/trace')
     return request ? new URL(request.url).searchParams.get('sessionId') : undefined
   }).toBe('test-session')
+  await firstRequestBar.click()
+  const responseInspector = page.getByRole('complementary', { name: 'Assistant · Request #1' })
+  await expect(responseInspector.getByText('Source', { exact: true })).toBeVisible()
+  await expect(responseInspector.getByText('Status', { exact: true })).toBeVisible()
+  await expect(responseInspector.getByText('250 tok', { exact: true })).toBeVisible()
+  await expect(responseInspector.getByText('180 tok', { exact: true })).toBeVisible()
+  await expect(responseInspector.getByText('70 tok', { exact: true })).toBeVisible()
+  await expect(responseInspector.getByText('I will write the release note.')).toBeVisible()
+  await expect(page.getByText('Created RELEASE.md')).toBeVisible()
+  await page.getByRole('button', { name: /write.*Created RELEASE\.md/ }).click()
+  await expect(page.getByRole('heading', { name: 'Arguments' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Result' })).toBeVisible()
+  const argumentsToggle = page.getByRole('button', { name: 'Arguments', exact: true })
+  const resultToggle = page.getByRole('button', { name: 'Result', exact: true })
+  await expect(argumentsToggle).toHaveAttribute('aria-expanded', 'true')
+  await argumentsToggle.click()
+  await expect(argumentsToggle).toHaveAttribute('aria-expanded', 'false')
+  await expect(resultToggle).toHaveAttribute('aria-expanded', 'true')
+  await expect(page.getByText('Session timestamps', { exact: true })).toBeVisible()
+
+  await page.setViewportSize({ width: 700, height: 820 })
+  await expect(page.getByText('Execution timeline', { exact: true })).toBeVisible()
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
 test('dark theme uses the cool neutral canvas', async ({ page }) => {

@@ -25,38 +25,6 @@ export type DiagnosticEvent = {
   costTotalUsd?: number
 }
 
-export type DiagnosticRun = {
-  id: string
-  sessionId: string
-  status: string
-  errorCode?: string
-  startedAt: string
-  updatedAt: string
-  durationMs?: number
-  timeToFirstOutputMs?: number
-  checkpointDurationMs?: number
-  toolDurationMs?: number
-  approvalDurationMs?: number
-  providerRequests: number
-  toolCalls: number
-  approvalRequests: number
-  retries: number
-  contextRecoveries: number
-  inputTokens?: number
-  outputTokens?: number
-  cacheReadTokens?: number
-  cacheWriteTokens?: number
-  totalTokens?: number
-  costTotalUsd?: number
-  events: DiagnosticEvent[]
-  omittedEvents?: number
-}
-
-export type DiagnosticReport = {
-  runs: DiagnosticRun[]
-  generatedAt: string
-}
-
 export type RequestSnapshotAttachment = {
 	id: string
 	kind: string
@@ -121,36 +89,121 @@ export type RequestSnapshot = {
 	attachments?: RequestSnapshotAttachment[]
 }
 
-type DiagnosticRequest = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
-
-export async function fetchDiagnosticRuns(
-  sessionID?: string,
-  signal?: AbortSignal,
-  request: DiagnosticRequest = fetch,
-): Promise<DiagnosticReport> {
-  const query = new URLSearchParams({ limit: '50' })
-  if (sessionID) query.set('sessionId', sessionID)
-  const response = await request(apiURL(`/diagnostics/runs?${query}`), {
-    cache: 'no-store',
-    signal,
-  })
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
-  return response.json() as Promise<DiagnosticReport>
+export type TraceBundleAttempt = {
+	number: number
+	status?: string
+	lifecycle: 'complete' | 'in-progress' | 'missing-start'
+	startedAt: string
+	completedAt?: string
+	durationMs?: number
+	httpStatus?: number
+	errorCode?: string
+	rawEvents: DiagnosticEvent[]
 }
 
-export async function fetchDiagnosticRequest(
-	providerRequestID: string,
+export type TraceBundleCheckpoint = {
+	status?: string
+	startedAt: string
+	completedAt: string
+	durationMs?: number
+	errorCode?: string
+}
+
+export type TraceBundleTool = {
+	id: string
+	name?: string
+	status?: string
+	errorCode?: string
+	lifecycle: 'complete' | 'in-progress' | 'missing-start'
+	startedAt: string
+	completedAt?: string
+	durationMs?: number
+	approvalDurationMs?: number
+	executionDurationMs?: number
+	arguments?: Record<string, unknown>
+	result?: RequestSnapshotMessage
+	rawEvents: DiagnosticEvent[]
+}
+
+export type TraceBundleRequest = {
+	id: string
+	number: number
+	turnId?: string
+	status?: string
+	errorCode?: string
+	lifecycle: 'complete' | 'in-progress' | 'missing-start'
+	startedAt: string
+	completedAt?: string
+	durationMs?: number
+	timeToFirstOutputMs?: number
+	checkpointDurationMs?: number
+	provider?: string
+	model?: string
+	inputTokens?: number
+	inputUnknown?: boolean
+	outputTokens?: number
+	cacheReadTokens?: number
+	cacheWriteTokens?: number
+	totalTokens?: number
+	costTotalUsd?: number
+	attempts: TraceBundleAttempt[]
+	checkpoints: TraceBundleCheckpoint[]
+	tools: TraceBundleTool[]
+	snapshotState: 'available' | 'missing' | 'error'
+	capturedAt?: string
+	input?: RequestSnapshot['input']
+	output?: RequestSnapshot['output']
+	attachments?: RequestSnapshotAttachment[]
+	rawEvents: DiagnosticEvent[]
+}
+
+export type TraceBundleTask = {
+	id: string
+	status: string
+	errorCode?: string
+	prompt?: string
+	startedAt: string
+	updatedAt: string
+	durationMs?: number
+	timeToFirstOutputMs?: number
+	checkpointDurationMs?: number
+	toolDurationMs?: number
+	approvalDurationMs?: number
+	retries: number
+	contextRecoveries: number
+	inputTokens?: number
+	outputTokens?: number
+	cacheReadTokens?: number
+	cacheWriteTokens?: number
+	totalTokens?: number
+	costTotalUsd?: number
+	requests: TraceBundleRequest[]
+	rawEvents: DiagnosticEvent[]
+	omittedEvents?: number
+}
+
+export type TraceBundle = {
+	version: number
+	generatedAt: string
+	sessionId: string
+	selectedTaskId: string
+	tasks: TraceBundleTask[]
+}
+
+type DiagnosticRequest = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+
+export async function fetchDiagnosticTrace(
 	sessionID: string,
-	runID: string,
+	runID?: string,
 	signal?: AbortSignal,
 	request: DiagnosticRequest = fetch,
-): Promise<RequestSnapshot | undefined> {
-	const query = new URLSearchParams({ sessionId: sessionID, runId: runID })
-	const response = await request(
-		apiURL(`/diagnostics/requests/${encodeURIComponent(providerRequestID)}?${query}`),
-		{ cache: 'no-store', signal },
-	)
-	if (response.status === 404) return undefined
+): Promise<TraceBundle> {
+	const query = new URLSearchParams({ sessionId: sessionID })
+	if (runID) query.set('runId', runID)
+	const response = await request(apiURL(`/diagnostics/trace?${query}`), {
+		cache: 'no-store',
+		signal,
+	})
 	if (!response.ok) throw new Error(`HTTP ${response.status}`)
-	return response.json() as Promise<RequestSnapshot>
+	return response.json() as Promise<TraceBundle>
 }
