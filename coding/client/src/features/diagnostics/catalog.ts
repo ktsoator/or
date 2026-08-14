@@ -192,6 +192,48 @@ export type TraceBundle = {
 
 type DiagnosticRequest = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
+function normalizeMessage(message: RequestSnapshotMessage): RequestSnapshotMessage {
+	return { ...message, content: message.content ?? [] }
+}
+
+function normalizeTraceBundle(bundle: TraceBundle): TraceBundle {
+	return {
+		...bundle,
+		tasks: (bundle.tasks ?? []).map((task) => ({
+			...task,
+			rawEvents: task.rawEvents ?? [],
+			requests: (task.requests ?? []).map((traceRequest) => ({
+				...traceRequest,
+				rawEvents: traceRequest.rawEvents ?? [],
+				attempts: (traceRequest.attempts ?? []).map((attempt) => ({
+					...attempt,
+					rawEvents: attempt.rawEvents ?? [],
+				})),
+				checkpoints: traceRequest.checkpoints ?? [],
+				tools: (traceRequest.tools ?? []).map((tool) => ({
+					...tool,
+					rawEvents: tool.rawEvents ?? [],
+					result: tool.result ? normalizeMessage(tool.result) : undefined,
+				})),
+				attachments: traceRequest.attachments ?? [],
+				input: traceRequest.input
+					? {
+						...traceRequest.input,
+						messages: (traceRequest.input.messages ?? []).map(normalizeMessage),
+						tools: traceRequest.input.tools ?? [],
+					}
+					: undefined,
+				output: traceRequest.output
+					? {
+						...traceRequest.output,
+						message: normalizeMessage(traceRequest.output.message),
+					}
+					: undefined,
+			})),
+		})),
+	}
+}
+
 export async function fetchDiagnosticTrace(
 	sessionID: string,
 	runID?: string,
@@ -205,5 +247,5 @@ export async function fetchDiagnosticTrace(
 		signal,
 	})
 	if (!response.ok) throw new Error(`HTTP ${response.status}`)
-	return response.json() as Promise<TraceBundle>
+	return normalizeTraceBundle(await response.json() as TraceBundle)
 }

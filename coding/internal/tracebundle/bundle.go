@@ -521,10 +521,18 @@ func attachSnapshotTools(requests []Request) {
 				}
 				tool := tools[content.ToolCallID]
 				if tool == nil {
+					status, lifecycle := "requested", "in-progress"
+					var completedAt *time.Time
+					if request.Status == "cancelled" || request.Output.StopReason == "aborted" {
+						status, lifecycle, completedAt = "cancelled", "complete", request.CompletedAt
+					} else if request.Status == "failed" || request.Output.StopReason == "error" {
+						status, lifecycle, completedAt = "failed", "complete", request.CompletedAt
+					}
 					request.Tools = append(request.Tools, Tool{
 						ID: content.ToolCallID, Name: content.ToolName,
-						Status: "requested", Lifecycle: "in-progress",
-						StartedAt: request.CompletedAtValue(),
+						Status: status, Lifecycle: lifecycle,
+						StartedAt: request.CompletedAtValue(), CompletedAt: completedAt,
+						RawEvents: []observability.DiagnosticEvent{},
 					})
 					tool = &request.Tools[len(request.Tools)-1]
 					tools[content.ToolCallID] = tool

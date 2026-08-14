@@ -144,6 +144,56 @@ func TestBuildKeepsRequestWhenSnapshotIsMissing(t *testing.T) {
 	}
 }
 
+func TestBuildCompletesSnapshotToolWhenRequestIsCancelled(t *testing.T) {
+	store, err := requestsnapshot.NewFileStore(t.TempDir(), requestsnapshot.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := time.Date(2026, 8, 14, 12, 0, 0, 0, time.UTC)
+	if err := store.Save(requestsnapshot.Snapshot{
+		Version: requestsnapshot.CurrentVersion, CapturedAt: base,
+		SessionID: "session-1", RunID: "run-1", TurnID: "turn-1",
+		ProviderRequestID: "request-1", Provider: "openai", Model: "gpt-5",
+		Input: requestsnapshot.Input{Messages: []requestsnapshot.Message{{
+			Role: "user", Content: []requestsnapshot.Content{{Type: "text", Text: "Create a file"}},
+		}}},
+		Output: &requestsnapshot.Output{
+			CapturedAt: base.Add(2 * time.Second), StopReason: "aborted", ErrorMessage: "context canceled",
+			Message: requestsnapshot.Message{Role: "assistant", Content: []requestsnapshot.Content{
+				{Type: "thinking", Thinking: "Inspect the existing implementation."},
+				{Type: "toolCall", ToolCallID: "call-1", ToolName: "write", Arguments: map[string]any{"path": "note.txt"}},
+			}},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	report := observability.DiagnosticReport{Runs: []observability.DiagnosticRun{
+		diagnosticRun("run-1", base, []observability.DiagnosticEvent{
+			{Name: observability.ProviderStarted, Timestamp: base, TurnID: "turn-1", ProviderRequestID: "request-1", Status: "running"},
+			{Name: observability.ProviderFailed, Timestamp: base.Add(2 * time.Second), TurnID: "turn-1", ProviderRequestID: "request-1", Status: "cancelled", ErrorCode: "context_cancelled", DurationMS: 2000},
+		}),
+	}}
+
+	bundle, err := Build(report, "session-1", "run-1", store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := bundle.Tasks[0].Requests[0]
+	if request.Output == nil || request.Output.Message.Content[0].Thinking != "Inspect the existing implementation." {
+		t.Fatalf("output = %#v", request.Output)
+	}
+	if len(request.Tools) != 1 {
+		t.Fatalf("tools = %#v", request.Tools)
+	}
+	tool := request.Tools[0]
+	if tool.Status != "cancelled" || tool.Lifecycle != "complete" || tool.CompletedAt == nil {
+		t.Fatalf("tool lifecycle = %#v", tool)
+	}
+	if tool.Arguments["path"] != "note.txt" || tool.RawEvents == nil || len(tool.RawEvents) != 0 {
+		t.Fatalf("tool snapshot = %#v", tool)
+	}
+}
+
 func TestBuildRejectsUnknownTask(t *testing.T) {
 	_, err := Build(observability.DiagnosticReport{}, "session-1", "missing", nil)
 	if !errors.Is(err, ErrTaskNotFound) {

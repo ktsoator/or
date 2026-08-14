@@ -189,7 +189,9 @@ function ConversationTrace({
   const items = useMemo(() => buildTrajectoryItems(bundle.tasks, t), [bundle.tasks, t])
   const requests = useMemo(() => bundle.tasks.flatMap((task) => task.requests), [bundle.tasks])
   const initialRequest = selectedTask(bundle)?.requests.at(-1) ?? requests.at(-1)
-  const initialItem = items.findLast((item) => item.request?.id === initialRequest?.id) ?? items.at(-1)
+  const initialItem = items.findLast(
+    (item) => item.kind === 'assistant' && item.request?.id === initialRequest?.id,
+  ) ?? items.findLast((item) => item.request?.id === initialRequest?.id) ?? items.at(-1)
   const [selectedItemID, setSelectedItemID] = useState(initialItem?.id ?? '')
   const [inspectorOpen, setInspectorOpen] = useState(true)
   const [mode, setMode] = useState<InspectorMode>('summary')
@@ -1190,7 +1192,7 @@ function requestStatusLabel(request: TraceBundleRequest, t: Translate): string {
 
 function toolTimingSource(tool: TraceBundleTool, t: Translate): string {
   if (tool.lifecycle === 'missing-start') return t('diagnostics.timingSource.reconstructed')
-  if (tool.rawEvents.length === 0) return t('diagnostics.timingSource.snapshot')
+  if ((tool.rawEvents?.length ?? 0) === 0) return t('diagnostics.timingSource.snapshot')
   return t('diagnostics.timingSource.events')
 }
 

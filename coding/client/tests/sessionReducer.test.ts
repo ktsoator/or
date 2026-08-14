@@ -62,6 +62,28 @@ describe('threadsReducer event sequences', () => {
     ])
   })
 
+  test('restores completed thinking from an interrupted response', () => {
+    const state = reduce([{
+      t: 'reset',
+      sessionID,
+      history: {
+        running: false,
+        events: [
+          { type: 'run_start', runId: 'run-interrupted', startedAt },
+          { type: 'delta', kind: 'thinking', delta: 'Inspect the existing implementation.' },
+          { type: 'message_end', text: '', finalResponse: false },
+        ],
+      },
+    }])
+
+    expect(thread(state).items).toContainEqual(expect.objectContaining({
+      kind: 'thinking',
+      text: 'Inspect the existing implementation.',
+      streaming: false,
+    }))
+    expect(thread(state).items.some((item) => item.kind === 'tool')).toBe(false)
+  })
+
   test('backfills durable message IDs when a live run completes', () => {
     const state = reduce([
       {

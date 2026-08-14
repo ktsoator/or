@@ -37,6 +37,41 @@ describe('diagnostic trace catalog', () => {
     expect(requestedURL).toBe('/api/diagnostics/trace?sessionId=session')
   })
 
+  test('normalizes incomplete interrupted bundles', async () => {
+    const bundle = await fetchDiagnosticTrace('session', undefined, undefined, async () => Response.json({
+      version: 1,
+      generatedAt: '2026-08-14T12:00:00Z',
+      sessionId: 'session',
+      selectedTaskId: 'run-1',
+      tasks: [{
+        id: 'run-1',
+        rawEvents: null,
+        requests: [{
+          id: 'request-1',
+          rawEvents: null,
+          attempts: [{ number: 1, rawEvents: null }],
+          checkpoints: null,
+          attachments: null,
+          input: { messages: [{ role: 'user', content: null }], tools: null },
+          output: { message: { role: 'assistant', content: null } },
+          tools: [{ id: 'call-1', rawEvents: null, result: { role: 'toolResult', content: null } }],
+        }],
+      }],
+    }))
+
+    expect(bundle.tasks[0]?.rawEvents).toEqual([])
+    const request = bundle.tasks[0]?.requests[0]
+    expect(request?.rawEvents).toEqual([])
+    expect(request?.attempts[0]?.rawEvents).toEqual([])
+    expect(request?.checkpoints).toEqual([])
+    expect(request?.attachments).toEqual([])
+    expect(request?.input?.messages[0]?.content).toEqual([])
+    expect(request?.input?.tools).toEqual([])
+    expect(request?.output?.message.content).toEqual([])
+    expect(request?.tools[0]?.rawEvents).toEqual([])
+    expect(request?.tools[0]?.result?.content).toEqual([])
+  })
+
   test('rejects failed bundle responses', async () => {
     expect(
       fetchDiagnosticTrace('session', undefined, undefined, async () => new Response('', { status: 503 })),

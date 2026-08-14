@@ -331,7 +331,7 @@ func assistantHistory(message *llm.AssistantMessage) []HistoryItem {
 	if message == nil {
 		return nil
 	}
-	if message.StopReason == llm.StopReasonError || message.StopReason == llm.StopReasonAborted {
+	if message.StopReason == llm.StopReasonError {
 		text, _ := eventAssistantText(agent.FromLLM(message))
 		return []HistoryItem{{
 			Type:          HistoryAssistant,
@@ -382,7 +382,7 @@ func assistantHistory(message *llm.AssistantMessage) []HistoryItem {
 		case *llm.ToolCall:
 			flushText()
 			flushThinking()
-			if block != nil {
+			if block != nil && message.StopReason != llm.StopReasonAborted {
 				items = append(items, HistoryItem{
 					Type:       HistoryToolCall,
 					ToolCallID: block.ID,
@@ -394,6 +394,17 @@ func assistantHistory(message *llm.AssistantMessage) []HistoryItem {
 	}
 	flushText()
 	flushThinking()
+	if message.StopReason == llm.StopReasonAborted {
+		// A terminal marker completes restored thinking without presenting an
+		// unfinished response as final. Tool calls in an aborted provider payload
+		// were never handed to the executor and are intentionally omitted above.
+		if len(items) == 0 || items[len(items)-1].Type != HistoryAssistant {
+			items = append(items, HistoryItem{
+				Type: HistoryAssistant, Provider: message.Provider, Model: message.Model,
+			})
+		}
+		return items
+	}
 	if message.StopReason != llm.StopReasonToolUse {
 		for index := len(items) - 1; index >= 0; index-- {
 			if items[index].Type == HistoryAssistant {
