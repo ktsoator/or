@@ -96,6 +96,15 @@ async function setGuestControls(
   }, controls)
 }
 
+async function emitSessionEvent(page: Page, sessionID: string, payload: unknown): Promise<void> {
+  await page.evaluate(({ id, event }) => {
+    const emit = (window as Window & {
+      __emitSessionSSE?: (targetSessionID: string, value: unknown) => void
+    }).__emitSessionSSE
+    emit?.(id, event)
+  }, { id: sessionID, event: payload })
+}
+
 const models = {
   models: [
     {
@@ -161,6 +170,7 @@ async function openDesktopClient(
     usageEventPages?: UsageEventPage[]
     usageEventPagesByOffset?: Record<number, UsageEventPage>
     usageEventDelayMs?: number
+    diagnosticsTrace?: () => unknown
     skills?: Array<{
       name: string
       description: string
@@ -779,6 +789,7 @@ async function openDesktopClient(
           }],
         }],
       }
+      if (options.diagnosticsTrace) body = options.diagnosticsTrace()
     }
     if (path === '/api/providers') {
       body = {
@@ -1120,6 +1131,198 @@ test('conversation diagnostics uses one session-scoped header entry', async ({ p
   await page.setViewportSize({ width: 700, height: 820 })
   await expect(executionTimeline).toBeVisible()
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})
+
+test('conversation diagnostics streams a tool loop and replaces provisional metrics', async ({ page }) => {
+  let traceFinalized = false
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    diagnosticsTrace: () => traceFinalized ? {
+      version: 1,
+      generatedAt: '2026-07-22T00:02:02Z',
+      sessionId: 'test-session',
+      selectedTaskId: 'run-live',
+      tasks: [{
+        id: 'run-live',
+        status: 'completed',
+        prompt: 'Inspect the live trace',
+        startedAt: '2026-07-22T00:02:00Z',
+        updatedAt: '2026-07-22T00:02:02Z',
+        durationMs: 2000,
+        totalTokens: 60,
+        retries: 0,
+        contextRecoveries: 0,
+        rawEvents: [],
+        requests: [{
+          id: 'request-live-1',
+          number: 1,
+          status: 'completed',
+          lifecycle: 'complete',
+          startedAt: '2026-07-22T00:02:00Z',
+          completedAt: '2026-07-22T00:02:01Z',
+          durationMs: 1000,
+          timeToFirstOutputMs: 150,
+          model: 'test-model',
+          totalTokens: 18,
+          attempts: [],
+          checkpoints: [],
+          snapshotState: 'available',
+          rawEvents: [],
+          output: {
+            capturedAt: '2026-07-22T00:02:01Z',
+            stopReason: 'tool_use',
+            message: {
+              role: 'assistant',
+              providerRequestId: 'request-live-1',
+              content: [
+                { type: 'thinking', thinking: 'Inspecting workspace' },
+                {
+                  type: 'toolCall',
+                  toolCallId: 'call-live-1',
+                  toolName: 'read',
+                  arguments: { path: 'trace.go' },
+                },
+              ],
+            },
+          },
+          tools: [{
+            id: 'call-live-1',
+            name: 'read',
+            status: 'success',
+            lifecycle: 'complete',
+            startedAt: '2026-07-22T00:02:00.5Z',
+            completedAt: '2026-07-22T00:02:01Z',
+            durationMs: 500,
+            executionDurationMs: 500,
+            arguments: { path: 'trace.go' },
+            result: {
+              role: 'toolResult',
+              toolCallId: 'call-live-1',
+              toolName: 'read',
+              content: [{ type: 'text', text: 'Loaded trace.go' }],
+            },
+            rawEvents: [],
+          }],
+        }, {
+          id: 'request-live-2',
+          number: 2,
+          status: 'completed',
+          lifecycle: 'complete',
+          startedAt: '2026-07-22T00:02:01Z',
+          completedAt: '2026-07-22T00:02:01.9Z',
+          durationMs: 900,
+          timeToFirstOutputMs: 120,
+          model: 'test-model',
+          inputTokens: 30,
+          outputTokens: 12,
+          totalTokens: 42,
+          attempts: [],
+          checkpoints: [],
+          tools: [],
+          snapshotState: 'available',
+          rawEvents: [],
+          output: {
+            capturedAt: '2026-07-22T00:02:01.9Z',
+            stopReason: 'stop',
+            message: {
+              role: 'assistant',
+              providerRequestId: 'request-live-2',
+              content: [
+                { type: 'thinking', thinking: 'Preparing final response' },
+                { type: 'text', text: 'Live trace complete' },
+              ],
+            },
+          },
+        }],
+      }],
+    } : {
+      version: 1,
+      generatedAt: '2026-07-22T00:02:00Z',
+      sessionId: 'test-session',
+      tasks: [],
+    },
+  })
+
+  await page.getByTestId('conversation-diagnostics-button').click()
+  const composer = page.getByRole('textbox', { name: 'Ask anything' })
+  await composer.fill('Inspect the live trace')
+  await page.getByRole('button', { name: 'Send prompt' }).click()
+  await expect.poll(() =>
+    requests.find((request) => request.path === '/api/sessions/test-session/prompt')?.body,
+  ).toEqual({ text: 'Inspect the live trace', images: [] })
+
+  await emitSessionEvent(page, 'test-session', {
+    type: 'run_start',
+    id: 'run-live',
+    runId: 'run-live',
+    startedAt: '2026-07-22T00:02:00Z',
+  })
+  await emitSessionEvent(page, 'test-session', {
+    type: 'delta',
+    kind: 'thinking',
+    delta: 'Inspecting workspace',
+    providerRequestId: 'request-live-1',
+  })
+
+  const ledger = page.locator('section[aria-label="Trajectory records"]')
+  await expect(
+    ledger.getByRole('button', { name: /Assistant Thinking · Inspecting workspace/ }),
+  ).toBeVisible()
+
+  await emitSessionEvent(page, 'test-session', {
+    type: 'tool_start',
+    id: 'call-live-1',
+    tool: 'read',
+    args: { path: 'trace.go' },
+    providerRequestId: 'request-live-1',
+  })
+  await expect(ledger.getByText('read', { exact: true })).toBeVisible()
+  await emitSessionEvent(page, 'test-session', {
+    type: 'tool_end',
+    id: 'call-live-1',
+    tool: 'read',
+    result: 'Loaded trace.go',
+    outcome: { status: 'success' },
+    providerRequestId: 'request-live-1',
+  })
+  await expect(ledger.getByText('Loaded trace.go', { exact: true })).toBeVisible()
+
+  await emitSessionEvent(page, 'test-session', {
+    type: 'delta',
+    kind: 'thinking',
+    delta: 'Preparing final response',
+    providerRequestId: 'request-live-2',
+  })
+  await emitSessionEvent(page, 'test-session', {
+    type: 'delta',
+    kind: 'text',
+    delta: 'Live trace complete',
+    providerRequestId: 'request-live-2',
+  })
+  await expect(ledger.getByText('Live trace complete', { exact: true })).toBeVisible()
+
+  traceFinalized = true
+  await emitSessionEvent(page, 'test-session', {
+    type: 'message_end',
+    text: 'Live trace complete',
+    finalResponse: true,
+    completedAt: '2026-07-22T00:02:01.9Z',
+    providerRequestId: 'request-live-2',
+  })
+  await emitSessionEvent(page, 'test-session', {
+    type: 'done',
+    runId: 'run-live',
+    startedAt: '2026-07-22T00:02:00Z',
+    durationMs: 2000,
+  })
+
+  const finalResponse = ledger.getByRole('button', { name: /Assistant.*Live trace complete/ })
+  await expect(finalResponse).toBeVisible()
+  await finalResponse.click()
+  const inspector = page.getByRole('complementary', { name: 'Assistant · Request #2' })
+  await expect(inspector.getByText('42 tok', { exact: true })).toBeVisible()
+  await expect(inspector.getByText('120 ms', { exact: true })).toBeVisible()
+  await expect(composer).toBeEnabled()
 })
 
 test('dark theme uses the cool neutral canvas', async ({ page }) => {
