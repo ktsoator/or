@@ -5301,6 +5301,8 @@ test('Composer controls stay separate and compact when Chat is narrow', async ({
     composerBox!.x + composerBox!.width,
   )
   expect(modelBox!.width).toBeGreaterThan(40)
+  await expect(permission.locator('.lucide-chevron-down')).toHaveCount(0)
+  await expect(model.locator('.lucide-chevron-down')).toHaveCount(0)
 
   await expect(permission).toHaveCSS('color', 'rgb(138, 139, 141)')
   await expect(page.getByTestId('model-settings-name')).toHaveCSS(
@@ -5308,7 +5310,7 @@ test('Composer controls stay separate and compact when Chat is narrow', async ({
     'rgb(138, 139, 141)',
   )
   await expect(page.getByTestId('model-settings-effort')).toBeHidden()
-  await expect(page.getByTestId('permission-mode-label')).toBeHidden()
+  await expect(page.getByTestId('permission-mode-label')).toBeVisible()
   await expect(page.getByTestId('model-settings-name')).toHaveCSS('text-overflow', 'ellipsis')
   const modelNameLayout = await page.getByTestId('model-settings-name').evaluate((element) => ({
     clientWidth: element.clientWidth,
@@ -5319,7 +5321,7 @@ test('Composer controls stay separate and compact when Chat is narrow', async ({
   expect(modelNameLayout.scrollWidth).toBeGreaterThan(modelNameLayout.clientWidth)
 })
 
-test('model menu expands the measured context breakdown', async ({ page }) => {
+test('Composer context ring opens the measured context breakdown', async ({ page }) => {
   await openDesktopClient(page, {
     existingSession: true,
     contextUsage: {
@@ -5338,14 +5340,34 @@ test('model menu expands the measured context breakdown', async ({ page }) => {
     },
   })
 
-  await page.getByTestId('model-settings-trigger').click()
   const trigger = page.getByTestId('context-window-trigger')
-  await expect(trigger).toContainText('Context window')
-  await expect(trigger).toContainText(/64k\s*\/\s*128k\s*·\s*50%/)
+  const composerSurface = page.getByTestId('composer-surface')
+  const modelTrigger = page.getByTestId('model-settings-trigger')
+  const sendButton = page.getByTestId('composer-send')
+  await expect(trigger).toBeVisible()
+  await expect(trigger).toHaveAccessibleName('Model context window usage')
   await expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  const [composerBox, modelBox, triggerBox, sendBox] = await Promise.all([
+    composerSurface.boundingBox(),
+    modelTrigger.boundingBox(),
+    trigger.boundingBox(),
+    sendButton.boundingBox(),
+  ])
+  expect(composerBox).not.toBeNull()
+  expect(modelBox).not.toBeNull()
+  expect(triggerBox).not.toBeNull()
+  expect(sendBox).not.toBeNull()
+  expect(triggerBox!.x).toBeGreaterThanOrEqual(composerBox!.x)
+  expect(triggerBox!.x + triggerBox!.width).toBeLessThanOrEqual(composerBox!.x + composerBox!.width)
+  expect(triggerBox!.x + triggerBox!.width).toBeLessThanOrEqual(modelBox!.x)
+  expect(triggerBox!.x + triggerBox!.width).toBeLessThanOrEqual(sendBox!.x)
 
   await trigger.click()
   await expect(trigger).toHaveAttribute('aria-expanded', 'true')
+  const summary = page.getByTestId('context-window-summary')
+  await expect(summary).toContainText('Context window')
+  await expect(summary).toContainText(/64k\s*\/\s*128k\s*·\s*50%/)
+  await expect(page.getByTestId('context-window-ring')).toHaveAttribute('stroke-dasharray', '50 100')
   const breakdown = page.getByTestId('context-window-breakdown')
   await expect(breakdown).toBeVisible()
   await expect(breakdown).toContainText('Estimated breakdown')
@@ -6282,9 +6304,15 @@ test('desktop project browsing uses the native directory picker', async ({ page 
 
   const projectPicker = page.getByRole('button', { name: 'Choose project' })
   await expect(projectPicker).toHaveClass(/text-\[rgb\(138,139,141\)\]/)
+  await expect(projectPicker.locator('.lucide-chevron-down')).toHaveCount(0)
   await projectPicker.click()
-  await page.getByText('New project', { exact: true }).hover()
-  await page.getByText('Use an existing folder', { exact: true }).click()
+  await expect(page.getByRole('textbox', { name: 'Search projects' })).toHaveCSS('height', '30px')
+  const newProject = page.getByRole('menuitem', { name: 'New project' })
+  await expect(newProject).toHaveCSS('height', '30px')
+  await newProject.hover()
+  const existingFolder = page.getByRole('menuitem', { name: 'Use an existing folder' })
+  await expect(existingFolder).toHaveCSS('height', '30px')
+  await existingFolder.click()
 
   await expect.poll(() =>
     page.evaluate(() =>

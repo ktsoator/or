@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, ChevronDown, ChevronRight, LoaderCircle, Minimize2 } from 'lucide-react'
+import { Check, ChevronRight } from 'lucide-react'
 import { DropdownMenu } from 'radix-ui'
-import type { ContextUsage, ModelOption, ThinkingLevel } from '@/types'
+import type { ModelOption, ThinkingLevel } from '@/types'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 import { ProviderIcon } from '@/shared/ui/ProviderIdentity'
@@ -24,27 +24,21 @@ export function ModelSettingsMenu({
   modelProvider,
   modelID,
   thinkingLevel,
-  contextUsage,
   disabled,
   updating,
-  compacting,
   onChange,
-  onCompact,
 }: {
   models: ModelOption[]
   modelProvider?: string
   modelID?: string
   thinkingLevel?: ThinkingLevel
-  contextUsage?: ContextUsage
   disabled: boolean
   updating: boolean
-  compacting: boolean
   onChange: (
     provider: string,
     model: string,
     thinkingLevel: ThinkingLevel,
   ) => Promise<void>
-  onCompact?: () => void
 }) {
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
@@ -77,11 +71,6 @@ export function ModelSettingsMenu({
   const unavailable = disabled || !modelKey || models.length === 0
   const controlsDisabled = unavailable || updating
   const menuOpen = open && !unavailable
-  const contextWindow = currentModel?.contextWindow ?? contextUsage?.contextWindow ?? 0
-  const currentContextUsage =
-    contextUsage && contextUsage.provider === modelProvider && contextUsage.model === modelID
-      ? contextUsage
-      : undefined
 
   useEffect(() => {
     if (unavailable) setOpen(false)
@@ -122,7 +111,7 @@ export function ModelSettingsMenu({
           className={cn(
             composerMenuTriggerClass,
             composerControlTextClass,
-            'h-[30px] max-w-[24rem] rounded-[10px] max-sm:max-w-[8rem] max-sm:px-2',
+            'h-[30px] max-w-[24rem] rounded-[10px] px-2 max-sm:max-w-[8rem]',
           )}
           aria-label={t('model.settings')}
           disabled={controlsDisabled}
@@ -156,10 +145,6 @@ export function ModelSettingsMenu({
               {thinkingName}
             </span>
           )}
-          <ChevronDown
-            className="size-3.5 shrink-0 text-ink-faint transition-transform duration-150 group-data-[state=open]:rotate-180"
-            aria-hidden="true"
-          />
         </button>
       </DropdownMenu.Trigger>
 
@@ -341,196 +326,10 @@ export function ModelSettingsMenu({
             </DropdownMenu.Sub>
           )}
 
-          <DropdownMenu.Separator className="mx-2 my-1 h-px bg-canvas-sunken" />
-          <ContextMeter usage={currentContextUsage} contextWindow={contextWindow} />
-          {onCompact && (
-            <>
-              <DropdownMenu.Separator className="mx-2 my-1 h-px bg-canvas-sunken" />
-              <DropdownMenu.Item
-                className="flex h-[30px] cursor-default select-none items-center gap-2.5 rounded-[10px] px-2.5 outline-none data-[highlighted]:bg-surface-active data-[disabled]:opacity-40"
-                disabled={compacting || updating}
-                onSelect={onCompact}
-              >
-                {compacting ? (
-                  <LoaderCircle className="size-4 animate-spin text-ink-muted" aria-hidden="true" />
-                ) : (
-                  <Minimize2 className="size-4 text-ink-muted" aria-hidden="true" />
-                )}
-                <span>{compacting ? t('model.compacting') : t('model.compact')}</span>
-              </DropdownMenu.Item>
-            </>
-          )}
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
   )
-}
-
-function ContextMeter({
-  usage,
-  contextWindow,
-}: {
-  usage?: ContextUsage
-  contextWindow: number
-}) {
-  const { t, formatNumber } = useI18n()
-  const [expanded, setExpanded] = useState(false)
-  const measured = Boolean(usage?.measured && usage.usedTokens > 0 && contextWindow > 0)
-  const usedTokens = measured ? usage?.usedTokens ?? 0 : 0
-  const percentage = measured ? Math.min((usedTokens / contextWindow) * 100, 100) : 0
-  const breakdown = measured ? usage?.breakdown : undefined
-  const rows = breakdown
-    ? [
-        {
-          key: 'messages',
-          label: t('model.contextMessages'),
-          tokens: breakdown.messages,
-          swatch: 'bg-blue-500',
-        },
-        {
-          key: 'tools',
-          label: t('model.contextSystemTools'),
-          tokens: breakdown.systemTools,
-          swatch: 'bg-sky-400',
-        },
-        {
-          key: 'prompt',
-          label: t('model.contextSystemPrompt'),
-          tokens: breakdown.systemPrompt,
-          swatch: 'bg-violet-400',
-        },
-        {
-          key: 'skills',
-          label: t('model.contextSkills'),
-          tokens: breakdown.skills,
-          swatch: 'bg-emerald-500',
-        },
-        {
-          key: 'project',
-          label: t('model.contextProject'),
-          tokens: breakdown.projectContext,
-          swatch: 'bg-amber-500',
-        },
-        {
-          key: 'free',
-          label: t('model.contextFree'),
-          tokens: Math.max(contextWindow - usedTokens, 0),
-          swatch: 'bg-canvas-strong',
-        },
-      ]
-    : []
-  const expandable = rows.length > 0
-
-  return (
-    <div className="px-2.5 pt-1.5 pb-2" aria-label={t('model.contextUsage')}>
-      <button
-        type="button"
-        className={cn(
-          'flex w-full items-center gap-2 text-[0.75rem] leading-5 tabular-nums outline-none',
-          expandable && 'cursor-pointer rounded-sm focus-visible:ring-2 focus-visible:ring-edge-strong',
-        )}
-        aria-expanded={expandable ? expanded : undefined}
-        aria-controls={expandable ? 'context-window-breakdown' : undefined}
-        disabled={!expandable}
-        onClick={() => setExpanded((current) => !current)}
-        data-testid="context-window-trigger"
-      >
-        <span className="font-medium text-ink-muted">{t('model.context')}</span>
-        <span className="ml-auto text-ink-faint">
-          {measured ? formatTokens(usedTokens, formatNumber) : '—'} /{' '}
-          {formatTokens(contextWindow, formatNumber)}
-          {measured && <span> · {formatNumber(Math.round(percentage))}%</span>}
-        </span>
-        {expandable && (
-          <ChevronDown
-            className={cn(
-              'size-3.5 shrink-0 text-ink-faint transition-transform duration-150',
-              expanded && 'rotate-180',
-            )}
-            aria-hidden="true"
-          />
-        )}
-      </button>
-      <div className="mt-1 h-1 overflow-hidden rounded-full bg-canvas-sunken">
-        <div
-          className={cn(
-            'h-full rounded-full transition-[width,background-color] duration-300 ease-out',
-            percentage >= 90
-              ? 'bg-danger-soft'
-              : percentage >= 75
-                ? 'bg-warning'
-                : 'bg-ink-muted',
-            !measured && 'bg-transparent',
-          )}
-          style={{ width: `${percentage}%` }}
-        />
-      </div>
-      {expanded && expandable && (
-        <div
-          id="context-window-breakdown"
-          className="mt-2.5"
-          data-testid="context-window-breakdown"
-        >
-          <div className="mb-1 text-[0.6875rem] leading-4 text-ink-faint">
-            {t('model.contextBreakdown')}
-          </div>
-          <div className="space-y-0.5">
-            {rows.map((row) => (
-              <div
-                key={row.key}
-                className="grid h-5 grid-cols-[minmax(0,1fr)_4rem_3.25rem] items-center gap-2 text-[0.75rem] leading-5 tabular-nums"
-                data-testid={`context-breakdown-${row.key}`}
-              >
-                <span className="flex min-w-0 items-center gap-2 text-ink-soft">
-                  <span
-                    className={cn('size-2.5 shrink-0 rounded-[2px]', row.swatch)}
-                    aria-hidden="true"
-                  />
-                  <span className="truncate">{row.label}</span>
-                </span>
-                <span className="text-right text-ink-faint">
-                  {formatTokens(row.tokens, formatNumber)}
-                </span>
-                <span className="text-right text-ink-muted">
-                  {formatContextPercentage(row.tokens, contextWindow, formatNumber)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {!measured && contextWindow > 0 && (
-        <p className="mt-1 text-[0.6875rem] leading-4 text-ink-faint">
-          {t('model.measureAfterResponse')}
-        </p>
-      )}
-    </div>
-  )
-}
-
-type NumberFormatter = (value: number, options?: Intl.NumberFormatOptions) => string
-
-function formatTokens(value: number, formatNumber: NumberFormatter): string {
-  if (value <= 0) return '—'
-  if (value >= 1_000_000) return `${formatTokenDecimal(value / 1_000_000, formatNumber)}m`
-  if (value >= 1_000) return `${formatTokenDecimal(value / 1_000, formatNumber)}k`
-  return formatNumber(Math.round(value))
-}
-
-function formatTokenDecimal(value: number, formatNumber: NumberFormatter): string {
-  return formatNumber(value, { maximumFractionDigits: value >= 100 ? 0 : 1 })
-}
-
-function formatContextPercentage(
-  tokens: number,
-  contextWindow: number,
-  formatNumber: NumberFormatter,
-): string {
-  if (contextWindow <= 0) return '—'
-  return `${formatNumber((tokens / contextWindow) * 100, {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-  })}%`
 }
 
 const subTriggerClass = cn(
