@@ -96,6 +96,15 @@ async function setGuestControls(
   }, controls)
 }
 
+async function emitSessionEvent(page: Page, sessionID: string, payload: unknown): Promise<void> {
+  await page.evaluate(({ id, event }) => {
+    const emit = (window as Window & {
+      __emitSessionSSE?: (targetSessionID: string, value: unknown) => void
+    }).__emitSessionSSE
+    emit?.(id, event)
+  }, { id: sessionID, event: payload })
+}
+
 const models = {
   models: [
     {
@@ -161,6 +170,12 @@ async function openDesktopClient(
     usageEventPages?: UsageEventPage[]
     usageEventPagesByOffset?: Record<number, UsageEventPage>
     usageEventDelayMs?: number
+    diagnosticsTrace?: (
+      requestNumber: number,
+      sessionID: string,
+      query: URLSearchParams,
+    ) => unknown | Promise<unknown>
+    diagnosticsStatus?: number
     skills?: Array<{
       name: string
       description: string
@@ -222,6 +237,7 @@ async function openDesktopClient(
   let sessionHistoryRunning = options.historyRunning ?? false
   let remainingHealthFailures = options.healthFailures ?? 0
   let remainingBrowserResultFailures = options.browserResultFailures ?? 0
+  let diagnosticTraceRequestCount = 0
   const usageEventRangeKeys: string[] = []
 
   await page.addInitScript(({ nativeDirectory }) => {
@@ -599,6 +615,204 @@ async function openDesktopClient(
         })),
       }
     }
+    if (path === '/api/diagnostics/trace') {
+      status = options.diagnosticsStatus ?? status
+      body = {
+        version: 1,
+        generatedAt: '2026-07-22T00:00:05Z',
+        sessionId: 'test-session',
+        selectedTaskId: 'run-diagnostics',
+        page: { hasMore: false },
+        tasks: [{
+          id: 'run-diagnostics',
+          status: 'completed',
+          prompt: 'Create a short release note',
+          startedAt: '2026-07-22T00:00:00Z',
+          updatedAt: '2026-07-22T00:00:05Z',
+          durationMs: 5000,
+          timeToFirstOutputMs: 1200,
+          inputTokens: 260,
+          outputTokens: 80,
+          cacheReadTokens: 80,
+          totalTokens: 420,
+          retries: 0,
+          contextRecoveries: 0,
+          rawEvents: [],
+          requests: [
+            {
+              id: 'request-1',
+              number: 1,
+              status: 'completed',
+              lifecycle: 'complete',
+              startedAt: '2026-07-22T00:00:00Z',
+              completedAt: '2026-07-22T00:00:02Z',
+              durationMs: 2000,
+              timeToFirstOutputMs: 900,
+              model: 'test-model',
+              inputTokens: 180,
+              outputTokens: 70,
+              totalTokens: 250,
+              attempts: [],
+              checkpoints: [],
+              snapshotState: 'available',
+              rawEvents: [],
+              input: {
+                systemPrompt: 'You are a coding agent.',
+                messages: [
+                  { role: 'user', content: [{ type: 'text', text: '<or-context kind="base">\nCurrent runtime context.\n</or-context>' }] },
+                  { role: 'user', content: [{ type: 'text', text: '<or-context kind="skill_listing">\nAvailable release skills.\n</or-context>' }] },
+                  { role: 'user', content: [{ type: 'text', text: 'Create a short release note' }] },
+                ],
+                tools: [{ name: 'write', description: 'Write one file', parameters: { type: 'object' } }],
+              },
+              attachments: [
+                { id: 'context-base-1', kind: 'base', placement: 'prefix', messageIndex: 0 },
+                { id: 'skill-listing-1', kind: 'skill_listing', placement: 'prefix', messageIndex: 1 },
+              ],
+              output: {
+                capturedAt: '2026-07-22T00:00:02Z',
+                stopReason: 'tool_use',
+                message: {
+                  role: 'assistant',
+                  content: [
+                    { type: 'thinking', thinking: 'Prepare the release note before writing it.' },
+                    { type: 'text', text: '## Release note\n\nI will write the **release note**.\n\n- Keep it concise' },
+                    { type: 'toolCall', toolCallId: 'call-1', toolName: 'write', arguments: { path: 'RELEASE.md' } },
+                  ],
+                },
+              },
+              tools: [{
+                id: 'call-1',
+                name: 'write',
+                status: 'success',
+                lifecycle: 'complete',
+                startedAt: '2026-07-22T00:00:02Z',
+                completedAt: '2026-07-22T00:00:02.2Z',
+                durationMs: 200,
+                executionDurationMs: 200,
+                arguments: { path: 'RELEASE.md' },
+                result: { role: 'toolResult', toolCallId: 'call-1', toolName: 'write', content: [{ type: 'text', text: 'Created RELEASE.md' }] },
+                rawEvents: [{
+                  name: 'tool.call.started',
+                  timestamp: '2026-07-22T00:00:02Z',
+                  toolCallId: 'call-1',
+                  toolName: 'write',
+                }],
+              }],
+            },
+            {
+              id: 'request-2',
+              number: 2,
+              status: 'completed',
+              lifecycle: 'complete',
+              startedAt: '2026-07-22T00:00:02.3Z',
+              completedAt: '2026-07-22T00:00:05Z',
+              durationMs: 2700,
+              timeToFirstOutputMs: 1200,
+              model: 'test-model',
+              totalTokens: 170,
+              attempts: [],
+              checkpoints: [],
+              tools: [{
+                id: 'call-2',
+                name: 'bash',
+                status: 'success',
+                lifecycle: 'complete',
+                startedAt: '2026-07-22T00:00:04Z',
+                completedAt: '2026-07-22T00:00:04.1Z',
+                durationMs: 100,
+                executionDurationMs: 100,
+                arguments: { command: 'git status' },
+                result: { role: 'toolResult', toolCallId: 'call-2', toolName: 'bash', content: [{ type: 'text', text: 'clean' }] },
+                rawEvents: [],
+              }],
+              snapshotState: 'available',
+              rawEvents: [],
+              input: {
+                systemPrompt: 'You are a coding agent.',
+                messages: [
+                  { role: 'user', content: [{ type: 'text', text: '<or-context kind="base">\nCurrent runtime context.\n</or-context>' }] },
+                  { role: 'user', content: [{ type: 'text', text: '<or-context kind="skill_listing">\nAvailable release skills.\n</or-context>' }] },
+                  { role: 'user', content: [{ type: 'text', text: '<or-context kind="context_update">\nThe git branch changed to release.\n</or-context>' }] },
+                ],
+              },
+              attachments: [
+                { id: 'context-base-1', kind: 'base', placement: 'prefix', messageIndex: 0 },
+                { id: 'skill-listing-1', kind: 'skill_listing', placement: 'prefix', messageIndex: 1 },
+                { id: 'context-update-1', kind: 'context_update', placement: 'after-current', revision: 'revision-2', messageIndex: 2 },
+              ],
+              output: {
+                capturedAt: '2026-07-22T00:00:05Z',
+                stopReason: 'stop',
+                message: {
+                  role: 'assistant',
+                  content: [
+                    { type: 'thinking', thinking: 'The file was created successfully.' },
+                    { type: 'toolCall', toolCallId: 'call-2', toolName: 'bash', arguments: { command: 'git status' } },
+                  ],
+                },
+              },
+            },
+          ],
+        }, {
+          id: 'run-diagnostics-followup',
+          status: 'completed',
+          prompt: 'Check the release status',
+          startedAt: '2026-07-22T00:01:00Z',
+          updatedAt: '2026-07-22T00:01:02Z',
+          durationMs: 2000,
+          inputTokens: 50,
+          outputTokens: 30,
+          cacheReadTokens: 40,
+          totalTokens: 120,
+          retries: 0,
+          contextRecoveries: 0,
+          rawEvents: [],
+          requests: [{
+            id: 'request-3',
+            number: 3,
+            status: 'completed',
+            lifecycle: 'complete',
+            startedAt: '2026-07-22T00:01:00Z',
+            completedAt: '2026-07-22T00:01:02Z',
+            durationMs: 2000,
+            model: 'test-model',
+            totalTokens: 120,
+            attempts: [],
+            checkpoints: [],
+            tools: [],
+            snapshotState: 'available',
+            rawEvents: [],
+            input: {
+              systemPrompt: 'You are a coding agent.',
+              messages: [
+                { role: 'user', content: [{ type: 'text', text: '<or-context kind="base">\nCurrent runtime context.\n</or-context>' }] },
+                { role: 'user', content: [{ type: 'text', text: '<or-context kind="skill_listing">\nAvailable release skills.\n</or-context>' }] },
+                { role: 'user', content: [{ type: 'text', text: 'Check the release status' }] },
+              ],
+            },
+            attachments: [
+              { id: 'context-base-1', kind: 'base', placement: 'prefix', messageIndex: 0 },
+              { id: 'skill-listing-1', kind: 'skill_listing', placement: 'prefix', messageIndex: 1 },
+            ],
+            output: {
+              capturedAt: '2026-07-22T00:01:02Z',
+              stopReason: 'stop',
+              message: { role: 'assistant', content: [{ type: 'text', text: 'The release is available.' }] },
+            },
+          }],
+        }],
+      }
+      if (options.diagnosticsTrace) {
+        diagnosticTraceRequestCount += 1
+        const query = new URL(request.url()).searchParams
+        body = await options.diagnosticsTrace(
+          diagnosticTraceRequestCount,
+          query.get('sessionId') ?? '',
+          query,
+        )
+      }
+    }
     if (path === '/api/providers') {
       body = {
         providers: [
@@ -842,6 +1056,842 @@ test('desktop headers expose native drag regions while controls remain interacti
   await expect(workbenchToggle).toHaveAccessibleName('Hide workbench')
   await workbenchToggle.click()
   await expect(workbenchToggle).toHaveAccessibleName('Show workbench')
+})
+
+test('conversation diagnostics uses one session-scoped header entry', async ({ page }) => {
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    historyEvents: [
+      {
+        type: 'run_start',
+        id: 'run-diagnostics',
+        startedAt: '2026-07-22T00:00:00Z',
+        durationMs: 1000,
+      },
+      {
+        type: 'message_end',
+        text: 'Response with diagnostics',
+        finalResponse: true,
+      },
+    ],
+  })
+
+  const diagnosticsButton = page.getByTestId('conversation-diagnostics-button')
+  await expect(diagnosticsButton).toBeVisible()
+  await expect(diagnosticsButton).toHaveAccessibleName('View conversation usage and diagnostics')
+  await expect(page.getByRole('button', { name: 'View diagnostics for this run' })).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Open profile menu' }).click()
+  await expect(page.getByRole('menuitem', { name: 'Run diagnostics' })).toHaveCount(0)
+  await page.keyboard.press('Escape')
+
+  await diagnosticsButton.click()
+  await expect(page.getByRole('heading', { name: 'Run diagnostics' })).toBeVisible()
+  await expect(diagnosticsButton).toHaveAttribute('aria-pressed', 'true')
+  await expect(diagnosticsButton).toHaveAccessibleName('Back to conversation')
+  const diagnosticsToolbar = page.getByTestId('diagnostics-toolbar')
+  await expect(diagnosticsToolbar.getByRole('tab', { name: 'Overview' })).toBeVisible()
+  await expect(diagnosticsToolbar.getByRole('tab', { name: 'Trajectory' })).toBeVisible()
+  await expect(page.getByRole('main').getByRole('tab', { name: 'Overview' })).toHaveCount(0)
+  await expect(page.getByRole('main').getByRole('tab', { name: 'Trajectory' })).toHaveCount(0)
+  await expect(page.locator('textarea:visible')).toBeEnabled()
+  await expect(page.getByText('Create a short release note')).toBeVisible()
+  await expect(page.getByText('Check the release status')).toBeVisible()
+  await expect(page.getByRole('combobox', { name: 'Select run' })).toHaveCount(0)
+  const firstRequestBar = page.getByRole('button', { name: 'Assistant · Request #1', exact: true })
+  const secondRequestBar = page.getByRole('button', { name: 'Assistant · Request #2', exact: true })
+  await expect(firstRequestBar).toBeVisible()
+  await expect(secondRequestBar).toBeVisible()
+  await expect(firstRequestBar).toHaveAttribute('data-model-timing', 'true')
+  await expect(firstRequestBar).toHaveAttribute(
+    'title',
+    'Assistant · Request #1\nTTFT 900 ms · Generation 1.10 s · Total 2.00 s',
+  )
+  await expect(firstRequestBar.locator('[data-timeline-segment="ttft"]')).toHaveAttribute('style', 'width: 45%;')
+  await expect(firstRequestBar.locator('[data-timeline-segment="generation"]')).toHaveAttribute('style', 'width: 55%;')
+  const markdownResponseRow = page.locator('[data-trajectory-item-id="request:request-1:response"]')
+  await expect(markdownResponseRow).toContainText('Release note I will write the release note. Keep it concise')
+  await expect(markdownResponseRow).not.toContainText('##')
+  await expect(markdownResponseRow).not.toContainText('**')
+  await expect(page.getByRole('button', { name: 'System · Initial system prompt', exact: true })).toBeVisible()
+  await expect(page.getByText('Initial system prompt', { exact: true })).toHaveCount(1)
+  await expect(page.getByRole('button', { name: 'Context · Runtime context', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Context · Available skills', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Context · Runtime context update', exact: true })).toBeVisible()
+  await expect(page.getByText('Runtime context', { exact: true })).toHaveCount(1)
+  await expect(page.getByText('Available skills', { exact: true })).toHaveCount(1)
+  const executionTimeline = page.locator('section[aria-label="Execution timeline"]')
+  await expect(executionTimeline.getByText('Input', { exact: true })).toBeVisible()
+  await expect(executionTimeline.getByText('Context', { exact: true })).toHaveCount(0)
+  const systemRow = page.getByRole('button', { name: /System Initial system prompt/ })
+  await systemRow.click()
+  const systemInspector = page.getByRole('complementary', { name: 'System · Initial system prompt' })
+  await expect(systemInspector.getByText('You are a coding agent.', { exact: true })).toBeVisible()
+  const initialTools = systemInspector.getByRole('tab', { name: 'Tools 1', exact: true })
+  await expect(initialTools).toHaveAttribute('aria-selected', 'false')
+  await initialTools.click()
+  await expect(initialTools).toHaveAttribute('aria-selected', 'true')
+  await expect(systemInspector.getByText('write', { exact: true })).toBeVisible()
+  await expect(systemInspector.getByText('Write one file', { exact: true }).first()).toBeVisible()
+  const runtimeContextRow = page.getByRole('button', { name: /Context Runtime context.*Current runtime context/ })
+  await runtimeContextRow.click()
+  const contextInspector = page.getByRole('complementary', { name: 'Context · Runtime context' })
+  await expect(contextInspector.getByText('Current runtime context.', { exact: false })).toBeVisible()
+  const thinkingOnlyRow = page.getByRole('button', { name: /Assistant Thinking · The file was created successfully\./ })
+  await expect(thinkingOnlyRow).toBeVisible()
+  await expect(thinkingOnlyRow.getByText('Thinking ·', { exact: true })).toBeVisible()
+  await expect(thinkingOnlyRow).not.toContainText('bash')
+  await thinkingOnlyRow.click()
+  const thinkingOnlyInspector = page.getByRole('complementary', { name: 'Assistant · Request #2' })
+  const responseToolCalls = thinkingOnlyInspector.getByTestId('diagnostics-response-tool-calls')
+  await expect(responseToolCalls).toContainText('Tool calls')
+  await expect(responseToolCalls.getByText('bash', { exact: true })).toBeVisible()
+  await expect(responseToolCalls).toContainText('{"command":"git status"}')
+  await expect(responseToolCalls).toContainText('Success · 100 ms')
+  await expect(page.getByText(/Turn \d/)).toHaveCount(0)
+  await expect.poll(() => {
+    const request = requests.find((candidate) => candidate.path === '/api/diagnostics/trace')
+    return request ? new URL(request.url).searchParams.get('sessionId') : undefined
+  }).toBe('test-session')
+  await firstRequestBar.click()
+  const responseInspector = page.getByRole('complementary', { name: 'Assistant · Request #1' })
+  await expect(responseInspector.getByRole('tab', { name: 'System prompt' })).toHaveCount(0)
+  await expect(responseInspector.getByRole('tab', { name: 'Tools 1' })).toHaveCount(0)
+  await expect(responseInspector.getByText('Source', { exact: true })).toBeVisible()
+  await expect(responseInspector.getByText('Status', { exact: true })).toBeVisible()
+  await expect(responseInspector.getByText('250 tok', { exact: true })).toBeVisible()
+  await expect(responseInspector.getByText('250 tok', { exact: true })).toHaveCSS('font-weight', '400')
+  await expect(responseInspector.getByText('180 tok', { exact: true })).toBeVisible()
+  await expect(responseInspector.getByText('70 tok', { exact: true })).toBeVisible()
+  await expect(responseInspector.getByRole('heading', { name: 'Release note', level: 2 })).toBeVisible()
+  await expect(responseInspector.getByText('I will write the release note.')).toBeVisible()
+  await expect(responseInspector.getByText('release note', { exact: true })).toHaveCSS('font-weight', '600')
+  await expect(responseInspector.getByRole('listitem').getByText('Keep it concise')).toBeVisible()
+  await responseInspector.getByRole('tab', { name: 'Content' }).click()
+  await expect(responseInspector.getByRole('heading', { name: 'Release note', level: 2 })).toBeVisible()
+  await expect(page.getByText('Created RELEASE.md')).toBeVisible()
+  await page.getByRole('button', { name: /write.*Created RELEASE\.md/ }).click()
+  await expect(page.getByRole('heading', { name: 'Arguments' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Result' })).toBeVisible()
+  const argumentsToggle = page.getByRole('button', { name: 'Arguments', exact: true })
+  const resultToggle = page.getByRole('button', { name: 'Result', exact: true })
+  await expect(argumentsToggle).toHaveAttribute('aria-expanded', 'true')
+  await argumentsToggle.click()
+  await expect(argumentsToggle).toHaveAttribute('aria-expanded', 'false')
+  await expect(resultToggle).toHaveAttribute('aria-expanded', 'true')
+  await expect(page.getByText('Session timestamps', { exact: true })).toBeVisible()
+
+  await page.setViewportSize({ width: 700, height: 820 })
+  await expect(executionTimeline).toBeVisible()
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})
+
+test('conversation diagnostics treats a missing new-session trace as empty', async ({ page }) => {
+  await openDesktopClient(page, {
+    existingSession: true,
+    diagnosticsStatus: 404,
+  })
+
+  await page.getByTestId('conversation-diagnostics-button').click()
+  await expect(page.getByRole('heading', { name: 'No runs recorded' })).toBeVisible()
+  await expect(page.getByText('Could not load local diagnostics.')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Retry' })).toHaveCount(0)
+})
+
+test('conversation diagnostics inspector divider supports pointer and keyboard resizing', async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 })
+  await openDesktopClient(page, { existingSession: true })
+  await page.getByTestId('conversation-diagnostics-button').click()
+
+  const handle = page.getByTestId('diagnostics-inspector-resize-handle')
+  const inspector = page.getByRole('complementary', { name: /Assistant · Request #/ })
+  await expect(handle).toBeVisible()
+  await expect(handle).toHaveAccessibleName('Resize request details')
+  await expect(handle).toHaveAttribute('aria-orientation', 'vertical')
+
+  const [handleBefore, inspectorBefore] = await Promise.all([
+    handle.boundingBox(),
+    inspector.boundingBox(),
+  ])
+  expect(handleBefore).not.toBeNull()
+  expect(inspectorBefore).not.toBeNull()
+
+  const bodyStylesBefore = await page.evaluate(() => ({
+    cursor: document.body.style.cursor,
+    userSelect: document.body.style.userSelect,
+  }))
+  await page.mouse.move(
+    handleBefore!.x + handleBefore!.width / 2,
+    handleBefore!.y + handleBefore!.height / 2,
+  )
+  await page.mouse.down()
+  await expect.poll(() => page.evaluate(() => ({
+    cursor: document.body.style.cursor,
+    userSelect: document.body.style.userSelect,
+  }))).toEqual({ cursor: 'col-resize', userSelect: 'none' })
+  await page.mouse.move(
+    handleBefore!.x + handleBefore!.width / 2 - 64,
+    handleBefore!.y + handleBefore!.height / 2,
+    { steps: 8 },
+  )
+  await page.mouse.up()
+
+  await expect.poll(async () => (await inspector.boundingBox())?.width)
+    .toBeCloseTo(inspectorBefore!.width + 64, 0)
+  await expect.poll(() => page.evaluate(() => ({
+    cursor: document.body.style.cursor,
+    userSelect: document.body.style.userSelect,
+  }))).toEqual(bodyStylesBefore)
+
+  const widthAfterPointer = (await inspector.boundingBox())!.width
+  await handle.focus()
+  await handle.press('ArrowRight')
+  await expect.poll(async () => (await inspector.boundingBox())?.width)
+    .toBeCloseTo(widthAfterPointer - 16, 0)
+
+  const rememberedWidth = (await inspector.boundingBox())!.width
+  await page.getByTestId('conversation-diagnostics-button').click()
+  await page.getByTestId('conversation-diagnostics-button').click()
+  await expect.poll(async () => (await inspector.boundingBox())?.width)
+    .toBeCloseTo(rememberedWidth, 0)
+
+  await page.setViewportSize({ width: 700, height: 820 })
+  await expect(handle).toBeHidden()
+})
+
+test('conversation diagnostics overview surfaces useful signals and opens requests', async ({ page }) => {
+  await openDesktopClient(page, { existingSession: true })
+
+  await page.getByTestId('conversation-diagnostics-button').click()
+  await page.getByTestId('diagnostics-toolbar').getByRole('tab', { name: 'Overview' }).click()
+
+  const summary = page.locator('section[aria-label="Conversation performance"]')
+  await expect(summary).toBeVisible()
+  await expect(summary.locator('[data-overview-metric="duration"]')).toContainText('7.00 s')
+  await expect(summary.locator('[data-overview-metric="requests"]')).toContainText('3')
+  await expect(summary.locator('[data-overview-metric="first-token"]')).toContainText('1.05 s')
+  await expect(summary.locator('[data-overview-metric="tokens"]')).toContainText('540')
+  await expect(summary.locator('[data-overview-metric="tokens"]')).toContainText('120 cache read')
+  await expect(summary.locator('[data-overview-metric="cost"]')).toContainText('Not reported')
+  await expect(summary.locator('[data-overview-metric="tools"]')).toContainText('2')
+
+  const breakdown = page.getByTestId('diagnostics-duration-breakdown')
+  await expect(breakdown).toContainText('Model requests')
+  await expect(breakdown).toContainText('6.70 s')
+  await expect(breakdown).toContainText('Tool execution')
+  await expect(breakdown).toContainText('300 ms')
+  await expect(page.getByText('Longest request', { exact: true })).toBeVisible()
+  await expect(page.getByText('Slowest first token', { exact: true })).toBeVisible()
+  await expect(page.getByText('Reliability', { exact: true })).toBeVisible()
+  await expect(page.getByTestId('diagnostics-key-signals')).toContainText('40% of model time')
+  await expect(page.getByTestId('diagnostics-key-signals')).toContainText('1.1× median')
+  await expect(page.getByTestId('diagnostics-key-signals')).toContainText('46% of total usage')
+
+  await page.setViewportSize({ width: 2000, height: 1000 })
+  const mainBox = await page.getByRole('main').boundingBox()
+  const summaryBox = await summary.boundingBox()
+  const summaryGridBox = await page.getByTestId('diagnostics-overview-summary-grid').boundingBox()
+  const keySignalsBox = await page.getByTestId('diagnostics-key-signals').boundingBox()
+  const overviewScrollBox = await page.getByTestId('diagnostics-overview-scroll').boundingBox()
+  expect(mainBox).not.toBeNull()
+  expect(summaryBox).not.toBeNull()
+  expect(summaryGridBox).not.toBeNull()
+  expect(keySignalsBox).not.toBeNull()
+  expect(overviewScrollBox).not.toBeNull()
+  const overviewRightSpacing = await page.getByTestId('diagnostics-overview-scroll').evaluate((scrollArea) => {
+    const summaryGrid = scrollArea.querySelector<HTMLElement>('[data-testid="diagnostics-overview-summary-grid"]')
+    const scrollBounds = scrollArea.getBoundingClientRect()
+    const summaryBounds = summaryGrid?.getBoundingClientRect()
+    return {
+      actual: summaryBounds ? scrollBounds.right - summaryBounds.right : 0,
+      expected: Number.parseFloat(window.getComputedStyle(scrollArea).paddingRight) +
+        (scrollArea.offsetWidth - scrollArea.clientWidth),
+    }
+  })
+  expect(overviewRightSpacing.actual).toBeCloseTo(overviewRightSpacing.expected, 0)
+  expect(keySignalsBox?.x ?? 0).toBeGreaterThan((summaryBox?.x ?? 0) + (summaryBox?.width ?? 0))
+  expect((mainBox?.x ?? 0) + (mainBox?.width ?? 0) - ((overviewScrollBox?.x ?? 0) + (overviewScrollBox?.width ?? 0)))
+    .toBeLessThanOrEqual(1)
+  await expect(page.getByTestId('diagnostics-request-table')).toHaveCount(0)
+
+  await page.setViewportSize({ width: 700, height: 820 })
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+
+  await page.getByRole('button', { name: /Slowest first token: Request #2/ }).click()
+  await expect(page.getByTestId('diagnostics-toolbar').getByRole('tab', { name: 'Trajectory' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('complementary', { name: 'Assistant · Request #2' })).toBeVisible()
+})
+
+test('conversation diagnostics loads earlier tasks without moving the visible record', async ({ page }) => {
+  const task = (group: 'current' | 'older', index: number) => {
+    const hour = group === 'current' ? 12 : 10
+    const startedAt = `2026-07-22T${hour}:${String(index).padStart(2, '0')}:00Z`
+    return {
+      id: `run-${group}-${index}`,
+      status: 'completed',
+      prompt: `${group === 'current' ? 'Current' : 'Older'} task ${index}`,
+      startedAt,
+      updatedAt: startedAt,
+      retries: 0,
+      contextRecoveries: 0,
+      rawEvents: [],
+      requests: [{
+        id: `request-${group}-${index}`,
+        number: 1,
+        status: 'completed',
+        lifecycle: 'complete',
+        startedAt,
+        attempts: [],
+        checkpoints: [],
+        tools: [],
+        snapshotState: 'available',
+        rawEvents: [],
+        input: { messages: [{ role: 'user', content: [{ type: 'text', text: `${group} input ${index}` }] }] },
+        output: {
+          capturedAt: startedAt,
+          message: { role: 'assistant', content: [{ type: 'text', text: `${group} response ${index}` }] },
+        },
+      }],
+    }
+  }
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    diagnosticsTrace: (_requestNumber, sessionID, query) => {
+      const older = query.get('before') === 'older-cursor'
+      return {
+        version: 1,
+        generatedAt: '2026-07-22T13:00:00Z',
+        sessionId: sessionID,
+        selectedTaskId: older ? 'run-older-12' : 'run-current-12',
+        tasks: Array.from({ length: 12 }, (_, index) => task(older ? 'older' : 'current', index + 1)),
+        page: older
+          ? { hasMore: false }
+          : { hasMore: true, beforeCursor: 'older-cursor' },
+      }
+    },
+  })
+
+  await page.getByTestId('conversation-diagnostics-button').click()
+  const loadEarlier = page.getByRole('button', { name: 'Load earlier user tasks' })
+  const currentAnchor = page.locator('[data-trajectory-item-id="task:run-current-1:user"]')
+  await expect(loadEarlier).toBeVisible()
+  await expect(currentAnchor).toBeVisible()
+  const beforeBox = await currentAnchor.boundingBox()
+  expect(beforeBox).not.toBeNull()
+
+  await loadEarlier.click()
+  await expect(page.getByText('Older task 1', { exact: true })).toBeAttached()
+  await expect(loadEarlier).toHaveCount(0)
+  const afterBox = await currentAnchor.boundingBox()
+  expect(afterBox).not.toBeNull()
+  expect(Math.abs((afterBox?.y ?? 0) - (beforeBox?.y ?? 0))).toBeLessThanOrEqual(2)
+
+  const traceRequests = requests.filter((request) => request.path === '/api/diagnostics/trace')
+  expect(new URL(traceRequests[0]!.url).searchParams.get('limit')).toBe('12')
+  const olderRequest = traceRequests.find((request) =>
+    new URL(request.url).searchParams.get('before') === 'older-cursor')
+  expect(olderRequest).toBeDefined()
+})
+
+test('conversation diagnostics virtualizes a thousand trajectory records', async ({ page }) => {
+  const task = (group: 'current' | 'older', index: number) => {
+    const startedAt = new Date(Date.UTC(
+      2026,
+      6,
+      22,
+      group === 'current' ? 12 : 10,
+      0,
+      index,
+    )).toISOString()
+    return {
+      id: `run-large-${group}-${index}`,
+      status: 'completed',
+      prompt: `${group === 'current' ? 'Current' : 'Older'} large task ${index}`,
+      startedAt,
+      updatedAt: startedAt,
+      retries: 0,
+      contextRecoveries: 0,
+      rawEvents: [],
+      requests: [{
+        id: `request-large-${group}-${index}`,
+        number: index,
+        status: 'completed',
+        lifecycle: 'complete',
+        startedAt,
+        attempts: [],
+        checkpoints: [],
+        tools: [],
+        snapshotState: 'available',
+        rawEvents: [],
+        input: { messages: [{ role: 'user', content: [{ type: 'text', text: `${group} input ${index}` }] }] },
+        output: {
+          capturedAt: startedAt,
+          message: { role: 'assistant', content: [{ type: 'text', text: `${group} response ${index}` }] },
+        },
+      }],
+    }
+  }
+  await openDesktopClient(page, {
+    existingSession: true,
+    diagnosticsTrace: (_requestNumber, sessionID, query) => {
+      const older = query.get('before') === 'large-older-cursor'
+      const count = older ? 12 : 500
+      return {
+        version: 1,
+        generatedAt: '2026-07-22T13:00:00Z',
+        sessionId: sessionID,
+        selectedTaskId: older ? 'run-large-older-12' : 'run-large-current-500',
+        tasks: Array.from({ length: count }, (_, index) => task(older ? 'older' : 'current', index + 1)),
+        page: older
+          ? { hasMore: false }
+          : { hasMore: true, beforeCursor: 'large-older-cursor' },
+      }
+    },
+  })
+
+  await page.getByTestId('conversation-diagnostics-button').click()
+  const ledger = page.getByTestId('diagnostics-ledger-scroll')
+  const timeline = page.getByTestId('diagnostics-timeline-scroll')
+  const currentAnchor = ledger.locator('[data-trajectory-item-id="task:run-large-current-1:user"]')
+  await expect(ledger).toHaveAttribute('data-virtualized', 'true')
+  await expect(timeline).toHaveAttribute('data-virtualized', 'true')
+  await expect(page.getByText('1000 items', { exact: true })).toBeVisible()
+  await expect(currentAnchor).toBeVisible()
+  expect(await ledger.locator('[data-trajectory-item-id]').count()).toBeLessThanOrEqual(160)
+  expect(await timeline.locator('[data-timeline-item-id]').count()).toBeLessThanOrEqual(80)
+
+  const beforeBox = await currentAnchor.boundingBox()
+  expect(beforeBox).not.toBeNull()
+  await page.getByRole('button', { name: 'Load earlier user tasks' }).click()
+  await expect(page.getByText('1024 items', { exact: true })).toBeVisible()
+  await expect.poll(async () => {
+    const afterBox = await currentAnchor.boundingBox()
+    return Math.abs((afterBox?.y ?? 0) - (beforeBox?.y ?? 0))
+  }).toBeLessThanOrEqual(2)
+
+  const timelineTarget = timeline.locator('[data-timeline-item-id]').last()
+  const targetID = await timelineTarget.getAttribute('data-timeline-item-id')
+  expect(targetID).not.toBeNull()
+  await timelineTarget.click()
+  const timelineBox = await timeline.boundingBox()
+  const targetBox = await timelineTarget.boundingBox()
+  expect(timelineBox).not.toBeNull()
+  expect(targetBox).not.toBeNull()
+  expect((timelineBox?.x ?? 0) + (timelineBox?.width ?? 0) - ((targetBox?.x ?? 0) + (targetBox?.width ?? 0)))
+    .toBeGreaterThanOrEqual(6)
+  const targetRow = ledger.locator(`[data-trajectory-item-id="${targetID}"]`)
+  await expect(targetRow).toBeVisible()
+  await expect(targetRow).toHaveAttribute('aria-expanded', 'true')
+  expect(await ledger.locator('[data-trajectory-item-id]').count()).toBeLessThanOrEqual(160)
+})
+
+test('conversation diagnostics preserves state independently for each session', async ({ page }) => {
+  const traceForSession = (sessionID: string) => {
+    const label = sessionID === 'secondary-session' ? 'Secondary' : 'Primary'
+    const tasks = Array.from({ length: 14 }, (_, index) => {
+      const number = index + 1
+      const requestID = `${sessionID}-request-${number}`
+      return {
+        id: `${sessionID}-run-${number}`,
+        status: 'completed',
+        prompt: `${label} task ${number}`,
+        startedAt: `2026-07-22T00:${String(number).padStart(2, '0')}:00Z`,
+        updatedAt: `2026-07-22T00:${String(number).padStart(2, '0')}:02Z`,
+        durationMs: 2000,
+        totalTokens: 100 + number,
+        retries: 0,
+        contextRecoveries: 0,
+        rawEvents: [],
+        requests: [{
+          id: requestID,
+          number,
+          status: 'completed',
+          lifecycle: 'complete',
+          startedAt: `2026-07-22T00:${String(number).padStart(2, '0')}:00Z`,
+          completedAt: `2026-07-22T00:${String(number).padStart(2, '0')}:02Z`,
+          durationMs: 2000,
+          timeToFirstOutputMs: 300,
+          model: 'test-model',
+          inputTokens: 80,
+          outputTokens: 20 + number,
+          totalTokens: 100 + number,
+          attempts: [],
+          checkpoints: [],
+          tools: [],
+          snapshotState: 'available',
+          rawEvents: [],
+          input: {
+            systemPrompt: `System prompt for ${label}`,
+            messages: [{
+              role: 'user',
+              content: [{ type: 'text', text: `${label} task ${number}` }],
+            }],
+            tools: [],
+          },
+          output: {
+            capturedAt: `2026-07-22T00:${String(number).padStart(2, '0')}:02Z`,
+            stopReason: 'stop',
+            message: {
+              role: 'assistant',
+              providerRequestId: requestID,
+              content: [{ type: 'text', text: `${label} response ${number}` }],
+            },
+          },
+        }],
+      }
+    })
+    return {
+      version: 1,
+      generatedAt: '2026-07-22T00:15:00Z',
+      sessionId: sessionID,
+      selectedTaskId: tasks.at(-1)?.id ?? '',
+      tasks,
+    }
+  }
+
+  await openDesktopClient(page, {
+    existingSession: true,
+    secondarySession: true,
+    diagnosticsTrace: (_requestNumber, sessionID) => traceForSession(sessionID),
+  })
+
+  const chats = page.getByRole('navigation', { name: 'Chats' })
+  const toolbar = page.getByTestId('diagnostics-toolbar')
+  await page.getByTestId('conversation-diagnostics-button').click()
+
+  const primarySearch = page.getByPlaceholder('Search trajectory')
+  await primarySearch.fill('Primary')
+  const primaryResponse = page.getByRole('button', { name: /Assistant Primary response 8/ })
+  await primaryResponse.click()
+  const primaryInspector = page.getByRole('complementary', { name: 'Assistant · Request #8' })
+  await primaryInspector.getByRole('tab', { name: 'Content' }).click()
+
+  const ledger = page.getByTestId('diagnostics-ledger-scroll')
+  await ledger.evaluate((element) => {
+    element.scrollTop = 240
+    element.dispatchEvent(new Event('scroll'))
+  })
+  const primaryScrollTop = await ledger.evaluate((element) => element.scrollTop)
+  expect(primaryScrollTop).toBeGreaterThan(0)
+
+  await chats.getByRole('button', { name: 'Secondary task', exact: true }).click()
+  await page.getByTestId('conversation-diagnostics-button').click()
+  const secondarySearch = page.getByPlaceholder('Search trajectory')
+  await expect(secondarySearch).toHaveValue('')
+  await secondarySearch.fill('Secondary')
+  await page.getByRole('button', { name: /Assistant Secondary response 4/ }).click()
+  const secondaryInspector = page.getByRole('complementary', {
+    name: 'Assistant · Request #4',
+  })
+  await secondaryInspector.getByRole('button', { name: 'Close' }).click()
+  await toolbar.getByRole('tab', { name: 'Overview' }).click()
+  await expect(toolbar.getByRole('tab', { name: 'Overview' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+
+  await chats.getByRole('button', { name: 'New session', exact: true }).click()
+  await expect(toolbar.getByRole('tab', { name: 'Trajectory' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  await expect(page.getByPlaceholder('Search trajectory')).toHaveValue('Primary')
+  await expect(primaryResponse).toHaveAttribute('aria-expanded', 'true')
+  await expect(primaryInspector).toBeVisible()
+  await expect(primaryInspector.getByRole('tab', { name: 'Content' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  await expect.poll(() => ledger.evaluate((element) => element.scrollTop)).toBe(primaryScrollTop)
+
+  await chats.getByRole('button', { name: 'Secondary task', exact: true }).click()
+  await expect(toolbar.getByRole('tab', { name: 'Overview' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  await toolbar.getByRole('tab', { name: 'Trajectory' }).click()
+  await expect(page.getByPlaceholder('Search trajectory')).toHaveValue('Secondary')
+  await expect(
+    page.getByRole('complementary', { name: 'Assistant · Request #4' }),
+  ).toHaveCount(0)
+})
+
+test('conversation diagnostics ignores an older trace response that finishes last', async ({ page }) => {
+  const trace = (requestID: string, text: string, generatedAt: string) => ({
+    version: 1,
+    generatedAt,
+    sessionId: 'test-session',
+    selectedTaskId: 'run-race',
+    page: { hasMore: false },
+    tasks: [{
+      id: 'run-race',
+      status: 'running',
+      prompt: 'Inspect response ordering',
+      startedAt: '2026-07-22T00:03:00Z',
+      updatedAt: '2026-07-22T00:03:01Z',
+      retries: 0,
+      contextRecoveries: 0,
+      rawEvents: [],
+      requests: [{
+        id: requestID,
+        number: 1,
+        status: 'running',
+        lifecycle: 'in-progress',
+        startedAt: '2026-07-22T00:03:00Z',
+        attempts: [],
+        checkpoints: [],
+        tools: [],
+        snapshotState: 'available',
+        rawEvents: [],
+        output: {
+          capturedAt: '2026-07-22T00:03:01Z',
+          message: {
+            role: 'assistant',
+            providerRequestId: requestID,
+            content: [{ type: 'text', text }],
+          },
+        },
+      }],
+    }],
+  })
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    historyRunning: true,
+    historyEvents: [
+      { type: 'user_message', text: 'Inspect response ordering' },
+      {
+        type: 'run_start',
+        id: 'run-race',
+        runId: 'run-race',
+        startedAt: '2026-07-22T00:03:00Z',
+      },
+    ],
+    diagnosticsTrace: async (_requestNumber, _sessionID, query) => {
+      if (query.has('runId')) {
+        return trace('request-current', 'Current trace response', '2026-07-22T00:03:02Z')
+      }
+      await new Promise((resolve) => setTimeout(resolve, 600))
+      return trace('request-stale', 'Stale trace response', '2026-07-22T00:03:01Z')
+    },
+  })
+
+  await page.getByTestId('conversation-diagnostics-button').click()
+  await expect.poll(() => requests.filter((request) =>
+    request.path === '/api/diagnostics/trace').length).toBeGreaterThan(0)
+  await emitSessionEvent(page, 'test-session', {
+    type: 'tool_start',
+    id: 'call-race',
+    tool: 'read',
+    args: { path: 'trace.go' },
+    providerRequestId: 'request-current',
+  })
+  await expect(page.getByText('Current trace response', { exact: true })).toBeVisible()
+  await page.waitForTimeout(700)
+  await expect(page.getByText('Current trace response', { exact: true })).toBeVisible()
+  await expect(page.getByText('Stale trace response', { exact: true })).toHaveCount(0)
+})
+
+test('conversation diagnostics streams a tool loop and replaces provisional metrics', async ({ page }) => {
+  let traceFinalized = false
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    diagnosticsTrace: () => traceFinalized ? {
+      version: 1,
+      generatedAt: '2026-07-22T00:02:02Z',
+      sessionId: 'test-session',
+      selectedTaskId: 'run-live',
+      tasks: [{
+        id: 'run-live',
+        status: 'completed',
+        prompt: 'Inspect the live trace',
+        startedAt: '2026-07-22T00:02:00Z',
+        updatedAt: '2026-07-22T00:02:02Z',
+        durationMs: 2000,
+        totalTokens: 60,
+        retries: 0,
+        contextRecoveries: 0,
+        rawEvents: [],
+        requests: [{
+          id: 'request-live-1',
+          number: 1,
+          status: 'completed',
+          lifecycle: 'complete',
+          startedAt: '2026-07-22T00:02:00Z',
+          completedAt: '2026-07-22T00:02:01Z',
+          durationMs: 1000,
+          timeToFirstOutputMs: 150,
+          model: 'test-model',
+          totalTokens: 18,
+          attempts: [],
+          checkpoints: [],
+          snapshotState: 'available',
+          rawEvents: [],
+          output: {
+            capturedAt: '2026-07-22T00:02:01Z',
+            stopReason: 'tool_use',
+            message: {
+              role: 'assistant',
+              providerRequestId: 'request-live-1',
+              content: [
+                { type: 'thinking', thinking: 'Inspecting workspace' },
+                {
+                  type: 'toolCall',
+                  toolCallId: 'call-live-1',
+                  toolName: 'read',
+                  arguments: { path: 'trace.go' },
+                },
+              ],
+            },
+          },
+          tools: [{
+            id: 'call-live-1',
+            name: 'read',
+            status: 'success',
+            lifecycle: 'complete',
+            startedAt: '2026-07-22T00:02:00.5Z',
+            completedAt: '2026-07-22T00:02:01Z',
+            durationMs: 500,
+            executionDurationMs: 500,
+            arguments: { path: 'trace.go' },
+            result: {
+              role: 'toolResult',
+              toolCallId: 'call-live-1',
+              toolName: 'read',
+              content: [{ type: 'text', text: 'Loaded trace.go' }],
+            },
+            rawEvents: [],
+          }],
+        }, {
+          id: 'request-live-2',
+          number: 2,
+          status: 'completed',
+          lifecycle: 'complete',
+          startedAt: '2026-07-22T00:02:01Z',
+          completedAt: '2026-07-22T00:02:01.9Z',
+          durationMs: 900,
+          timeToFirstOutputMs: 120,
+          model: 'test-model',
+          inputTokens: 30,
+          outputTokens: 12,
+          totalTokens: 42,
+          attempts: [],
+          checkpoints: [],
+          tools: [],
+          snapshotState: 'available',
+          rawEvents: [],
+          output: {
+            capturedAt: '2026-07-22T00:02:01.9Z',
+            stopReason: 'stop',
+            message: {
+              role: 'assistant',
+              providerRequestId: 'request-live-2',
+              content: [
+                { type: 'thinking', thinking: 'Preparing final response' },
+                { type: 'text', text: 'Live trace complete' },
+              ],
+            },
+          },
+        }],
+      }],
+    } : {
+      version: 1,
+      generatedAt: '2026-07-22T00:02:00Z',
+      sessionId: 'test-session',
+      tasks: [],
+    },
+  })
+
+  await page.getByTestId('conversation-diagnostics-button').click()
+  const composer = page.getByRole('textbox', { name: 'Ask anything' })
+  await composer.fill('Inspect the live trace')
+  await page.getByRole('button', { name: 'Send prompt' }).click()
+  await expect.poll(() =>
+    requests.find((request) => request.path === '/api/sessions/test-session/prompt')?.body,
+  ).toEqual({ text: 'Inspect the live trace', images: [] })
+
+  await emitSessionEvent(page, 'test-session', {
+    type: 'run_start',
+    id: 'run-live',
+    runId: 'run-live',
+    startedAt: '2026-07-22T00:02:00Z',
+  })
+  await emitSessionEvent(page, 'test-session', {
+    type: 'delta',
+    kind: 'thinking',
+    delta: 'Inspecting workspace',
+    providerRequestId: 'request-live-1',
+  })
+
+  const ledger = page.locator('section[aria-label="Trajectory records"]')
+  await expect(
+    ledger.getByRole('button', { name: /Assistant Thinking · Inspecting workspace/ }),
+  ).toBeVisible()
+
+  await emitSessionEvent(page, 'test-session', {
+    type: 'tool_start',
+    id: 'call-live-1',
+    tool: 'read',
+    args: { path: 'trace.go' },
+    providerRequestId: 'request-live-1',
+  })
+  await expect(ledger.getByText('read', { exact: true })).toBeVisible()
+  await emitSessionEvent(page, 'test-session', {
+    type: 'tool_end',
+    id: 'call-live-1',
+    tool: 'read',
+    result: 'Loaded trace.go',
+    outcome: { status: 'success' },
+    providerRequestId: 'request-live-1',
+  })
+  await expect(ledger.getByText('Loaded trace.go', { exact: true })).toBeVisible()
+
+  await emitSessionEvent(page, 'test-session', {
+    type: 'delta',
+    kind: 'thinking',
+    delta: 'Preparing final response',
+    providerRequestId: 'request-live-2',
+  })
+  await emitSessionEvent(page, 'test-session', {
+    type: 'delta',
+    kind: 'text',
+    delta: 'Live trace complete',
+    providerRequestId: 'request-live-2',
+  })
+  await expect(ledger.getByText('Live trace complete', { exact: true })).toBeVisible()
+
+  traceFinalized = true
+  await emitSessionEvent(page, 'test-session', {
+    type: 'message_end',
+    text: 'Live trace complete',
+    finalResponse: true,
+    completedAt: '2026-07-22T00:02:01.9Z',
+    providerRequestId: 'request-live-2',
+  })
+  await emitSessionEvent(page, 'test-session', {
+    type: 'done',
+    runId: 'run-live',
+    startedAt: '2026-07-22T00:02:00Z',
+    durationMs: 2000,
+  })
+
+  const finalResponse = ledger.getByRole('button', { name: /Assistant.*Live trace complete/ })
+  await expect(finalResponse).toBeVisible()
+  await finalResponse.click()
+  const inspector = page.getByRole('complementary', { name: 'Assistant · Request #2' })
+  await expect(inspector.getByText('42 tok', { exact: true })).toBeVisible()
+  await expect(inspector.getByText('120 ms', { exact: true })).toBeVisible()
+  await expect(composer).toBeEnabled()
+
+  const traceRequests = requests.filter((request) => request.path === '/api/diagnostics/trace')
+  expect(new URL(traceRequests[0]!.url).searchParams.get('limit')).toBe('12')
+  const fullPageRequests = traceRequests.filter((request) =>
+    !new URL(request.url).searchParams.has('runId'))
+  const runRequests = traceRequests.filter((request) =>
+    new URL(request.url).searchParams.has('runId'))
+  expect(fullPageRequests.length).toBeLessThanOrEqual(2)
+  expect(runRequests.length).toBeGreaterThan(0)
+  expect(runRequests.every((request) =>
+    new URL(request.url).searchParams.get('runId') === 'run-live')).toBe(true)
 })
 
 test('dark theme uses the cool neutral canvas', async ({ page }) => {
@@ -2040,6 +3090,133 @@ test('workbench divider resizes the panel without moving the corner control', as
     afterDrag!.width - 16,
     0,
   )
+})
+
+test('long threads coalesce workbench resize events into one animation frame', async ({
+  page,
+}) => {
+  await openDesktopClient(page, {
+    existingSession: true,
+    historyEvents: Array.from({ length: 8 }, (_, index) =>
+      longThreadHistory(`resize-${index}`),
+    ).flat(),
+  })
+  await expect(page.getByTestId('assistant-message')).toHaveCount(144)
+
+  await page.getByTestId('workbench-panel-toggle').click()
+  const viewport = page.getByTestId('workbench-viewport')
+  const handle = page.getByTestId('workbench-resize-handle')
+  await expect.poll(async () => (await viewport.boundingBox())?.width).toBeGreaterThan(490)
+  const before = await viewport.boundingBox()
+  const handleBox = await handle.boundingBox()
+  expect(before).not.toBeNull()
+  expect(handleBox).not.toBeNull()
+
+  const startX = handleBox!.x + handleBox!.width / 2
+  const pointerY = handleBox!.y + handleBox!.height / 2
+  await handle.evaluate((element, { clientX, clientY }) => {
+    const capturedPointers = new Set<number>()
+    const originalSetPointerCapture = element.setPointerCapture.bind(element)
+    const originalHasPointerCapture = element.hasPointerCapture.bind(element)
+    const originalReleasePointerCapture = element.releasePointerCapture.bind(element)
+    const testWindow = window as Window & { __restoreResizePointerCapture?: () => void }
+    element.setPointerCapture = (pointerID) => capturedPointers.add(pointerID)
+    element.hasPointerCapture = (pointerID) => capturedPointers.has(pointerID)
+    element.releasePointerCapture = (pointerID) => capturedPointers.delete(pointerID)
+    testWindow.__restoreResizePointerCapture = () => {
+      element.setPointerCapture = originalSetPointerCapture
+      element.hasPointerCapture = originalHasPointerCapture
+      element.releasePointerCapture = originalReleasePointerCapture
+    }
+    element.dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true,
+      button: 0,
+      buttons: 1,
+      clientX,
+      clientY,
+      pointerId: 77,
+    }))
+  }, { clientX: startX, clientY: pointerY })
+
+  await page.evaluate(() => {
+    const nativeRequestAnimationFrame = window.requestAnimationFrame.bind(window)
+    const nativeCancelAnimationFrame = window.cancelAnimationFrame.bind(window)
+    const callbacks = new Map<number, FrameRequestCallback>()
+    let nextFrameID = 100_000
+    const testWindow = window as Window & {
+      __resizeFrameTest?: {
+        count: () => number
+        flush: () => void
+        restore: () => void
+      }
+    }
+    const restore = () => {
+      window.requestAnimationFrame = nativeRequestAnimationFrame
+      window.cancelAnimationFrame = nativeCancelAnimationFrame
+    }
+    window.requestAnimationFrame = (callback) => {
+      const frameID = nextFrameID
+      nextFrameID += 1
+      callbacks.set(frameID, callback)
+      return frameID
+    }
+    window.cancelAnimationFrame = (frameID) => {
+      callbacks.delete(frameID)
+    }
+    testWindow.__resizeFrameTest = {
+      count: () => callbacks.size,
+      flush: () => {
+        const pending = [...callbacks.values()]
+        callbacks.clear()
+        restore()
+        for (const callback of pending) callback(performance.now())
+      },
+      restore,
+    }
+  })
+
+  try {
+    await handle.evaluate((element, { startX, pointerY }) => {
+      for (let step = 1; step <= 40; step += 1) {
+        element.dispatchEvent(new PointerEvent('pointermove', {
+          bubbles: true,
+          buttons: 1,
+          clientX: startX - step * 2,
+          clientY: pointerY,
+          pointerId: 77,
+        }))
+      }
+    }, { startX, pointerY })
+
+    await expect.poll(() => page.evaluate(() => (
+      window as Window & { __resizeFrameTest?: { count: () => number } }
+    ).__resizeFrameTest?.count())).toBe(1)
+    expect((await viewport.boundingBox())?.width).toBeCloseTo(before!.width, 0)
+
+    await page.evaluate(() => (
+      window as Window & { __resizeFrameTest?: { flush: () => void } }
+    ).__resizeFrameTest?.flush())
+    await expect.poll(async () => (await viewport.boundingBox())?.width).toBeCloseTo(
+      before!.width + 80,
+      0,
+    )
+  } finally {
+    await page.evaluate(() => (
+      window as Window & { __resizeFrameTest?: { restore: () => void } }
+    ).__resizeFrameTest?.restore())
+    await handle.evaluate((element, { clientX, clientY }) => {
+      element.dispatchEvent(new PointerEvent('pointerup', {
+        bubbles: true,
+        buttons: 0,
+        clientX,
+        clientY,
+        pointerId: 77,
+      }))
+    }, { clientX: startX - 80, clientY: pointerY })
+    await page.evaluate(() => (
+      window as Window & { __restoreResizePointerCapture?: () => void }
+    ).__restoreResizePointerCapture?.())
+  }
 })
 
 test('workbench restores after an automatic collapse but respects a manual close', async ({

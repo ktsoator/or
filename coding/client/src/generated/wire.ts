@@ -298,6 +298,8 @@ export type WireEvent = {
   tabID?: string
   questions?: Question[]
   title?: string
+  runId?: string
+  providerRequestId?: string
   startedAt?: string
   completedAt?: string
   durationMs?: number

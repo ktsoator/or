@@ -4,8 +4,9 @@ import type {
   UIEventHandler,
   WheelEventHandler,
 } from 'react'
-import { useEffect, useRef, useState } from 'react'
-import { LoaderCircle, PanelLeft } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Gauge, LoaderCircle, PanelLeft } from 'lucide-react'
+import { Tooltip } from 'radix-ui'
 import type {
   ApprovalItem,
   BackgroundTask,
@@ -52,6 +53,8 @@ type ConversationPaneProps = {
     workbenchToggleControl: ReactNode
     awayFromLatest: boolean
     hasNewContent: boolean
+    diagnosticsOpen: boolean
+    diagnosticsContent: ReactNode
   }
   scroll: {
     logRef: RefObject<HTMLDivElement | null>
@@ -66,6 +69,7 @@ type ConversationPaneProps = {
     selectSession: (sessionID: string) => void
     returnToParent?: () => void
     branchPointLocated: (target: { sessionID: string; messageID: string }) => void
+    openSessionDiagnostics: () => void
     forkMessage: (
       messageID: string,
       mode: 'before_user' | 'after_assistant',
@@ -104,6 +108,8 @@ export function ConversationPane({
     workbenchToggleControl,
     awayFromLatest,
     hasNewContent,
+    diagnosticsOpen,
+    diagnosticsContent,
   } = layout
   const {
     logRef,
@@ -118,6 +124,7 @@ export function ConversationPane({
     selectSession,
     returnToParent,
     branchPointLocated,
+    openSessionDiagnostics,
     forkMessage,
     editMessage,
     renderComposer,
@@ -134,6 +141,8 @@ export function ConversationPane({
           item.messageID === branchPointTarget.messageID,
       )?.id
     : undefined
+  const conversationUnits = useMemo(() => groupAssistantTurns(items), [items])
+  const lastItemID = items.at(-1)?.id
   const emptySession = !loading && items.length === 0 && !approval
   const awaitingFirstOutput = running && items.at(-1)?.kind === 'user'
 
@@ -272,17 +281,51 @@ export function ConversationPane({
               onSelectTask={openTaskInWorkbench}
             />
           )}
+          {!draft && activeSession && (
+            <Tooltip.Provider delayDuration={120}>
+              <Tooltip.Root>
+                <Tooltip.Trigger asChild>
+                  <button
+                    type="button"
+                    aria-label={diagnosticsOpen ? t('diagnostics.backToConversation') : t('diagnostics.openCurrentSession')}
+                    aria-pressed={diagnosticsOpen}
+                    data-testid="conversation-diagnostics-button"
+                    data-active={diagnosticsOpen || undefined}
+                    title={diagnosticsOpen ? t('diagnostics.backToConversation') : t('diagnostics.openCurrentSession')}
+                    className={cn(
+                      'window-titlebar-control grid size-8 shrink-0 cursor-pointer place-items-center rounded-[8px] text-ink-muted outline-none transition-colors hover:bg-canvas-strong/65 hover:text-ink focus-visible:bg-canvas-strong/65 focus-visible:text-ink',
+                      diagnosticsOpen && 'bg-canvas-strong text-ink',
+                    )}
+                    onClick={openSessionDiagnostics}
+                  >
+                    <Gauge className="size-4" aria-hidden="true" />
+                  </button>
+                </Tooltip.Trigger>
+                <Tooltip.Portal>
+                  <Tooltip.Content
+                    side="bottom"
+                    sideOffset={6}
+                    collisionPadding={8}
+                    className="z-[150] animate-[fade-in_100ms_ease-out] rounded-md bg-canvas-inverse px-2 py-1 text-[0.6875rem] leading-4 font-medium whitespace-nowrap text-ink-inverse shadow-lg"
+                  >
+                    {diagnosticsOpen ? t('diagnostics.backToConversation') : t('diagnostics.openCurrentSession')}
+                  </Tooltip.Content>
+                </Tooltip.Portal>
+              </Tooltip.Root>
+            </Tooltip.Provider>
+          )}
           {!workbenchOwnsToggle && workbenchToggleControl}
         </header>
 
         <div className="relative min-h-0 flex-1">
-          <main
-            ref={logRef}
-            data-testid="conversation-transcript"
-            className="h-full overflow-x-hidden overflow-y-auto px-3 md:px-6 md:[scrollbar-gutter:stable_both-edges]"
-            onScroll={trackScrollPosition}
-            onWheelCapture={pauseFollowOnWheel}
-          >
+          {diagnosticsOpen ? diagnosticsContent : (
+            <main
+              ref={logRef}
+              data-testid="conversation-transcript"
+              className="h-full overflow-x-hidden overflow-y-auto px-3 md:px-6 md:[scrollbar-gutter:stable_both-edges]"
+              onScroll={trackScrollPosition}
+              onWheelCapture={pauseFollowOnWheel}
+            >
             <div
               className={cn(
                 'mx-auto min-h-full w-full max-w-[750px] pt-5 pb-9 max-md:pt-4 max-md:pb-7',
@@ -308,7 +351,7 @@ export function ConversationPane({
                 </div>
               ) : (
                 <>
-                  {groupAssistantTurns(items).map((unit) => {
+                  {conversationUnits.map((unit) => {
                     if (unit.kind === 'assistant-turn') {
                       const highlighted =
                         activeSession?.id === highlightedBranchPoint?.sessionID &&
@@ -337,8 +380,9 @@ export function ConversationPane({
                 </>
               )}
             </div>
-          </main>
-          {awayFromLatest && (
+            </main>
+          )}
+          {!diagnosticsOpen && awayFromLatest && (
             <ScrollToLatestButton
               hasNewContent={hasNewContent}
               onClick={scrollToLatest}
@@ -346,7 +390,7 @@ export function ConversationPane({
           )}
         </div>
 
-        {!loading && !emptySession && renderComposer()}
+        {!loading && (!emptySession || diagnosticsOpen) && renderComposer()}
       </div>
   )
 
@@ -362,13 +406,8 @@ export function ConversationPane({
         branchingDisabled={running || forking}
         onForkMessage={forkMessage}
         onEditMessage={editMessage}
-        editRequiresConfirmation={hasLaterConversationContent(unit.item)}
+        editRequiresConfirmation={unit.item.id !== lastItemID}
       />
     )
-  }
-
-  function hasLaterConversationContent(item: Item) {
-    const index = items.findIndex((candidate) => candidate.id === item.id)
-    return index >= 0 && index < items.length - 1
   }
 }

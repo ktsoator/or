@@ -29,11 +29,19 @@ type Attachment struct {
 	Rendered  string
 }
 
+// ProjectedAttachment locates one hidden attachment in the prepared provider
+// message sequence. MessageIndex refers to PreparedStep.Input.Messages.
+type ProjectedAttachment struct {
+	Attachment
+	MessageIndex int
+}
+
 // PreparedStep is the immutable model input for one request plus any context
 // attachments that must become durable before that request reaches a provider.
 type PreparedStep struct {
-	Input   llm.Context
-	Pending []Attachment
+	Input       llm.Context
+	Pending     []Attachment
+	Attachments []ProjectedAttachment
 }
 
 // State is a detached diagnostic snapshot.

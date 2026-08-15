@@ -136,8 +136,14 @@ func NewCompaction(compact Compaction) Entry {
 }
 
 func NewRun(firstEntryID string, startedAt, completedAt time.Time) Entry {
+	return NewRunWithID(NewID(), firstEntryID, startedAt, completedAt)
+}
+
+// NewRunWithID builds a run entry with a caller-supplied identity. Product
+// observability uses the same ID in the diagnostic log and durable transcript.
+func NewRunWithID(id, firstEntryID string, startedAt, completedAt time.Time) Entry {
 	return Entry{
-		ID:        NewID(),
+		ID:        id,
 		Timestamp: completedAt.UTC(),
 		Type:      RunEntry,
 		Run: &Run{

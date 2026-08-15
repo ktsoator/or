@@ -9,6 +9,7 @@ import (
 	"github.com/ktsoator/or/coding/internal/conversation"
 	"github.com/ktsoator/or/coding/internal/mcp"
 	"github.com/ktsoator/or/coding/internal/provider"
+	"github.com/ktsoator/or/coding/internal/requestsnapshot"
 	"github.com/ktsoator/or/coding/internal/usage"
 	"github.com/ktsoator/or/coding/internal/workspace"
 	"github.com/ktsoator/or/llm"
@@ -24,31 +25,35 @@ func init() {
 // Each field is the store one group of routes actually reads. Handlers reach
 // for the store they need and never through another component to find it.
 type Server struct {
-	conversations *conversation.Manager
-	transports    *SessionTransports
-	ledger        *usage.Store
-	workspaces    *workspace.Registry
-	registry      *llm.ProviderRegistry
-	providers     *provider.Store
-	providerTests *provider.ConnectionTester
-	mcp           *mcp.Manager
-	mcpConfigPath string
-	mcpConfigMu   sync.Mutex
+	conversations        *conversation.Manager
+	transports           *SessionTransports
+	ledger               *usage.Store
+	workspaces           *workspace.Registry
+	registry             *llm.ProviderRegistry
+	providers            *provider.Store
+	providerTests        *provider.ConnectionTester
+	mcp                  *mcp.Manager
+	mcpConfigPath        string
+	mcpConfigMu          sync.Mutex
+	observabilityLogPath string
+	requestSnapshots     requestsnapshot.Reader
 }
 
 // Options contains the product services exposed through HTTP. Construction
 // belongs to internal/app; this package only translates between HTTP and those
 // services.
 type Options struct {
-	Conversations *conversation.Manager
-	Transports    *SessionTransports
-	Ledger        *usage.Store
-	Workspaces    *workspace.Registry
-	Registry      *llm.ProviderRegistry
-	Providers     *provider.Store
-	ProviderTests *provider.ConnectionTester
-	MCP           *mcp.Manager
-	MCPConfigPath string
+	Conversations        *conversation.Manager
+	Transports           *SessionTransports
+	Ledger               *usage.Store
+	Workspaces           *workspace.Registry
+	Registry             *llm.ProviderRegistry
+	Providers            *provider.Store
+	ProviderTests        *provider.ConnectionTester
+	MCP                  *mcp.Manager
+	MCPConfigPath        string
+	ObservabilityLogPath string
+	RequestSnapshots     requestsnapshot.Reader
 }
 
 // NewServer builds the HTTP delivery layer from already-created services.
@@ -58,15 +63,17 @@ func NewServer(opts Options) *Server {
 		mcpConfigPath = opts.MCP.Path()
 	}
 	return &Server{
-		conversations: opts.Conversations,
-		transports:    opts.Transports,
-		ledger:        opts.Ledger,
-		workspaces:    opts.Workspaces,
-		registry:      opts.Registry,
-		providers:     opts.Providers,
-		providerTests: opts.ProviderTests,
-		mcp:           opts.MCP,
-		mcpConfigPath: mcpConfigPath,
+		conversations:        opts.Conversations,
+		transports:           opts.Transports,
+		ledger:               opts.Ledger,
+		workspaces:           opts.Workspaces,
+		registry:             opts.Registry,
+		providers:            opts.Providers,
+		providerTests:        opts.ProviderTests,
+		mcp:                  opts.MCP,
+		mcpConfigPath:        mcpConfigPath,
+		observabilityLogPath: opts.ObservabilityLogPath,
+		requestSnapshots:     opts.RequestSnapshots,
 	}
 }
 
@@ -89,6 +96,7 @@ func (s *Server) Handler() http.Handler {
 	s.mountSkills(api)
 	s.mountMCP(api)
 	s.mountPreview(api)
+	s.mountDiagnostics(api)
 
 	return r
 }

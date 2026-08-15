@@ -62,6 +62,108 @@ describe('threadsReducer event sequences', () => {
     ])
   })
 
+  test('restores completed thinking from an interrupted response', () => {
+    const state = reduce([{
+      t: 'reset',
+      sessionID,
+      history: {
+        running: false,
+        events: [
+          { type: 'run_start', runId: 'run-interrupted', startedAt },
+          { type: 'delta', kind: 'thinking', delta: 'Inspect the existing implementation.' },
+          { type: 'message_end', text: '', finalResponse: false },
+        ],
+      },
+    }])
+
+    expect(thread(state).items).toContainEqual(expect.objectContaining({
+      kind: 'thinking',
+      text: 'Inspect the existing implementation.',
+      streaming: false,
+    }))
+    expect(thread(state).items.some((item) => item.kind === 'tool')).toBe(false)
+  })
+
+  test('retains provider request correlation on streamed content and tools', () => {
+    const state = reduce([
+      {
+        t: 'reset',
+        sessionID,
+        history: { running: true, events: [{ type: 'run_start', runId: 'run-1', startedAt }] },
+      },
+      {
+        t: 'wire',
+        sessionID,
+        ev: {
+          type: 'delta',
+          kind: 'thinking',
+          delta: 'Inspecting',
+          providerRequestId: 'request-1',
+        },
+      },
+      {
+        t: 'wire',
+        sessionID,
+        ev: {
+          type: 'tool_start',
+          id: 'call-1',
+          tool: 'read',
+          args: { path: 'trace.go' },
+          providerRequestId: 'request-1',
+        },
+      },
+      {
+        t: 'wire',
+        sessionID,
+        ev: {
+          type: 'tool_end',
+          id: 'call-1',
+          tool: 'read',
+          result: 'done',
+          providerRequestId: 'request-1',
+        },
+      },
+      {
+        t: 'wire',
+        sessionID,
+        ev: {
+          type: 'delta',
+          kind: 'text',
+          delta: 'Finished',
+          providerRequestId: 'request-2',
+        },
+      },
+      {
+        t: 'wire',
+        sessionID,
+        ev: {
+          type: 'message_end',
+          text: 'Finished',
+          finalResponse: true,
+          providerRequestId: 'request-2',
+        },
+      },
+    ])
+
+    expect(thread(state).items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'thinking',
+        text: 'Inspecting',
+        providerRequestId: 'request-1',
+      }),
+      expect.objectContaining({
+        kind: 'tool',
+        id: 'call-1',
+        providerRequestId: 'request-1',
+      }),
+      expect.objectContaining({
+        kind: 'assistant',
+        markdown: 'Finished',
+        providerRequestId: 'request-2',
+      }),
+    ]))
+  })
+
   test('backfills durable message IDs when a live run completes', () => {
     const state = reduce([
       {
@@ -75,7 +177,7 @@ describe('threadsReducer event sequences', () => {
       {
         t: 'wire',
         sessionID,
-        ev: { type: 'run_start', startedAt },
+        ev: { type: 'run_start', runId: 'run-1', startedAt },
       },
       {
         t: 'wire',
@@ -87,6 +189,7 @@ describe('threadsReducer event sequences', () => {
         sessionID,
         ev: {
           type: 'done',
+          runId: 'run-1',
           startedAt,
           userMessageIDs: ['transcript-user-1'],
           assistantMessageID: 'transcript-assistant-1',
@@ -100,9 +203,10 @@ describe('threadsReducer event sequences', () => {
         id: 'local-user',
         messageID: 'transcript-user-1',
       }),
-      expect.objectContaining({ kind: 'run', startedAt }),
+      expect.objectContaining({ kind: 'run', runId: 'run-1', startedAt }),
       expect.objectContaining({
         kind: 'assistant',
+        runId: 'run-1',
         messageID: 'transcript-assistant-1',
         complete: true,
       }),

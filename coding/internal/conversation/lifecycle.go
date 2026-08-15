@@ -130,6 +130,11 @@ func (m *Manager) Delete(id string) error {
 		m.mu.Unlock()
 		return err
 	}
+	if err := m.sessionData.DeleteSession(id); err != nil {
+		restoreFiles(staged)
+		m.mu.Unlock()
+		return fmt.Errorf("delete session data: %w", err)
+	}
 
 	detachedChildren := make(map[*sessionRuntime]record)
 	for _, child := range m.sessions {

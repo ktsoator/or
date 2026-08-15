@@ -8,7 +8,9 @@ import (
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/compaction"
 	"github.com/ktsoator/or/coding/internal/contextprojection"
+	"github.com/ktsoator/or/coding/internal/observability"
 	"github.com/ktsoator/or/coding/internal/permission"
+	"github.com/ktsoator/or/coding/internal/requestsnapshot"
 	"github.com/ktsoator/or/coding/internal/skills"
 	"github.com/ktsoator/or/coding/internal/tools"
 )
@@ -57,10 +59,6 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	}
 	activeToolSet := toolsWithSkillAvailability(toolSet, initialRegistry.Len() > 0)
 
-	authorizer, err := permission.NewService(cwd, opts.PermissionMode, opts.Approver)
-	if err != nil {
-		return nil, err
-	}
 	journal, seed, entries, err := newSessionJournal(ctx, opts.Store)
 	if err != nil {
 		return nil, err
@@ -72,21 +70,32 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	}
 
 	s := &Session{
-		journal:       journal,
-		tools:         activeToolSet,
-		allTools:      toolSet,
-		toolByName:    toolsByName(toolSet),
-		authorizer:    authorizer,
-		tasks:         tasks,
-		cwd:           cwd,
-		instructions:  opts.Instructions,
-		skillRegistry: dynamicSkills,
-		skillLoader:   opts.SkillLoader,
-		skillRevision: initialRegistry.Revision(),
-		maxRetries:    maxRetries,
-		contextWindow: opts.Model.ContextWindow,
-		compactor:     opts.Compactor,
+		journal:          journal,
+		sessionID:        opts.SessionID,
+		recorder:         observability.OrDiscard(opts.Recorder),
+		requestSnapshots: requestsnapshot.OrDiscard(opts.RequestSnapshots),
+		tools:            activeToolSet,
+		allTools:         toolSet,
+		toolByName:       toolsByName(toolSet),
+		tasks:            tasks,
+		cwd:              cwd,
+		instructions:     opts.Instructions,
+		skillRegistry:    dynamicSkills,
+		skillLoader:      opts.SkillLoader,
+		skillRevision:    initialRegistry.Revision(),
+		maxRetries:       maxRetries,
+		contextWindow:    opts.Model.ContextWindow,
+		compactor:        opts.Compactor,
 	}
+	authorizer, err := permission.NewService(
+		cwd,
+		opts.PermissionMode,
+		s.observedApprover(opts.Approver),
+	)
+	if err != nil {
+		return nil, err
+	}
+	s.authorizer = authorizer
 	if s.compactor == nil {
 		s.compactor = compaction.LLM{
 			StreamFn: opts.StreamFn, StreamOptions: opts.StreamOptions,
@@ -129,6 +138,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		StreamFn:      s.modelStreamFn(opts.StreamFn),
 		GetAPIKey:     opts.GetAPIKey,
 		BeforeToolCall: func(bc agent.BeforeToolCallCtx) (bool, string) {
+			s.beginObservedTool(bc.ToolCall.ID, bc.ToolCall.Name)
 			args, _ := bc.Args.(map[string]any)
 			var accesses []permission.Access
 			if t, ok := s.toolByName[bc.ToolCall.Name]; ok {
@@ -157,7 +167,13 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	s.agent = agent.New(agentOpts)
 	s.journal.captureOutcomes(s.agent)
 	s.agent.Subscribe(func(ev agent.AgentEvent) {
-		if projected, ok := projectAgentEvent(ev); ok {
+		projected, visible := projectAgentEvent(ev)
+		if visible {
+			// Correlate before observeAgentEvent removes terminal tool state.
+			s.correlateVisibleEvent(&projected)
+		}
+		s.observeAgentEvent(ev)
+		if visible {
 			if projected.Type == MessageCompleted {
 				projected.ContextUsage = s.ContextUsage()
 			}

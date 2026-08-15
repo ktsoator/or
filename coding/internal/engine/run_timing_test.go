@@ -75,6 +75,9 @@ func TestSessionPersistsAndReplaysRunTiming(t *testing.T) {
 	if history[1].MessageID != "" {
 		t.Fatalf("run message id = %q, want empty", history[1].MessageID)
 	}
+	if history[1].RunID != entries[3].ID {
+		t.Fatalf("run id = %q, want transcript run %q", history[1].RunID, entries[3].ID)
+	}
 	if history[2].MessageID != entries[2].ID {
 		t.Fatalf("assistant message id = %q, want transcript entry %q", history[2].MessageID, entries[2].ID)
 	}
@@ -120,13 +123,14 @@ func TestHistoryDoesNotDuplicateRunAfterCompletedEntryIsPersisted(t *testing.T) 
 	}
 
 	entries := session.Entries()
-	completedRun := entries[len(entries)-1].Run
+	completedRunEntry := entries[len(entries)-1]
+	completedRun := completedRunEntry.Run
 	if completedRun == nil {
 		t.Fatalf("last entry = %#v, want completed run", entries[len(entries)-1])
 	}
 	// Recreate the interval after persistNewRun and before the deferred active
 	// run state is cleared.
-	session.setRunState(ctx, completedRun.StartedAt, 0)
+	session.setRunState(ctx, completedRunEntry.ID, completedRun.StartedAt, 0)
 	defer session.clearRunState()
 
 	history := session.History()

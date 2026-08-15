@@ -42,7 +42,7 @@ func (s *Session) withRetry(ctx context.Context, err error) error {
 		if last == nil || !s.isRetryable(*last) {
 			break
 		}
-		s.dropTrailingErrorTurn()
+		s.dropTrailingErrorTurn("retry")
 		if !sleepCtx(ctx, backoff(attempt)) {
 			break // cancelled during backoff
 		}
@@ -70,13 +70,14 @@ func (s *Session) isRetryable(msg llm.AssistantMessage) bool {
 
 // dropTrailingErrorTurn removes a trailing failed assistant message so Continue
 // can resume from the preceding user or tool-result message.
-func (s *Session) dropTrailingErrorTurn() {
+func (s *Session) dropTrailingErrorTurn(reason string) {
 	msgs := s.agent.Snapshot().Messages
 	n := len(msgs)
 	if n == 0 {
 		return
 	}
 	if a := asAssistant(msgs[n-1]); a != nil && a.StopReason == llm.StopReasonError {
+		s.recordTurnDiscarded(reason)
 		s.dispatchEvent(Event{Type: TurnDiscarded})
 		s.agent.SetMessages(msgs[:n-1])
 	}

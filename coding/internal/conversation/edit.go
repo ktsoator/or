@@ -93,6 +93,7 @@ func (m *Manager) rebuildSession(runtime *sessionRuntime) (*engine.Session, erro
 	model, _ := llm.LookupModel(runtime.record.Provider, runtime.record.Model)
 	additionalTools := runtime.mcpLease.Tools()
 	session, err := newEngineSession(m.ctx, engineSessionConfig{
+		SessionID:       runtime.record.ID,
 		WorkspacePath:   runtime.record.WorkspacePath,
 		TranscriptPath:  runtime.record.Transcript,
 		Model:           model,
@@ -100,6 +101,7 @@ func (m *Manager) rebuildSession(runtime *sessionRuntime) (*engine.Session, erro
 		PermissionMode:  permission.Mode(runtime.record.PermissionMode),
 		AdditionalTools: additionalTools,
 		StreamFn:        m.streamFn,
+		Recorder:        m.recorder,
 	}, runtime.transport)
 	if err != nil {
 		return nil, err

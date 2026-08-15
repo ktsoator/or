@@ -3,6 +3,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useRef,
   useState,
   type CSSProperties,
 } from 'react'
@@ -33,6 +34,7 @@ import {
 } from './SessionDialogs'
 import { useI18n } from '@/i18n'
 import { useSidebarLayout } from './useSidebarLayout'
+import type { DiagnosticsSessionState } from '@/features/diagnostics/DiagnosticsPage'
 
 const SettingsPage = lazy(() =>
   import('@/features/settings/SettingsPage').then((module) => ({ default: module.SettingsPage })),
@@ -43,12 +45,17 @@ const SkillsPage = lazy(() =>
 const MCPPage = lazy(() =>
   import('@/features/mcp/MCPPage').then((module) => ({ default: module.MCPPage })),
 )
+const DiagnosticsPage = lazy(() =>
+  import('@/features/diagnostics/DiagnosticsPage').then((module) => ({ default: module.DiagnosticsPage })),
+)
 
 type AppView =
   | { type: 'conversation' }
   | { type: 'settings'; section: SettingsSection }
   | { type: 'skills' }
   | { type: 'mcp' }
+
+type ConversationSurface = 'conversation' | 'diagnostics'
 
 type BranchPointTarget = {
   sessionID: string
@@ -132,6 +139,10 @@ export default function App() {
   const [removingWorkspace, setRemovingWorkspace] = useState(false)
   const [removeWorkspaceError, setRemoveWorkspaceError] = useState('')
   const [view, setView] = useState<AppView>({ type: 'conversation' })
+  const [conversationSurfaces, setConversationSurfaces] = useState<
+    Record<string, ConversationSurface>
+  >({})
+  const diagnosticsStatesRef = useRef<Record<string, DiagnosticsSessionState>>({})
   const [workspaceOpenError, setWorkspaceOpenError] = useState('')
   const [selectedWorkspacePath, setSelectedWorkspacePath] = useState<string>()
   const {
@@ -357,6 +368,13 @@ export default function App() {
     setDeleteError('')
     try {
       await deleteSession(deleteTarget.id)
+      delete diagnosticsStatesRef.current[deleteTarget.id]
+      setConversationSurfaces((current) => {
+        if (!(deleteTarget.id in current)) return current
+        const next = { ...current }
+        delete next[deleteTarget.id]
+        return next
+      })
       if (secondarySessionID === deleteTarget.id) setSecondarySessionID(undefined)
       if (workbenchTaskRequest?.sessionID === deleteTarget.id) {
         setWorkbenchTaskRequest(undefined)
@@ -466,6 +484,20 @@ export default function App() {
       onCompact={draft ? undefined : compactContext}
     />
   )
+
+  const diagnosticsOpen = Boolean(
+    activeSessionID && conversationSurfaces[activeSessionID] === 'diagnostics',
+  )
+
+  const toggleSessionDiagnostics = () => {
+    if (!activeSessionID) return
+    setConversationSurfaces((current) => ({
+      ...current,
+      [activeSessionID]: current[activeSessionID] === 'diagnostics'
+        ? 'conversation'
+        : 'diagnostics',
+    }))
+  }
 
   const workbenchOwnsToggle =
     workbenchOpen || workbenchClosing || workbenchAutoLayoutChanging
@@ -622,6 +654,25 @@ export default function App() {
           workbenchToggleControl,
           awayFromLatest,
           hasNewContent,
+          diagnosticsOpen,
+          diagnosticsContent: diagnosticsOpen && activeSessionID ? (
+            <Suspense fallback={<AppViewFallback />}>
+              <DiagnosticsPage
+                key={activeSessionID}
+                embedded
+                sessionID={activeSessionID}
+                liveItems={items}
+                running={running}
+                initialState={diagnosticsStatesRef.current[activeSessionID]}
+                onStateChange={(patch) => {
+                  diagnosticsStatesRef.current[activeSessionID] = {
+                    ...diagnosticsStatesRef.current[activeSessionID],
+                    ...patch,
+                  }
+                }}
+              />
+            </Suspense>
+          ) : null,
         }}
         scroll={{
           logRef,
@@ -638,6 +689,7 @@ export default function App() {
             ? () => chooseSession(parentSession.id, activeSession?.forkedFromMessageId)
             : undefined,
           branchPointLocated: handleBranchPointLocated,
+          openSessionDiagnostics: toggleSessionDiagnostics,
           forkMessage,
           editMessage,
           renderComposer: composer,

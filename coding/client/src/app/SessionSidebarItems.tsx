@@ -42,6 +42,7 @@ export function WorkspaceSessions({
   onRemoveWorkspace,
   openHoverCardKey,
   onHoverCardOpenChange,
+  onMenuOpenChange,
 }: {
   path: string
   name: string
@@ -59,18 +60,29 @@ export function WorkspaceSessions({
   onRemoveWorkspace: (path: string, name: string) => void
   openHoverCardKey?: string
   onHoverCardOpenChange: (key: string, open: boolean) => void
+  onMenuOpenChange: (key: string, open: boolean) => void
 }) {
   const { t } = useI18n()
   const [expanded, setExpanded] = useState(true)
   const [menuOpen, setMenuOpen] = useState(false)
   const skipMenuFocusRestore = useRef(false)
+  const hoverCardKey = `workspace:${path}`
+
+  const handleMenuOpenChange = (open: boolean) => {
+    setMenuOpen(open)
+    onMenuOpenChange(hoverCardKey, open)
+    if (open) onHoverCardOpenChange(hoverCardKey, false)
+  }
 
   return (
     <section aria-label={name}>
       <div className="group/workspace relative flex h-8 items-center">
         <HoverCard.Root
-          open={openHoverCardKey === `workspace:${path}`}
-          onOpenChange={(open) => onHoverCardOpenChange(`workspace:${path}`, open)}
+          open={!menuOpen && openHoverCardKey === hoverCardKey}
+          onOpenChange={(open) => {
+            if (open && menuOpen) return
+            onHoverCardOpenChange(hoverCardKey, open)
+          }}
           openDelay={200}
           closeDelay={100}
         >
@@ -154,7 +166,7 @@ export function WorkspaceSessions({
           >
             <SquarePen className="size-3.5" aria-hidden="true" />
           </button>
-          <DropdownMenu.Root open={menuOpen} onOpenChange={setMenuOpen}>
+          <DropdownMenu.Root open={menuOpen} onOpenChange={handleMenuOpenChange}>
             <DropdownMenu.Trigger asChild>
               <button
                 className="grid size-7 cursor-pointer place-items-center rounded-[9px] text-ink-faint outline-none transition-colors hover:bg-canvas-sunken hover:text-ink focus-visible:bg-canvas-sunken focus-visible:text-ink data-[state=open]:text-ink"
@@ -240,6 +252,7 @@ export function WorkspaceSessions({
                 onRename={(title) => onRenameSession(session.id, title)}
                 openHoverCardKey={openHoverCardKey}
                 onHoverCardOpenChange={onHoverCardOpenChange}
+                onMenuOpenChange={onMenuOpenChange}
                 indented
               />
             ))
@@ -261,6 +274,7 @@ export function SessionRow({
   onRename,
   openHoverCardKey,
   onHoverCardOpenChange,
+  onMenuOpenChange,
   indented = false,
 }: {
   session: SessionSummary
@@ -273,6 +287,7 @@ export function SessionRow({
   onRename: (customTitle: string) => Promise<void>
   openHoverCardKey?: string
   onHoverCardOpenChange: (key: string, open: boolean) => void
+  onMenuOpenChange: (key: string, open: boolean) => void
   indented?: boolean
 }) {
   const { locale, t } = useI18n()
@@ -283,6 +298,13 @@ export function SessionRow({
   const committing = useRef(false)
   const openingEditor = useRef(false)
   const renameInput = useRef<HTMLInputElement>(null)
+  const hoverCardKey = `session:${session.id}`
+
+  const handleMenuOpenChange = (open: boolean) => {
+    setMenuOpen(open)
+    onMenuOpenChange(hoverCardKey, open)
+    if (open) onHoverCardOpenChange(hoverCardKey, false)
+  }
 
   useEffect(() => {
     if (editing) renameInput.current?.select()
@@ -334,8 +356,11 @@ export function SessionRow({
   return (
     <div className="group/session relative">
       <HoverCard.Root
-        open={openHoverCardKey === `session:${session.id}`}
-        onOpenChange={(open) => onHoverCardOpenChange(`session:${session.id}`, open)}
+        open={!menuOpen && openHoverCardKey === hoverCardKey}
+        onOpenChange={(open) => {
+          if (open && menuOpen) return
+          onHoverCardOpenChange(hoverCardKey, open)
+        }}
         openDelay={200}
         closeDelay={100}
       >
@@ -438,7 +463,7 @@ export function SessionRow({
         >
           <Pin className={cn('size-3.5', pinned && 'fill-current')} aria-hidden="true" />
         </button>
-        <DropdownMenu.Root open={menuOpen} onOpenChange={setMenuOpen}>
+        <DropdownMenu.Root open={menuOpen} onOpenChange={handleMenuOpenChange}>
           <DropdownMenu.Trigger asChild>
             <button
               className="grid size-7 cursor-pointer place-items-center rounded-[9px] text-ink-faint outline-none transition-colors hover:bg-canvas-sunken hover:text-ink focus-visible:bg-canvas-sunken focus-visible:text-ink data-[state=open]:text-ink"

@@ -57,18 +57,19 @@ type userMessageWire struct {
 }
 
 type assistantMessageWire struct {
-	Role          string            `json:"role"`
-	Content       []json.RawMessage `json:"content"`
-	Protocol      Protocol          `json:"protocol"`
-	Provider      string            `json:"provider"`
-	Model         string            `json:"model"`
-	ResponseModel string            `json:"responseModel,omitempty"`
-	ResponseID    string            `json:"responseId,omitempty"`
-	Usage         Usage             `json:"usage"`
-	StopReason    StopReason        `json:"stopReason"`
-	ErrorMessage  string            `json:"errorMessage,omitempty"`
-	Diagnostics   []Diagnostic      `json:"diagnostics,omitempty"`
-	Timestamp     int64             `json:"timestamp"`
+	Role              string            `json:"role"`
+	Content           []json.RawMessage `json:"content"`
+	ProviderRequestID string            `json:"providerRequestId,omitempty"`
+	Protocol          Protocol          `json:"protocol"`
+	Provider          string            `json:"provider"`
+	Model             string            `json:"model"`
+	ResponseModel     string            `json:"responseModel,omitempty"`
+	ResponseID        string            `json:"responseId,omitempty"`
+	Usage             Usage             `json:"usage"`
+	StopReason        StopReason        `json:"stopReason"`
+	ErrorMessage      string            `json:"errorMessage,omitempty"`
+	Diagnostics       []Diagnostic      `json:"diagnostics,omitempty"`
+	Timestamp         int64             `json:"timestamp"`
 }
 
 type toolResultMessageWire struct {
@@ -157,18 +158,19 @@ func (message AssistantMessage) MarshalJSON() ([]byte, error) {
 		return nil, err
 	}
 	return json.Marshal(assistantMessageWire{
-		Role:          messageRoleAssistant,
-		Content:       content,
-		Protocol:      message.Protocol,
-		Provider:      message.Provider,
-		Model:         message.Model,
-		ResponseModel: message.ResponseModel,
-		ResponseID:    message.ResponseID,
-		Usage:         message.Usage,
-		StopReason:    message.StopReason,
-		ErrorMessage:  message.ErrorMessage,
-		Diagnostics:   message.Diagnostics,
-		Timestamp:     message.Timestamp,
+		Role:              messageRoleAssistant,
+		Content:           content,
+		ProviderRequestID: message.ProviderRequestID,
+		Protocol:          message.Protocol,
+		Provider:          message.Provider,
+		Model:             message.Model,
+		ResponseModel:     message.ResponseModel,
+		ResponseID:        message.ResponseID,
+		Usage:             message.Usage,
+		StopReason:        message.StopReason,
+		ErrorMessage:      message.ErrorMessage,
+		Diagnostics:       message.Diagnostics,
+		Timestamp:         message.Timestamp,
 	})
 }
 
@@ -188,17 +190,18 @@ func (message *AssistantMessage) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*message = AssistantMessage{
-		Content:       content,
-		Protocol:      wire.Protocol,
-		Provider:      wire.Provider,
-		Model:         wire.Model,
-		ResponseModel: wire.ResponseModel,
-		ResponseID:    wire.ResponseID,
-		Usage:         wire.Usage,
-		StopReason:    wire.StopReason,
-		ErrorMessage:  wire.ErrorMessage,
-		Diagnostics:   wire.Diagnostics,
-		Timestamp:     wire.Timestamp,
+		Content:           content,
+		ProviderRequestID: wire.ProviderRequestID,
+		Protocol:          wire.Protocol,
+		Provider:          wire.Provider,
+		Model:             wire.Model,
+		ResponseModel:     wire.ResponseModel,
+		ResponseID:        wire.ResponseID,
+		Usage:             wire.Usage,
+		StopReason:        wire.StopReason,
+		ErrorMessage:      wire.ErrorMessage,
+		Diagnostics:       wire.Diagnostics,
+		Timestamp:         wire.Timestamp,
 	}
 	return nil
 }

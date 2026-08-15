@@ -63,8 +63,14 @@ type AppSidebarProps = {
 export function AppSidebar({ layout, content, actions }: AppSidebarProps) {
   const { t } = useI18n()
   const [openHoverCardKey, setOpenHoverCardKey] = useState<string>()
+  const [openMenuKey, setOpenMenuKey] = useState<string>()
   const handleHoverCardOpenChange = useCallback((key: string, open: boolean) => {
+    if (open && openMenuKey !== undefined) return
     setOpenHoverCardKey((current) => open ? key : current === key ? undefined : current)
+  }, [openMenuKey])
+  const handleMenuOpenChange = useCallback((key: string, open: boolean) => {
+    setOpenMenuKey((current) => open ? key : current === key ? undefined : current)
+    if (open) setOpenHoverCardKey(undefined)
   }, [])
   const {
     mobileSessionsOpen,
@@ -240,6 +246,7 @@ export function AppSidebar({ layout, content, actions }: AppSidebarProps) {
                     onRename={(title) => handleRename(session.id, title)}
                     openHoverCardKey={openHoverCardKey}
                     onHoverCardOpenChange={handleHoverCardOpenChange}
+                    onMenuOpenChange={handleMenuOpenChange}
                   />
                 ))
               )}
@@ -282,6 +289,7 @@ export function AppSidebar({ layout, content, actions }: AppSidebarProps) {
                   onRemoveWorkspace={requestRemoveWorkspace}
                   openHoverCardKey={openHoverCardKey}
                   onHoverCardOpenChange={handleHoverCardOpenChange}
+                  onMenuOpenChange={handleMenuOpenChange}
                 />
               ))}
             </div>

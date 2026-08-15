@@ -159,6 +159,9 @@ type AssistantMessage struct {
 	Content []AssistantContent `json:"content"`
 
 	// --- Response metadata ---
+	// ProviderRequestID is the caller-assigned correlation ID for the provider
+	// request that produced this message. Providers never receive this field.
+	ProviderRequestID string `json:"providerRequestId,omitempty"`
 	// Protocol is the wire protocol used for this response.
 	Protocol Protocol `json:"protocol"`
 	// Provider is the model provider that produced this response.

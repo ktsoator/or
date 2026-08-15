@@ -92,12 +92,12 @@ export function useSidebarLayout(
 
   const updateResize = useCallback((
     currentResize: { startX: number; startWidth: number },
-    event: ReactPointerEvent<HTMLDivElement>,
+    clientX: number,
   ) => {
     setWidth(resizedSidebarWidth(
       currentResize.startWidth,
       currentResize.startX,
-      event.clientX,
+      clientX,
     ))
   }, [])
 

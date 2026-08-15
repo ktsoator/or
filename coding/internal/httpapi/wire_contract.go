@@ -279,9 +279,11 @@ type wireEvent struct {
 	// title_update
 	Title string `json:"title,omitempty"`
 	// run timing
-	StartedAt   string `json:"startedAt,omitempty"`
-	CompletedAt string `json:"completedAt,omitempty"`
-	DurationMS  *int64 `json:"durationMs,omitempty"`
+	RunID             string `json:"runId,omitempty"`
+	ProviderRequestID string `json:"providerRequestId,omitempty"`
+	StartedAt         string `json:"startedAt,omitempty"`
+	CompletedAt       string `json:"completedAt,omitempty"`
+	DurationMS        *int64 `json:"durationMs,omitempty"`
 	// done events backfill stable transcript IDs into messages first rendered
 	// from the live stream.
 	UserMessageIDs     []string `json:"userMessageIDs,omitempty"`

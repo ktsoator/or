@@ -100,7 +100,6 @@ export function ResponseActions({
             pressed={feedback === 'down'}
             onClick={() => setFeedback((current) => (current === 'down' ? undefined : 'down'))}
           />
-
           {completedTime && (
             <time
               className="ml-1.5 shrink-0 pr-1 text-[0.75rem] leading-5 text-ink-faint tabular-nums"
@@ -119,7 +118,7 @@ export function ResponseActions({
           <Tooltip.Root>
             <Tooltip.Trigger asChild>
               <button
-                className="group inline-flex h-7 min-w-0 max-w-full shrink cursor-pointer items-center rounded-lg px-2 text-[0.75rem] leading-5 text-ink-faint tabular-nums outline-none transition-colors hover:bg-surface-active hover:text-ink-muted focus-visible:bg-surface-active focus-visible:text-ink-muted data-[state=delayed-open]:bg-surface-active data-[state=delayed-open]:text-ink-muted"
+                className="inline-flex h-7 min-w-0 max-w-full shrink items-center rounded-lg px-2 text-[0.75rem] leading-5 text-ink-faint tabular-nums outline-none transition-colors hover:bg-surface-active hover:text-ink-muted focus-visible:bg-surface-active focus-visible:text-ink-muted data-[state=delayed-open]:bg-surface-active data-[state=delayed-open]:text-ink-muted"
                 type="button"
                 aria-label={t('actions.showUsage')}
                 data-testid="response-usage-trigger"

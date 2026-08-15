@@ -29,6 +29,9 @@ const (
 // or LLM message representations.
 type HistoryItem struct {
 	Type HistoryItemType
+	// RunID is the durable run-entry identity shared with local diagnostics.
+	// It is populated for HistoryRun when the run has been persisted.
+	RunID string
 	// MessageID is the durable transcript entry ID for persisted user and
 	// assistant messages. Live messages remain empty until they are checkpointed.
 	MessageID string
@@ -139,14 +142,16 @@ func projectEntryHistory(entries []transcript.Entry, outcomes map[string]agent.T
 				pending = nil
 				if entry.Run != nil {
 					items = append(items, HistoryItem{
-						Type: HistoryRun, StartedAt: entry.Run.StartedAt, CompletedAt: entry.Run.CompletedAt,
+						Type: HistoryRun, RunID: entry.ID,
+						StartedAt: entry.Run.StartedAt, CompletedAt: entry.Run.CompletedAt,
 					})
 				}
 				continue
 			}
 			flushMessages(pending[:first])
 			items = append(items, projectRecordedRunHistory(
-				entryHistoryMessages(pending[first:]), outcomes, entry.Run.StartedAt, entry.Run.CompletedAt,
+				entryHistoryMessages(pending[first:]), outcomes, entry.ID,
+				entry.Run.StartedAt, entry.Run.CompletedAt,
 			)...)
 			pending = nil
 		}
@@ -161,12 +166,13 @@ func projectRunHistory(
 	startedAt time.Time,
 	completedAt time.Time,
 ) []HistoryItem {
-	return projectRecordedRunHistory(liveHistoryMessages(messages), outcomes, startedAt, completedAt)
+	return projectRecordedRunHistory(liveHistoryMessages(messages), outcomes, "", startedAt, completedAt)
 }
 
 func projectRecordedRunHistory(
 	messages []historyMessage,
 	outcomes map[string]agent.ToolOutcome,
+	runID string,
 	startedAt time.Time,
 	completedAt time.Time,
 ) []HistoryItem {
@@ -179,7 +185,7 @@ func projectRecordedRunHistory(
 			}
 		}
 	}
-	run := HistoryItem{Type: HistoryRun, StartedAt: startedAt, CompletedAt: completedAt}
+	run := HistoryItem{Type: HistoryRun, RunID: runID, StartedAt: startedAt, CompletedAt: completedAt}
 	if len(projected) > 0 && projected[0].Type == HistoryUser {
 		items := make([]HistoryItem, 0, len(projected)+1)
 		items = append(items, projected[0], run)
@@ -325,7 +331,7 @@ func assistantHistory(message *llm.AssistantMessage) []HistoryItem {
 	if message == nil {
 		return nil
 	}
-	if message.StopReason == llm.StopReasonError || message.StopReason == llm.StopReasonAborted {
+	if message.StopReason == llm.StopReasonError {
 		text, _ := eventAssistantText(agent.FromLLM(message))
 		return []HistoryItem{{
 			Type:          HistoryAssistant,
@@ -376,7 +382,7 @@ func assistantHistory(message *llm.AssistantMessage) []HistoryItem {
 		case *llm.ToolCall:
 			flushText()
 			flushThinking()
-			if block != nil {
+			if block != nil && message.StopReason != llm.StopReasonAborted {
 				items = append(items, HistoryItem{
 					Type:       HistoryToolCall,
 					ToolCallID: block.ID,
@@ -388,6 +394,17 @@ func assistantHistory(message *llm.AssistantMessage) []HistoryItem {
 	}
 	flushText()
 	flushThinking()
+	if message.StopReason == llm.StopReasonAborted {
+		// A terminal marker completes restored thinking without presenting an
+		// unfinished response as final. Tool calls in an aborted provider payload
+		// were never handed to the executor and are intentionally omitted above.
+		if len(items) == 0 || items[len(items)-1].Type != HistoryAssistant {
+			items = append(items, HistoryItem{
+				Type: HistoryAssistant, Provider: message.Provider, Model: message.Model,
+			})
+		}
+		return items
+	}
 	if message.StopReason != llm.StopReasonToolUse {
 		for index := len(items) - 1; index >= 0; index-- {
 			if items[index].Type == HistoryAssistant {

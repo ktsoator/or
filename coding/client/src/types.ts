@@ -133,6 +133,8 @@ export type UserItem = {
 export type AssistantItem = {
   kind: 'assistant'
   id: string
+  runId?: string
+  providerRequestId?: string
   messageID?: string
   markdown: string
   open: boolean
@@ -146,13 +148,21 @@ export type AssistantItem = {
 export type RunItem = {
   kind: 'run'
   id: string
+  runId?: string
   startedAt: string
   durationMs?: number
 }
-export type ThinkingItem = { kind: 'thinking'; id: string; text: string; streaming: boolean }
+export type ThinkingItem = {
+  kind: 'thinking'
+  id: string
+  providerRequestId?: string
+  text: string
+  streaming: boolean
+}
 export type ToolItem = {
   kind: 'tool'
   id: string
+  providerRequestId?: string
   name: string
   args: unknown
   status: 'preparing' | 'running' | 'complete' | 'error'

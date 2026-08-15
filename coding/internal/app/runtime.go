@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"path/filepath"
 	"sync"
@@ -9,7 +10,9 @@ import (
 	"github.com/ktsoator/or/coding/internal/conversation"
 	"github.com/ktsoator/or/coding/internal/httpapi"
 	"github.com/ktsoator/or/coding/internal/mcp"
+	"github.com/ktsoator/or/coding/internal/observability"
 	"github.com/ktsoator/or/coding/internal/provider"
+	"github.com/ktsoator/or/coding/internal/requestsnapshot"
 	"github.com/ktsoator/or/coding/internal/usage"
 	"github.com/ktsoator/or/coding/internal/workspace"
 	"github.com/ktsoator/or/llm"
@@ -21,6 +24,7 @@ type Runtime struct {
 	conversations *conversation.Manager
 	mcp           *mcp.Manager
 	ledger        *usage.Store
+	recorder      observability.Recorder
 	cancel        context.CancelFunc
 	closeOnce     sync.Once
 }
@@ -56,15 +60,45 @@ func New(ctx context.Context, dataDir string) (*Runtime, error) {
 	for _, registered := range workspaces.List() {
 		mcp.Warm(registered.Path)
 	}
+	observabilityLogPath := filepath.Join(dataDir, "logs", "observability.jsonl")
+	recorder, recorderErr := observability.NewJSONL(
+		observabilityLogPath,
+		observability.FileOptions{},
+	)
+	var eventRecorder observability.Recorder = recorder
+	var eventCleaner observability.SessionCleaner = recorder
+	if recorderErr != nil {
+		// Diagnostics are best-effort: an unavailable log path must not prevent
+		// the coding runtime from starting.
+		discard := observability.DiscardRecorder{}
+		eventRecorder = discard
+		eventCleaner = discard
+	}
+	requestSnapshots, snapshotErr := requestsnapshot.NewFileStore(
+		filepath.Join(dataDir, "diagnostics", "requests"),
+		requestsnapshot.Options{},
+	)
+	var snapshotWriter requestsnapshot.Writer = requestSnapshots
+	if snapshotErr != nil {
+		// Request inspection is also best-effort and cannot block the runtime.
+		snapshotWriter = requestsnapshot.DiscardWriter{}
+	}
 
 	manager, err := conversation.NewManager(ctx, conversation.Options{
-		DataDir:      dataDir,
-		Usage:        ledger,
-		Workspaces:   workspaces,
-		NewTransport: transports.New,
-		MCP:          mcp,
+		DataDir:          dataDir,
+		Usage:            ledger,
+		Workspaces:       workspaces,
+		NewTransport:     transports.New,
+		MCP:              mcp,
+		Recorder:         eventRecorder,
+		RequestSnapshots: snapshotWriter,
+		SessionData: diagnosticSessionCleaner{
+			observability: eventCleaner,
+			requests:      snapshotCleaner(requestSnapshots),
+		},
 	})
 	if err != nil {
+		_ = eventRecorder.Close()
 		mcp.Close()
 		_ = ledger.Close()
 		cancel()
@@ -72,22 +106,46 @@ func New(ctx context.Context, dataDir string) (*Runtime, error) {
 	}
 
 	server := httpapi.NewServer(httpapi.Options{
-		Conversations: manager,
-		Transports:    transports,
-		Ledger:        ledger,
-		Workspaces:    workspaces,
-		Registry:      registry,
-		Providers:     providers,
-		ProviderTests: providerTests,
-		MCP:           mcp,
+		Conversations:        manager,
+		Transports:           transports,
+		Ledger:               ledger,
+		Workspaces:           workspaces,
+		Registry:             registry,
+		Providers:            providers,
+		ProviderTests:        providerTests,
+		MCP:                  mcp,
+		ObservabilityLogPath: observabilityLogPath,
+		RequestSnapshots:     requestSnapshots,
 	})
-	return &Runtime{
+	runtime := &Runtime{
 		handler:       server.Handler(),
 		conversations: manager,
 		mcp:           mcp,
 		ledger:        ledger,
+		recorder:      eventRecorder,
 		cancel:        cancel,
-	}, nil
+	}
+	eventRecorder.Record(observability.Event{Name: observability.ApplicationStarted})
+	return runtime, nil
+}
+
+type diagnosticSessionCleaner struct {
+	observability observability.SessionCleaner
+	requests      requestsnapshot.SessionCleaner
+}
+
+func (cleaner diagnosticSessionCleaner) DeleteSession(sessionID string) error {
+	return errors.Join(
+		cleaner.observability.DeleteSession(sessionID),
+		cleaner.requests.DeleteSession(sessionID),
+	)
+}
+
+func snapshotCleaner(store *requestsnapshot.FileStore) requestsnapshot.SessionCleaner {
+	if store == nil {
+		return requestsnapshot.DiscardWriter{}
+	}
+	return store
 }
 
 // Handler returns the complete desktop /api HTTP surface.
@@ -100,5 +158,7 @@ func (r *Runtime) Close() {
 		r.conversations.Close()
 		r.mcp.Close()
 		_ = r.ledger.Close()
+		r.recorder.Record(observability.Event{Name: observability.ApplicationStopped})
+		_ = r.recorder.Close()
 	})
 }

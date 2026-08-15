@@ -1,4 +1,4 @@
-import { type ClipboardEvent, type FormEvent, type KeyboardEvent, useEffect, useState } from 'react'
+import { memo, type ClipboardEvent, type FormEvent, type KeyboardEvent, useEffect, useState } from 'react'
 import {
   BookOpen,
   CircleAlert,
@@ -62,7 +62,7 @@ export function AutoCompactionStatus() {
   )
 }
 
-export function ThreadItem({
+export const ThreadItem = memo(function ThreadItem({
   item,
   cwd,
   highlighted = false,
@@ -375,7 +375,7 @@ export function ThreadItem({
         </div>
       )
   }
-}
+})
 
 function MessageActionButton({
   icon: Icon,

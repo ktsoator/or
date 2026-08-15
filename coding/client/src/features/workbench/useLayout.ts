@@ -248,12 +248,12 @@ export function useWorkbenchLayout({
 
   const updateResize = useCallback((
     currentResize: { startX: number; startWidth: number },
-    event: ReactPointerEvent<HTMLDivElement>,
+    clientX: number,
   ) => {
     setUserWidth(resizedWorkbenchWidth(
       currentResize.startWidth,
       currentResize.startX,
-      event.clientX,
+      clientX,
       getLayoutWidth(),
     ))
   }, [getLayoutWidth, setUserWidth])

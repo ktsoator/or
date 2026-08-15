@@ -26,6 +26,9 @@ func (manager *Manager) PrepareStep(input llm.Context) PreparedStep {
 
 	messages := make([]llm.Message, 0, len(prefix)+len(input.Messages)+len(suffix))
 	for _, attachment := range prefix {
+		prepared.Attachments = append(prepared.Attachments, ProjectedAttachment{
+			Attachment: attachment.Attachment, MessageIndex: len(messages),
+		})
 		messages = append(messages, llm.UserText(attachment.Rendered))
 		if !attachment.committed {
 			prepared.Pending = append(prepared.Pending, attachment.Attachment)
@@ -33,6 +36,9 @@ func (manager *Manager) PrepareStep(input llm.Context) PreparedStep {
 	}
 	messages = append(messages, input.Messages...)
 	for _, attachment := range suffix {
+		prepared.Attachments = append(prepared.Attachments, ProjectedAttachment{
+			Attachment: attachment.Attachment, MessageIndex: len(messages),
+		})
 		messages = append(messages, llm.UserText(attachment.Rendered))
 		if !attachment.committed {
 			prepared.Pending = append(prepared.Pending, attachment.Attachment)
