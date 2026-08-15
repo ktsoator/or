@@ -631,6 +631,9 @@ async function openDesktopClient(
           updatedAt: '2026-07-22T00:00:05Z',
           durationMs: 5000,
           timeToFirstOutputMs: 1200,
+          inputTokens: 260,
+          outputTokens: 80,
+          cacheReadTokens: 80,
           totalTokens: 420,
           retries: 0,
           contextRecoveries: 0,
@@ -673,7 +676,7 @@ async function openDesktopClient(
                   role: 'assistant',
                   content: [
                     { type: 'thinking', thinking: 'Prepare the release note before writing it.' },
-                    { type: 'text', text: 'I will write the release note.' },
+                    { type: 'text', text: '## Release note\n\nI will write the **release note**.\n\n- Keep it concise' },
                     { type: 'toolCall', toolCallId: 'call-1', toolName: 'write', arguments: { path: 'RELEASE.md' } },
                   ],
                 },
@@ -758,6 +761,9 @@ async function openDesktopClient(
           startedAt: '2026-07-22T00:01:00Z',
           updatedAt: '2026-07-22T00:01:02Z',
           durationMs: 2000,
+          inputTokens: 50,
+          outputTokens: 30,
+          cacheReadTokens: 40,
           totalTokens: 120,
           retries: 0,
           contextRecoveries: 0,
@@ -1096,6 +1102,17 @@ test('conversation diagnostics uses one session-scoped header entry', async ({ p
   const secondRequestBar = page.getByRole('button', { name: 'Assistant · Request #2', exact: true })
   await expect(firstRequestBar).toBeVisible()
   await expect(secondRequestBar).toBeVisible()
+  await expect(firstRequestBar).toHaveAttribute('data-model-timing', 'true')
+  await expect(firstRequestBar).toHaveAttribute(
+    'title',
+    'Assistant · Request #1\nTTFT 900 ms · Generation 1.10 s · Total 2.00 s',
+  )
+  await expect(firstRequestBar.locator('[data-timeline-segment="ttft"]')).toHaveAttribute('style', 'width: 45%;')
+  await expect(firstRequestBar.locator('[data-timeline-segment="generation"]')).toHaveAttribute('style', 'width: 55%;')
+  const markdownResponseRow = page.locator('[data-trajectory-item-id="request:request-1:response"]')
+  await expect(markdownResponseRow).toContainText('Release note I will write the release note. Keep it concise')
+  await expect(markdownResponseRow).not.toContainText('##')
+  await expect(markdownResponseRow).not.toContainText('**')
   await expect(page.getByRole('button', { name: 'System · Initial system prompt', exact: true })).toBeVisible()
   await expect(page.getByText('Initial system prompt', { exact: true })).toHaveCount(1)
   await expect(page.getByRole('button', { name: 'Context · Runtime context', exact: true })).toBeVisible()
@@ -1110,6 +1127,12 @@ test('conversation diagnostics uses one session-scoped header entry', async ({ p
   await systemRow.click()
   const systemInspector = page.getByRole('complementary', { name: 'System · Initial system prompt' })
   await expect(systemInspector.getByText('You are a coding agent.', { exact: true })).toBeVisible()
+  const initialTools = systemInspector.getByRole('tab', { name: 'Tools 1', exact: true })
+  await expect(initialTools).toHaveAttribute('aria-selected', 'false')
+  await initialTools.click()
+  await expect(initialTools).toHaveAttribute('aria-selected', 'true')
+  await expect(systemInspector.getByText('write', { exact: true })).toBeVisible()
+  await expect(systemInspector.getByText('Write one file', { exact: true }).first()).toBeVisible()
   const runtimeContextRow = page.getByRole('button', { name: /Context Runtime context.*Current runtime context/ })
   await runtimeContextRow.click()
   const contextInspector = page.getByRole('complementary', { name: 'Context · Runtime context' })
@@ -1118,6 +1141,13 @@ test('conversation diagnostics uses one session-scoped header entry', async ({ p
   await expect(thinkingOnlyRow).toBeVisible()
   await expect(thinkingOnlyRow.getByText('Thinking ·', { exact: true })).toBeVisible()
   await expect(thinkingOnlyRow).not.toContainText('bash')
+  await thinkingOnlyRow.click()
+  const thinkingOnlyInspector = page.getByRole('complementary', { name: 'Assistant · Request #2' })
+  const responseToolCalls = thinkingOnlyInspector.getByTestId('diagnostics-response-tool-calls')
+  await expect(responseToolCalls).toContainText('Tool calls')
+  await expect(responseToolCalls.getByText('bash', { exact: true })).toBeVisible()
+  await expect(responseToolCalls).toContainText('{"command":"git status"}')
+  await expect(responseToolCalls).toContainText('Success · 100 ms')
   await expect(page.getByText(/Turn \d/)).toHaveCount(0)
   await expect.poll(() => {
     const request = requests.find((candidate) => candidate.path === '/api/diagnostics/trace')
@@ -1125,13 +1155,20 @@ test('conversation diagnostics uses one session-scoped header entry', async ({ p
   }).toBe('test-session')
   await firstRequestBar.click()
   const responseInspector = page.getByRole('complementary', { name: 'Assistant · Request #1' })
+  await expect(responseInspector.getByRole('tab', { name: 'System prompt' })).toHaveCount(0)
+  await expect(responseInspector.getByRole('tab', { name: 'Tools 1' })).toHaveCount(0)
   await expect(responseInspector.getByText('Source', { exact: true })).toBeVisible()
   await expect(responseInspector.getByText('Status', { exact: true })).toBeVisible()
   await expect(responseInspector.getByText('250 tok', { exact: true })).toBeVisible()
   await expect(responseInspector.getByText('250 tok', { exact: true })).toHaveCSS('font-weight', '400')
   await expect(responseInspector.getByText('180 tok', { exact: true })).toBeVisible()
   await expect(responseInspector.getByText('70 tok', { exact: true })).toBeVisible()
+  await expect(responseInspector.getByRole('heading', { name: 'Release note', level: 2 })).toBeVisible()
   await expect(responseInspector.getByText('I will write the release note.')).toBeVisible()
+  await expect(responseInspector.getByText('release note', { exact: true })).toHaveCSS('font-weight', '600')
+  await expect(responseInspector.getByRole('listitem').getByText('Keep it concise')).toBeVisible()
+  await responseInspector.getByRole('tab', { name: 'Content' }).click()
+  await expect(responseInspector.getByRole('heading', { name: 'Release note', level: 2 })).toBeVisible()
   await expect(page.getByText('Created RELEASE.md')).toBeVisible()
   await page.getByRole('button', { name: /write.*Created RELEASE\.md/ }).click()
   await expect(page.getByRole('heading', { name: 'Arguments' })).toBeVisible()
@@ -1159,6 +1196,121 @@ test('conversation diagnostics treats a missing new-session trace as empty', asy
   await expect(page.getByRole('heading', { name: 'No runs recorded' })).toBeVisible()
   await expect(page.getByText('Could not load local diagnostics.')).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Retry' })).toHaveCount(0)
+})
+
+test('conversation diagnostics inspector divider supports pointer and keyboard resizing', async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 })
+  await openDesktopClient(page, { existingSession: true })
+  await page.getByTestId('conversation-diagnostics-button').click()
+
+  const handle = page.getByTestId('diagnostics-inspector-resize-handle')
+  const inspector = page.getByRole('complementary', { name: /Assistant · Request #/ })
+  await expect(handle).toBeVisible()
+  await expect(handle).toHaveAccessibleName('Resize request details')
+  await expect(handle).toHaveAttribute('aria-orientation', 'vertical')
+
+  const [handleBefore, inspectorBefore] = await Promise.all([
+    handle.boundingBox(),
+    inspector.boundingBox(),
+  ])
+  expect(handleBefore).not.toBeNull()
+  expect(inspectorBefore).not.toBeNull()
+
+  const bodyStylesBefore = await page.evaluate(() => ({
+    cursor: document.body.style.cursor,
+    userSelect: document.body.style.userSelect,
+  }))
+  await page.mouse.move(
+    handleBefore!.x + handleBefore!.width / 2,
+    handleBefore!.y + handleBefore!.height / 2,
+  )
+  await page.mouse.down()
+  await expect.poll(() => page.evaluate(() => ({
+    cursor: document.body.style.cursor,
+    userSelect: document.body.style.userSelect,
+  }))).toEqual({ cursor: 'col-resize', userSelect: 'none' })
+  await page.mouse.move(
+    handleBefore!.x + handleBefore!.width / 2 - 64,
+    handleBefore!.y + handleBefore!.height / 2,
+    { steps: 8 },
+  )
+  await page.mouse.up()
+
+  await expect.poll(async () => (await inspector.boundingBox())?.width)
+    .toBeCloseTo(inspectorBefore!.width + 64, 0)
+  await expect.poll(() => page.evaluate(() => ({
+    cursor: document.body.style.cursor,
+    userSelect: document.body.style.userSelect,
+  }))).toEqual(bodyStylesBefore)
+
+  const widthAfterPointer = (await inspector.boundingBox())!.width
+  await handle.focus()
+  await handle.press('ArrowRight')
+  await expect.poll(async () => (await inspector.boundingBox())?.width)
+    .toBeCloseTo(widthAfterPointer - 16, 0)
+
+  const rememberedWidth = (await inspector.boundingBox())!.width
+  await page.getByTestId('conversation-diagnostics-button').click()
+  await page.getByTestId('conversation-diagnostics-button').click()
+  await expect.poll(async () => (await inspector.boundingBox())?.width)
+    .toBeCloseTo(rememberedWidth, 0)
+
+  await page.setViewportSize({ width: 700, height: 820 })
+  await expect(handle).toBeHidden()
+})
+
+test('conversation diagnostics overview surfaces useful signals and opens requests', async ({ page }) => {
+  await openDesktopClient(page, { existingSession: true })
+
+  await page.getByTestId('conversation-diagnostics-button').click()
+  await page.getByTestId('diagnostics-toolbar').getByRole('tab', { name: 'Overview' }).click()
+
+  const summary = page.locator('section[aria-label="Conversation performance"]')
+  await expect(summary).toBeVisible()
+  await expect(summary.locator('[data-overview-metric="duration"]')).toContainText('7.00 s')
+  await expect(summary.locator('[data-overview-metric="requests"]')).toContainText('3')
+  await expect(summary.locator('[data-overview-metric="first-token"]')).toContainText('1.05 s')
+  await expect(summary.locator('[data-overview-metric="tokens"]')).toContainText('540')
+  await expect(summary.locator('[data-overview-metric="tokens"]')).toContainText('120 cache read')
+  await expect(summary.locator('[data-overview-metric="cost"]')).toContainText('Not reported')
+  await expect(summary.locator('[data-overview-metric="tools"]')).toContainText('2')
+
+  const breakdown = page.getByTestId('diagnostics-duration-breakdown')
+  await expect(breakdown).toContainText('Model requests')
+  await expect(breakdown).toContainText('6.70 s')
+  await expect(breakdown).toContainText('Tool execution')
+  await expect(breakdown).toContainText('300 ms')
+  await expect(page.getByText('Longest request', { exact: true })).toBeVisible()
+  await expect(page.getByText('Slowest first token', { exact: true })).toBeVisible()
+  await expect(page.getByText('Reliability', { exact: true })).toBeVisible()
+  await expect(page.getByTestId('diagnostics-key-signals')).toContainText('40% of model time')
+  await expect(page.getByTestId('diagnostics-key-signals')).toContainText('1.1× median')
+  await expect(page.getByTestId('diagnostics-key-signals')).toContainText('46% of total usage')
+
+  await page.setViewportSize({ width: 2000, height: 1000 })
+  const mainBox = await page.getByRole('main').boundingBox()
+  const summaryBox = await summary.boundingBox()
+  const summaryGridBox = await page.getByTestId('diagnostics-overview-summary-grid').boundingBox()
+  const keySignalsBox = await page.getByTestId('diagnostics-key-signals').boundingBox()
+  const overviewScrollBox = await page.getByTestId('diagnostics-overview-scroll').boundingBox()
+  expect(mainBox).not.toBeNull()
+  expect(summaryBox).not.toBeNull()
+  expect(summaryGridBox).not.toBeNull()
+  expect(keySignalsBox).not.toBeNull()
+  expect(overviewScrollBox).not.toBeNull()
+  expect((mainBox?.x ?? 0) + (mainBox?.width ?? 0) - ((summaryGridBox?.x ?? 0) + (summaryGridBox?.width ?? 0)))
+    .toBeLessThanOrEqual(32)
+  expect(keySignalsBox?.x ?? 0).toBeGreaterThan((summaryBox?.x ?? 0) + (summaryBox?.width ?? 0))
+  expect((mainBox?.x ?? 0) + (mainBox?.width ?? 0) - ((overviewScrollBox?.x ?? 0) + (overviewScrollBox?.width ?? 0)))
+    .toBeLessThanOrEqual(1)
+  await expect(page.getByTestId('diagnostics-request-table')).toHaveCount(0)
+
+  await page.setViewportSize({ width: 700, height: 820 })
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+
+  await page.getByRole('button', { name: /Slowest first token: Request #2/ }).click()
+  await expect(page.getByTestId('diagnostics-toolbar').getByRole('tab', { name: 'Trajectory' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('complementary', { name: 'Assistant · Request #2' })).toBeVisible()
 })
 
 test('conversation diagnostics loads earlier tasks without moving the visible record', async ({ page }) => {
