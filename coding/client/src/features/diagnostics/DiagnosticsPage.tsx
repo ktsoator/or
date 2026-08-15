@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   ArrowLeft,
   ChevronRight,
@@ -16,6 +16,9 @@ import type { Item } from '@/types'
 import {
   DiagnosticTraceError,
   fetchDiagnosticTrace,
+  mergeDiagnosticTracePage,
+  mergeDiagnosticTraceRun,
+  mergeLatestDiagnosticTrace,
   type DiagnosticEvent,
   type RequestSnapshotAttachment,
   type RequestSnapshotContent,
@@ -40,6 +43,11 @@ export type DiagnosticsSessionState = {
 }
 
 type DiagnosticsStatePatch = Partial<DiagnosticsSessionState>
+
+type TraceRequestSlot = {
+  revision: number
+  controller?: AbortController
+}
 
 export function DiagnosticsPage({
   onBack,
@@ -67,74 +75,134 @@ export function DiagnosticsPage({
   const { t } = useI18n()
   const [bundle, setBundle] = useState<TraceBundle>()
   const [loading, setLoading] = useState(true)
+  const [loadingEarlier, setLoadingEarlier] = useState(false)
+  const [earlierError, setEarlierError] = useState(false)
   const [error, setError] = useState(false)
   const [view, setView] = useState<TraceView>(initialState?.view ?? 'trajectory')
-  const requestRef = useRef<{ revision: number; controller?: AbortController }>({ revision: 0 })
+  const latestRequestRef = useRef<TraceRequestSlot>({ revision: 0 })
+  const runRequestRef = useRef<TraceRequestSlot>({ revision: 0 })
+  const earlierRequestRef = useRef<TraceRequestSlot>({ revision: 0 })
   const refreshKey = liveTraceRefreshKey(liveItems, running)
+  const liveRunID = useMemo(() => {
+    const run = liveItems?.findLast((item) => item.kind === 'run')
+    return run?.kind === 'run' ? run.runId ?? run.id : undefined
+  }, [liveItems])
+  const previousRefreshKeyRef = useRef(refreshKey)
 
   const cancelLoad = useCallback(() => {
-    requestRef.current.revision += 1
-    requestRef.current.controller?.abort()
-    requestRef.current.controller = undefined
+    cancelTraceRequest(latestRequestRef.current)
+    cancelTraceRequest(runRequestRef.current)
+    cancelTraceRequest(earlierRequestRef.current)
   }, [])
 
-  const load = useCallback(async (quiet = false) => {
-    const revision = requestRef.current.revision + 1
-    requestRef.current.revision = revision
-    requestRef.current.controller?.abort()
-    const controller = new AbortController()
-    requestRef.current.controller = controller
+  const loadLatest = useCallback(async (quiet = false) => {
+    const requestState = startTraceRequest(latestRequestRef.current)
     if (!quiet) setLoading(true)
     setError(false)
     if (!sessionID) {
-      controller.abort()
-      if (requestRef.current.controller === controller) {
-        requestRef.current.controller = undefined
-      }
+      cancelTraceRequest(latestRequestRef.current)
       setError(true)
       setLoading(false)
       return
     }
-    const isCurrent = () =>
-      requestRef.current.revision === revision &&
-      requestRef.current.controller === controller &&
-      !controller.signal.aborted
     try {
-      const nextBundle = await fetchDiagnosticTrace(sessionID, initialRunID, controller.signal)
-      if (isCurrent()) setBundle(nextBundle)
+      const nextBundle = await fetchDiagnosticTrace(sessionID, {
+        ...(initialRunID ? { runID: initialRunID } : { limit: 12 }),
+        signal: requestState.controller.signal,
+      })
+      if (isCurrentTraceRequest(latestRequestRef.current, requestState)) {
+        setBundle((current) => initialRunID
+          ? nextBundle
+          : mergeLatestDiagnosticTrace(current, nextBundle))
+      }
     } catch (cause) {
-      if (!isCurrent() || (cause instanceof DOMException && cause.name === 'AbortError')) return
+      if (!isCurrentTraceRequest(latestRequestRef.current, requestState) || isAbortError(cause)) return
       if (cause instanceof DiagnosticTraceError && cause.status === 404) {
         setBundle((current) => quiet && current ? current : emptyTraceBundle(sessionID, initialRunID))
       } else {
         setError(true)
       }
     } finally {
-      if (isCurrent()) {
-        requestRef.current.controller = undefined
+      if (isCurrentTraceRequest(latestRequestRef.current, requestState)) {
+        latestRequestRef.current.controller = undefined
         setLoading(false)
       }
     }
   }, [initialRunID, sessionID])
 
+  const loadRun = useCallback(async (runID: string) => {
+    if (!sessionID) return
+    const requestState = startTraceRequest(runRequestRef.current)
+    try {
+      const runBundle = await fetchDiagnosticTrace(sessionID, {
+        runID,
+        signal: requestState.controller.signal,
+      })
+      if (isCurrentTraceRequest(runRequestRef.current, requestState)) {
+        setBundle((current) => mergeDiagnosticTraceRun(current, runBundle))
+      }
+    } catch (cause) {
+      if (!isCurrentTraceRequest(runRequestRef.current, requestState) || isAbortError(cause)) return
+      if (!(cause instanceof DiagnosticTraceError && cause.status === 404)) setError(true)
+    } finally {
+      if (isCurrentTraceRequest(runRequestRef.current, requestState)) {
+        runRequestRef.current.controller = undefined
+      }
+    }
+  }, [sessionID])
+
+  const loadEarlier = useCallback(async (): Promise<boolean> => {
+    const beforeCursor = bundle?.page.beforeCursor
+    if (!sessionID || !bundle?.page.hasMore || !beforeCursor) return false
+    const requestState = startTraceRequest(earlierRequestRef.current)
+    setLoadingEarlier(true)
+    setEarlierError(false)
+    try {
+      const olderPage = await fetchDiagnosticTrace(sessionID, {
+        beforeCursor,
+        limit: 12,
+        signal: requestState.controller.signal,
+      })
+      if (!isCurrentTraceRequest(earlierRequestRef.current, requestState)) return false
+      setBundle((current) => current ? mergeDiagnosticTracePage(current, olderPage) : olderPage)
+      return true
+    } catch (cause) {
+      if (!isCurrentTraceRequest(earlierRequestRef.current, requestState) || isAbortError(cause)) return false
+      setEarlierError(true)
+      return false
+    } finally {
+      if (isCurrentTraceRequest(earlierRequestRef.current, requestState)) {
+        earlierRequestRef.current.controller = undefined
+        setLoadingEarlier(false)
+      }
+    }
+  }, [bundle?.page.beforeCursor, bundle?.page.hasMore, sessionID])
+
   useEffect(() => {
     setBundle(undefined)
-    void load()
+    setLoadingEarlier(false)
+    setEarlierError(false)
+    void loadLatest()
     return cancelLoad
-  }, [cancelLoad, load])
+  }, [cancelLoad, loadLatest])
 
   useEffect(() => {
     if (!running) return
-    const interval = window.setInterval(() => void load(true), 1500)
+    const interval = window.setInterval(() => {
+      if (liveRunID) void loadRun(liveRunID)
+      else void loadLatest(true)
+    }, 15_000)
     return () => { window.clearInterval(interval) }
-  }, [load, running])
+  }, [liveRunID, loadLatest, loadRun, running])
 
   const hasLiveItems = Boolean(liveItems?.length)
   useEffect(() => {
-    if (!sessionID || !hasLiveItems) return
-    const timeout = window.setTimeout(() => void load(true), 250)
+    const previousRefreshKey = previousRefreshKeyRef.current
+    previousRefreshKeyRef.current = refreshKey
+    if (previousRefreshKey === refreshKey || !sessionID || !hasLiveItems || !liveRunID) return
+    const timeout = window.setTimeout(() => void loadRun(liveRunID), 250)
     return () => { window.clearTimeout(timeout) }
-  }, [hasLiveItems, load, refreshKey, sessionID])
+  }, [hasLiveItems, liveRunID, loadRun, refreshKey, sessionID])
 
   const displayBundle = useMemo(
     () => mergeLiveTraceBundle(bundle, sessionID, liveItems, running),
@@ -160,7 +228,7 @@ export function DiagnosticsPage({
               </>
             )}
           </div>
-          <RefreshButton loading={loading} onRefresh={() => void load()} />
+          <RefreshButton loading={loading} onRefresh={() => void loadLatest()} />
         </header>
       ) : (
         <header
@@ -192,7 +260,7 @@ export function DiagnosticsPage({
               </div>
             )}
           </div>
-          <RefreshButton loading={loading} onRefresh={() => void load()} />
+          <RefreshButton loading={loading} onRefresh={() => void loadLatest()} />
         </header>
       )}
 
@@ -209,7 +277,7 @@ export function DiagnosticsPage({
             <button
               className="h-8 cursor-pointer rounded-[8px] border border-edge px-3 text-[0.8125rem] text-ink-soft hover:bg-canvas-sunken"
               type="button"
-              onClick={() => void load()}
+              onClick={() => void loadLatest()}
             >
               {t('diagnostics.retry')}
             </button>
@@ -221,6 +289,10 @@ export function DiagnosticsPage({
             onViewChange={changeView}
             initialState={initialState}
             onStateChange={onStateChange}
+            hasEarlier={Boolean(displayBundle.page.hasMore && displayBundle.page.beforeCursor)}
+            loadingEarlier={loadingEarlier}
+            earlierError={earlierError}
+            onLoadEarlier={loadEarlier}
           />
         ) : (
           <div className="flex h-full flex-col items-center justify-center text-center">
@@ -268,7 +340,35 @@ function emptyTraceBundle(sessionID: string, selectedTaskID?: string): TraceBund
     sessionId: sessionID,
     selectedTaskId: selectedTaskID ?? '',
     tasks: [],
+    page: { hasMore: false },
   }
+}
+
+function startTraceRequest(slot: TraceRequestSlot): { revision: number; controller: AbortController } {
+  slot.revision += 1
+  slot.controller?.abort()
+  const controller = new AbortController()
+  slot.controller = controller
+  return { revision: slot.revision, controller }
+}
+
+function cancelTraceRequest(slot: TraceRequestSlot) {
+  slot.revision += 1
+  slot.controller?.abort()
+  slot.controller = undefined
+}
+
+function isCurrentTraceRequest(
+  slot: TraceRequestSlot,
+  request: { revision: number; controller: AbortController },
+): boolean {
+  return slot.revision === request.revision &&
+    slot.controller === request.controller &&
+    !request.controller.signal.aborted
+}
+
+function isAbortError(cause: unknown): boolean {
+  return cause instanceof DOMException && cause.name === 'AbortError'
 }
 
 type TrajectoryKind = 'system' | 'user' | 'context' | 'assistant' | 'tool'
@@ -294,12 +394,20 @@ function ConversationTrace({
   onViewChange,
   initialState,
   onStateChange,
+  hasEarlier,
+  loadingEarlier,
+  earlierError,
+  onLoadEarlier,
 }: {
   bundle: TraceBundle
   view: TraceView
   onViewChange: (view: TraceView) => void
   initialState?: DiagnosticsSessionState
   onStateChange?: (patch: DiagnosticsStatePatch) => void
+  hasEarlier: boolean
+  loadingEarlier: boolean
+  earlierError: boolean
+  onLoadEarlier: () => Promise<boolean>
 }) {
   const { t } = useI18n()
   const rememberedStateRef = useRef<DiagnosticsSessionState>(initialState ?? {})
@@ -341,10 +449,17 @@ function ConversationTrace({
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden px-7 pb-3 max-lg:px-5 max-md:px-3" aria-label={t('diagnostics.runDetail')}>
       {view === 'overview' ? (
-        <ConversationOverview bundle={bundle} onOpenRequest={(requestID) => {
-          selectRequest(requestID)
-          onViewChange('trajectory')
-        }} />
+        <ConversationOverview
+          bundle={bundle}
+          hasEarlier={hasEarlier}
+          loadingEarlier={loadingEarlier}
+          earlierError={earlierError}
+          onLoadEarlier={onLoadEarlier}
+          onOpenRequest={(requestID) => {
+            selectRequest(requestID)
+            onViewChange('trajectory')
+          }}
+        />
       ) : items.length === 0 ? (
         <TraceEmpty title={t('diagnostics.noProviderRequests')} description={t('diagnostics.noProviderRequestsDescription')} />
       ) : (
@@ -370,6 +485,10 @@ function ConversationTrace({
               initialScrollTop={rememberedState.ledgerScrollTop}
               onQueryChange={(query) => rememberState({ query })}
               onScrollTopChange={(ledgerScrollTop) => rememberState({ ledgerScrollTop })}
+              hasEarlier={hasEarlier}
+              loadingEarlier={loadingEarlier}
+              earlierError={earlierError}
+              onLoadEarlier={onLoadEarlier}
             />
             {inspectorOpen && selectedItem && (
               <TrajectoryInspector
@@ -474,6 +593,10 @@ function TrajectoryLedger({
   initialScrollTop = 0,
   onQueryChange,
   onScrollTopChange,
+  hasEarlier,
+  loadingEarlier,
+  earlierError,
+  onLoadEarlier,
 }: {
   items: TrajectoryItem[]
   selectedItemID: string
@@ -482,13 +605,30 @@ function TrajectoryLedger({
   initialScrollTop?: number
   onQueryChange?: (query: string) => void
   onScrollTopChange?: (scrollTop: number) => void
+  hasEarlier: boolean
+  loadingEarlier: boolean
+  earlierError: boolean
+  onLoadEarlier: () => Promise<boolean>
 }) {
   const { t } = useI18n()
   const [query, setQuery] = useState(initialQuery)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const prependAnchorRef = useRef<{ itemID: string; offset: number } | undefined>(undefined)
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = initialScrollTop
   }, [initialScrollTop])
+  useLayoutEffect(() => {
+    const anchor = prependAnchorRef.current
+    const scrollArea = scrollRef.current
+    if (!anchor || !scrollArea || loadingEarlier) return
+    const row = [...scrollArea.querySelectorAll<HTMLElement>('[data-trajectory-item-id]')]
+      .find((candidate) => candidate.dataset.trajectoryItemId === anchor.itemID)
+    if (row) {
+      const nextOffset = row.getBoundingClientRect().top - scrollArea.getBoundingClientRect().top
+      scrollArea.scrollTop += nextOffset - anchor.offset
+    }
+    prependAnchorRef.current = undefined
+  }, [items, loadingEarlier])
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const filtered = normalizedQuery
     ? items.filter((item) => trajectorySearchText(item).toLocaleLowerCase().includes(normalizedQuery))
@@ -517,6 +657,29 @@ function TrajectoryLedger({
         data-testid="diagnostics-ledger-scroll"
         onScroll={(event) => onScrollTopChange?.(event.currentTarget.scrollTop)}
       >
+        {hasEarlier && (
+          <LoadEarlierControl
+            loading={loadingEarlier}
+            error={earlierError}
+            onLoad={() => {
+              const scrollArea = scrollRef.current
+              if (scrollArea) {
+                const scrollTop = scrollArea.getBoundingClientRect().top
+                const row = [...scrollArea.querySelectorAll<HTMLElement>('[data-trajectory-item-id]')]
+                  .find((candidate) => candidate.getBoundingClientRect().bottom > scrollTop)
+                if (row?.dataset.trajectoryItemId) {
+                  prependAnchorRef.current = {
+                    itemID: row.dataset.trajectoryItemId,
+                    offset: row.getBoundingClientRect().top - scrollTop,
+                  }
+                }
+              }
+              void onLoadEarlier().then((loaded) => {
+                if (!loaded) prependAnchorRef.current = undefined
+              })
+            }}
+          />
+        )}
         {filtered.length === 0 ? (
           <TraceEmpty title={t('diagnostics.noSearchResults')} description={t('diagnostics.searchInput')} />
         ) : filtered.map((item) => (
@@ -557,6 +720,7 @@ function TrajectoryRow({
       )}
       <button
         id={trajectoryDOMID(item.id)}
+        data-trajectory-item-id={item.id}
         type="button"
         aria-expanded={active}
         className={cn(
@@ -1046,9 +1210,17 @@ function RawValue({ value }: { value: unknown }) {
 function ConversationOverview({
   bundle,
   onOpenRequest,
+  hasEarlier,
+  loadingEarlier,
+  earlierError,
+  onLoadEarlier,
 }: {
   bundle: TraceBundle
   onOpenRequest: (requestID: string) => void
+  hasEarlier: boolean
+  loadingEarlier: boolean
+  earlierError: boolean
+  onLoadEarlier: () => Promise<boolean>
 }) {
   const { t } = useI18n()
   const tasks = bundle.tasks
@@ -1062,6 +1234,15 @@ function ConversationOverview({
   ] as const
   return (
     <div className="code-scroll-area min-h-0 flex-1 overflow-y-auto py-6">
+      {hasEarlier && (
+        <div className="mb-5 max-w-[58rem]">
+          <LoadEarlierControl
+            loading={loadingEarlier}
+            error={earlierError}
+            onLoad={() => { void onLoadEarlier() }}
+          />
+        </div>
+      )}
       <section className="max-w-[58rem]">
         <h3 className="text-[0.875rem] font-semibold text-ink-soft">{t('diagnostics.durationBreakdown')}</h3>
         <div className="mt-4 space-y-3">
@@ -1093,6 +1274,31 @@ function ConversationOverview({
         </div>
       </section>
       <RawEvents events={tasks.flatMap((task) => task.rawEvents)} omitted={tasks.reduce((total, task) => total + (task.omittedEvents ?? 0), 0)} />
+    </div>
+  )
+}
+
+function LoadEarlierControl({
+  loading,
+  error,
+  onLoad,
+}: {
+  loading: boolean
+  error: boolean
+  onLoad: () => void
+}) {
+  const { t } = useI18n()
+  return (
+    <div className="flex h-8 shrink-0 items-center justify-center bg-canvas">
+      <button
+        type="button"
+        className="flex h-7 cursor-pointer items-center gap-1.5 rounded-[6px] px-2.5 text-[0.75rem] font-normal text-ink-muted outline-none hover:bg-surface-hover hover:text-ink focus-visible:bg-surface-hover focus-visible:text-ink disabled:cursor-wait disabled:opacity-60"
+        disabled={loading}
+        onClick={onLoad}
+      >
+        {loading && <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />}
+        {t(error ? 'diagnostics.retryEarlier' : 'diagnostics.loadEarlier')}
+      </button>
     </div>
   )
 }

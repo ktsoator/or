@@ -173,6 +173,7 @@ async function openDesktopClient(
     diagnosticsTrace?: (
       requestNumber: number,
       sessionID: string,
+      query: URLSearchParams,
     ) => unknown | Promise<unknown>
     diagnosticsStatus?: number
     skills?: Array<{
@@ -621,6 +622,7 @@ async function openDesktopClient(
         generatedAt: '2026-07-22T00:00:05Z',
         sessionId: 'test-session',
         selectedTaskId: 'run-diagnostics',
+        page: { hasMore: false },
         tasks: [{
           id: 'run-diagnostics',
           status: 'completed',
@@ -797,9 +799,11 @@ async function openDesktopClient(
       }
       if (options.diagnosticsTrace) {
         diagnosticTraceRequestCount += 1
+        const query = new URL(request.url()).searchParams
         body = await options.diagnosticsTrace(
           diagnosticTraceRequestCount,
-          new URL(request.url()).searchParams.get('sessionId') ?? '',
+          query.get('sessionId') ?? '',
+          query,
         )
       }
     }
@@ -1157,6 +1161,77 @@ test('conversation diagnostics treats a missing new-session trace as empty', asy
   await expect(page.getByRole('button', { name: 'Retry' })).toHaveCount(0)
 })
 
+test('conversation diagnostics loads earlier tasks without moving the visible record', async ({ page }) => {
+  const task = (group: 'current' | 'older', index: number) => {
+    const hour = group === 'current' ? 12 : 10
+    const startedAt = `2026-07-22T${hour}:${String(index).padStart(2, '0')}:00Z`
+    return {
+      id: `run-${group}-${index}`,
+      status: 'completed',
+      prompt: `${group === 'current' ? 'Current' : 'Older'} task ${index}`,
+      startedAt,
+      updatedAt: startedAt,
+      retries: 0,
+      contextRecoveries: 0,
+      rawEvents: [],
+      requests: [{
+        id: `request-${group}-${index}`,
+        number: 1,
+        status: 'completed',
+        lifecycle: 'complete',
+        startedAt,
+        attempts: [],
+        checkpoints: [],
+        tools: [],
+        snapshotState: 'available',
+        rawEvents: [],
+        input: { messages: [{ role: 'user', content: [{ type: 'text', text: `${group} input ${index}` }] }] },
+        output: {
+          capturedAt: startedAt,
+          message: { role: 'assistant', content: [{ type: 'text', text: `${group} response ${index}` }] },
+        },
+      }],
+    }
+  }
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    diagnosticsTrace: (_requestNumber, sessionID, query) => {
+      const older = query.get('before') === 'older-cursor'
+      return {
+        version: 1,
+        generatedAt: '2026-07-22T13:00:00Z',
+        sessionId: sessionID,
+        selectedTaskId: older ? 'run-older-12' : 'run-current-12',
+        tasks: Array.from({ length: 12 }, (_, index) => task(older ? 'older' : 'current', index + 1)),
+        page: older
+          ? { hasMore: false }
+          : { hasMore: true, beforeCursor: 'older-cursor' },
+      }
+    },
+  })
+
+  await page.getByTestId('conversation-diagnostics-button').click()
+  const loadEarlier = page.getByRole('button', { name: 'Load earlier user tasks' })
+  const currentAnchor = page.locator('[data-trajectory-item-id="task:run-current-1:user"]')
+  await expect(loadEarlier).toBeVisible()
+  await expect(currentAnchor).toBeVisible()
+  const beforeBox = await currentAnchor.boundingBox()
+  expect(beforeBox).not.toBeNull()
+
+  await loadEarlier.click()
+  await expect(page.getByText('Older task 1', { exact: true })).toBeAttached()
+  await expect(loadEarlier).toHaveCount(0)
+  const afterBox = await currentAnchor.boundingBox()
+  expect(afterBox).not.toBeNull()
+  expect(Math.abs((afterBox?.y ?? 0) - (beforeBox?.y ?? 0))).toBeLessThanOrEqual(2)
+
+  const traceRequests = requests.filter((request) => request.path === '/api/diagnostics/trace')
+  expect(new URL(traceRequests[0]!.url).searchParams.get('limit')).toBe('12')
+  const olderRequest = traceRequests.find((request) =>
+    new URL(request.url).searchParams.get('before') === 'older-cursor')
+  expect(olderRequest).toBeDefined()
+})
+
 test('conversation diagnostics preserves state independently for each session', async ({ page }) => {
   const traceForSession = (sessionID: string) => {
     const label = sessionID === 'secondary-session' ? 'Secondary' : 'Primary'
@@ -1289,11 +1364,12 @@ test('conversation diagnostics preserves state independently for each session', 
 })
 
 test('conversation diagnostics ignores an older trace response that finishes last', async ({ page }) => {
-  const trace = (requestID: string, text: string) => ({
+  const trace = (requestID: string, text: string, generatedAt: string) => ({
     version: 1,
-    generatedAt: '2026-07-22T00:03:01Z',
+    generatedAt,
     sessionId: 'test-session',
     selectedTaskId: 'run-race',
+    page: { hasMore: false },
     tasks: [{
       id: 'run-race',
       status: 'running',
@@ -1325,7 +1401,7 @@ test('conversation diagnostics ignores an older trace response that finishes las
       }],
     }],
   })
-  await openDesktopClient(page, {
+  const requests = await openDesktopClient(page, {
     existingSession: true,
     historyRunning: true,
     historyEvents: [
@@ -1337,16 +1413,25 @@ test('conversation diagnostics ignores an older trace response that finishes las
         startedAt: '2026-07-22T00:03:00Z',
       },
     ],
-    diagnosticsTrace: async (requestNumber) => {
-      if (requestNumber === 1) {
-        await new Promise((resolve) => setTimeout(resolve, 600))
-        return trace('request-stale', 'Stale trace response')
+    diagnosticsTrace: async (_requestNumber, _sessionID, query) => {
+      if (query.has('runId')) {
+        return trace('request-current', 'Current trace response', '2026-07-22T00:03:02Z')
       }
-      return trace('request-current', 'Current trace response')
+      await new Promise((resolve) => setTimeout(resolve, 600))
+      return trace('request-stale', 'Stale trace response', '2026-07-22T00:03:01Z')
     },
   })
 
   await page.getByTestId('conversation-diagnostics-button').click()
+  await expect.poll(() => requests.filter((request) =>
+    request.path === '/api/diagnostics/trace').length).toBeGreaterThan(0)
+  await emitSessionEvent(page, 'test-session', {
+    type: 'tool_start',
+    id: 'call-race',
+    tool: 'read',
+    args: { path: 'trace.go' },
+    providerRequestId: 'request-current',
+  })
   await expect(page.getByText('Current trace response', { exact: true })).toBeVisible()
   await page.waitForTimeout(700)
   await expect(page.getByText('Current trace response', { exact: true })).toBeVisible()
@@ -1543,6 +1628,17 @@ test('conversation diagnostics streams a tool loop and replaces provisional metr
   await expect(inspector.getByText('42 tok', { exact: true })).toBeVisible()
   await expect(inspector.getByText('120 ms', { exact: true })).toBeVisible()
   await expect(composer).toBeEnabled()
+
+  const traceRequests = requests.filter((request) => request.path === '/api/diagnostics/trace')
+  expect(new URL(traceRequests[0]!.url).searchParams.get('limit')).toBe('12')
+  const fullPageRequests = traceRequests.filter((request) =>
+    !new URL(request.url).searchParams.has('runId'))
+  const runRequests = traceRequests.filter((request) =>
+    new URL(request.url).searchParams.has('runId'))
+  expect(fullPageRequests.length).toBeLessThanOrEqual(2)
+  expect(runRequests.length).toBeGreaterThan(0)
+  expect(runRequests.every((request) =>
+    new URL(request.url).searchParams.get('runId') === 'run-live')).toBe(true)
 })
 
 test('dark theme uses the cool neutral canvas', async ({ page }) => {

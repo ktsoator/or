@@ -2,6 +2,9 @@ import { describe, expect, test } from 'bun:test'
 import {
   DiagnosticTraceError,
   fetchDiagnosticTrace,
+  mergeDiagnosticTracePage,
+  mergeDiagnosticTraceRun,
+  mergeLatestDiagnosticTrace,
 } from '../src/features/diagnostics/catalog'
 import type { TraceBundle } from '../src/features/diagnostics/catalog'
 import {
@@ -17,18 +20,20 @@ describe('diagnostic trace catalog', () => {
     const controller = new AbortController()
     const bundle = await fetchDiagnosticTrace(
       'session/one',
-      'run one',
-      controller.signal,
-      async (url, init) => {
-        requestedURL = String(url)
-        requestInit = init
-        return Response.json({
-          version: 1,
-          generatedAt: '2026-08-14T12:00:00Z',
-          sessionId: 'session/one',
-          selectedTaskId: 'run one',
-          tasks: [{ id: 'run one', requests: [] }],
-        })
+      {
+        runID: 'run one',
+        signal: controller.signal,
+        request: async (url, init) => {
+          requestedURL = String(url)
+          requestInit = init
+          return Response.json({
+            version: 1,
+            generatedAt: '2026-08-14T12:00:00Z',
+            sessionId: 'session/one',
+            selectedTaskId: 'run one',
+            tasks: [{ id: 'run one', requests: [] }],
+          })
+        },
       },
     )
 
@@ -41,15 +46,30 @@ describe('diagnostic trace catalog', () => {
 
   test('loads the conversation with its latest task selected when no run is specified', async () => {
     let requestedURL = ''
-    await fetchDiagnosticTrace('session', undefined, undefined, async (url) => {
-      requestedURL = String(url)
-      return Response.json({ selectedTaskId: 'latest', tasks: [] })
+    await fetchDiagnosticTrace('session', {
+      request: async (url) => {
+        requestedURL = String(url)
+        return Response.json({ selectedTaskId: 'latest', tasks: [] })
+      },
     })
-    expect(requestedURL).toBe('/api/diagnostics/trace?sessionId=session&limit=50')
+    expect(requestedURL).toBe('/api/diagnostics/trace?sessionId=session&limit=12')
+  })
+
+  test('loads an older page with an opaque cursor', async () => {
+    let requestedURL = ''
+    await fetchDiagnosticTrace('session', {
+      beforeCursor: 'opaque cursor',
+      limit: 8,
+      request: async (url) => {
+        requestedURL = String(url)
+        return Response.json({ selectedTaskId: 'older', tasks: [], page: { hasMore: false } })
+      },
+    })
+    expect(requestedURL).toBe('/api/diagnostics/trace?sessionId=session&limit=8&before=opaque+cursor')
   })
 
   test('normalizes incomplete interrupted bundles', async () => {
-    const bundle = await fetchDiagnosticTrace('session', undefined, undefined, async () => Response.json({
+    const bundle = await fetchDiagnosticTrace('session', { request: async () => Response.json({
       version: 1,
       generatedAt: '2026-08-14T12:00:00Z',
       sessionId: 'session',
@@ -68,7 +88,7 @@ describe('diagnostic trace catalog', () => {
           tools: [{ id: 'call-1', rawEvents: null, result: { role: 'toolResult', content: null } }],
         }],
       }],
-    }))
+    }) })
 
     expect(bundle.tasks[0]?.rawEvents).toEqual([])
     const request = bundle.tasks[0]?.requests[0]
@@ -81,11 +101,12 @@ describe('diagnostic trace catalog', () => {
     expect(request?.output?.message.content).toEqual([])
     expect(request?.tools[0]?.rawEvents).toEqual([])
     expect(request?.tools[0]?.result?.content).toEqual([])
+    expect(bundle.page).toEqual({ hasMore: false })
   })
 
   test('rejects failed bundle responses', async () => {
     expect(
-      fetchDiagnosticTrace('session', undefined, undefined, async () => new Response('', { status: 503 })),
+      fetchDiagnosticTrace('session', { request: async () => new Response('', { status: 503 }) }),
     ).rejects.toThrow('HTTP 503')
   })
 
@@ -93,15 +114,108 @@ describe('diagnostic trace catalog', () => {
     try {
       await fetchDiagnosticTrace(
         'new-session',
-        undefined,
-        undefined,
-        async () => new Response('', { status: 404 }),
+        { request: async () => new Response('', { status: 404 }) },
       )
       throw new Error('expected the trace request to fail')
     } catch (cause) {
       expect(cause).toBeInstanceOf(DiagnosticTraceError)
       expect((cause as DiagnosticTraceError).status).toBe(404)
     }
+  })
+
+  test('rejects a run and page cursor in the same request', async () => {
+    expect(fetchDiagnosticTrace('session', {
+      runID: 'run-1',
+      beforeCursor: 'cursor',
+    })).rejects.toThrow('mutually exclusive')
+  })
+})
+
+describe('diagnostic trace paging', () => {
+  test('prepends older tasks and assigns request numbers across the loaded window', () => {
+    const current = traceBundle()
+    current.page = { hasMore: true, beforeCursor: 'current-cursor' }
+    const older = traceBundle()
+    older.selectedTaskId = 'run-old'
+    older.tasks[0] = {
+      ...older.tasks[0]!,
+      id: 'run-old',
+      startedAt: '2026-08-14T11:00:00Z',
+      requests: [{ ...older.tasks[0]!.requests[0]!, id: 'request-old', number: 1 }],
+    }
+    older.page = { hasMore: false }
+
+    const merged = mergeDiagnosticTracePage(current, older)
+
+    expect(merged.tasks.map((task) => task.id)).toEqual(['run-old', 'run-1'])
+    expect(merged.tasks.flatMap((task) => task.requests.map((request) => request.number))).toEqual([1, 2])
+    expect(merged.selectedTaskId).toBe('run-1')
+    expect(merged.page).toEqual({ hasMore: false })
+  })
+
+  test('refreshes the latest page without discarding already loaded history', () => {
+    const older = traceBundle().tasks[0]!
+    older.id = 'run-old'
+    older.startedAt = '2026-08-14T11:00:00Z'
+    older.requests = [{ ...older.requests[0]!, id: 'request-old' }]
+    const current = traceBundle()
+    current.tasks = [older, current.tasks[0]!]
+    current.page = { hasMore: false }
+    const latest = traceBundle()
+    latest.tasks[0] = { ...latest.tasks[0]!, status: 'completed' }
+    latest.page = { hasMore: true, beforeCursor: 'latest-cursor' }
+
+    const merged = mergeLatestDiagnosticTrace(current, latest)
+
+    expect(merged.tasks.map((task) => task.id)).toEqual(['run-old', 'run-1'])
+    expect(merged.tasks[1]?.status).toBe('completed')
+    expect(merged.page).toEqual({ hasMore: false })
+  })
+
+  test('uses the latest cursor when the only unmatched task is newer provisional data', () => {
+    const current = traceBundle()
+    current.tasks.push({
+      ...current.tasks[0]!,
+      id: 'run-live',
+      startedAt: '2026-08-14T13:00:00Z',
+      requests: [{ ...current.tasks[0]!.requests[0]!, id: 'request-live' }],
+    })
+    current.page = { hasMore: false }
+    const latest = traceBundle()
+    latest.page = { hasMore: true, beforeCursor: 'latest-cursor' }
+
+    const merged = mergeLatestDiagnosticTrace(current, latest)
+
+    expect(merged.tasks.map((task) => task.id)).toEqual(['run-1', 'run-live'])
+    expect(merged.page).toEqual({ hasMore: true, beforeCursor: 'latest-cursor' })
+  })
+
+  test('does not let an older full-page response overwrite a newer run refresh', () => {
+    const current = traceBundle()
+    current.generatedAt = '2026-08-14T12:00:03Z'
+    current.tasks[0] = { ...current.tasks[0]!, status: 'completed', totalTokens: 42 }
+    const stalePage = traceBundle()
+    stalePage.generatedAt = '2026-08-14T12:00:02Z'
+    stalePage.tasks[0] = { ...stalePage.tasks[0]!, status: 'running', totalTokens: 12 }
+
+    const merged = mergeLatestDiagnosticTrace(current, stalePage)
+
+    expect(merged.tasks[0]).toMatchObject({ status: 'completed', totalTokens: 42 })
+    expect(merged.generatedAt).toBe('2026-08-14T12:00:03Z')
+  })
+
+  test('replaces only the refreshed run and keeps the history cursor', () => {
+    const current = traceBundle()
+    current.page = { hasMore: true, beforeCursor: 'history-cursor' }
+    const run = traceBundle()
+    run.tasks[0] = { ...run.tasks[0]!, status: 'completed', totalTokens: 42 }
+    run.page = { hasMore: false }
+
+    const merged = mergeDiagnosticTraceRun(current, run)
+
+    expect(merged.tasks).toHaveLength(1)
+    expect(merged.tasks[0]).toMatchObject({ status: 'completed', totalTokens: 42 })
+    expect(merged.page).toEqual({ hasMore: true, beforeCursor: 'history-cursor' })
   })
 })
 
@@ -250,6 +364,7 @@ function traceBundle(): TraceBundle {
     generatedAt: '2026-08-14T12:00:00Z',
     sessionId: 'session-1',
     selectedTaskId: 'run-1',
+    page: { hasMore: false },
     tasks: [{
       id: 'run-1',
       status: 'running',

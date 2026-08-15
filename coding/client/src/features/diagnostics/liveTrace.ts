@@ -112,6 +112,7 @@ export function mergeLiveTraceBundle(
     sessionId: sessionID,
     selectedTaskId: task.id,
     tasks,
+    page: bundle?.page ?? { hasMore: false },
   }
 }
 
