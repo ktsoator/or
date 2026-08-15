@@ -8,16 +8,16 @@ import {
 
 type PointerResizeOptions<Session> = {
   start: (event: ReactPointerEvent<HTMLDivElement>) => Session | undefined
-  move: (
-    session: Session,
-    event: ReactPointerEvent<HTMLDivElement>,
-  ) => void
+  move: (session: Session, clientX: number) => void
 }
 
 type ActivePointerResize<Session> = {
   pointerID: number
   target: HTMLDivElement
   session: Session
+  latestClientX: number
+  frameID?: number
+  pending: boolean
 }
 
 export function usePointerResize<Session>({
@@ -25,27 +25,44 @@ export function usePointerResize<Session>({
   move,
 }: PointerResizeOptions<Session>) {
   const activeRef = useRef<ActivePointerResize<Session> | undefined>(undefined)
+  const moveRef = useRef(move)
   const [resizing, setResizing] = useState(false)
+  moveRef.current = move
 
-  const finishResize = useCallback((pointerID?: number) => {
+  const flushMove = useCallback((active: ActivePointerResize<Session>) => {
+    if (!active.pending) return
+    active.pending = false
+    moveRef.current(active.session, active.latestClientX)
+  }, [])
+
+  const finishResize = useCallback((pointerID?: number, clientX?: number) => {
     const active = activeRef.current
     if (!active || (pointerID !== undefined && active.pointerID !== pointerID)) return
 
+    if (clientX !== undefined && clientX !== active.latestClientX) {
+      active.latestClientX = clientX
+      active.pending = true
+    }
+    if (active.frameID !== undefined) {
+      window.cancelAnimationFrame(active.frameID)
+      active.frameID = undefined
+    }
+    flushMove(active)
     activeRef.current = undefined
     if (active.target.hasPointerCapture(active.pointerID)) {
       active.target.releasePointerCapture(active.pointerID)
     }
     setResizing(false)
-  }, [])
+  }, [flushMove])
 
   useEffect(() => {
     if (!resizing) return
 
     const previousCursor = document.body.style.cursor
     const previousUserSelect = document.body.style.userSelect
-    const stopFromPointer = (event: PointerEvent) => finishResize(event.pointerId)
+    const stopFromPointer = (event: PointerEvent) => finishResize(event.pointerId, event.clientX)
     const stopIfReleased = (event: PointerEvent) => {
-      if ((event.buttons & 1) === 0) finishResize(event.pointerId)
+      if ((event.buttons & 1) === 0) finishResize(event.pointerId, event.clientX)
     }
     const stopFromWindow = () => finishResize()
     const stopWhenHidden = () => {
@@ -82,6 +99,8 @@ export function usePointerResize<Session>({
       pointerID: event.pointerId,
       target: event.currentTarget,
       session,
+      latestClientX: event.clientX,
+      pending: false,
     }
     setResizing(true)
   }, [start])
@@ -90,14 +109,21 @@ export function usePointerResize<Session>({
     const active = activeRef.current
     if (!active || active.pointerID !== event.pointerId) return
     if ((event.buttons & 1) === 0) {
-      finishResize(event.pointerId)
+      finishResize(event.pointerId, event.clientX)
       return
     }
-    move(active.session, event)
-  }, [finishResize, move])
+    active.latestClientX = event.clientX
+    active.pending = true
+    if (active.frameID !== undefined) return
+    active.frameID = window.requestAnimationFrame(() => {
+      active.frameID = undefined
+      if (activeRef.current !== active) return
+      flushMove(active)
+    })
+  }, [finishResize, flushMove])
 
   const stopResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    finishResize(event.pointerId)
+    finishResize(event.pointerId, event.clientX)
   }, [finishResize])
 
   return {

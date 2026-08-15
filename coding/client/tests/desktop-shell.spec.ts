@@ -2925,6 +2925,133 @@ test('workbench divider resizes the panel without moving the corner control', as
   )
 })
 
+test('long threads coalesce workbench resize events into one animation frame', async ({
+  page,
+}) => {
+  await openDesktopClient(page, {
+    existingSession: true,
+    historyEvents: Array.from({ length: 8 }, (_, index) =>
+      longThreadHistory(`resize-${index}`),
+    ).flat(),
+  })
+  await expect(page.getByTestId('assistant-message')).toHaveCount(144)
+
+  await page.getByTestId('workbench-panel-toggle').click()
+  const viewport = page.getByTestId('workbench-viewport')
+  const handle = page.getByTestId('workbench-resize-handle')
+  await expect.poll(async () => (await viewport.boundingBox())?.width).toBeGreaterThan(490)
+  const before = await viewport.boundingBox()
+  const handleBox = await handle.boundingBox()
+  expect(before).not.toBeNull()
+  expect(handleBox).not.toBeNull()
+
+  const startX = handleBox!.x + handleBox!.width / 2
+  const pointerY = handleBox!.y + handleBox!.height / 2
+  await handle.evaluate((element, { clientX, clientY }) => {
+    const capturedPointers = new Set<number>()
+    const originalSetPointerCapture = element.setPointerCapture.bind(element)
+    const originalHasPointerCapture = element.hasPointerCapture.bind(element)
+    const originalReleasePointerCapture = element.releasePointerCapture.bind(element)
+    const testWindow = window as Window & { __restoreResizePointerCapture?: () => void }
+    element.setPointerCapture = (pointerID) => capturedPointers.add(pointerID)
+    element.hasPointerCapture = (pointerID) => capturedPointers.has(pointerID)
+    element.releasePointerCapture = (pointerID) => capturedPointers.delete(pointerID)
+    testWindow.__restoreResizePointerCapture = () => {
+      element.setPointerCapture = originalSetPointerCapture
+      element.hasPointerCapture = originalHasPointerCapture
+      element.releasePointerCapture = originalReleasePointerCapture
+    }
+    element.dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true,
+      button: 0,
+      buttons: 1,
+      clientX,
+      clientY,
+      pointerId: 77,
+    }))
+  }, { clientX: startX, clientY: pointerY })
+
+  await page.evaluate(() => {
+    const nativeRequestAnimationFrame = window.requestAnimationFrame.bind(window)
+    const nativeCancelAnimationFrame = window.cancelAnimationFrame.bind(window)
+    const callbacks = new Map<number, FrameRequestCallback>()
+    let nextFrameID = 100_000
+    const testWindow = window as Window & {
+      __resizeFrameTest?: {
+        count: () => number
+        flush: () => void
+        restore: () => void
+      }
+    }
+    const restore = () => {
+      window.requestAnimationFrame = nativeRequestAnimationFrame
+      window.cancelAnimationFrame = nativeCancelAnimationFrame
+    }
+    window.requestAnimationFrame = (callback) => {
+      const frameID = nextFrameID
+      nextFrameID += 1
+      callbacks.set(frameID, callback)
+      return frameID
+    }
+    window.cancelAnimationFrame = (frameID) => {
+      callbacks.delete(frameID)
+    }
+    testWindow.__resizeFrameTest = {
+      count: () => callbacks.size,
+      flush: () => {
+        const pending = [...callbacks.values()]
+        callbacks.clear()
+        restore()
+        for (const callback of pending) callback(performance.now())
+      },
+      restore,
+    }
+  })
+
+  try {
+    await handle.evaluate((element, { startX, pointerY }) => {
+      for (let step = 1; step <= 40; step += 1) {
+        element.dispatchEvent(new PointerEvent('pointermove', {
+          bubbles: true,
+          buttons: 1,
+          clientX: startX - step * 2,
+          clientY: pointerY,
+          pointerId: 77,
+        }))
+      }
+    }, { startX, pointerY })
+
+    await expect.poll(() => page.evaluate(() => (
+      window as Window & { __resizeFrameTest?: { count: () => number } }
+    ).__resizeFrameTest?.count())).toBe(1)
+    expect((await viewport.boundingBox())?.width).toBeCloseTo(before!.width, 0)
+
+    await page.evaluate(() => (
+      window as Window & { __resizeFrameTest?: { flush: () => void } }
+    ).__resizeFrameTest?.flush())
+    await expect.poll(async () => (await viewport.boundingBox())?.width).toBeCloseTo(
+      before!.width + 80,
+      0,
+    )
+  } finally {
+    await page.evaluate(() => (
+      window as Window & { __resizeFrameTest?: { restore: () => void } }
+    ).__resizeFrameTest?.restore())
+    await handle.evaluate((element, { clientX, clientY }) => {
+      element.dispatchEvent(new PointerEvent('pointerup', {
+        bubbles: true,
+        buttons: 0,
+        clientX,
+        clientY,
+        pointerId: 77,
+      }))
+    }, { clientX: startX - 80, clientY: pointerY })
+    await page.evaluate(() => (
+      window as Window & { __restoreResizePointerCapture?: () => void }
+    ).__restoreResizePointerCapture?.())
+  }
+})
+
 test('workbench restores after an automatic collapse but respects a manual close', async ({
   page,
 }) => {

@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { LoaderCircle } from 'lucide-react'
 import type { ModelOption, WorkspaceSummary } from '@/types'
 import type { SessionThread } from '@/features/session'
@@ -30,6 +31,7 @@ export function ConversationView({
     awayFromLatest,
     hasNewContent,
   } = useConversationScroll(thread.session.id, thread.items)
+  const conversationUnits = useMemo(() => groupItems(thread.items), [thread.items])
   const empty = !thread.loading && thread.items.length === 0 && !thread.approval
   const awaitingFirstOutput = thread.running && thread.items.at(-1)?.kind === 'user'
 
@@ -106,7 +108,7 @@ export function ConversationView({
               </div>
             ) : (
               <>
-                {groupItems(thread.items).map((unit) =>
+                {conversationUnits.map((unit) =>
                   unit.kind === 'steps' ? (
                     <StepGroup
                       key={unit.id}

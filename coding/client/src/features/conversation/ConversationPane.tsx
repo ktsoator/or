@@ -4,7 +4,7 @@ import type {
   UIEventHandler,
   WheelEventHandler,
 } from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Gauge, LoaderCircle, PanelLeft } from 'lucide-react'
 import { Tooltip } from 'radix-ui'
 import type {
@@ -141,6 +141,8 @@ export function ConversationPane({
           item.messageID === branchPointTarget.messageID,
       )?.id
     : undefined
+  const conversationUnits = useMemo(() => groupAssistantTurns(items), [items])
+  const lastItemID = items.at(-1)?.id
   const emptySession = !loading && items.length === 0 && !approval
   const awaitingFirstOutput = running && items.at(-1)?.kind === 'user'
 
@@ -349,7 +351,7 @@ export function ConversationPane({
                 </div>
               ) : (
                 <>
-                  {groupAssistantTurns(items).map((unit) => {
+                  {conversationUnits.map((unit) => {
                     if (unit.kind === 'assistant-turn') {
                       const highlighted =
                         activeSession?.id === highlightedBranchPoint?.sessionID &&
@@ -404,13 +406,8 @@ export function ConversationPane({
         branchingDisabled={running || forking}
         onForkMessage={forkMessage}
         onEditMessage={editMessage}
-        editRequiresConfirmation={hasLaterConversationContent(unit.item)}
+        editRequiresConfirmation={unit.item.id !== lastItemID}
       />
     )
-  }
-
-  function hasLaterConversationContent(item: Item) {
-    const index = items.findIndex((candidate) => candidate.id === item.id)
-    return index >= 0 && index < items.length - 1
   }
 }

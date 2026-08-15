@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { ChevronRight, Layers } from 'lucide-react'
 import type { Item } from '@/types'
 import { cn } from '@/lib/utils'
@@ -47,7 +47,7 @@ function summarizeSteps(items: Item[], t: ReturnType<typeof useI18n>['t']): stri
 
 // StepGroup stays compact by default. Running-state updates must not override a
 // user's expand/collapse choice or make the conversation jump while streaming.
-export function StepGroup({ items, cwd }: { items: Item[]; cwd?: string }) {
+export const StepGroup = memo(function StepGroup({ items, cwd }: { items: Item[]; cwd?: string }) {
   const { t } = useI18n()
   const active = items.some(
     (it) =>
@@ -90,4 +90,4 @@ export function StepGroup({ items, cwd }: { items: Item[]; cwd?: string }) {
       </CollapsibleContent>
     </Collapsible>
   )
-}
+})
