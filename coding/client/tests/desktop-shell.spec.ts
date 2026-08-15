@@ -1298,8 +1298,17 @@ test('conversation diagnostics overview surfaces useful signals and opens reques
   expect(summaryGridBox).not.toBeNull()
   expect(keySignalsBox).not.toBeNull()
   expect(overviewScrollBox).not.toBeNull()
-  expect((mainBox?.x ?? 0) + (mainBox?.width ?? 0) - ((summaryGridBox?.x ?? 0) + (summaryGridBox?.width ?? 0)))
-    .toBeLessThanOrEqual(32)
+  const overviewRightSpacing = await page.getByTestId('diagnostics-overview-scroll').evaluate((scrollArea) => {
+    const summaryGrid = scrollArea.querySelector<HTMLElement>('[data-testid="diagnostics-overview-summary-grid"]')
+    const scrollBounds = scrollArea.getBoundingClientRect()
+    const summaryBounds = summaryGrid?.getBoundingClientRect()
+    return {
+      actual: summaryBounds ? scrollBounds.right - summaryBounds.right : 0,
+      expected: Number.parseFloat(window.getComputedStyle(scrollArea).paddingRight) +
+        (scrollArea.offsetWidth - scrollArea.clientWidth),
+    }
+  })
+  expect(overviewRightSpacing.actual).toBeCloseTo(overviewRightSpacing.expected, 0)
   expect(keySignalsBox?.x ?? 0).toBeGreaterThan((summaryBox?.x ?? 0) + (summaryBox?.width ?? 0))
   expect((mainBox?.x ?? 0) + (mainBox?.width ?? 0) - ((overviewScrollBox?.x ?? 0) + (overviewScrollBox?.width ?? 0)))
     .toBeLessThanOrEqual(1)

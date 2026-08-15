@@ -50,8 +50,8 @@ type InspectorMode = 'summary' | 'content' | 'input' | 'raw' | 'tools'
 
 const TRAJECTORY_VIRTUALIZATION_THRESHOLD = 100
 const TRAJECTORY_OVERSCAN = 12
-const TRAJECTORY_ROW_ESTIMATE = 36
-const TRAJECTORY_TASK_HEADER_HEIGHT = 28
+const TRAJECTORY_ROW_HEIGHT_REM = 2.25
+const TRAJECTORY_TASK_HEADER_HEIGHT_REM = 1.75
 const TIMELINE_COLUMN_WIDTH = 50
 const TIMELINE_EDGE_PADDING = 8
 const DEFAULT_INSPECTOR_RATIO = 0.36
@@ -949,13 +949,19 @@ function TrajectoryLedger({
     ? items.filter((item) => trajectorySearchText(item).toLocaleLowerCase().includes(normalizedQuery))
     : items, [items, normalizedQuery])
   const virtualized = filtered.length > TRAJECTORY_VIRTUALIZATION_THRESHOLD
+  const rootFontSize = useMemo(() => {
+    if (typeof window === 'undefined') return 16
+    return Number.parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 16
+  }, [])
+  const rowEstimate = rootFontSize * TRAJECTORY_ROW_HEIGHT_REM
+  const taskHeaderHeight = rootFontSize * TRAJECTORY_TASK_HEADER_HEIGHT_REM
   const rowVirtualizer = useVirtualizer({
     count: filtered.length,
     enabled: virtualized,
     getScrollElement: () => scrollRef.current,
     getItemKey: (index) => filtered[index]?.id ?? index,
-    estimateSize: (index) => TRAJECTORY_ROW_ESTIMATE +
-      (filtered[index]?.kind === 'user' ? TRAJECTORY_TASK_HEADER_HEIGHT : 0),
+    estimateSize: (index) => rowEstimate +
+      (filtered[index]?.kind === 'user' ? taskHeaderHeight : 0),
     overscan: TRAJECTORY_OVERSCAN,
     useFlushSync: false,
   })
@@ -994,13 +1000,13 @@ function TrajectoryLedger({
       const desiredOffset = anchor.viewportTop === undefined
         ? anchor.offset
         : anchor.viewportTop - scrollArea.getBoundingClientRect().top
-      const rowInset = filtered[index]?.kind === 'user' ? TRAJECTORY_TASK_HEADER_HEIGHT : 0
+      const rowInset = filtered[index]?.kind === 'user' ? taskHeaderHeight : 0
       rowVirtualizer.scrollToOffset(itemOffset + rowInset - desiredOffset)
       window.requestAnimationFrame(() => {
         window.requestAnimationFrame(adjustToMeasuredRow)
       })
     })
-  }, [filtered, rowVirtualizer, virtualized])
+  }, [filtered, rowVirtualizer, taskHeaderHeight, virtualized])
 
   const initialPositionRestoredRef = useRef(false)
   useLayoutEffect(() => {
@@ -1046,7 +1052,7 @@ function TrajectoryLedger({
     if (!scrollArea) return undefined
     const scrollBounds = scrollArea.getBoundingClientRect()
     const visibleTop = scrollBounds.top +
-      (virtualized && currentTaskNumber !== undefined ? TRAJECTORY_TASK_HEADER_HEIGHT : 0)
+      (virtualized && currentTaskNumber !== undefined ? taskHeaderHeight : 0)
     const row = [...scrollArea.querySelectorAll<HTMLElement>('[data-trajectory-item-id]')]
       .find((candidate) => candidate.getBoundingClientRect().bottom > visibleTop)
     if (!row?.dataset.trajectoryItemId) return undefined
