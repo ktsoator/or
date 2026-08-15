@@ -27,6 +27,20 @@ import {
 } from './catalog'
 import { liveTraceRefreshKey, mergeLiveTraceBundle } from './liveTrace'
 
+type TraceView = 'overview' | 'trajectory'
+type InspectorMode = 'summary' | 'content' | 'input' | 'system' | 'tools' | 'raw'
+
+export type DiagnosticsSessionState = {
+  view?: TraceView
+  selectedItemID?: string
+  inspectorOpen?: boolean
+  inspectorMode?: InspectorMode
+  query?: string
+  ledgerScrollTop?: number
+}
+
+type DiagnosticsStatePatch = Partial<DiagnosticsSessionState>
+
 export function DiagnosticsPage({
   onBack,
   sidebarCollapsed,
@@ -36,6 +50,8 @@ export function DiagnosticsPage({
   embedded = false,
   liveItems,
   running = false,
+  initialState,
+  onStateChange,
 }: {
   onBack?: () => void
   sidebarCollapsed?: boolean
@@ -45,12 +61,14 @@ export function DiagnosticsPage({
   embedded?: boolean
   liveItems?: Item[]
   running?: boolean
+  initialState?: DiagnosticsSessionState
+  onStateChange?: (patch: DiagnosticsStatePatch) => void
 }) {
   const { t } = useI18n()
   const [bundle, setBundle] = useState<TraceBundle>()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
-  const [view, setView] = useState<TraceView>('trajectory')
+  const [view, setView] = useState<TraceView>(initialState?.view ?? 'trajectory')
   const requestRef = useRef<{ revision: number; controller?: AbortController }>({ revision: 0 })
   const refreshKey = liveTraceRefreshKey(liveItems, running)
 
@@ -122,6 +140,10 @@ export function DiagnosticsPage({
     () => mergeLiveTraceBundle(bundle, sessionID, liveItems, running),
     [bundle, liveItems, running, sessionID],
   )
+  const changeView = (nextView: TraceView) => {
+    setView(nextView)
+    onStateChange?.({ view: nextView })
+  }
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-canvas">
@@ -133,8 +155,8 @@ export function DiagnosticsPage({
           <div className="flex items-stretch gap-1" role="tablist">
             {displayBundle && displayBundle.tasks.length > 0 && (
               <>
-                <DetailTab active={view === 'overview'} label={t('diagnostics.overview')} onClick={() => setView('overview')} />
-                <DetailTab active={view === 'trajectory'} label={t('diagnostics.trajectory')} onClick={() => setView('trajectory')} />
+                <DetailTab active={view === 'overview'} label={t('diagnostics.overview')} onClick={() => changeView('overview')} />
+                <DetailTab active={view === 'trajectory'} label={t('diagnostics.trajectory')} onClick={() => changeView('trajectory')} />
               </>
             )}
           </div>
@@ -165,8 +187,8 @@ export function DiagnosticsPage({
             </button>
             {displayBundle && displayBundle.tasks.length > 0 && (
               <div className="ml-2 flex self-stretch items-stretch gap-1" role="tablist">
-                <DetailTab active={view === 'overview'} label={t('diagnostics.overview')} onClick={() => setView('overview')} />
-                <DetailTab active={view === 'trajectory'} label={t('diagnostics.trajectory')} onClick={() => setView('trajectory')} />
+                <DetailTab active={view === 'overview'} label={t('diagnostics.overview')} onClick={() => changeView('overview')} />
+                <DetailTab active={view === 'trajectory'} label={t('diagnostics.trajectory')} onClick={() => changeView('trajectory')} />
               </div>
             )}
           </div>
@@ -193,7 +215,13 @@ export function DiagnosticsPage({
             </button>
           </div>
         ) : displayBundle && displayBundle.tasks.length > 0 ? (
-          <ConversationTrace bundle={displayBundle} view={view} onViewChange={setView} />
+          <ConversationTrace
+            bundle={displayBundle}
+            view={view}
+            onViewChange={changeView}
+            initialState={initialState}
+            onStateChange={onStateChange}
+          />
         ) : (
           <div className="flex h-full flex-col items-center justify-center text-center">
             <Gauge className="size-6 text-ink-faint" aria-hidden="true" />
@@ -243,8 +271,6 @@ function emptyTraceBundle(sessionID: string, selectedTaskID?: string): TraceBund
   }
 }
 
-type TraceView = 'overview' | 'trajectory'
-type InspectorMode = 'summary' | 'content' | 'input' | 'system' | 'tools' | 'raw'
 type TrajectoryKind = 'system' | 'user' | 'context' | 'assistant' | 'tool'
 
 type TrajectoryItem = {
@@ -266,27 +292,40 @@ function ConversationTrace({
   bundle,
   view,
   onViewChange,
+  initialState,
+  onStateChange,
 }: {
   bundle: TraceBundle
   view: TraceView
   onViewChange: (view: TraceView) => void
+  initialState?: DiagnosticsSessionState
+  onStateChange?: (patch: DiagnosticsStatePatch) => void
 }) {
   const { t } = useI18n()
+  const rememberedStateRef = useRef<DiagnosticsSessionState>(initialState ?? {})
+  const rememberState = (patch: DiagnosticsStatePatch) => {
+    rememberedStateRef.current = { ...rememberedStateRef.current, ...patch }
+    onStateChange?.(patch)
+  }
+  const rememberedState = rememberedStateRef.current
   const items = useMemo(() => buildTrajectoryItems(bundle.tasks, t), [bundle.tasks, t])
   const requests = useMemo(() => bundle.tasks.flatMap((task) => task.requests), [bundle.tasks])
   const initialRequest = selectedTask(bundle)?.requests.at(-1) ?? requests.at(-1)
   const initialItem = items.findLast(
     (item) => item.kind === 'assistant' && item.request?.id === initialRequest?.id,
   ) ?? items.findLast((item) => item.request?.id === initialRequest?.id) ?? items.at(-1)
-  const [selectedItemID, setSelectedItemID] = useState(initialItem?.id ?? '')
-  const [inspectorOpen, setInspectorOpen] = useState(true)
-  const [mode, setMode] = useState<InspectorMode>('summary')
+  const [selectedItemID, setSelectedItemID] = useState(
+    rememberedState.selectedItemID ?? initialItem?.id ?? '',
+  )
+  const [inspectorOpen, setInspectorOpen] = useState(rememberedState.inspectorOpen ?? true)
+  const [mode, setMode] = useState<InspectorMode>(rememberedState.inspectorMode ?? 'summary')
   const selectedItem = items.find((item) => item.id === selectedItemID) ?? initialItem
 
   const selectItem = (item: TrajectoryItem, scroll = false) => {
     setSelectedItemID(item.id)
     setInspectorOpen(true)
     setMode('summary')
+    rememberState({ selectedItemID: item.id, inspectorOpen: true, inspectorMode: 'summary' })
     if (scroll) {
       window.requestAnimationFrame(() => {
         document.getElementById(trajectoryDOMID(item.id))?.scrollIntoView({ block: 'nearest' })
@@ -327,13 +366,23 @@ function ConversationTrace({
               items={items}
               selectedItemID={selectedItem?.id ?? ''}
               onSelect={selectItem}
+              initialQuery={rememberedState.query}
+              initialScrollTop={rememberedState.ledgerScrollTop}
+              onQueryChange={(query) => rememberState({ query })}
+              onScrollTopChange={(ledgerScrollTop) => rememberState({ ledgerScrollTop })}
             />
             {inspectorOpen && selectedItem && (
               <TrajectoryInspector
                 item={selectedItem}
                 mode={mode}
-                onModeChange={setMode}
-                onClose={() => setInspectorOpen(false)}
+                onModeChange={(nextMode) => {
+                  setMode(nextMode)
+                  rememberState({ inspectorMode: nextMode })
+                }}
+                onClose={() => {
+                  setInspectorOpen(false)
+                  rememberState({ inspectorOpen: false })
+                }}
               />
             )}
           </div>
@@ -421,13 +470,25 @@ function TrajectoryLedger({
   items,
   selectedItemID,
   onSelect,
+  initialQuery = '',
+  initialScrollTop = 0,
+  onQueryChange,
+  onScrollTopChange,
 }: {
   items: TrajectoryItem[]
   selectedItemID: string
   onSelect: (item: TrajectoryItem) => void
+  initialQuery?: string
+  initialScrollTop?: number
+  onQueryChange?: (query: string) => void
+  onScrollTopChange?: (scrollTop: number) => void
 }) {
   const { t } = useI18n()
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(initialQuery)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = initialScrollTop
+  }, [initialScrollTop])
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const filtered = normalizedQuery
     ? items.filter((item) => trajectorySearchText(item).toLocaleLowerCase().includes(normalizedQuery))
@@ -443,11 +504,19 @@ function TrajectoryLedger({
             value={query}
             placeholder={t('diagnostics.searchInput')}
             className="h-7 w-full rounded-[6px] border-0 bg-canvas-sunken pl-8 pr-2 text-[0.75rem] text-ink outline-none placeholder:text-ink-faint focus-visible:ring-1 focus-visible:ring-info"
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value)
+              onQueryChange?.(event.target.value)
+            }}
           />
         </label>
       </div>
-      <div className="code-scroll-area min-h-0 flex-1 overflow-y-auto">
+      <div
+        ref={scrollRef}
+        className="code-scroll-area min-h-0 flex-1 overflow-y-auto"
+        data-testid="diagnostics-ledger-scroll"
+        onScroll={(event) => onScrollTopChange?.(event.currentTarget.scrollTop)}
+      >
         {filtered.length === 0 ? (
           <TraceEmpty title={t('diagnostics.noSearchResults')} description={t('diagnostics.searchInput')} />
         ) : filtered.map((item) => (

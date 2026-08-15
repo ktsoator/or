@@ -170,7 +170,10 @@ async function openDesktopClient(
     usageEventPages?: UsageEventPage[]
     usageEventPagesByOffset?: Record<number, UsageEventPage>
     usageEventDelayMs?: number
-    diagnosticsTrace?: (requestNumber: number) => unknown | Promise<unknown>
+    diagnosticsTrace?: (
+      requestNumber: number,
+      sessionID: string,
+    ) => unknown | Promise<unknown>
     diagnosticsStatus?: number
     skills?: Array<{
       name: string
@@ -794,7 +797,10 @@ async function openDesktopClient(
       }
       if (options.diagnosticsTrace) {
         diagnosticTraceRequestCount += 1
-        body = await options.diagnosticsTrace(diagnosticTraceRequestCount)
+        body = await options.diagnosticsTrace(
+          diagnosticTraceRequestCount,
+          new URL(request.url()).searchParams.get('sessionId') ?? '',
+        )
       }
     }
     if (path === '/api/providers') {
@@ -1149,6 +1155,137 @@ test('conversation diagnostics treats a missing new-session trace as empty', asy
   await expect(page.getByRole('heading', { name: 'No runs recorded' })).toBeVisible()
   await expect(page.getByText('Could not load local diagnostics.')).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Retry' })).toHaveCount(0)
+})
+
+test('conversation diagnostics preserves state independently for each session', async ({ page }) => {
+  const traceForSession = (sessionID: string) => {
+    const label = sessionID === 'secondary-session' ? 'Secondary' : 'Primary'
+    const tasks = Array.from({ length: 14 }, (_, index) => {
+      const number = index + 1
+      const requestID = `${sessionID}-request-${number}`
+      return {
+        id: `${sessionID}-run-${number}`,
+        status: 'completed',
+        prompt: `${label} task ${number}`,
+        startedAt: `2026-07-22T00:${String(number).padStart(2, '0')}:00Z`,
+        updatedAt: `2026-07-22T00:${String(number).padStart(2, '0')}:02Z`,
+        durationMs: 2000,
+        totalTokens: 100 + number,
+        retries: 0,
+        contextRecoveries: 0,
+        rawEvents: [],
+        requests: [{
+          id: requestID,
+          number,
+          status: 'completed',
+          lifecycle: 'complete',
+          startedAt: `2026-07-22T00:${String(number).padStart(2, '0')}:00Z`,
+          completedAt: `2026-07-22T00:${String(number).padStart(2, '0')}:02Z`,
+          durationMs: 2000,
+          timeToFirstOutputMs: 300,
+          model: 'test-model',
+          inputTokens: 80,
+          outputTokens: 20 + number,
+          totalTokens: 100 + number,
+          attempts: [],
+          checkpoints: [],
+          tools: [],
+          snapshotState: 'available',
+          rawEvents: [],
+          input: {
+            systemPrompt: `System prompt for ${label}`,
+            messages: [{
+              role: 'user',
+              content: [{ type: 'text', text: `${label} task ${number}` }],
+            }],
+            tools: [],
+          },
+          output: {
+            capturedAt: `2026-07-22T00:${String(number).padStart(2, '0')}:02Z`,
+            stopReason: 'stop',
+            message: {
+              role: 'assistant',
+              providerRequestId: requestID,
+              content: [{ type: 'text', text: `${label} response ${number}` }],
+            },
+          },
+        }],
+      }
+    })
+    return {
+      version: 1,
+      generatedAt: '2026-07-22T00:15:00Z',
+      sessionId: sessionID,
+      selectedTaskId: tasks.at(-1)?.id ?? '',
+      tasks,
+    }
+  }
+
+  await openDesktopClient(page, {
+    existingSession: true,
+    secondarySession: true,
+    diagnosticsTrace: (_requestNumber, sessionID) => traceForSession(sessionID),
+  })
+
+  const chats = page.getByRole('navigation', { name: 'Chats' })
+  const toolbar = page.getByTestId('diagnostics-toolbar')
+  await page.getByTestId('conversation-diagnostics-button').click()
+
+  const primarySearch = page.getByPlaceholder('Search trajectory')
+  await primarySearch.fill('Primary')
+  const primaryResponse = page.getByRole('button', { name: /Assistant Primary response 8/ })
+  await primaryResponse.click()
+  const primaryInspector = page.getByRole('complementary', { name: 'Assistant · Request #8' })
+  await primaryInspector.getByRole('tab', { name: 'Content' }).click()
+
+  const ledger = page.getByTestId('diagnostics-ledger-scroll')
+  await ledger.evaluate((element) => {
+    element.scrollTop = 240
+    element.dispatchEvent(new Event('scroll'))
+  })
+  const primaryScrollTop = await ledger.evaluate((element) => element.scrollTop)
+  expect(primaryScrollTop).toBeGreaterThan(0)
+
+  await chats.getByRole('button', { name: 'Secondary task', exact: true }).click()
+  await page.getByTestId('conversation-diagnostics-button').click()
+  const secondarySearch = page.getByPlaceholder('Search trajectory')
+  await expect(secondarySearch).toHaveValue('')
+  await secondarySearch.fill('Secondary')
+  await page.getByRole('button', { name: /Assistant Secondary response 4/ }).click()
+  const secondaryInspector = page.getByRole('complementary', {
+    name: 'Assistant · Request #4',
+  })
+  await secondaryInspector.getByRole('button', { name: 'Close' }).click()
+  await toolbar.getByRole('tab', { name: 'Overview' }).click()
+  await expect(toolbar.getByRole('tab', { name: 'Overview' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+
+  await chats.getByRole('button', { name: 'New session', exact: true }).click()
+  await expect(toolbar.getByRole('tab', { name: 'Trajectory' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  await expect(page.getByPlaceholder('Search trajectory')).toHaveValue('Primary')
+  await expect(primaryResponse).toHaveAttribute('aria-expanded', 'true')
+  await expect(primaryInspector).toBeVisible()
+  await expect(primaryInspector.getByRole('tab', { name: 'Content' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  await expect.poll(() => ledger.evaluate((element) => element.scrollTop)).toBe(primaryScrollTop)
+
+  await chats.getByRole('button', { name: 'Secondary task', exact: true }).click()
+  await expect(toolbar.getByRole('tab', { name: 'Overview' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  await toolbar.getByRole('tab', { name: 'Trajectory' }).click()
+  await expect(page.getByPlaceholder('Search trajectory')).toHaveValue('Secondary')
+  await expect(
+    page.getByRole('complementary', { name: 'Assistant · Request #4' }),
+  ).toHaveCount(0)
 })
 
 test('conversation diagnostics ignores an older trace response that finishes last', async ({ page }) => {

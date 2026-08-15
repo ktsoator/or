@@ -3,6 +3,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useRef,
   useState,
   type CSSProperties,
 } from 'react'
@@ -33,6 +34,7 @@ import {
 } from './SessionDialogs'
 import { useI18n } from '@/i18n'
 import { useSidebarLayout } from './useSidebarLayout'
+import type { DiagnosticsSessionState } from '@/features/diagnostics/DiagnosticsPage'
 
 const SettingsPage = lazy(() =>
   import('@/features/settings/SettingsPage').then((module) => ({ default: module.SettingsPage })),
@@ -140,6 +142,7 @@ export default function App() {
   const [conversationSurfaces, setConversationSurfaces] = useState<
     Record<string, ConversationSurface>
   >({})
+  const diagnosticsStatesRef = useRef<Record<string, DiagnosticsSessionState>>({})
   const [workspaceOpenError, setWorkspaceOpenError] = useState('')
   const [selectedWorkspacePath, setSelectedWorkspacePath] = useState<string>()
   const {
@@ -365,6 +368,13 @@ export default function App() {
     setDeleteError('')
     try {
       await deleteSession(deleteTarget.id)
+      delete diagnosticsStatesRef.current[deleteTarget.id]
+      setConversationSurfaces((current) => {
+        if (!(deleteTarget.id in current)) return current
+        const next = { ...current }
+        delete next[deleteTarget.id]
+        return next
+      })
       if (secondarySessionID === deleteTarget.id) setSecondarySessionID(undefined)
       if (workbenchTaskRequest?.sessionID === deleteTarget.id) {
         setWorkbenchTaskRequest(undefined)
@@ -648,10 +658,18 @@ export default function App() {
           diagnosticsContent: diagnosticsOpen && activeSessionID ? (
             <Suspense fallback={<AppViewFallback />}>
               <DiagnosticsPage
+                key={activeSessionID}
                 embedded
                 sessionID={activeSessionID}
                 liveItems={items}
                 running={running}
+                initialState={diagnosticsStatesRef.current[activeSessionID]}
+                onStateChange={(patch) => {
+                  diagnosticsStatesRef.current[activeSessionID] = {
+                    ...diagnosticsStatesRef.current[activeSessionID],
+                    ...patch,
+                  }
+                }}
               />
             </Suspense>
           ) : null,
