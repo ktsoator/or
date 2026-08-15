@@ -12,6 +12,7 @@ import {
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { SidebarToggleButton } from '@/shared/ui/SidebarToggleButton'
+import type { Item } from '@/types'
 import {
   fetchDiagnosticTrace,
   type DiagnosticEvent,
@@ -23,6 +24,7 @@ import {
   type TraceBundleTask,
   type TraceBundleTool,
 } from './catalog'
+import { liveTraceRefreshKey, mergeLiveTraceBundle } from './liveTrace'
 
 export function DiagnosticsPage({
   onBack,
@@ -30,18 +32,25 @@ export function DiagnosticsPage({
   onExpandSidebar,
   sessionID,
   initialRunID,
+  embedded = false,
+  liveItems,
+  running = false,
 }: {
-  onBack: () => void
+  onBack?: () => void
   sidebarCollapsed?: boolean
   onExpandSidebar?: () => void
   sessionID?: string
   initialRunID?: string
+  embedded?: boolean
+  liveItems?: Item[]
+  running?: boolean
 }) {
   const { t } = useI18n()
   const [bundle, setBundle] = useState<TraceBundle>()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [view, setView] = useState<TraceView>('trajectory')
+  const refreshKey = liveTraceRefreshKey(liveItems, running)
 
   const load = useCallback(async (signal?: AbortSignal, quiet = false) => {
     if (!quiet) setLoading(true)
@@ -63,64 +72,87 @@ export function DiagnosticsPage({
 
   useEffect(() => {
     const controller = new AbortController()
+    setBundle(undefined)
     void load(controller.signal)
-    const interval = window.setInterval(() => void load(undefined, true), 5000)
-    return () => {
-      controller.abort()
-      window.clearInterval(interval)
-    }
+    return () => { controller.abort() }
   }, [load])
+
+  useEffect(() => {
+    if (!running) return
+    const interval = window.setInterval(() => void load(undefined, true), 1500)
+    return () => { window.clearInterval(interval) }
+  }, [load, running])
+
+  const hasLiveItems = Boolean(liveItems?.length)
+  useEffect(() => {
+    if (!sessionID || !hasLiveItems) return
+    const timeout = window.setTimeout(() => void load(undefined, true), 250)
+    return () => { window.clearTimeout(timeout) }
+  }, [hasLiveItems, load, refreshKey, sessionID])
+
+  const displayBundle = useMemo(
+    () => mergeLiveTraceBundle(bundle, sessionID, liveItems, running),
+    [bundle, liveItems, running, sessionID],
+  )
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-canvas">
-      <header
-        className={cn(
-          'skills-header window-titlebar z-20 flex h-[45px] shrink-0 items-center justify-between gap-3 border-b border-edge/80 bg-canvas px-4 max-md:h-12',
-          sidebarCollapsed && 'sidebar-is-collapsed',
-        )}
-      >
-        <div className="flex min-w-0 self-stretch items-center gap-1">
-          {sidebarCollapsed && onExpandSidebar && (
-            <SidebarToggleButton
-              expanded={false}
-              className="desktop-sidebar-toggle hidden md:grid"
-              onToggle={onExpandSidebar}
-            />
-          )}
-          <button
-            className="window-titlebar-control flex h-9 cursor-pointer items-center gap-2 rounded-[8px] px-2.5 text-[0.84375rem] text-ink-muted outline-none transition-colors hover:bg-canvas-strong/65 hover:text-ink focus-visible:bg-canvas-strong/65 focus-visible:text-ink"
-            type="button"
-            onClick={onBack}
-          >
-            <ArrowLeft className="size-4" aria-hidden="true" />
-            <span>{t('diagnostics.back')}</span>
-          </button>
-          {bundle && bundle.tasks.length > 0 && (
-            <div className="ml-2 flex self-stretch items-stretch gap-1" role="tablist">
-              <DetailTab active={view === 'overview'} label={t('diagnostics.overview')} onClick={() => setView('overview')} />
-              <DetailTab active={view === 'trajectory'} label={t('diagnostics.trajectory')} onClick={() => setView('trajectory')} />
-            </div>
-          )}
-        </div>
-        <button
-          className="window-titlebar-control grid size-8 cursor-pointer place-items-center rounded-[8px] text-ink-muted outline-none transition-colors hover:bg-canvas-strong/65 hover:text-ink focus-visible:bg-canvas-strong/65 focus-visible:text-ink disabled:cursor-wait disabled:opacity-50"
-          type="button"
-          title={t('diagnostics.refresh')}
-          aria-label={t('diagnostics.refresh')}
-          disabled={loading}
-          onClick={() => void load()}
+      {embedded ? (
+        <header
+          className="flex h-10 shrink-0 items-stretch justify-between border-b border-edge/80 bg-canvas px-4"
+          data-testid="diagnostics-toolbar"
         >
-          <RefreshCw className={cn('size-4', loading && 'animate-spin')} aria-hidden="true" />
-        </button>
-      </header>
+          <div className="flex items-stretch gap-1" role="tablist">
+            {displayBundle && displayBundle.tasks.length > 0 && (
+              <>
+                <DetailTab active={view === 'overview'} label={t('diagnostics.overview')} onClick={() => setView('overview')} />
+                <DetailTab active={view === 'trajectory'} label={t('diagnostics.trajectory')} onClick={() => setView('trajectory')} />
+              </>
+            )}
+          </div>
+          <RefreshButton loading={loading} onRefresh={() => void load()} />
+        </header>
+      ) : (
+        <header
+          className={cn(
+            'skills-header window-titlebar z-20 flex h-[45px] shrink-0 items-center justify-between gap-3 border-b border-edge/80 bg-canvas px-4 max-md:h-12',
+            sidebarCollapsed && 'sidebar-is-collapsed',
+          )}
+        >
+          <div className="flex min-w-0 self-stretch items-center gap-1">
+            {sidebarCollapsed && onExpandSidebar && (
+              <SidebarToggleButton
+                expanded={false}
+                className="desktop-sidebar-toggle hidden md:grid"
+                onToggle={onExpandSidebar}
+              />
+            )}
+            <button
+              className="window-titlebar-control flex h-9 cursor-pointer items-center gap-2 rounded-[8px] px-2.5 text-[0.84375rem] text-ink-muted outline-none transition-colors hover:bg-canvas-strong/65 hover:text-ink focus-visible:bg-canvas-strong/65 focus-visible:text-ink"
+              type="button"
+              onClick={onBack}
+            >
+              <ArrowLeft className="size-4" aria-hidden="true" />
+              <span>{t('diagnostics.back')}</span>
+            </button>
+            {displayBundle && displayBundle.tasks.length > 0 && (
+              <div className="ml-2 flex self-stretch items-stretch gap-1" role="tablist">
+                <DetailTab active={view === 'overview'} label={t('diagnostics.overview')} onClick={() => setView('overview')} />
+                <DetailTab active={view === 'trajectory'} label={t('diagnostics.trajectory')} onClick={() => setView('trajectory')} />
+              </div>
+            )}
+          </div>
+          <RefreshButton loading={loading} onRefresh={() => void load()} />
+        </header>
+      )}
 
       <main className="min-h-0 flex-1 overflow-hidden bg-canvas">
         <h1 className="sr-only">{t('diagnostics.title')}</h1>
-        {loading && !bundle ? (
+        {loading && !displayBundle ? (
           <PageState icon={<LoaderCircle className="size-4 animate-spin" />}>
             {t('diagnostics.loading')}
           </PageState>
-        ) : error && !bundle ? (
+        ) : error && !displayBundle ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
             <CircleAlert className="size-5 text-danger" aria-hidden="true" />
             <p className="text-[0.84375rem] text-ink-muted">{t('diagnostics.loadError')}</p>
@@ -132,8 +164,8 @@ export function DiagnosticsPage({
               {t('diagnostics.retry')}
             </button>
           </div>
-        ) : bundle && bundle.tasks.length > 0 ? (
-          <ConversationTrace bundle={bundle} view={view} onViewChange={setView} />
+        ) : displayBundle && displayBundle.tasks.length > 0 ? (
+          <ConversationTrace bundle={displayBundle} view={view} onViewChange={setView} />
         ) : (
           <div className="flex h-full flex-col items-center justify-center text-center">
             <Gauge className="size-6 text-ink-faint" aria-hidden="true" />
@@ -145,6 +177,22 @@ export function DiagnosticsPage({
         )}
       </main>
     </div>
+  )
+}
+
+function RefreshButton({ loading, onRefresh }: { loading: boolean; onRefresh: () => void }) {
+  const { t } = useI18n()
+  return (
+    <button
+      className="window-titlebar-control my-auto grid size-8 cursor-pointer place-items-center rounded-[8px] text-ink-muted outline-none transition-colors hover:bg-canvas-strong/65 hover:text-ink focus-visible:bg-canvas-strong/65 focus-visible:text-ink disabled:cursor-wait disabled:opacity-50"
+      type="button"
+      title={t('diagnostics.refresh')}
+      aria-label={t('diagnostics.refresh')}
+      disabled={loading}
+      onClick={onRefresh}
+    >
+      <RefreshCw className={cn('size-4', loading && 'animate-spin')} aria-hidden="true" />
+    </button>
   )
 }
 

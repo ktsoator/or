@@ -146,6 +146,40 @@ func (s *Session) lastTurnCorrelation() requestCorrelation {
 	}
 }
 
+func (s *Session) activeRequestCorrelation() requestCorrelation {
+	s.runState.mu.RLock()
+	defer s.runState.mu.RUnlock()
+	for index := len(s.runState.pendingTurns) - 1; index >= 0; index-- {
+		turn := s.runState.pendingTurns[index]
+		if turn.requestID != "" {
+			return requestCorrelation{
+				runID: s.runState.runID, turnID: turn.turnID, requestID: turn.requestID,
+			}
+		}
+	}
+	return requestCorrelation{runID: s.runState.runID}
+}
+
+func (s *Session) correlateVisibleEvent(event *Event) {
+	if event == nil || event.ProviderRequestID != "" {
+		return
+	}
+	switch event.Type {
+	case TextDelta, ThinkingDelta,
+		ToolInputStarted, ToolInputDelta, ToolInputCompleted,
+		ToolStarted, ToolFinished, MessageCompleted:
+	default:
+		return
+	}
+	if event.ToolCallID != "" {
+		if tool, ok := s.toolState(event.ToolCallID); ok {
+			event.ProviderRequestID = tool.correlation.requestID
+			return
+		}
+	}
+	event.ProviderRequestID = s.activeRequestCorrelation().requestID
+}
+
 func (s *Session) beginTool(
 	toolCallID, toolName string,
 	startedAt time.Time,

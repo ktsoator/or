@@ -154,6 +154,7 @@ func projectEvent(ev engine.Event) (wireEvent, bool) {
 	default:
 		return wireEvent{}, false
 	}
+	out.ProviderRequestID = ev.ProviderRequestID
 	return out, true
 }
 

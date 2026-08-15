@@ -53,6 +53,8 @@ type ConversationPaneProps = {
     workbenchToggleControl: ReactNode
     awayFromLatest: boolean
     hasNewContent: boolean
+    diagnosticsOpen: boolean
+    diagnosticsContent: ReactNode
   }
   scroll: {
     logRef: RefObject<HTMLDivElement | null>
@@ -106,6 +108,8 @@ export function ConversationPane({
     workbenchToggleControl,
     awayFromLatest,
     hasNewContent,
+    diagnosticsOpen,
+    diagnosticsContent,
   } = layout
   const {
     logRef,
@@ -281,9 +285,15 @@ export function ConversationPane({
                 <Tooltip.Trigger asChild>
                   <button
                     type="button"
-                    className="window-titlebar-control grid size-8 shrink-0 cursor-pointer place-items-center rounded-[8px] text-ink-muted outline-none transition-colors hover:bg-canvas-strong/65 hover:text-ink focus-visible:bg-canvas-strong/65 focus-visible:text-ink"
-                    aria-label={t('diagnostics.openCurrentSession')}
+                    aria-label={diagnosticsOpen ? t('diagnostics.backToConversation') : t('diagnostics.openCurrentSession')}
+                    aria-pressed={diagnosticsOpen}
                     data-testid="conversation-diagnostics-button"
+                    data-active={diagnosticsOpen || undefined}
+                    title={diagnosticsOpen ? t('diagnostics.backToConversation') : t('diagnostics.openCurrentSession')}
+                    className={cn(
+                      'window-titlebar-control grid size-8 shrink-0 cursor-pointer place-items-center rounded-[8px] text-ink-muted outline-none transition-colors hover:bg-canvas-strong/65 hover:text-ink focus-visible:bg-canvas-strong/65 focus-visible:text-ink',
+                      diagnosticsOpen && 'bg-canvas-strong text-ink',
+                    )}
                     onClick={openSessionDiagnostics}
                   >
                     <Gauge className="size-4" aria-hidden="true" />
@@ -296,7 +306,7 @@ export function ConversationPane({
                     collisionPadding={8}
                     className="z-[150] animate-[fade-in_100ms_ease-out] rounded-md bg-canvas-inverse px-2 py-1 text-[0.6875rem] leading-4 font-medium whitespace-nowrap text-ink-inverse shadow-lg"
                   >
-                    {t('diagnostics.openCurrentSession')}
+                    {diagnosticsOpen ? t('diagnostics.backToConversation') : t('diagnostics.openCurrentSession')}
                   </Tooltip.Content>
                 </Tooltip.Portal>
               </Tooltip.Root>
@@ -306,13 +316,14 @@ export function ConversationPane({
         </header>
 
         <div className="relative min-h-0 flex-1">
-          <main
-            ref={logRef}
-            data-testid="conversation-transcript"
-            className="h-full overflow-x-hidden overflow-y-auto px-3 md:px-6 md:[scrollbar-gutter:stable_both-edges]"
-            onScroll={trackScrollPosition}
-            onWheelCapture={pauseFollowOnWheel}
-          >
+          {diagnosticsOpen ? diagnosticsContent : (
+            <main
+              ref={logRef}
+              data-testid="conversation-transcript"
+              className="h-full overflow-x-hidden overflow-y-auto px-3 md:px-6 md:[scrollbar-gutter:stable_both-edges]"
+              onScroll={trackScrollPosition}
+              onWheelCapture={pauseFollowOnWheel}
+            >
             <div
               className={cn(
                 'mx-auto min-h-full w-full max-w-[750px] pt-5 pb-9 max-md:pt-4 max-md:pb-7',
@@ -367,8 +378,9 @@ export function ConversationPane({
                 </>
               )}
             </div>
-          </main>
-          {awayFromLatest && (
+            </main>
+          )}
+          {!diagnosticsOpen && awayFromLatest && (
             <ScrollToLatestButton
               hasNewContent={hasNewContent}
               onClick={scrollToLatest}
@@ -376,7 +388,7 @@ export function ConversationPane({
           )}
         </div>
 
-        {!loading && !emptySession && renderComposer()}
+        {!loading && (!emptySession || diagnosticsOpen) && renderComposer()}
       </div>
   )
 

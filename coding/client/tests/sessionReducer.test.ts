@@ -84,6 +84,86 @@ describe('threadsReducer event sequences', () => {
     expect(thread(state).items.some((item) => item.kind === 'tool')).toBe(false)
   })
 
+  test('retains provider request correlation on streamed content and tools', () => {
+    const state = reduce([
+      {
+        t: 'reset',
+        sessionID,
+        history: { running: true, events: [{ type: 'run_start', runId: 'run-1', startedAt }] },
+      },
+      {
+        t: 'wire',
+        sessionID,
+        ev: {
+          type: 'delta',
+          kind: 'thinking',
+          delta: 'Inspecting',
+          providerRequestId: 'request-1',
+        },
+      },
+      {
+        t: 'wire',
+        sessionID,
+        ev: {
+          type: 'tool_start',
+          id: 'call-1',
+          tool: 'read',
+          args: { path: 'trace.go' },
+          providerRequestId: 'request-1',
+        },
+      },
+      {
+        t: 'wire',
+        sessionID,
+        ev: {
+          type: 'tool_end',
+          id: 'call-1',
+          tool: 'read',
+          result: 'done',
+          providerRequestId: 'request-1',
+        },
+      },
+      {
+        t: 'wire',
+        sessionID,
+        ev: {
+          type: 'delta',
+          kind: 'text',
+          delta: 'Finished',
+          providerRequestId: 'request-2',
+        },
+      },
+      {
+        t: 'wire',
+        sessionID,
+        ev: {
+          type: 'message_end',
+          text: 'Finished',
+          finalResponse: true,
+          providerRequestId: 'request-2',
+        },
+      },
+    ])
+
+    expect(thread(state).items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'thinking',
+        text: 'Inspecting',
+        providerRequestId: 'request-1',
+      }),
+      expect.objectContaining({
+        kind: 'tool',
+        id: 'call-1',
+        providerRequestId: 'request-1',
+      }),
+      expect.objectContaining({
+        kind: 'assistant',
+        markdown: 'Finished',
+        providerRequestId: 'request-2',
+      }),
+    ]))
+  })
+
   test('backfills durable message IDs when a live run completes', () => {
     const state = reduce([
       {

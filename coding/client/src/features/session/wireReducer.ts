@@ -75,6 +75,11 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
   let autoCompacting = state.autoCompacting
   let seq = state.seq
   const nextId = () => `i-${seq++}`
+  const requestCorrelation = ev.providerRequestId
+    ? { providerRequestId: ev.providerRequestId }
+    : {}
+  const matchesEventRequest = (item: { providerRequestId?: string }) =>
+    !ev.providerRequestId || item.providerRequestId === ev.providerRequestId
 
   const closeAssistant = () => {
     items = items.map((it) => (it.kind === 'assistant' && it.open ? { ...it, open: false } : it))
@@ -268,23 +273,40 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
 
     case 'delta':
       if (ev.kind === 'thinking') {
-        const idx = lastIndex(items, (it) => it.kind === 'thinking' && it.streaming)
+        const idx = lastIndex(
+          items,
+          (it) => it.kind === 'thinking' && it.streaming && matchesEventRequest(it),
+        )
         if (idx >= 0) {
           const cur = items[idx] as Extract<Item, { kind: 'thinking' }>
-          items = replaceAt(items, idx, { ...cur, text: cur.text + (ev.delta ?? '') })
+          items = replaceAt(items, idx, {
+            ...cur,
+            ...requestCorrelation,
+            text: cur.text + (ev.delta ?? ''),
+          })
         } else {
           items = [
             ...items,
-            { kind: 'thinking', id: nextId(), text: ev.delta ?? '', streaming: true },
+            {
+              kind: 'thinking',
+              id: nextId(),
+              ...requestCorrelation,
+              text: ev.delta ?? '',
+              streaming: true,
+            },
           ]
         }
       } else {
         completeThinking()
-        const idx = lastIndex(items, (it) => it.kind === 'assistant' && it.open)
+        const idx = lastIndex(
+          items,
+          (it) => it.kind === 'assistant' && it.open && matchesEventRequest(it),
+        )
         if (idx >= 0) {
           const cur = items[idx] as Extract<Item, { kind: 'assistant' }>
           items = replaceAt(items, idx, {
             ...cur,
+            ...requestCorrelation,
             markdown: cur.markdown + (ev.delta ?? ''),
           })
         } else {
@@ -293,6 +315,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
             {
               kind: 'assistant',
               id: nextId(),
+              ...requestCorrelation,
               markdown: ev.delta ?? '',
               open: true,
               complete: false,
@@ -312,10 +335,14 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
           (it) =>
             it.kind === 'tool' &&
             it.status === 'preparing' &&
+            matchesEventRequest(it) &&
             it.toolContentIndex === ev.toolContentIndex,
         )
       }
-      if (idx < 0) {
+      if (idx >= 0) {
+        const cur = items[idx] as Extract<Item, { kind: 'tool' }>
+        items = replaceAt(items, idx, { ...cur, ...requestCorrelation })
+      } else {
         items = [
           ...items,
           {
@@ -324,6 +351,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
             name: ev.tool ?? 'tool',
             args: undefined,
             status: 'preparing',
+            ...requestCorrelation,
             toolContentIndex: ev.toolContentIndex,
             generatedBytes: 0,
           },
@@ -340,6 +368,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
           (it) =>
             it.kind === 'tool' &&
             it.status === 'preparing' &&
+            matchesEventRequest(it) &&
             it.toolContentIndex === ev.toolContentIndex,
         )
       }
@@ -347,6 +376,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
         const cur = items[idx] as Extract<Item, { kind: 'tool' }>
         items = replaceAt(items, idx, {
           ...cur,
+          ...requestCorrelation,
           id: ev.id ?? cur.id,
           name: ev.tool || cur.name,
           args: `${typeof cur.args === 'string' ? cur.args : ''}${ev.delta ?? ''}`,
@@ -361,6 +391,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
             name: ev.tool ?? 'tool',
             args: ev.delta ?? '',
             status: 'preparing',
+            ...requestCorrelation,
             toolContentIndex: ev.toolContentIndex,
             generatedBytes: ev.bytes ?? 0,
           },
@@ -377,6 +408,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
           (it) =>
             it.kind === 'tool' &&
             it.status === 'preparing' &&
+            matchesEventRequest(it) &&
             it.toolContentIndex === ev.toolContentIndex,
         )
       }
@@ -384,6 +416,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
         name: ev.tool ?? 'tool',
         args: ev.args,
         status: 'preparing' as const,
+        ...requestCorrelation,
         toolContentIndex: ev.toolContentIndex,
       }
       if (idx >= 0) {
@@ -413,6 +446,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
           (it) =>
             it.kind === 'tool' &&
             it.status === 'preparing' &&
+            matchesEventRequest(it) &&
             (!ev.tool || it.name === ev.tool),
         )
       }
@@ -420,6 +454,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
         const cur = items[idx] as Extract<Item, { kind: 'tool' }>
         items = replaceAt(items, idx, {
           ...cur,
+          ...requestCorrelation,
           id: ev.id ?? cur.id,
           name: ev.tool || cur.name,
           args: ev.args ?? cur.args,
@@ -434,6 +469,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
             name: ev.tool ?? 'tool',
             args: ev.args,
             status: 'running',
+            ...requestCorrelation,
           },
         ]
       }
@@ -448,6 +484,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
           (it) =>
             it.kind === 'tool' &&
             (it.status === 'running' || it.status === 'preparing') &&
+            matchesEventRequest(it) &&
             (!ev.tool || it.name === ev.tool),
         )
       }
@@ -459,6 +496,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
           | 'error'
           | 'complete',
         result: ev.result,
+        ...requestCorrelation,
         ...(ev.images ? { images: ev.images } : {}),
         outcome,
         change: structuredChange,
@@ -582,12 +620,18 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
       responseUsage = mergeUsage(responseUsage, ev.usage)
       if (ev.context) contextUsage = ev.context
       {
-        let idx = lastIndex(items, (it) => it.kind === 'assistant' && it.open)
+        let idx = lastIndex(
+          items,
+          (it) => it.kind === 'assistant' && it.open && matchesEventRequest(it),
+        )
         if (idx < 0 && ev.text) {
           const runIndex = lastIndex(items, (item) => item.kind === 'run')
           const matchingAssistant = lastIndex(
             items,
-            (item) => item.kind === 'assistant' && item.markdown === ev.text,
+            (item) =>
+              item.kind === 'assistant' &&
+              item.markdown === ev.text &&
+              matchesEventRequest(item),
           )
           if (
             matchingAssistant > runIndex &&
@@ -602,6 +646,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
             const cur = items[idx] as Extract<Item, { kind: 'assistant' }>
             items = replaceAt(items, idx, {
               ...cur,
+              ...requestCorrelation,
               ...(ev.messageID ? { messageID: ev.messageID } : {}),
               markdown: ev.text,
               open: false,
@@ -613,6 +658,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
               {
                 kind: 'assistant',
                 id: nextId(),
+                ...requestCorrelation,
                 ...(ev.messageID ? { messageID: ev.messageID } : {}),
                 markdown: ev.text,
                 open: false,
@@ -624,6 +670,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
           const cur = items[idx] as Extract<Item, { kind: 'assistant' }>
           items = replaceAt(items, idx, {
             ...cur,
+            ...requestCorrelation,
             ...(ev.messageID ? { messageID: ev.messageID } : {}),
             open: false,
           })

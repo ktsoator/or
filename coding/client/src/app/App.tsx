@@ -52,7 +52,8 @@ type AppView =
   | { type: 'settings'; section: SettingsSection }
   | { type: 'skills' }
   | { type: 'mcp' }
-  | { type: 'diagnostics' }
+
+type ConversationSurface = 'conversation' | 'diagnostics'
 
 type BranchPointTarget = {
   sessionID: string
@@ -136,6 +137,9 @@ export default function App() {
   const [removingWorkspace, setRemovingWorkspace] = useState(false)
   const [removeWorkspaceError, setRemoveWorkspaceError] = useState('')
   const [view, setView] = useState<AppView>({ type: 'conversation' })
+  const [conversationSurfaces, setConversationSurfaces] = useState<
+    Record<string, ConversationSurface>
+  >({})
   const [workspaceOpenError, setWorkspaceOpenError] = useState('')
   const [selectedWorkspacePath, setSelectedWorkspacePath] = useState<string>()
   const {
@@ -471,6 +475,20 @@ export default function App() {
     />
   )
 
+  const diagnosticsOpen = Boolean(
+    activeSessionID && conversationSurfaces[activeSessionID] === 'diagnostics',
+  )
+
+  const toggleSessionDiagnostics = () => {
+    if (!activeSessionID) return
+    setConversationSurfaces((current) => ({
+      ...current,
+      [activeSessionID]: current[activeSessionID] === 'diagnostics'
+        ? 'conversation'
+        : 'diagnostics',
+    }))
+  }
+
   const workbenchOwnsToggle =
     workbenchOpen || workbenchClosing || workbenchAutoLayoutChanging
   const workbenchToggleControl = (
@@ -585,15 +603,6 @@ export default function App() {
             workspaceName={activeSession?.workspaceName}
           />
         </Suspense>
-      ) : view.type === 'diagnostics' ? (
-        <Suspense fallback={<AppViewFallback />}>
-          <DiagnosticsPage
-            onBack={() => setView({ type: 'conversation' })}
-            sidebarCollapsed={sidebarCollapsed}
-            onExpandSidebar={expandSidebar}
-            sessionID={activeSessionID}
-          />
-        </Suspense>
       ) : (
       <div
         ref={workbenchLayoutRef}
@@ -635,6 +644,17 @@ export default function App() {
           workbenchToggleControl,
           awayFromLatest,
           hasNewContent,
+          diagnosticsOpen,
+          diagnosticsContent: diagnosticsOpen && activeSessionID ? (
+            <Suspense fallback={<AppViewFallback />}>
+              <DiagnosticsPage
+                embedded
+                sessionID={activeSessionID}
+                liveItems={items}
+                running={running}
+              />
+            </Suspense>
+          ) : null,
         }}
         scroll={{
           logRef,
@@ -651,7 +671,7 @@ export default function App() {
             ? () => chooseSession(parentSession.id, activeSession?.forkedFromMessageId)
             : undefined,
           branchPointLocated: handleBranchPointLocated,
-          openSessionDiagnostics: () => setView({ type: 'diagnostics' }),
+          openSessionDiagnostics: toggleSessionDiagnostics,
           forkMessage,
           editMessage,
           renderComposer: composer,

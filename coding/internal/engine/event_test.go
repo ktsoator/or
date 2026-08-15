@@ -165,3 +165,42 @@ func TestSessionProjectsQueuedUserMessageHandle(t *testing.T) {
 		}
 	}
 }
+
+func TestSessionCorrelatesVisibleEventsWithProviderRequest(t *testing.T) {
+	stream := func(
+		_ context.Context,
+		model llm.Model,
+		_ llm.Context,
+		_ llm.StreamOptions,
+	) (<-chan llm.Event, error) {
+		partial := llm.NewAssistantMessage(model)
+		partial.Content = []llm.AssistantContent{&llm.TextContent{Text: "answer"}}
+		message := llm.NewAssistantMessage(model)
+		message.Content = []llm.AssistantContent{&llm.TextContent{Text: "answer"}}
+		message.StopReason = llm.StopReasonStop
+		events := make(chan llm.Event, 2)
+		events <- llm.Event{Type: llm.EventTextDelta, Delta: "answer", Partial: &partial}
+		events <- llm.Event{Type: llm.EventDone, Message: &message}
+		close(events)
+		return events, nil
+	}
+	session, err := New(context.Background(), Options{
+		Model: llm.Model{Provider: "test", ID: "model"}, Tools: []tools.Tool{}, StreamFn: stream,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var requestIDs []string
+	session.Subscribe(func(event Event) {
+		if event.Type == TextDelta || event.Type == MessageCompleted {
+			requestIDs = append(requestIDs, event.ProviderRequestID)
+		}
+	})
+	if err := session.Prompt(context.Background(), "question"); err != nil {
+		t.Fatal(err)
+	}
+	if len(requestIDs) != 2 || requestIDs[0] == "" || requestIDs[0] != requestIDs[1] {
+		t.Fatalf("provider request IDs = %#v, want one stable non-empty ID", requestIDs)
+	}
+}

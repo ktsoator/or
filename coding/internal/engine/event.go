@@ -84,11 +84,14 @@ type Event struct {
 	// Response metadata identifies the exact provider request represented by a
 	// MessageCompleted event. It lets product shells build durable, per-model
 	// usage reports without inferring the active model from mutable UI state.
-	Provider      string
-	Model         string
-	ResponseModel string
-	ResponseID    string
-	Timestamp     time.Time
+	// ProviderRequestID is also populated on streamed content and tool events so
+	// live consumers can join them to the same diagnostic request snapshot.
+	ProviderRequestID string
+	Provider          string
+	Model             string
+	ResponseModel     string
+	ResponseID        string
+	Timestamp         time.Time
 	// Automatic distinguishes context maintenance performed inside an active run
 	// from an explicit Compact call. Error is populated on CompactionFailed.
 	Automatic bool
@@ -205,8 +208,9 @@ func projectAgentEvent(ev agent.AgentEvent) (Event, bool) {
 			return Event{}, false
 		}
 		return Event{
-			Type: MessageCompleted,
-			Text: displayAssistantText(assistant),
+			Type:              MessageCompleted,
+			Text:              displayAssistantText(assistant),
+			ProviderRequestID: assistant.ProviderRequestID,
 			FinalResponse: assistant.StopReason != llm.StopReasonToolUse &&
 				assistant.StopReason != llm.StopReasonError &&
 				assistant.StopReason != llm.StopReasonAborted,

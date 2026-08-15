@@ -199,6 +199,23 @@ func TestProjectEventIncludesUserMessageTime(t *testing.T) {
 	}
 }
 
+func TestProjectEventIncludesProviderRequestID(t *testing.T) {
+	data, ok := ProjectEvent(engine.Event{
+		Type: engine.ThinkingDelta, Delta: "checking", ProviderRequestID: "request-1",
+	})
+	if !ok {
+		t.Fatal("thinking event was not projected")
+	}
+
+	var event wireEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		t.Fatal(err)
+	}
+	if event.ProviderRequestID != "request-1" {
+		t.Fatalf("providerRequestId = %q, want request-1", event.ProviderRequestID)
+	}
+}
+
 func TestProjectEventIncludesToolInputProgress(t *testing.T) {
 	data, ok := ProjectEvent(engine.Event{
 		Type:             engine.ToolInputDelta,

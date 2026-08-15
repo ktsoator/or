@@ -299,6 +299,7 @@ export type WireEvent = {
   questions?: Question[]
   title?: string
   runId?: string
+  providerRequestId?: string
   startedAt?: string
   completedAt?: string
   durationMs?: number
