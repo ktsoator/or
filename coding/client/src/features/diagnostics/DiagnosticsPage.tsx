@@ -1,4 +1,14 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   ArrowLeft,
   ChevronRight,
@@ -33,6 +43,12 @@ import { liveTraceRefreshKey, mergeLiveTraceBundle } from './liveTrace'
 type TraceView = 'overview' | 'trajectory'
 type InspectorMode = 'summary' | 'content' | 'input' | 'system' | 'tools' | 'raw'
 
+const TRAJECTORY_VIRTUALIZATION_THRESHOLD = 100
+const TRAJECTORY_OVERSCAN = 12
+const TRAJECTORY_ROW_ESTIMATE = 36
+const TRAJECTORY_TASK_HEADER_HEIGHT = 28
+const TIMELINE_COLUMN_WIDTH = 50
+
 export type DiagnosticsSessionState = {
   view?: TraceView
   selectedItemID?: string
@@ -40,9 +56,22 @@ export type DiagnosticsSessionState = {
   inspectorMode?: InspectorMode
   query?: string
   ledgerScrollTop?: number
+  ledgerAnchorID?: string
+  ledgerAnchorOffset?: number
 }
 
 type DiagnosticsStatePatch = Partial<DiagnosticsSessionState>
+
+type TrajectoryScrollTarget = {
+  itemID: string
+  revision: number
+}
+
+type TrajectoryAnchor = {
+  itemID: string
+  offset: number
+  viewportTop?: number
+}
 
 type TraceRequestSlot = {
   revision: number
@@ -427,6 +456,8 @@ function ConversationTrace({
   )
   const [inspectorOpen, setInspectorOpen] = useState(rememberedState.inspectorOpen ?? true)
   const [mode, setMode] = useState<InspectorMode>(rememberedState.inspectorMode ?? 'summary')
+  const [scrollTarget, setScrollTarget] = useState<TrajectoryScrollTarget>()
+  const scrollRevisionRef = useRef(0)
   const selectedItem = items.find((item) => item.id === selectedItemID) ?? initialItem
 
   const selectItem = (item: TrajectoryItem, scroll = false) => {
@@ -435,9 +466,8 @@ function ConversationTrace({
     setMode('summary')
     rememberState({ selectedItemID: item.id, inspectorOpen: true, inspectorMode: 'summary' })
     if (scroll) {
-      window.requestAnimationFrame(() => {
-        document.getElementById(trajectoryDOMID(item.id))?.scrollIntoView({ block: 'nearest' })
-      })
+      scrollRevisionRef.current += 1
+      setScrollTarget({ itemID: item.id, revision: scrollRevisionRef.current })
     }
   }
   const selectRequest = (requestID: string) => {
@@ -481,10 +511,17 @@ function ConversationTrace({
               items={items}
               selectedItemID={selectedItem?.id ?? ''}
               onSelect={selectItem}
+              scrollTarget={scrollTarget}
               initialQuery={rememberedState.query}
               initialScrollTop={rememberedState.ledgerScrollTop}
+              initialAnchorID={rememberedState.ledgerAnchorID}
+              initialAnchorOffset={rememberedState.ledgerAnchorOffset}
               onQueryChange={(query) => rememberState({ query })}
-              onScrollTopChange={(ledgerScrollTop) => rememberState({ ledgerScrollTop })}
+              onScrollPositionChange={(position) => rememberState({
+                ledgerScrollTop: position.scrollTop,
+                ledgerAnchorID: position.anchorID,
+                ledgerAnchorOffset: position.anchorOffset,
+              })}
               hasEarlier={hasEarlier}
               loadingEarlier={loadingEarlier}
               earlierError={earlierError}
@@ -548,7 +585,78 @@ function TrajectoryTimeline({
     { id: 'model', kinds: ['assistant'], label: t('diagnostics.timelineModel') },
     { id: 'tools', kinds: ['tool'], label: t('diagnostics.timelineTools') },
   ]
-  const contentWidth = Math.max(640, items.length * 50)
+  const virtualized = items.length > TRAJECTORY_VIRTUALIZATION_THRESHOLD
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const columnVirtualizer = useVirtualizer({
+    count: items.length,
+    enabled: virtualized,
+    getScrollElement: () => scrollRef.current,
+    getItemKey: (index) => items[index]?.id ?? index,
+    estimateSize: () => TIMELINE_COLUMN_WIDTH,
+    horizontal: true,
+    overscan: TRAJECTORY_OVERSCAN,
+    useFlushSync: false,
+  })
+  const selectedIndex = items.findIndex((item) => item.id === selectedItemID)
+  useEffect(() => {
+    if (!virtualized || selectedIndex < 0) return
+    const frame = window.requestAnimationFrame(() => {
+      columnVirtualizer.scrollToIndex(selectedIndex, { align: 'auto' })
+    })
+    return () => { window.cancelAnimationFrame(frame) }
+  }, [columnVirtualizer, selectedIndex, virtualized])
+
+  if (virtualized) {
+    return (
+      <section className="shrink-0 py-2" aria-label={t('diagnostics.executionTimeline')}>
+        <div className="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-x-2 border-b border-edge-soft py-1">
+          <div>
+            {lanes.map((lane) => (
+              <span key={lane.id} className="flex h-5 items-center text-[0.6875rem] text-ink-faint">
+                {lane.label}
+              </span>
+            ))}
+          </div>
+          <div
+            ref={scrollRef}
+            className="code-scroll-area overflow-x-auto"
+            data-testid="diagnostics-timeline-scroll"
+            data-virtualized="true"
+          >
+            <div
+              className="relative h-[3.75rem]"
+              style={{ width: `${columnVirtualizer.getTotalSize()}px` }}
+            >
+              {columnVirtualizer.getVirtualItems().map((column) => {
+                const item = items[column.index]!
+                const laneIndex = lanes.findIndex((lane) => lane.kinds.includes(item.kind))
+                return (
+                  <div
+                    key={column.key}
+                    className="absolute top-0 flex h-5 items-center px-0.5"
+                    style={{
+                      left: `${column.start}px`,
+                      top: `${laneIndex * 20}px`,
+                      width: `${column.size}px`,
+                    }}
+                  >
+                    <TimelineItemButton
+                      item={item}
+                      active={item.id === selectedItemID}
+                      index={column.index}
+                      onSelect={() => onSelectItem(item)}
+                    />
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  const contentWidth = Math.max(640, items.length * TIMELINE_COLUMN_WIDTH)
   return (
     <section className="shrink-0 py-2" aria-label={t('diagnostics.executionTimeline')}>
       <div className="code-scroll-area overflow-x-auto border-b border-edge-soft py-1">
@@ -561,19 +669,13 @@ function TrajectoryTimeline({
                 style={{ gridTemplateColumns: `repeat(${items.length}, minmax(2.75rem, 1fr))` }}
               >
                 {items.map((item, index) => lane.kinds.includes(item.kind) ? (
-                  <button
+                  <TimelineItemButton
                     key={item.id}
-                    type="button"
-                    title={trajectoryItemTitle(item, t)}
-                    aria-label={trajectoryItemTitle(item, t)}
-                    aria-pressed={item.id === selectedItemID}
-                    className={cn(
-                      'h-2.5 cursor-pointer rounded-[2px] outline-none ring-offset-1 ring-offset-canvas transition-[height,opacity,box-shadow] hover:h-3.5 focus-visible:ring-2 focus-visible:ring-info',
-                      timelineTone(item.kind),
-                      item.id === selectedItemID ? 'h-3.5 ring-2 ring-info' : 'opacity-90 hover:opacity-100',
-                    )}
+                    item={item}
+                    active={item.id === selectedItemID}
+                    index={index}
                     style={{ gridColumnStart: index + 1 }}
-                    onClick={() => onSelectItem(item)}
+                    onSelect={() => onSelectItem(item)}
                   />
                 ) : null)}
               </div>
@@ -585,14 +687,50 @@ function TrajectoryTimeline({
   )
 }
 
+function TimelineItemButton({
+  item,
+  active,
+  index,
+  style,
+  onSelect,
+}: {
+  item: TrajectoryItem
+  active: boolean
+  index: number
+  style?: CSSProperties
+  onSelect: () => void
+}) {
+  const { t } = useI18n()
+  return (
+    <button
+      type="button"
+      title={trajectoryItemTitle(item, t)}
+      aria-label={trajectoryItemTitle(item, t)}
+      aria-pressed={active}
+      data-timeline-index={index}
+      data-timeline-item-id={item.id}
+      className={cn(
+        'h-2.5 w-full cursor-pointer rounded-[2px] outline-none ring-offset-1 ring-offset-canvas transition-[height,opacity,box-shadow] hover:h-3.5 focus-visible:ring-2 focus-visible:ring-info',
+        timelineTone(item.kind),
+        active ? 'h-3.5 ring-2 ring-info' : 'opacity-90 hover:opacity-100',
+      )}
+      style={style}
+      onClick={onSelect}
+    />
+  )
+}
+
 function TrajectoryLedger({
   items,
   selectedItemID,
   onSelect,
+  scrollTarget,
   initialQuery = '',
   initialScrollTop = 0,
+  initialAnchorID,
+  initialAnchorOffset = 0,
   onQueryChange,
-  onScrollTopChange,
+  onScrollPositionChange,
   hasEarlier,
   loadingEarlier,
   earlierError,
@@ -601,10 +739,17 @@ function TrajectoryLedger({
   items: TrajectoryItem[]
   selectedItemID: string
   onSelect: (item: TrajectoryItem) => void
+  scrollTarget?: TrajectoryScrollTarget
   initialQuery?: string
   initialScrollTop?: number
+  initialAnchorID?: string
+  initialAnchorOffset?: number
   onQueryChange?: (query: string) => void
-  onScrollTopChange?: (scrollTop: number) => void
+  onScrollPositionChange?: (position: {
+    scrollTop: number
+    anchorID?: string
+    anchorOffset?: number
+  }) => void
   hasEarlier: boolean
   loadingEarlier: boolean
   earlierError: boolean
@@ -613,26 +758,136 @@ function TrajectoryLedger({
   const { t } = useI18n()
   const [query, setQuery] = useState(initialQuery)
   const scrollRef = useRef<HTMLDivElement>(null)
-  const prependAnchorRef = useRef<{ itemID: string; offset: number } | undefined>(undefined)
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = initialScrollTop
-  }, [initialScrollTop])
+  const prependAnchorRef = useRef<TrajectoryAnchor | undefined>(undefined)
+  const normalizedQuery = query.trim().toLocaleLowerCase()
+  const filtered = useMemo(() => normalizedQuery
+    ? items.filter((item) => trajectorySearchText(item).toLocaleLowerCase().includes(normalizedQuery))
+    : items, [items, normalizedQuery])
+  const virtualized = filtered.length > TRAJECTORY_VIRTUALIZATION_THRESHOLD
+  const rowVirtualizer = useVirtualizer({
+    count: filtered.length,
+    enabled: virtualized,
+    getScrollElement: () => scrollRef.current,
+    getItemKey: (index) => filtered[index]?.id ?? index,
+    estimateSize: (index) => TRAJECTORY_ROW_ESTIMATE +
+      (filtered[index]?.kind === 'user' ? TRAJECTORY_TASK_HEADER_HEIGHT : 0),
+    overscan: TRAJECTORY_OVERSCAN,
+    useFlushSync: false,
+  })
+  const virtualRows = rowVirtualizer.getVirtualItems()
+  const visibleVirtualRow = virtualRows.find((row) =>
+    row.end > (rowVirtualizer.scrollOffset ?? 0))
+  const visibleItem = visibleVirtualRow ? filtered[visibleVirtualRow.index] : undefined
+  const currentTaskNumber = visibleVirtualRow
+    ? filtered.slice(0, visibleVirtualRow.index + 1)
+        .findLast((item) => item.kind === 'user')?.taskNumber
+    : undefined
+  const overlayTaskNumber = visibleItem?.kind === 'user' ? undefined : currentTaskNumber
+
+  const restoreAnchor = useCallback((anchor: TrajectoryAnchor) => {
+    const scrollArea = scrollRef.current
+    const index = filtered.findIndex((item) => item.id === anchor.itemID)
+    if (!scrollArea || index < 0) return
+    const adjustToMeasuredRow = () => {
+      const row = [...scrollArea.querySelectorAll<HTMLElement>('[data-trajectory-item-id]')]
+        .find((candidate) => candidate.dataset.trajectoryItemId === anchor.itemID)
+      if (!row) return
+      const rowTop = row.getBoundingClientRect().top
+      const nextPosition = anchor.viewportTop === undefined
+        ? rowTop - scrollArea.getBoundingClientRect().top
+        : rowTop
+      const desiredPosition = anchor.viewportTop ?? anchor.offset
+      scrollArea.scrollTop += nextPosition - desiredPosition
+    }
+    if (!virtualized) {
+      adjustToMeasuredRow()
+      return
+    }
+    window.requestAnimationFrame(() => {
+      const itemOffset = rowVirtualizer.getOffsetForIndex(index, 'start')?.[0]
+      if (itemOffset === undefined) return
+      const desiredOffset = anchor.viewportTop === undefined
+        ? anchor.offset
+        : anchor.viewportTop - scrollArea.getBoundingClientRect().top
+      const rowInset = filtered[index]?.kind === 'user' ? TRAJECTORY_TASK_HEADER_HEIGHT : 0
+      rowVirtualizer.scrollToOffset(itemOffset + rowInset - desiredOffset)
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(adjustToMeasuredRow)
+      })
+    })
+  }, [filtered, rowVirtualizer, virtualized])
+
+  const initialPositionRestoredRef = useRef(false)
+  useLayoutEffect(() => {
+    if (initialPositionRestoredRef.current || filtered.length === 0) return
+    initialPositionRestoredRef.current = true
+    if (initialAnchorID) {
+      restoreAnchor({ itemID: initialAnchorID, offset: initialAnchorOffset })
+    } else if (scrollRef.current) {
+      scrollRef.current.scrollTop = initialScrollTop
+    }
+  }, [filtered.length, initialAnchorID, initialAnchorOffset, initialScrollTop, restoreAnchor])
+
   useLayoutEffect(() => {
     const anchor = prependAnchorRef.current
-    const scrollArea = scrollRef.current
-    if (!anchor || !scrollArea || loadingEarlier) return
-    const row = [...scrollArea.querySelectorAll<HTMLElement>('[data-trajectory-item-id]')]
-      .find((candidate) => candidate.dataset.trajectoryItemId === anchor.itemID)
-    if (row) {
-      const nextOffset = row.getBoundingClientRect().top - scrollArea.getBoundingClientRect().top
-      scrollArea.scrollTop += nextOffset - anchor.offset
-    }
+    if (!anchor || loadingEarlier) return
     prependAnchorRef.current = undefined
-  }, [items, loadingEarlier])
-  const normalizedQuery = query.trim().toLocaleLowerCase()
-  const filtered = normalizedQuery
-    ? items.filter((item) => trajectorySearchText(item).toLocaleLowerCase().includes(normalizedQuery))
-    : items
+    restoreAnchor(anchor)
+  }, [filtered, loadingEarlier, restoreAnchor])
+
+  useEffect(() => {
+    if (!scrollTarget) return
+    const index = filtered.findIndex((item) => item.id === scrollTarget.itemID)
+    if (index < 0) return
+    if (virtualized) {
+      const frame = window.requestAnimationFrame(() => {
+        rowVirtualizer.scrollToIndex(index, { align: 'auto' })
+      })
+      return () => { window.cancelAnimationFrame(frame) }
+    }
+    const frame = window.requestAnimationFrame(() => {
+      const scrollArea = scrollRef.current
+      const row = scrollArea
+        ? [...scrollArea.querySelectorAll<HTMLElement>('[data-trajectory-item-id]')]
+            .find((candidate) => candidate.dataset.trajectoryItemId === scrollTarget.itemID)
+        : undefined
+      row?.scrollIntoView({ block: 'nearest' })
+    })
+    return () => { window.cancelAnimationFrame(frame) }
+  }, [filtered, rowVirtualizer, scrollTarget, virtualized])
+
+  const captureVisibleAnchor = () => {
+    const scrollArea = scrollRef.current
+    if (!scrollArea) return undefined
+    const scrollBounds = scrollArea.getBoundingClientRect()
+    const visibleTop = scrollBounds.top +
+      (virtualized && currentTaskNumber !== undefined ? TRAJECTORY_TASK_HEADER_HEIGHT : 0)
+    const row = [...scrollArea.querySelectorAll<HTMLElement>('[data-trajectory-item-id]')]
+      .find((candidate) => candidate.getBoundingClientRect().bottom > visibleTop)
+    if (!row?.dataset.trajectoryItemId) return undefined
+    return {
+      itemID: row.dataset.trajectoryItemId,
+      offset: row.getBoundingClientRect().top - scrollBounds.top,
+      viewportTop: row.getBoundingClientRect().top,
+    }
+  }
+
+  const handleScroll = (scrollArea: HTMLDivElement) => {
+    const anchor = captureVisibleAnchor()
+    onScrollPositionChange?.({
+      scrollTop: scrollArea.scrollTop,
+      anchorID: anchor?.itemID,
+      anchorOffset: anchor?.offset,
+    })
+  }
+
+  const loadEarlier = () => {
+    prependAnchorRef.current = captureVisibleAnchor()
+    void onLoadEarlier().then((loaded) => {
+      if (!loaded) prependAnchorRef.current = undefined
+    })
+  }
+
   return (
     <section className="flex min-h-0 flex-col overflow-hidden" aria-label={t('diagnostics.trajectoryRecords')}>
       <div className="flex h-10 shrink-0 items-center justify-between gap-4 border-b border-edge-soft px-3">
@@ -651,46 +906,58 @@ function TrajectoryLedger({
           />
         </label>
       </div>
-      <div
-        ref={scrollRef}
-        className="code-scroll-area min-h-0 flex-1 overflow-y-auto"
-        data-testid="diagnostics-ledger-scroll"
-        onScroll={(event) => onScrollTopChange?.(event.currentTarget.scrollTop)}
-      >
-        {hasEarlier && (
-          <LoadEarlierControl
-            loading={loadingEarlier}
-            error={earlierError}
-            onLoad={() => {
-              const scrollArea = scrollRef.current
-              if (scrollArea) {
-                const scrollTop = scrollArea.getBoundingClientRect().top
-                const row = [...scrollArea.querySelectorAll<HTMLElement>('[data-trajectory-item-id]')]
-                  .find((candidate) => candidate.getBoundingClientRect().bottom > scrollTop)
-                if (row?.dataset.trajectoryItemId) {
-                  prependAnchorRef.current = {
-                    itemID: row.dataset.trajectoryItemId,
-                    offset: row.getBoundingClientRect().top - scrollTop,
-                  }
-                }
-              }
-              void onLoadEarlier().then((loaded) => {
-                if (!loaded) prependAnchorRef.current = undefined
-              })
-            }}
-          />
+      {hasEarlier && (
+        <LoadEarlierControl loading={loadingEarlier} error={earlierError} onLoad={loadEarlier} />
+      )}
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        <div
+          ref={scrollRef}
+          className="code-scroll-area h-full overflow-y-auto"
+          data-testid="diagnostics-ledger-scroll"
+          data-virtualized={virtualized ? 'true' : 'false'}
+          onScroll={(event) => handleScroll(event.currentTarget)}
+        >
+          {filtered.length === 0 ? (
+            <TraceEmpty title={t('diagnostics.noSearchResults')} description={t('diagnostics.searchInput')} />
+          ) : virtualized ? (
+            <div
+              className="relative w-full"
+              data-testid="diagnostics-virtual-spacer"
+              style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+            >
+              {virtualRows.map((virtualRow) => {
+                const item = filtered[virtualRow.index]!
+                return (
+                  <div
+                    key={virtualRow.key}
+                    ref={rowVirtualizer.measureElement}
+                    data-index={virtualRow.index}
+                    className="absolute left-0 top-0 w-full"
+                    style={{ transform: `translateY(${virtualRow.start}px)` }}
+                  >
+                    <TrajectoryRow
+                      item={item}
+                      index={trajectorySequenceIndex(items, item)}
+                      active={item.id === selectedItemID}
+                      onSelect={() => onSelect(item)}
+                    />
+                  </div>
+                )
+              })}
+            </div>
+          ) : filtered.map((item) => (
+            <TrajectoryRow
+              key={item.id}
+              item={item}
+              index={trajectorySequenceIndex(items, item)}
+              active={item.id === selectedItemID}
+              onSelect={() => onSelect(item)}
+            />
+          ))}
+        </div>
+        {virtualized && overlayTaskNumber !== undefined && (
+          <TaskHeader taskNumber={overlayTaskNumber} overlay />
         )}
-        {filtered.length === 0 ? (
-          <TraceEmpty title={t('diagnostics.noSearchResults')} description={t('diagnostics.searchInput')} />
-        ) : filtered.map((item) => (
-          <TrajectoryRow
-            key={item.id}
-            item={item}
-            index={trajectorySequenceIndex(items, item)}
-            active={item.id === selectedItemID}
-            onSelect={() => onSelect(item)}
-          />
-        ))}
       </div>
     </section>
   )
@@ -700,11 +967,13 @@ function TrajectoryRow({
   item,
   index,
   active,
+  showTaskHeader = true,
   onSelect,
 }: {
   item: TrajectoryItem
   index: number
   active: boolean
+  showTaskHeader?: boolean
   onSelect: () => void
 }) {
   const { t } = useI18n()
@@ -712,11 +981,8 @@ function TrajectoryRow({
   const toolResult = item.tool?.result ? singleLine(messageText(item.tool.result)) : statusText(item.tool?.status)
   return (
     <>
-      {item.kind === 'user' && (
-        <div className="sticky top-0 z-10 flex h-7 items-center gap-3 border-b border-edge-soft bg-canvas-raised/95 px-3 backdrop-blur-sm">
-          <span className="font-mono text-[0.71875rem] font-medium text-info">{t('diagnostics.taskLabel', { count: item.taskNumber })}</span>
-          <span className="h-px flex-1 bg-edge-soft" aria-hidden="true" />
-        </div>
+      {showTaskHeader && item.kind === 'user' && (
+        <TaskHeader taskNumber={item.taskNumber} />
       )}
       <button
         id={trajectoryDOMID(item.id)}
@@ -759,6 +1025,21 @@ function TrajectoryRow({
         </span>
       </button>
     </>
+  )
+}
+
+function TaskHeader({ taskNumber, overlay = false }: { taskNumber: number; overlay?: boolean }) {
+  const { t } = useI18n()
+  return (
+    <div className={cn(
+      'z-10 flex h-7 items-center gap-3 border-b border-edge-soft bg-canvas-raised/95 px-3 backdrop-blur-sm',
+      overlay ? 'pointer-events-none absolute inset-x-0 top-0' : 'sticky top-0',
+    )}>
+      <span className="font-mono text-[0.71875rem] font-medium text-info">
+        {t('diagnostics.taskLabel', { count: taskNumber })}
+      </span>
+      <span className="h-px flex-1 bg-edge-soft" aria-hidden="true" />
+    </div>
   )
 }
 

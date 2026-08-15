@@ -1232,6 +1232,92 @@ test('conversation diagnostics loads earlier tasks without moving the visible re
   expect(olderRequest).toBeDefined()
 })
 
+test('conversation diagnostics virtualizes a thousand trajectory records', async ({ page }) => {
+  const task = (group: 'current' | 'older', index: number) => {
+    const startedAt = new Date(Date.UTC(
+      2026,
+      6,
+      22,
+      group === 'current' ? 12 : 10,
+      0,
+      index,
+    )).toISOString()
+    return {
+      id: `run-large-${group}-${index}`,
+      status: 'completed',
+      prompt: `${group === 'current' ? 'Current' : 'Older'} large task ${index}`,
+      startedAt,
+      updatedAt: startedAt,
+      retries: 0,
+      contextRecoveries: 0,
+      rawEvents: [],
+      requests: [{
+        id: `request-large-${group}-${index}`,
+        number: index,
+        status: 'completed',
+        lifecycle: 'complete',
+        startedAt,
+        attempts: [],
+        checkpoints: [],
+        tools: [],
+        snapshotState: 'available',
+        rawEvents: [],
+        input: { messages: [{ role: 'user', content: [{ type: 'text', text: `${group} input ${index}` }] }] },
+        output: {
+          capturedAt: startedAt,
+          message: { role: 'assistant', content: [{ type: 'text', text: `${group} response ${index}` }] },
+        },
+      }],
+    }
+  }
+  await openDesktopClient(page, {
+    existingSession: true,
+    diagnosticsTrace: (_requestNumber, sessionID, query) => {
+      const older = query.get('before') === 'large-older-cursor'
+      const count = older ? 12 : 500
+      return {
+        version: 1,
+        generatedAt: '2026-07-22T13:00:00Z',
+        sessionId: sessionID,
+        selectedTaskId: older ? 'run-large-older-12' : 'run-large-current-500',
+        tasks: Array.from({ length: count }, (_, index) => task(older ? 'older' : 'current', index + 1)),
+        page: older
+          ? { hasMore: false }
+          : { hasMore: true, beforeCursor: 'large-older-cursor' },
+      }
+    },
+  })
+
+  await page.getByTestId('conversation-diagnostics-button').click()
+  const ledger = page.getByTestId('diagnostics-ledger-scroll')
+  const timeline = page.getByTestId('diagnostics-timeline-scroll')
+  const currentAnchor = ledger.locator('[data-trajectory-item-id="task:run-large-current-1:user"]')
+  await expect(ledger).toHaveAttribute('data-virtualized', 'true')
+  await expect(timeline).toHaveAttribute('data-virtualized', 'true')
+  await expect(page.getByText('1000 items', { exact: true })).toBeVisible()
+  await expect(currentAnchor).toBeVisible()
+  expect(await ledger.locator('[data-trajectory-item-id]').count()).toBeLessThanOrEqual(160)
+  expect(await timeline.locator('[data-timeline-item-id]').count()).toBeLessThanOrEqual(80)
+
+  const beforeBox = await currentAnchor.boundingBox()
+  expect(beforeBox).not.toBeNull()
+  await page.getByRole('button', { name: 'Load earlier user tasks' }).click()
+  await expect(page.getByText('1024 items', { exact: true })).toBeVisible()
+  await expect.poll(async () => {
+    const afterBox = await currentAnchor.boundingBox()
+    return Math.abs((afterBox?.y ?? 0) - (beforeBox?.y ?? 0))
+  }).toBeLessThanOrEqual(2)
+
+  const timelineTarget = timeline.locator('[data-timeline-item-id]').last()
+  const targetID = await timelineTarget.getAttribute('data-timeline-item-id')
+  expect(targetID).not.toBeNull()
+  await timelineTarget.click()
+  const targetRow = ledger.locator(`[data-trajectory-item-id="${targetID}"]`)
+  await expect(targetRow).toBeVisible()
+  await expect(targetRow).toHaveAttribute('aria-expanded', 'true')
+  expect(await ledger.locator('[data-trajectory-item-id]').count()).toBeLessThanOrEqual(160)
+})
+
 test('conversation diagnostics preserves state independently for each session', async ({ page }) => {
   const traceForSession = (sessionID: string) => {
     const label = sessionID === 'secondary-session' ? 'Secondary' : 'Primary'
