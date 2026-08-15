@@ -32,6 +32,13 @@ type Bundle struct {
 	SessionID      string    `json:"sessionId"`
 	SelectedTaskID string    `json:"selectedTaskId"`
 	Tasks          []Task    `json:"tasks"`
+	Page           PageInfo  `json:"page"`
+}
+
+// PageInfo describes the older-history page following this bundle.
+type PageInfo struct {
+	HasMore      bool   `json:"hasMore"`
+	BeforeCursor string `json:"beforeCursor,omitempty"`
 }
 
 // Task is one Prompt or Continue invocation inside a conversation.

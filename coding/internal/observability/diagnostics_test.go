@@ -81,6 +81,63 @@ func TestReadDiagnosticReportIncludesRotationsAndIgnoresPartialLine(t *testing.T
 	}
 }
 
+func TestReadDiagnosticReportPagesByStartAndFiltersRun(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "observability.jsonl")
+	recorder, err := NewJSONL(path, FileOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
+	for _, run := range []struct {
+		id      string
+		started time.Time
+	}{
+		{id: "run-a", started: base},
+		{id: "run-b", started: base},
+		{id: "run-c", started: base.Add(time.Minute)},
+		{id: "run-d", started: base.Add(2 * time.Minute)},
+	} {
+		recorder.Record(Event{
+			Name: RunCompleted, Timestamp: run.started.Add(time.Second), StartedAt: run.started,
+			SessionID: "session-1", RunID: run.id, Status: "completed", Duration: time.Second,
+		})
+	}
+	if err := recorder.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	page, err := ReadDiagnosticReport(path, DiagnosticQuery{
+		SessionID: "session-1", RunLimit: 2, OrderByStart: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Runs) != 2 || page.Runs[0].ID != "run-d" || page.Runs[1].ID != "run-c" {
+		t.Fatalf("first page = %#v", page.Runs)
+	}
+
+	page, err = ReadDiagnosticReport(path, DiagnosticQuery{
+		SessionID: "session-1", RunLimit: 2, OrderByStart: true,
+		Before: &DiagnosticRunCursor{StartedAt: base.Add(time.Minute), RunID: "run-c"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Runs) != 2 || page.Runs[0].ID != "run-b" || page.Runs[1].ID != "run-a" {
+		t.Fatalf("older page = %#v", page.Runs)
+	}
+
+	filtered, err := ReadDiagnosticReport(path, DiagnosticQuery{
+		SessionID: "session-1", RunID: "run-a", RunLimit: 1, OrderByStart: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(filtered.Runs) != 1 || filtered.Runs[0].ID != "run-a" {
+		t.Fatalf("filtered runs = %#v", filtered.Runs)
+	}
+}
+
 func TestReadDiagnosticReportDropsUnapprovedFields(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "observability.jsonl")
 	const sensitive = "do-not-return-this-value"

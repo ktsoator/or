@@ -252,6 +252,7 @@ export async function fetchDiagnosticTrace(
 ): Promise<TraceBundle> {
 	const query = new URLSearchParams({ sessionId: sessionID })
 	if (runID) query.set('runId', runID)
+	else query.set('limit', '50')
 	const response = await request(apiURL(`/diagnostics/trace?${query}`), {
 		cache: 'no-store',
 		signal,

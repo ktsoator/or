@@ -1,10 +1,13 @@
 package httpapi
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -12,6 +15,18 @@ import (
 	"github.com/ktsoator/or/coding/internal/requestsnapshot"
 	"github.com/ktsoator/or/coding/internal/tracebundle"
 )
+
+const (
+	defaultDiagnosticTracePageLimit = 12
+	maximumDiagnosticTracePageLimit = 50
+)
+
+var errInvalidDiagnosticTraceCursor = errors.New("invalid diagnostic trace cursor")
+
+type diagnosticTraceCursor struct {
+	StartedAt time.Time `json:"startedAt"`
+	RunID     string    `json:"runId"`
+}
 
 func (s *Server) handleDiagnosticRuns(c *gin.Context) {
 	limit, err := diagnosticLimit(c.Query("limit"))
@@ -70,19 +85,70 @@ func (s *Server) handleDiagnosticTrace(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "diagnostic session ID is required"})
 		return
 	}
+	runID := strings.TrimSpace(c.Query("runId"))
+	beforeValue := strings.TrimSpace(c.Query("before"))
+	if runID != "" && beforeValue != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "diagnostic run ID and cursor are mutually exclusive"})
+		return
+	}
+	limit, err := diagnosticTracePageLimit(c.Query("limit"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid diagnostic trace limit"})
+		return
+	}
+	var before *observability.DiagnosticRunCursor
+	if beforeValue != "" {
+		cursor, err := decodeDiagnosticTraceCursor(beforeValue)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid diagnostic trace cursor"})
+			return
+		}
+		before = &observability.DiagnosticRunCursor{
+			StartedAt: cursor.StartedAt,
+			RunID:     cursor.RunID,
+		}
+	}
+	runLimit := limit + 1
+	if runID != "" {
+		runLimit = 1
+	}
 	report, err := observability.ReadDiagnosticReport(
 		s.observabilityLogPath,
 		observability.DiagnosticQuery{
-			SessionID: sessionID,
-			RunLimit:  observability.DefaultDiagnosticRunLimit,
+			SessionID:    sessionID,
+			RunID:        runID,
+			RunLimit:     runLimit,
+			Before:       before,
+			OrderByStart: true,
 		},
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not read diagnostics"})
 		return
 	}
+	hasMore := runID == "" && len(report.Runs) > limit
+	if hasMore {
+		report.Runs = report.Runs[:limit]
+	}
+	page := tracebundle.PageInfo{HasMore: hasMore}
+	if hasMore {
+		cursor, err := encodeDiagnosticTraceCursor(report.Runs[len(report.Runs)-1])
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not encode diagnostic cursor"})
+			return
+		}
+		page.BeforeCursor = cursor
+	}
+	if len(report.Runs) == 0 && before != nil {
+		c.Header("Cache-Control", "no-store")
+		c.JSON(http.StatusOK, tracebundle.Bundle{
+			Version: tracebundle.CurrentVersion, GeneratedAt: report.GeneratedAt,
+			SessionID: sessionID, Tasks: []tracebundle.Task{}, Page: page,
+		})
+		return
+	}
 	bundle, err := tracebundle.Build(
-		report, sessionID, strings.TrimSpace(c.Query("runId")), s.requestSnapshots,
+		report, sessionID, runID, s.requestSnapshots,
 	)
 	if errors.Is(err, tracebundle.ErrTaskNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "diagnostic task unavailable"})
@@ -92,8 +158,41 @@ func (s *Server) handleDiagnosticTrace(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not assemble diagnostic trace"})
 		return
 	}
+	bundle.Page = page
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, bundle)
+}
+
+func diagnosticTracePageLimit(value string) (int, error) {
+	if value == "" {
+		return defaultDiagnosticTracePageLimit, nil
+	}
+	limit, err := strconv.Atoi(value)
+	if err != nil || limit <= 0 || limit > maximumDiagnosticTracePageLimit {
+		return 0, strconv.ErrSyntax
+	}
+	return limit, nil
+}
+
+func encodeDiagnosticTraceCursor(run observability.DiagnosticRun) (string, error) {
+	payload, err := json.Marshal(diagnosticTraceCursor{StartedAt: run.StartedAt, RunID: run.ID})
+	if err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(payload), nil
+}
+
+func decodeDiagnosticTraceCursor(value string) (diagnosticTraceCursor, error) {
+	payload, err := base64.RawURLEncoding.DecodeString(value)
+	if err != nil {
+		return diagnosticTraceCursor{}, errInvalidDiagnosticTraceCursor
+	}
+	var cursor diagnosticTraceCursor
+	if err := json.Unmarshal(payload, &cursor); err != nil ||
+		cursor.StartedAt.IsZero() || strings.TrimSpace(cursor.RunID) == "" {
+		return diagnosticTraceCursor{}, errInvalidDiagnosticTraceCursor
+	}
+	return cursor, nil
 }
 
 func diagnosticLimit(value string) (int, error) {

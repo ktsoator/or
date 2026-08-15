@@ -22,8 +22,18 @@ const (
 // DiagnosticQuery bounds and optionally scopes one read of the local log.
 type DiagnosticQuery struct {
 	SessionID    string
+	RunID        string
 	RunLimit     int
 	EventsPerRun int
+	Before       *DiagnosticRunCursor
+	OrderByStart bool
+}
+
+// DiagnosticRunCursor identifies one stable position in start-time order.
+// RunID disambiguates runs that started at the same timestamp.
+type DiagnosticRunCursor struct {
+	StartedAt time.Time
+	RunID     string
 }
 
 // DiagnosticReport is the privacy-safe, UI-facing projection of local events.
@@ -118,6 +128,9 @@ type storedEvent struct {
 // partially written final line is ignored so observing an active runtime is
 // harmless.
 func ReadDiagnosticReport(path string, query DiagnosticQuery) (DiagnosticReport, error) {
+	if query.Before != nil {
+		query.OrderByStart = true
+	}
 	query.RunLimit = boundedLimit(
 		query.RunLimit, DefaultDiagnosticRunLimit, MaximumDiagnosticRunLimit,
 	)
@@ -126,7 +139,12 @@ func ReadDiagnosticReport(path string, query DiagnosticQuery) (DiagnosticReport,
 	)
 	runs := make(map[string]*DiagnosticRun)
 	for _, candidate := range diagnosticLogPaths(path) {
-		if err := readDiagnosticFile(candidate, strings.TrimSpace(query.SessionID), runs); err != nil {
+		if err := readDiagnosticFile(
+			candidate,
+			strings.TrimSpace(query.SessionID),
+			strings.TrimSpace(query.RunID),
+			runs,
+		); err != nil {
 			return DiagnosticReport{}, err
 		}
 	}
@@ -144,11 +162,26 @@ func ReadDiagnosticReport(path string, query DiagnosticQuery) (DiagnosticReport,
 			run.OmittedEvents = len(run.Events) - query.EventsPerRun
 			run.Events = append([]DiagnosticEvent(nil), run.Events[len(run.Events)-query.EventsPerRun:]...)
 		}
+		if query.Before != nil && !diagnosticRunBefore(*run, *query.Before) {
+			continue
+		}
 		result = append(result, *run)
 	}
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].UpdatedAt.After(result[j].UpdatedAt)
-	})
+	if query.OrderByStart {
+		sort.Slice(result, func(i, j int) bool {
+			if result[i].StartedAt.Equal(result[j].StartedAt) {
+				return result[i].ID > result[j].ID
+			}
+			return result[i].StartedAt.After(result[j].StartedAt)
+		})
+	} else {
+		sort.Slice(result, func(i, j int) bool {
+			if result[i].UpdatedAt.Equal(result[j].UpdatedAt) {
+				return result[i].ID > result[j].ID
+			}
+			return result[i].UpdatedAt.After(result[j].UpdatedAt)
+		})
+	}
 	if len(result) > query.RunLimit {
 		result = result[:query.RunLimit]
 	}
@@ -156,6 +189,13 @@ func ReadDiagnosticReport(path string, query DiagnosticQuery) (DiagnosticReport,
 		result = []DiagnosticRun{}
 	}
 	return DiagnosticReport{Runs: result, GeneratedAt: generatedAt}, nil
+}
+
+func diagnosticRunBefore(run DiagnosticRun, cursor DiagnosticRunCursor) bool {
+	if run.StartedAt.Equal(cursor.StartedAt) {
+		return run.ID < cursor.RunID
+	}
+	return run.StartedAt.Before(cursor.StartedAt)
 }
 
 func boundedLimit(value, fallback, maximum int) int {
@@ -199,7 +239,7 @@ func diagnosticLogPaths(path string) []string {
 	return append(paths, path)
 }
 
-func readDiagnosticFile(path, sessionID string, runs map[string]*DiagnosticRun) error {
+func readDiagnosticFile(path, sessionID, runID string, runs map[string]*DiagnosticRun) error {
 	file, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -215,7 +255,9 @@ func readDiagnosticFile(path, sessionID string, runs map[string]*DiagnosticRun) 
 		if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
 			continue
 		}
-		if event.RunID == "" || (sessionID != "" && event.SessionID != sessionID) {
+		if event.RunID == "" ||
+			(sessionID != "" && event.SessionID != sessionID) ||
+			(runID != "" && event.RunID != runID) {
 			continue
 		}
 		if !diagnosticEventNames[event.Name] {

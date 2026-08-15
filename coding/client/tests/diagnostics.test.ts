@@ -45,7 +45,7 @@ describe('diagnostic trace catalog', () => {
       requestedURL = String(url)
       return Response.json({ selectedTaskId: 'latest', tasks: [] })
     })
-    expect(requestedURL).toBe('/api/diagnostics/trace?sessionId=session')
+    expect(requestedURL).toBe('/api/diagnostics/trace?sessionId=session&limit=50')
   })
 
   test('normalizes incomplete interrupted bundles', async () => {

@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -205,6 +207,173 @@ func TestDiagnosticTraceRequiresSession(t *testing.T) {
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusBadRequest)
 	}
+}
+
+func TestDiagnosticTracePagesHistoryWithStableCursor(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "observability.jsonl")
+	base := time.Date(2026, 8, 14, 12, 0, 0, 0, time.UTC)
+	recordDiagnosticRuns(t, path, "session-1", base, 1, 15)
+	server := NewServer(Options{ObservabilityLogPath: path}).Handler()
+
+	defaultPage := readDiagnosticTracePage(
+		t, server, "/api/diagnostics/trace?sessionId=session-1",
+	)
+	if len(defaultPage.Tasks) != defaultDiagnosticTracePageLimit ||
+		defaultPage.Tasks[0].ID != "run-04" || defaultPage.Tasks[11].ID != "run-15" ||
+		!defaultPage.Page.HasMore || defaultPage.Page.BeforeCursor == "" ||
+		defaultPage.SelectedTaskID != "run-15" {
+		t.Fatalf("default page = %#v", defaultPage)
+	}
+
+	first := readDiagnosticTracePage(
+		t, server, "/api/diagnostics/trace?sessionId=session-1&limit=3",
+	)
+	if got := diagnosticTaskIDs(first); len(got) != 3 ||
+		got[0] != "run-13" || got[1] != "run-14" || got[2] != "run-15" {
+		t.Fatalf("first task IDs = %#v", got)
+	}
+	if !first.Page.HasMore || first.Page.BeforeCursor == "" {
+		t.Fatalf("first page info = %#v", first.Page)
+	}
+
+	// A newly appended tail run must not move an existing older-page cursor.
+	recordDiagnosticRuns(t, path, "session-1", base, 16, 1)
+	second := readDiagnosticTracePage(t, server,
+		"/api/diagnostics/trace?sessionId=session-1&limit=3&before="+
+			url.QueryEscape(first.Page.BeforeCursor),
+	)
+	if got := diagnosticTaskIDs(second); len(got) != 3 ||
+		got[0] != "run-10" || got[1] != "run-11" || got[2] != "run-12" {
+		t.Fatalf("second task IDs = %#v", got)
+	}
+	if second.SelectedTaskID != "run-12" || !second.Page.HasMore ||
+		second.Page.BeforeCursor == "" || second.Page.BeforeCursor == first.Page.BeforeCursor {
+		t.Fatalf("second page = %#v", second)
+	}
+	single := readDiagnosticTracePage(
+		t, server, "/api/diagnostics/trace?sessionId=session-1&runId=run-07",
+	)
+	if got := diagnosticTaskIDs(single); len(got) != 1 || got[0] != "run-07" ||
+		single.SelectedTaskID != "run-07" || single.Page.HasMore ||
+		single.Page.BeforeCursor != "" {
+		t.Fatalf("single run page = %#v", single)
+	}
+
+	page := second
+	for range 3 {
+		page = readDiagnosticTracePage(t, server,
+			"/api/diagnostics/trace?sessionId=session-1&limit=3&before="+
+				url.QueryEscape(page.Page.BeforeCursor),
+		)
+	}
+	if got := diagnosticTaskIDs(page); len(got) != 3 ||
+		got[0] != "run-01" || got[1] != "run-02" || got[2] != "run-03" {
+		t.Fatalf("last task IDs = %#v", got)
+	}
+	if page.Page.HasMore || page.Page.BeforeCursor != "" || page.SelectedTaskID != "run-03" {
+		t.Fatalf("last page = %#v", page)
+	}
+
+	pastEndCursor, err := encodeDiagnosticTraceCursor(observability.DiagnosticRun{
+		ID: "run-01", StartedAt: base.Add(time.Minute),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	empty := readDiagnosticTracePage(t, server,
+		"/api/diagnostics/trace?sessionId=session-1&limit=3&before="+
+			url.QueryEscape(pastEndCursor),
+	)
+	if len(empty.Tasks) != 0 || empty.SelectedTaskID != "" ||
+		empty.Page.HasMore || empty.Page.BeforeCursor != "" {
+		t.Fatalf("empty page = %#v", empty)
+	}
+}
+
+func TestDiagnosticTraceRejectsInvalidPagingParameters(t *testing.T) {
+	for _, target := range []string{
+		"/api/diagnostics/trace?sessionId=session-1&limit=0",
+		"/api/diagnostics/trace?sessionId=session-1&limit=51",
+		"/api/diagnostics/trace?sessionId=session-1&before=not-a-cursor",
+		"/api/diagnostics/trace?sessionId=session-1&runId=run-1&before=not-a-cursor",
+	} {
+		request := httptest.NewRequest(http.MethodGet, target, nil)
+		response := httptest.NewRecorder()
+		NewServer(Options{}).Handler().ServeHTTP(response, request)
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("%s status = %d, body = %s", target, response.Code, response.Body.String())
+		}
+	}
+}
+
+type diagnosticTracePageResponse struct {
+	SessionID      string `json:"sessionId"`
+	SelectedTaskID string `json:"selectedTaskId"`
+	Tasks          []struct {
+		ID string `json:"id"`
+	} `json:"tasks"`
+	Page struct {
+		HasMore      bool   `json:"hasMore"`
+		BeforeCursor string `json:"beforeCursor"`
+	} `json:"page"`
+}
+
+func readDiagnosticTracePage(
+	t *testing.T,
+	handler http.Handler,
+	target string,
+) diagnosticTracePageResponse {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodGet, target, nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("%s status = %d, body = %s", target, response.Code, response.Body.String())
+	}
+	var page diagnosticTracePageResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &page); err != nil {
+		t.Fatal(err)
+	}
+	return page
+}
+
+func diagnosticTaskIDs(page diagnosticTracePageResponse) []string {
+	ids := make([]string, 0, len(page.Tasks))
+	for _, task := range page.Tasks {
+		ids = append(ids, task.ID)
+	}
+	return ids
+}
+
+func recordDiagnosticRuns(
+	t *testing.T,
+	path, sessionID string,
+	base time.Time,
+	first, count int,
+) {
+	t.Helper()
+	recorder, err := observability.NewJSONL(path, observability.FileOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for number := first; number < first+count; number++ {
+		startedAt := base.Add(time.Duration(number) * time.Minute)
+		recorder.Record(observability.Event{
+			Name: observability.RunCompleted, Timestamp: startedAt.Add(time.Second),
+			StartedAt: startedAt, SessionID: sessionID,
+			RunID: "run-" + leftPadTwo(number), Status: "completed", Duration: time.Second,
+		})
+	}
+	if err := recorder.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func leftPadTwo(value int) string {
+	if value < 10 {
+		return "0" + strconv.Itoa(value)
+	}
+	return strconv.Itoa(value)
 }
 
 func httpapiOptions(path string, snapshots requestsnapshot.Reader) Options {
