@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'bun:test'
-import { fetchDiagnosticTrace } from '../src/features/diagnostics/catalog'
+import {
+  DiagnosticTraceError,
+  fetchDiagnosticTrace,
+} from '../src/features/diagnostics/catalog'
 import type { TraceBundle } from '../src/features/diagnostics/catalog'
 import {
   liveTraceRefreshKey,
@@ -11,10 +14,11 @@ describe('diagnostic trace catalog', () => {
   test('loads one assembled conversation bundle scoped to session and run', async () => {
     let requestedURL = ''
     let requestInit: RequestInit | undefined
+    const controller = new AbortController()
     const bundle = await fetchDiagnosticTrace(
       'session/one',
       'run one',
-      undefined,
+      controller.signal,
       async (url, init) => {
         requestedURL = String(url)
         requestInit = init
@@ -30,6 +34,7 @@ describe('diagnostic trace catalog', () => {
 
     expect(requestedURL).toBe('/api/diagnostics/trace?sessionId=session%2Fone&runId=run+one')
     expect(requestInit?.cache).toBe('no-store')
+    expect(requestInit?.signal).toBe(controller.signal)
     expect(bundle.selectedTaskId).toBe('run one')
     expect(bundle.tasks[0]?.id).toBe('run one')
   })
@@ -82,6 +87,21 @@ describe('diagnostic trace catalog', () => {
     expect(
       fetchDiagnosticTrace('session', undefined, undefined, async () => new Response('', { status: 503 })),
     ).rejects.toThrow('HTTP 503')
+  })
+
+  test('preserves the HTTP status for an unavailable trace', async () => {
+    try {
+      await fetchDiagnosticTrace(
+        'new-session',
+        undefined,
+        undefined,
+        async () => new Response('', { status: 404 }),
+      )
+      throw new Error('expected the trace request to fail')
+    } catch (cause) {
+      expect(cause).toBeInstanceOf(DiagnosticTraceError)
+      expect((cause as DiagnosticTraceError).status).toBe(404)
+    }
   })
 })
 

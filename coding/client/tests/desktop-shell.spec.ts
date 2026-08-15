@@ -170,7 +170,8 @@ async function openDesktopClient(
     usageEventPages?: UsageEventPage[]
     usageEventPagesByOffset?: Record<number, UsageEventPage>
     usageEventDelayMs?: number
-    diagnosticsTrace?: () => unknown
+    diagnosticsTrace?: (requestNumber: number) => unknown | Promise<unknown>
+    diagnosticsStatus?: number
     skills?: Array<{
       name: string
       description: string
@@ -232,6 +233,7 @@ async function openDesktopClient(
   let sessionHistoryRunning = options.historyRunning ?? false
   let remainingHealthFailures = options.healthFailures ?? 0
   let remainingBrowserResultFailures = options.browserResultFailures ?? 0
+  let diagnosticTraceRequestCount = 0
   const usageEventRangeKeys: string[] = []
 
   await page.addInitScript(({ nativeDirectory }) => {
@@ -610,6 +612,7 @@ async function openDesktopClient(
       }
     }
     if (path === '/api/diagnostics/trace') {
+      status = options.diagnosticsStatus ?? status
       body = {
         version: 1,
         generatedAt: '2026-07-22T00:00:05Z',
@@ -789,7 +792,10 @@ async function openDesktopClient(
           }],
         }],
       }
-      if (options.diagnosticsTrace) body = options.diagnosticsTrace()
+      if (options.diagnosticsTrace) {
+        diagnosticTraceRequestCount += 1
+        body = await options.diagnosticsTrace(diagnosticTraceRequestCount)
+      }
     }
     if (path === '/api/providers') {
       body = {
@@ -1131,6 +1137,83 @@ test('conversation diagnostics uses one session-scoped header entry', async ({ p
   await page.setViewportSize({ width: 700, height: 820 })
   await expect(executionTimeline).toBeVisible()
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})
+
+test('conversation diagnostics treats a missing new-session trace as empty', async ({ page }) => {
+  await openDesktopClient(page, {
+    existingSession: true,
+    diagnosticsStatus: 404,
+  })
+
+  await page.getByTestId('conversation-diagnostics-button').click()
+  await expect(page.getByRole('heading', { name: 'No runs recorded' })).toBeVisible()
+  await expect(page.getByText('Could not load local diagnostics.')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Retry' })).toHaveCount(0)
+})
+
+test('conversation diagnostics ignores an older trace response that finishes last', async ({ page }) => {
+  const trace = (requestID: string, text: string) => ({
+    version: 1,
+    generatedAt: '2026-07-22T00:03:01Z',
+    sessionId: 'test-session',
+    selectedTaskId: 'run-race',
+    tasks: [{
+      id: 'run-race',
+      status: 'running',
+      prompt: 'Inspect response ordering',
+      startedAt: '2026-07-22T00:03:00Z',
+      updatedAt: '2026-07-22T00:03:01Z',
+      retries: 0,
+      contextRecoveries: 0,
+      rawEvents: [],
+      requests: [{
+        id: requestID,
+        number: 1,
+        status: 'running',
+        lifecycle: 'in-progress',
+        startedAt: '2026-07-22T00:03:00Z',
+        attempts: [],
+        checkpoints: [],
+        tools: [],
+        snapshotState: 'available',
+        rawEvents: [],
+        output: {
+          capturedAt: '2026-07-22T00:03:01Z',
+          message: {
+            role: 'assistant',
+            providerRequestId: requestID,
+            content: [{ type: 'text', text }],
+          },
+        },
+      }],
+    }],
+  })
+  await openDesktopClient(page, {
+    existingSession: true,
+    historyRunning: true,
+    historyEvents: [
+      { type: 'user_message', text: 'Inspect response ordering' },
+      {
+        type: 'run_start',
+        id: 'run-race',
+        runId: 'run-race',
+        startedAt: '2026-07-22T00:03:00Z',
+      },
+    ],
+    diagnosticsTrace: async (requestNumber) => {
+      if (requestNumber === 1) {
+        await new Promise((resolve) => setTimeout(resolve, 600))
+        return trace('request-stale', 'Stale trace response')
+      }
+      return trace('request-current', 'Current trace response')
+    },
+  })
+
+  await page.getByTestId('conversation-diagnostics-button').click()
+  await expect(page.getByText('Current trace response', { exact: true })).toBeVisible()
+  await page.waitForTimeout(700)
+  await expect(page.getByText('Current trace response', { exact: true })).toBeVisible()
+  await expect(page.getByText('Stale trace response', { exact: true })).toHaveCount(0)
 })
 
 test('conversation diagnostics streams a tool loop and replaces provisional metrics', async ({ page }) => {

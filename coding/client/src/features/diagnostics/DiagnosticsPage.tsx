@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   ArrowLeft,
   ChevronRight,
@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 import { SidebarToggleButton } from '@/shared/ui/SidebarToggleButton'
 import type { Item } from '@/types'
 import {
+  DiagnosticTraceError,
   fetchDiagnosticTrace,
   type DiagnosticEvent,
   type RequestSnapshotAttachment,
@@ -50,43 +51,70 @@ export function DiagnosticsPage({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [view, setView] = useState<TraceView>('trajectory')
+  const requestRef = useRef<{ revision: number; controller?: AbortController }>({ revision: 0 })
   const refreshKey = liveTraceRefreshKey(liveItems, running)
 
-  const load = useCallback(async (signal?: AbortSignal, quiet = false) => {
+  const cancelLoad = useCallback(() => {
+    requestRef.current.revision += 1
+    requestRef.current.controller?.abort()
+    requestRef.current.controller = undefined
+  }, [])
+
+  const load = useCallback(async (quiet = false) => {
+    const revision = requestRef.current.revision + 1
+    requestRef.current.revision = revision
+    requestRef.current.controller?.abort()
+    const controller = new AbortController()
+    requestRef.current.controller = controller
     if (!quiet) setLoading(true)
     setError(false)
     if (!sessionID) {
+      controller.abort()
+      if (requestRef.current.controller === controller) {
+        requestRef.current.controller = undefined
+      }
       setError(true)
       setLoading(false)
       return
     }
+    const isCurrent = () =>
+      requestRef.current.revision === revision &&
+      requestRef.current.controller === controller &&
+      !controller.signal.aborted
     try {
-      setBundle(await fetchDiagnosticTrace(sessionID, initialRunID, signal))
+      const nextBundle = await fetchDiagnosticTrace(sessionID, initialRunID, controller.signal)
+      if (isCurrent()) setBundle(nextBundle)
     } catch (cause) {
-      if (cause instanceof DOMException && cause.name === 'AbortError') return
-      setError(true)
+      if (!isCurrent() || (cause instanceof DOMException && cause.name === 'AbortError')) return
+      if (cause instanceof DiagnosticTraceError && cause.status === 404) {
+        setBundle((current) => quiet && current ? current : emptyTraceBundle(sessionID, initialRunID))
+      } else {
+        setError(true)
+      }
     } finally {
-      if (!signal?.aborted && !quiet) setLoading(false)
+      if (isCurrent()) {
+        requestRef.current.controller = undefined
+        setLoading(false)
+      }
     }
   }, [initialRunID, sessionID])
 
   useEffect(() => {
-    const controller = new AbortController()
     setBundle(undefined)
-    void load(controller.signal)
-    return () => { controller.abort() }
-  }, [load])
+    void load()
+    return cancelLoad
+  }, [cancelLoad, load])
 
   useEffect(() => {
     if (!running) return
-    const interval = window.setInterval(() => void load(undefined, true), 1500)
+    const interval = window.setInterval(() => void load(true), 1500)
     return () => { window.clearInterval(interval) }
   }, [load, running])
 
   const hasLiveItems = Boolean(liveItems?.length)
   useEffect(() => {
     if (!sessionID || !hasLiveItems) return
-    const timeout = window.setTimeout(() => void load(undefined, true), 250)
+    const timeout = window.setTimeout(() => void load(true), 250)
     return () => { window.clearTimeout(timeout) }
   }, [hasLiveItems, load, refreshKey, sessionID])
 
@@ -203,6 +231,16 @@ function PageState({ icon, children }: { icon: ReactNode; children: ReactNode })
       {children}
     </div>
   )
+}
+
+function emptyTraceBundle(sessionID: string, selectedTaskID?: string): TraceBundle {
+  return {
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    sessionId: sessionID,
+    selectedTaskId: selectedTaskID ?? '',
+    tasks: [],
+  }
 }
 
 type TraceView = 'overview' | 'trajectory'

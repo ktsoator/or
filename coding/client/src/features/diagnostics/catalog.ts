@@ -192,6 +192,16 @@ export type TraceBundle = {
 
 type DiagnosticRequest = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
+export class DiagnosticTraceError extends Error {
+	readonly status: number
+
+	constructor(status: number) {
+		super(`HTTP ${status}`)
+		this.name = 'DiagnosticTraceError'
+		this.status = status
+	}
+}
+
 function normalizeMessage(message: RequestSnapshotMessage): RequestSnapshotMessage {
 	return { ...message, content: message.content ?? [] }
 }
@@ -246,6 +256,6 @@ export async function fetchDiagnosticTrace(
 		cache: 'no-store',
 		signal,
 	})
-	if (!response.ok) throw new Error(`HTTP ${response.status}`)
+	if (!response.ok) throw new DiagnosticTraceError(response.status)
 	return normalizeTraceBundle(await response.json() as TraceBundle)
 }
