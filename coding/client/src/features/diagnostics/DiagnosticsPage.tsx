@@ -48,6 +48,7 @@ const TRAJECTORY_OVERSCAN = 12
 const TRAJECTORY_ROW_ESTIMATE = 36
 const TRAJECTORY_TASK_HEADER_HEIGHT = 28
 const TIMELINE_COLUMN_WIDTH = 50
+const TIMELINE_EDGE_PADDING = 8
 
 export type DiagnosticsSessionState = {
   view?: TraceView
@@ -595,6 +596,8 @@ function TrajectoryTimeline({
     estimateSize: () => TIMELINE_COLUMN_WIDTH,
     horizontal: true,
     overscan: TRAJECTORY_OVERSCAN,
+    paddingEnd: TIMELINE_EDGE_PADDING,
+    scrollPaddingEnd: TIMELINE_EDGE_PADDING,
     useFlushSync: false,
   })
   const selectedIndex = items.findIndex((item) => item.id === selectedItemID)
@@ -660,7 +663,13 @@ function TrajectoryTimeline({
   return (
     <section className="shrink-0 py-2" aria-label={t('diagnostics.executionTimeline')}>
       <div className="code-scroll-area overflow-x-auto border-b border-edge-soft py-1">
-        <div className="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-x-2" style={{ minWidth: `${contentWidth + 64}px` }}>
+        <div
+          className="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-x-2"
+          style={{
+            minWidth: `${contentWidth + 64}px`,
+            paddingRight: `${TIMELINE_EDGE_PADDING}px`,
+          }}
+        >
           {lanes.map((lane) => (
             <div key={lane.id} className="contents">
               <span className="flex h-5 items-center text-[0.6875rem] text-ink-faint">{lane.label}</span>
