@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
   Check,
-  ChevronDown,
   FolderOpen,
   Globe2,
   LoaderCircle,
@@ -120,7 +119,7 @@ export function PermissionModeMenu({
             className={cn(
               composerMenuTriggerClass,
               composerControlTextClass,
-              'h-[30px] max-w-[10rem] rounded-[10px] max-sm:px-2',
+              'h-[30px] max-w-[10rem] rounded-[10px] px-2',
               fullAccessSelected && 'text-warning hover:text-warning focus-visible:text-warning',
             )}
             aria-label={t('permission.choose')}
@@ -129,17 +128,10 @@ export function PermissionModeMenu({
           >
             <span
               data-testid="permission-mode-label"
-              className="min-w-0 truncate @max-[390px]:hidden max-sm:hidden"
+              className="min-w-0 truncate"
             >
               {t(selected.shortLabelKey)}
             </span>
-            <ChevronDown
-              className={cn(
-                'size-3.5 shrink-0 text-ink-faint transition-transform duration-150 group-data-[state=open]:rotate-180',
-                fullAccessSelected && 'text-warning',
-              )}
-              aria-hidden="true"
-            />
           </button>
         </DropdownMenu.Trigger>
 

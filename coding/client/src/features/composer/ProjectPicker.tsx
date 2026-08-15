@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, ChevronDown, ChevronRight, Folder, FolderOpen, Plus, Search } from 'lucide-react'
+import { Check, ChevronRight, Folder, FolderOpen, Plus, Search } from 'lucide-react'
 import { DropdownMenu } from 'radix-ui'
 import type { WorkspaceSummary } from '@/types'
 import { useI18n } from '@/i18n'
@@ -58,7 +58,7 @@ export function ProjectPicker({
           className={cn(
             composerMenuTriggerClass,
             composerControlTextClass,
-            'h-[30px] max-w-full gap-2 rounded-[10px] disabled:opacity-45 max-sm:size-[30px] max-sm:justify-center max-sm:p-0',
+            'h-[30px] max-w-full gap-1.5 rounded-[10px] px-2 disabled:opacity-45 max-sm:size-[30px] max-sm:justify-center max-sm:p-0',
           )}
           aria-label={t('workspace.chooseProject')}
           disabled={disabled}
@@ -67,10 +67,6 @@ export function ProjectPicker({
           <span className="min-w-0 truncate max-sm:hidden">
             {selected?.name ?? t('workspace.chooseProject')}
           </span>
-          <ChevronDown
-            className="size-3.5 shrink-0 text-ink-faint transition-transform duration-150 group-data-[state=open]:rotate-180 max-sm:hidden"
-            aria-hidden="true"
-          />
         </button>
       </DropdownMenu.Trigger>
 
@@ -80,10 +76,10 @@ export function ProjectPicker({
           align="start"
           sideOffset={8}
           collisionPadding={12}
-          className="z-[110] w-[19rem] max-w-[calc(100vw-24px)] animate-[fade-in_110ms_ease-out] rounded-2xl border border-edge bg-canvas p-1.5 text-[0.875rem] text-ink shadow-[0_18px_48px_-26px_rgba(28,25,23,0.5)] outline-none"
+          className="z-[110] w-[19rem] max-w-[calc(100vw-24px)] animate-[fade-in_110ms_ease-out] rounded-2xl border border-edge bg-canvas p-1 text-[0.875rem] text-ink shadow-[0_18px_48px_-26px_rgba(28,25,23,0.5)] outline-none"
         >
           <div
-            className="relative mb-1"
+            className="relative mb-0.5"
             onKeyDown={(event) => event.stopPropagation()}
           >
             <Search
@@ -91,7 +87,7 @@ export function ProjectPicker({
               aria-hidden="true"
             />
             <input
-              className="h-9 w-full rounded-[10px] border-0 bg-transparent pr-2.5 pl-8.5 text-[0.875rem] outline-none placeholder:text-ink-faint focus:bg-canvas-raised"
+              className="h-[30px] w-full rounded-[10px] border-0 bg-transparent pr-2.5 pl-8.5 text-[0.875rem] outline-none placeholder:text-ink-faint focus:bg-canvas-raised"
               value={query}
               placeholder={t('workspace.searchProjects')}
               aria-label={t('workspace.searchProjects')}
@@ -104,14 +100,14 @@ export function ProjectPicker({
           <DropdownMenu.RadioGroup
             value={selectedPath ?? ''}
             onValueChange={(path) => onSelect(path)}
-            className="my-1 flex max-h-[14rem] flex-col gap-0.5 overflow-y-auto"
+            className="my-0.5 flex max-h-[14rem] flex-col gap-0.5 overflow-y-auto"
           >
             {filtered.length > 0 ? (
               filtered.map((workspace) => (
                 <DropdownMenu.RadioItem
                   key={workspace.path}
                   value={workspace.path}
-                  className="relative flex h-9 cursor-default select-none items-center gap-2 rounded-[10px] px-2.5 pr-8 outline-none data-[highlighted]:bg-surface-active data-[state=checked]:bg-surface-selected"
+                  className="relative flex h-[30px] cursor-default select-none items-center gap-2 rounded-[10px] px-2.5 pr-8 outline-none data-[highlighted]:bg-surface-active data-[state=checked]:bg-surface-selected"
                   title={workspace.path}
                 >
                   <Folder className="size-[1.0625rem] shrink-0 text-ink-muted" strokeWidth={1.7} aria-hidden="true" />
@@ -122,7 +118,7 @@ export function ProjectPicker({
                 </DropdownMenu.RadioItem>
               ))
             ) : (
-              <div className="flex h-10 items-center px-2.5 text-[0.8125rem] text-ink-faint">
+              <div className="flex h-[30px] items-center px-2.5 text-[0.8125rem] text-ink-faint">
                 {t('workspace.noMatchingProjects')}
               </div>
             )}
@@ -130,7 +126,7 @@ export function ProjectPicker({
 
           <DropdownMenu.Separator className="mx-1 h-px bg-canvas-strong/80" />
           <DropdownMenu.Sub>
-            <DropdownMenu.SubTrigger className="mt-1 flex h-9 cursor-default select-none items-center gap-2 rounded-[10px] px-2.5 outline-none data-[highlighted]:bg-surface-active data-[state=open]:bg-surface-selected">
+            <DropdownMenu.SubTrigger className="mt-0.5 flex h-[30px] cursor-default select-none items-center gap-2 rounded-[10px] px-2.5 outline-none data-[highlighted]:bg-surface-active data-[state=open]:bg-surface-selected">
               <Plus className="size-[1.0625rem] shrink-0" aria-hidden="true" />
               <span>{t('workspace.newProject')}</span>
               <ChevronRight className="ml-auto size-3.5 text-ink-faint" aria-hidden="true" />
@@ -140,17 +136,17 @@ export function ProjectPicker({
                 sideOffset={6}
                 alignOffset={-5}
                 collisionPadding={12}
-                className="z-[120] flex min-w-[13.75rem] animate-[fade-in_110ms_ease-out] flex-col gap-0.5 rounded-2xl border border-edge bg-canvas p-1.5 text-[0.875rem] text-ink shadow-[0_18px_48px_-26px_rgba(28,25,23,0.5)] outline-none"
+                className="z-[120] flex min-w-[13.75rem] animate-[fade-in_110ms_ease-out] flex-col gap-0.5 rounded-2xl border border-edge bg-canvas p-1 text-[0.875rem] text-ink shadow-[0_18px_48px_-26px_rgba(28,25,23,0.5)] outline-none"
               >
                 <DropdownMenu.Item
-                  className="flex h-9 cursor-default select-none items-center gap-2 rounded-[10px] px-2.5 outline-none data-[highlighted]:bg-surface-active"
+                  className="flex h-[30px] cursor-default select-none items-center gap-2 rounded-[10px] px-2.5 outline-none data-[highlighted]:bg-surface-active"
                   onSelect={() => onSelect(undefined)}
                 >
                   <Plus className="size-[1.0625rem]" aria-hidden="true" />
                   {t('workspace.startFromScratch')}
                 </DropdownMenu.Item>
                 <DropdownMenu.Item
-                  className="flex h-9 cursor-default select-none items-center gap-2 rounded-[10px] px-2.5 outline-none data-[highlighted]:bg-surface-active"
+                  className="flex h-[30px] cursor-default select-none items-center gap-2 rounded-[10px] px-2.5 outline-none data-[highlighted]:bg-surface-active"
                   onSelect={onBrowse}
                 >
                   <FolderOpen className="size-[1.0625rem]" strokeWidth={1.7} aria-hidden="true" />

@@ -1386,12 +1386,20 @@ function SystemDetail({ item }: { item: TrajectoryItem }) {
 
 function ContextDetail({ item }: { item: TrajectoryItem }) {
   const { t } = useI18n()
+  const content = item.message ? messageText(item.message) : item.preview
+  const skillMarkdown = item.attachment?.kind === 'activated_skill'
+    ? activatedSkillMarkdown(content)
+    : undefined
   return (
     <div className="px-5 py-5 max-sm:px-4">
       <InspectorSection title={item.attachment ? attachmentLabel(item.attachment.kind, t) : t('diagnostics.trace.context')} first>
-        <pre className="m-0 font-mono text-[0.78125rem] leading-6 whitespace-pre-wrap break-words text-ink-soft">
-          {item.message ? messageText(item.message) || '—' : item.preview || '—'}
-        </pre>
+        {skillMarkdown ? (
+          <Markdown source={skillMarkdown} />
+        ) : (
+          <pre className="m-0 font-mono text-[0.78125rem] leading-6 whitespace-pre-wrap break-words text-ink-soft">
+            {content || '—'}
+          </pre>
+        )}
       </InspectorSection>
     </div>
   )
@@ -2192,6 +2200,17 @@ function contentText(content: RequestSnapshotContent): string {
 
 function messageText(message: RequestSnapshotMessage): string {
   return message.content.map(contentText).filter(Boolean).join('\n\n')
+}
+
+function activatedSkillMarkdown(value: string): string {
+  const loadedSkill = /<loaded_skill\b[^>]*>/i.exec(value)
+  const content = loadedSkill
+    ? value.slice((loadedSkill.index ?? 0) + loadedSkill[0].length)
+    : value.replace(/^\s*<or-context\b[^>]*>/i, '')
+  return content
+    .replace(/<\/loaded_skill>\s*(?:<\/or-context>)?\s*$/i, '')
+    .replace(/<\/or-context>\s*$/i, '')
+    .trim()
 }
 
 function inputMessageLabel(

@@ -45,6 +45,7 @@ import {
 } from './panelStyles'
 import { Question } from './Question'
 import { ModelSettingsMenu } from './ModelSettingsMenu'
+import { ContextUsageMenu } from './ContextUsageMenu'
 import { PermissionModeMenu } from './PermissionModeMenu'
 import { ProjectPicker } from './ProjectPicker'
 import { PendingQueue } from './PendingQueue'
@@ -143,14 +144,19 @@ export function Composer({
   // parked inside a tool call until the user answers it.
   const awaitingUser = awaitingApproval || awaitingQuestion
   const modelConfigured = Boolean(modelProvider && modelID && thinkingLevel)
+  const currentModel = models.find(
+    (model) => model.provider === modelProvider && model.id === modelID,
+  )
+  const currentContextUsage =
+    contextUsage && contextUsage.provider === modelProvider && contextUsage.model === modelID
+      ? contextUsage
+      : undefined
+  const contextWindow = currentModel?.contextWindow ?? currentContextUsage?.contextWindow ?? 0
   const editorDisabled = awaitingUser || !connected || compacting || !modelConfigured
   const settingsLocked = running || editorDisabled
   const settingsDisabled = settingsLocked || updatingSettings
   const sendDisabled = editorDisabled || updatingSettings
-  const supportsImages = Boolean(
-    models.find((model) => model.provider === modelProvider && model.id === modelID)
-      ?.supportsImages,
-  )
+  const supportsImages = Boolean(currentModel?.supportsImages)
   const {
     imageFileRef,
     textFileRef,
@@ -381,6 +387,7 @@ export function Composer({
 
         <div
           ref={surfaceRef}
+          data-testid="composer-surface"
           hidden={awaitingUser}
           className={cn(
             'relative rounded-[28px] border border-edge bg-canvas [container-type:inline-size]',
@@ -609,7 +616,7 @@ export function Composer({
                 />
               </div>
             </div>
-            <div className="col-start-2 row-start-2 flex min-w-0 items-center gap-2.5 max-sm:gap-1.5">
+            <div className="col-start-2 row-start-2 flex min-w-0 items-center gap-1.5">
               <div
                 data-testid="composer-permission-controls"
                 className="flex min-w-0 shrink items-center gap-1"
@@ -632,26 +639,39 @@ export function Composer({
               </div>
               <div
                 data-testid="composer-model-controls"
-                className="ml-auto flex min-w-0 items-center gap-2.5 max-sm:gap-1.5"
+                className="ml-auto flex min-w-0 items-center gap-1"
               >
+                {modelConfigured && (
+                  <ContextUsageMenu
+                    usage={currentContextUsage}
+                    contextWindow={contextWindow}
+                    disabled={!connected}
+                    compacting={compacting}
+                    compactDisabled={settingsLocked || updatingSettings}
+                    onCompact={
+                      onCompact
+                        ? () => {
+                            void compactContext()
+                          }
+                        : undefined
+                    }
+                  />
+                )}
                 {modelConfigured ? (
                   <ModelSettingsMenu
                     models={models}
                     modelProvider={modelProvider}
                     modelID={modelID}
                     thinkingLevel={thinkingLevel}
-                    contextUsage={contextUsage}
                     disabled={settingsLocked}
                     updating={updatingSettings}
                     onChange={changeSettings}
-                    compacting={compacting}
-                    onCompact={onCompact ? compactContext : undefined}
                   />
                 ) : (
                   <button
                     type="button"
                     onClick={onConfigureModel}
-                    className="inline-flex h-[30px] min-w-0 cursor-pointer items-center truncate rounded-[10px] px-3 text-[0.8125rem] font-medium text-ink-muted outline-none transition-colors hover:bg-surface-active hover:text-ink focus-visible:bg-surface-active"
+                    className="inline-flex h-[30px] min-w-0 cursor-pointer items-center truncate rounded-[10px] px-2 text-[0.8125rem] font-medium text-ink-muted outline-none transition-colors hover:bg-surface-active hover:text-ink focus-visible:bg-surface-active"
                   >
                     {t('composer.configureModel')}
                   </button>
