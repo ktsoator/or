@@ -788,12 +788,14 @@ async function openDesktopClient(
               messages: [
                 { role: 'user', content: [{ type: 'text', text: '<or-context kind="base">\nCurrent runtime context.\n</or-context>' }] },
                 { role: 'user', content: [{ type: 'text', text: '<or-context kind="skill_listing">\nAvailable release skills.\n</or-context>' }] },
+                { role: 'user', content: [{ type: 'text', text: '<or-context kind="activated_skill" name="git-workflow">\nThis Skill was activated earlier in the conversation. Its exact instructions remain in force.\n\n<loaded_skill name="git-workflow" root="/tmp/skills/git-workflow">\n# Git Workflow\n\n## Scope\n\nUse this skill only inside the repository.\n\n## Workflow order\n\n1. Confirm the working tree is clean.\n2. Create a focused branch from `main`.\n</loaded_skill>\n</or-context>' }] },
                 { role: 'user', content: [{ type: 'text', text: 'Check the release status' }] },
               ],
             },
             attachments: [
               { id: 'context-base-1', kind: 'base', placement: 'prefix', messageIndex: 0 },
               { id: 'skill-listing-1', kind: 'skill_listing', placement: 'prefix', messageIndex: 1 },
+              { id: 'activated-skill-1', kind: 'activated_skill', placement: 'prefix', messageIndex: 2 },
             ],
             output: {
               capturedAt: '2026-07-22T00:01:02Z',
@@ -1137,6 +1139,17 @@ test('conversation diagnostics uses one session-scoped header entry', async ({ p
   await runtimeContextRow.click()
   const contextInspector = page.getByRole('complementary', { name: 'Context · Runtime context' })
   await expect(contextInspector.getByText('Current runtime context.', { exact: false })).toBeVisible()
+  const activatedSkillRow = page.getByRole('button', { name: 'Context · Activated skill', exact: true })
+  await activatedSkillRow.click()
+  const activatedSkillInspector = page.getByRole('complementary', { name: 'Context · Activated skill' })
+  await activatedSkillInspector.getByRole('tab', { name: 'Content' }).click()
+  await expect(activatedSkillInspector.getByRole('heading', { name: 'Git Workflow', level: 1 })).toBeVisible()
+  await expect(activatedSkillInspector.getByRole('heading', { name: 'Scope', level: 2 })).toBeVisible()
+  await expect(activatedSkillInspector.getByRole('listitem').getByText('Confirm the working tree is clean.')).toBeVisible()
+  await expect(activatedSkillInspector).not.toContainText('This Skill was activated earlier')
+  await expect(activatedSkillInspector).not.toContainText('<loaded_skill')
+  await activatedSkillInspector.getByRole('tab', { name: 'Raw' }).click()
+  await expect(activatedSkillInspector).toContainText('<or-context kind=\\"activated_skill\\" name=\\"git-workflow\\">')
   const thinkingOnlyRow = page.getByRole('button', { name: /Assistant Thinking · The file was created successfully\./ })
   await expect(thinkingOnlyRow).toBeVisible()
   await expect(thinkingOnlyRow.getByText('Thinking ·', { exact: true })).toBeVisible()
