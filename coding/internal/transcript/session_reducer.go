@@ -46,7 +46,8 @@ type sessionTransition struct {
 // events. Projection, validation, and interrupted-tail repair all drive this
 // reducer so event ordering rules have one owner.
 type sessionReducer struct {
-	scope sessionScope
+	parent *sessionReducer
+	scope  sessionScope
 
 	entryIDs   map[string]struct{}
 	messageIDs map[string]struct{}
@@ -71,32 +72,101 @@ func newSessionReducer(capacity int) *sessionReducer {
 	}
 }
 
-func (r *sessionReducer) clone() *sessionReducer {
-	clone := &sessionReducer{
-		scope:        r.scope,
-		entryIDs:     cloneSet(r.entryIDs),
-		messageIDs:   cloneSet(r.messageIDs),
-		runIDs:       cloneSet(r.runIDs),
-		turnIDs:      cloneSet(r.turnIDs),
-		stepIDs:      cloneSet(r.stepIDs),
-		toolIDs:      cloneSet(r.toolIDs),
-		tools:        make(map[string]*reducedToolState, len(r.tools)),
-		pendingTools: append([]string(nil), r.pendingTools...),
+func newStagedSessionReducer(parent *sessionReducer, capacity int) *sessionReducer {
+	return &sessionReducer{
+		parent:       parent,
+		scope:        parent.scope,
+		entryIDs:     make(map[string]struct{}, capacity),
+		messageIDs:   make(map[string]struct{}),
+		runIDs:       make(map[string]struct{}),
+		turnIDs:      make(map[string]struct{}),
+		stepIDs:      make(map[string]struct{}),
+		toolIDs:      make(map[string]struct{}),
+		tools:        make(map[string]*reducedToolState),
+		pendingTools: append([]string(nil), parent.pendingTools...),
 	}
-	for id, tool := range r.tools {
-		copied := *tool
-		copied.Request.Arguments = append(json.RawMessage(nil), tool.Request.Arguments...)
-		clone.tools[id] = &copied
-	}
-	return clone
 }
 
-func cloneSet(source map[string]struct{}) map[string]struct{} {
-	clone := make(map[string]struct{}, len(source))
-	for value := range source {
-		clone[value] = struct{}{}
+func (r *sessionReducer) commitStage(stage *sessionReducer) {
+	if stage == nil || stage.parent != r {
+		panic("transcript: reducer stage does not belong to committed state")
 	}
-	return clone
+	r.scope = stage.scope
+	mergeReducerSet(r.entryIDs, stage.entryIDs)
+	mergeReducerSet(r.messageIDs, stage.messageIDs)
+	mergeReducerSet(r.runIDs, stage.runIDs)
+	mergeReducerSet(r.turnIDs, stage.turnIDs)
+	mergeReducerSet(r.stepIDs, stage.stepIDs)
+	mergeReducerSet(r.toolIDs, stage.toolIDs)
+	for id, tool := range stage.tools {
+		r.tools[id] = tool
+	}
+	r.pendingTools = stage.pendingTools
+	stage.parent = nil
+}
+
+func mergeReducerSet(target, additions map[string]struct{}) {
+	for value := range additions {
+		target[value] = struct{}{}
+	}
+}
+
+func (r *sessionReducer) hasEntryID(id string) bool {
+	_, exists := r.entryIDs[id]
+	return exists || r.parent != nil && r.parent.hasEntryID(id)
+}
+
+func (r *sessionReducer) hasMessageID(id string) bool {
+	_, exists := r.messageIDs[id]
+	return exists || r.parent != nil && r.parent.hasMessageID(id)
+}
+
+func (r *sessionReducer) hasRunID(id string) bool {
+	_, exists := r.runIDs[id]
+	return exists || r.parent != nil && r.parent.hasRunID(id)
+}
+
+func (r *sessionReducer) hasTurnID(id string) bool {
+	_, exists := r.turnIDs[id]
+	return exists || r.parent != nil && r.parent.hasTurnID(id)
+}
+
+func (r *sessionReducer) hasStepID(id string) bool {
+	_, exists := r.stepIDs[id]
+	return exists || r.parent != nil && r.parent.hasStepID(id)
+}
+
+func (r *sessionReducer) hasToolID(id string) bool {
+	_, exists := r.toolIDs[id]
+	return exists || r.parent != nil && r.parent.hasToolID(id)
+}
+
+func (r *sessionReducer) findTool(id string) (*reducedToolState, bool) {
+	tool, exists := r.tools[id]
+	if exists {
+		return tool, true
+	}
+	if r.parent == nil {
+		return nil, false
+	}
+	return r.parent.findTool(id)
+}
+
+func (r *sessionReducer) mutableTool(id string) (*reducedToolState, bool) {
+	if tool, exists := r.tools[id]; exists {
+		return tool, true
+	}
+	if r.parent == nil {
+		return nil, false
+	}
+	tool, exists := r.parent.findTool(id)
+	if !exists {
+		return nil, false
+	}
+	copied := *tool
+	copied.Request.Arguments = append(json.RawMessage(nil), tool.Request.Arguments...)
+	r.tools[id] = &copied
+	return &copied, true
 }
 
 func (r *sessionReducer) Apply(index int, entry Entry) (sessionTransition, error) {
@@ -111,7 +181,7 @@ func (r *sessionReducer) Apply(index int, entry Entry) (sessionTransition, error
 	if err := entry.Validate(); err != nil {
 		return sessionTransition{}, err
 	}
-	if _, exists := r.entryIDs[entry.ID]; exists {
+	if r.hasEntryID(entry.ID) {
 		return sessionTransition{}, fmt.Errorf("transcript: duplicate entry id %s", entry.ID)
 	}
 	r.entryIDs[entry.ID] = struct{}{}
@@ -167,7 +237,7 @@ func (r *sessionReducer) Apply(index int, entry Entry) (sessionTransition, error
 		if err := r.requireNoPendingTools(entry); err != nil {
 			return sessionTransition{}, err
 		}
-		if _, exists := r.messageIDs[entry.Compaction.FirstKeptEntryID]; !exists {
+		if !r.hasMessageID(entry.Compaction.FirstKeptEntryID) {
 			return sessionTransition{}, fmt.Errorf(
 				"transcript: compaction entry %s first kept entry %s is not a preceding message",
 				entry.ID,
@@ -196,7 +266,7 @@ func (r *sessionReducer) applyLifecycle(entry Entry) error {
 		if r.scope.RunID != "" {
 			return sessionOrderError(entry, "starts while run %s is open", r.scope.RunID)
 		}
-		if _, exists := r.runIDs[lifecycle.RunID]; exists {
+		if r.hasRunID(lifecycle.RunID) {
 			return sessionOrderError(entry, "reuses run id %s", lifecycle.RunID)
 		}
 		r.scope = sessionScope{RunID: lifecycle.RunID}
@@ -218,7 +288,7 @@ func (r *sessionReducer) applyLifecycle(entry Entry) error {
 		if r.scope.TurnID != "" {
 			return sessionOrderError(entry, "starts while turn %s is open", r.scope.TurnID)
 		}
-		if _, exists := r.turnIDs[lifecycle.TurnID]; exists {
+		if r.hasTurnID(lifecycle.TurnID) {
 			return sessionOrderError(entry, "reuses turn id %s", lifecycle.TurnID)
 		}
 		r.scope.TurnID = lifecycle.TurnID
@@ -240,7 +310,7 @@ func (r *sessionReducer) applyLifecycle(entry Entry) error {
 		if r.scope.StepID != "" {
 			return sessionOrderError(entry, "starts while step %s is open", r.scope.StepID)
 		}
-		if _, exists := r.stepIDs[lifecycle.StepID]; exists {
+		if r.hasStepID(lifecycle.StepID) {
 			return sessionOrderError(entry, "reuses step id %s", lifecycle.StepID)
 		}
 		r.scope.StepID = lifecycle.StepID
@@ -324,7 +394,7 @@ func (r *sessionReducer) addToolRequest(
 	if call.ID == "" {
 		return nil, fmt.Errorf("transcript: assistant entry %s has a tool call without an id", entry.ID)
 	}
-	if _, exists := r.toolIDs[call.ID]; exists {
+	if r.hasToolID(call.ID) {
 		return nil, fmt.Errorf("transcript: assistant entry %s repeats tool call id %s", entry.ID, call.ID)
 	}
 	arguments, err := json.Marshal(call.Arguments)
@@ -355,7 +425,7 @@ func (r *sessionReducer) applyToolDispatch(
 	if err := r.requireOpenStep(entry); err != nil {
 		return nil, err
 	}
-	tool, exists := r.tools[entry.ToolCall.ToolCallID]
+	tool, exists := r.mutableTool(entry.ToolCall.ToolCallID)
 	if !exists || tool.ResultEntryID != "" {
 		return nil, fmt.Errorf(
 			"transcript: tool call entry %s has no unresolved assistant call %s",
@@ -406,7 +476,10 @@ func (r *sessionReducer) resolveTool(
 		return nil, fmt.Errorf("transcript: tool result entry %s has no unresolved call", entry.ID)
 	}
 	wantID := r.pendingTools[0]
-	tool := r.tools[wantID]
+	tool, exists := r.mutableTool(wantID)
+	if !exists {
+		return nil, fmt.Errorf("transcript: tool result entry %s has no unresolved call", entry.ID)
+	}
 	if tool.Request.ID != result.ToolCallID {
 		return nil, fmt.Errorf(
 			"transcript: tool result entry %s resolves call %s out of model order; want %s",
@@ -443,7 +516,7 @@ func (r *sessionReducer) applyToolOutcome(
 	if err := r.requireOpenStep(entry); err != nil {
 		return nil, err
 	}
-	tool, exists := r.tools[entry.ToolOutcome.ToolCallID]
+	tool, exists := r.mutableTool(entry.ToolOutcome.ToolCallID)
 	if !exists {
 		return nil, fmt.Errorf(
 			"transcript: tool outcome entry %s has no assistant call %s",

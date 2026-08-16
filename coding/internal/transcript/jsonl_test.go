@@ -130,6 +130,42 @@ func TestJSONLAppendRejectsSequenceGapWithoutChangingLog(t *testing.T) {
 	}
 }
 
+func TestJSONLAppendRejectsEntryIDFromEarlierBatch(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	first := sequencedForTest(NewMessage(agent.UserMessage("first")))[0]
+	store := NewJSONL(path)
+	if err := store.Append(context.Background(), first); err != nil {
+		t.Fatal(err)
+	}
+
+	duplicate := NewMessage(agent.UserMessage("duplicate"))
+	duplicate.ID = first.ID
+	duplicate.Seq = 1
+	tests := []struct {
+		name  string
+		store *JSONL
+	}{
+		{name: "loaded instance", store: store},
+		{name: "reopened instance", store: NewJSONL(path)},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if err := test.store.Append(context.Background(), duplicate); err == nil ||
+				!strings.Contains(err.Error(), "repeats existing entry id") {
+				t.Fatalf("Append() error = %v, want existing entry id rejection", err)
+			}
+		})
+	}
+
+	loaded, err := NewJSONL(path).Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 1 || loaded[0].ID != first.ID {
+		t.Fatalf("entries after rejected appends = %#v", loaded)
+	}
+}
+
 func TestJSONLRoundTripsLifecycleTiming(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session.jsonl")
 	startedAt := time.Date(2026, time.July, 21, 12, 0, 0, 0, time.UTC)

@@ -245,23 +245,14 @@ func (j *sessionJournal) persistMessages(
 	if len(entries) == 0 {
 		return nil
 	}
-	sequenced, err := transcript.SequenceEntries(entries, j.validator.NextSeq())
+	sequenced, prepared, err := j.persistEntriesLocked(ctx, "session", entries)
 	if err != nil {
-		return fmt.Errorf("coding: sequence session append: %w", err)
-	}
-	nextValidator, err := j.validator.ValidateAppend(sequenced)
-	if err != nil {
-		return fmt.Errorf("coding: validate session append: %w", err)
-	}
-	if j.store != nil {
-		if err := j.store.Append(ctx, sequenced...); err != nil {
-			return err
-		}
+		return err
 	}
 	j.mu.Lock()
+	prepared.Commit()
 	j.entries = append(j.entries, sequenced...)
 	j.persistedLen = len(all)
-	j.validator = nextValidator
 	j.mu.Unlock()
 	return nil
 }
@@ -270,24 +261,43 @@ func (j *sessionJournal) appendCompaction(ctx context.Context, entry transcript.
 	j.commitMu.Lock()
 	defer j.commitMu.Unlock()
 
-	sequenced, err := transcript.SequenceEntries([]transcript.Entry{entry}, j.validator.NextSeq())
+	sequenced, prepared, err := j.persistEntriesLocked(
+		ctx,
+		"compaction",
+		[]transcript.Entry{entry},
+	)
 	if err != nil {
-		return fmt.Errorf("coding: sequence compaction append: %w", err)
+		return err
 	}
-	nextValidator, err := j.validator.ValidateAppend(sequenced)
+	j.mu.Lock()
+	prepared.Commit()
+	j.entries = append(j.entries, sequenced[0])
+	j.mu.Unlock()
+	return nil
+}
+
+// persistEntriesLocked prepares and durably writes one batch without changing
+// the journal. The caller holds commitMu and installs prepared only after this
+// function succeeds.
+func (j *sessionJournal) persistEntriesLocked(
+	ctx context.Context,
+	subject string,
+	entries []transcript.Entry,
+) ([]transcript.Entry, *transcript.PreparedAppend, error) {
+	sequenced, err := transcript.SequenceEntries(entries, j.validator.NextSeq())
 	if err != nil {
-		return fmt.Errorf("coding: validate compaction append: %w", err)
+		return nil, nil, fmt.Errorf("coding: sequence %s append: %w", subject, err)
+	}
+	prepared, err := j.validator.PrepareAppend(sequenced)
+	if err != nil {
+		return nil, nil, fmt.Errorf("coding: validate %s append: %w", subject, err)
 	}
 	if j.store != nil {
 		if err := j.store.Append(ctx, sequenced...); err != nil {
-			return err
+			return nil, nil, err
 		}
 	}
-	j.mu.Lock()
-	j.entries = append(j.entries, sequenced[0])
-	j.validator = nextValidator
-	j.mu.Unlock()
-	return nil
+	return sequenced, prepared, nil
 }
 
 func (j *sessionJournal) applyCompaction(

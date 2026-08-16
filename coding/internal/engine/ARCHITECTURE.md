@@ -145,8 +145,9 @@ Refactors must preserve these contracts:
 14. Session projection and interrupted-tail repair share one transcript reducer;
     ordering and ownership rules must not be reimplemented by consumers.
 15. Transcript entries carry contiguous durable sequence numbers. A journal
-    append is validated against a cloned reducer before persistence; failed
-    validation or persistence does not advance in-memory event state.
+    append is prepared as a batch-local reducer delta, persisted, and only then
+    committed into the canonical reducer. Failed validation or persistence does
+    not advance the durable sequence or in-memory event state.
 16. Session restore replays the committed prefix once, then validates generated
     tool and lifecycle repairs incrementally on the recovered validator.
 

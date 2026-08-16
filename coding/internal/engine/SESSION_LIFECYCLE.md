@@ -347,8 +347,9 @@ Implemented:
     single `RecoverSession` replay validates the committed prefix, repairs
     interrupted tools, and then closes its lifecycle boundaries.
 11. Version 6 assigns a contiguous durable `seq` to every entry. Journal writes
-    validate each candidate batch on a cloned reducer before persistence and
-    install the advanced reducer only after the Store append succeeds.
+    prepare a batch-local reducer delta, append the sequenced entries to the
+    Store, and commit that delta only after persistence succeeds. Failed Store
+    appends leave the canonical reducer and its next sequence unchanged.
 
 Remaining:
 

@@ -28,10 +28,11 @@ func RecoverSession(entries []Entry) (*SessionValidator, []Entry, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	validator, err = validator.ValidateAppend(toolRepairs)
+	preparedTools, err := validator.PrepareAppend(toolRepairs)
 	if err != nil {
 		return nil, nil, err
 	}
+	preparedTools.Commit()
 
 	lifecycleRepairs, err := interruptedLifecycleRepairs(validator.reducer)
 	if err != nil {
@@ -41,10 +42,11 @@ func RecoverSession(entries []Entry) (*SessionValidator, []Entry, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	validator, err = validator.ValidateAppend(lifecycleRepairs)
+	preparedLifecycle, err := validator.PrepareAppend(lifecycleRepairs)
 	if err != nil {
 		return nil, nil, err
 	}
+	preparedLifecycle.Commit()
 
 	repairs := make([]Entry, 0, len(toolRepairs)+len(lifecycleRepairs))
 	repairs = append(repairs, toolRepairs...)
