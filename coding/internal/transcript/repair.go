@@ -14,17 +14,45 @@ const (
 	ToolOutcomeUnknown = "TOOL_OUTCOME_UNKNOWN"
 )
 
-// RepairInterruptedToolCalls validates the complete event prefix through the
-// canonical reducer and returns synthetic result/outcome pairs for unresolved
-// calls. It never mutates the supplied committed prefix.
-func RepairInterruptedToolCalls(entries []Entry) ([]Entry, error) {
-	reducer := newSessionReducer(len(entries))
-	for index, entry := range entries {
-		if _, err := reducer.Apply(index, entry); err != nil {
-			return nil, err
-		}
+// RecoverSession validates one committed event prefix, synthesizes repairs for
+// its interrupted tail, and returns a validator advanced through those repairs.
+// The prefix is replayed once and is never mutated.
+func RecoverSession(entries []Entry) (*SessionValidator, []Entry, error) {
+	validator, err := ValidateSession(entries)
+	if err != nil {
+		return nil, nil, err
 	}
 
+	toolRepairs := interruptedToolCallRepairs(validator.reducer)
+	toolRepairs, err = SequenceEntries(toolRepairs, validator.NextSeq())
+	if err != nil {
+		return nil, nil, err
+	}
+	validator, err = validator.ValidateAppend(toolRepairs)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	lifecycleRepairs, err := interruptedLifecycleRepairs(validator.reducer)
+	if err != nil {
+		return nil, nil, err
+	}
+	lifecycleRepairs, err = SequenceEntries(lifecycleRepairs, validator.NextSeq())
+	if err != nil {
+		return nil, nil, err
+	}
+	validator, err = validator.ValidateAppend(lifecycleRepairs)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	repairs := make([]Entry, 0, len(toolRepairs)+len(lifecycleRepairs))
+	repairs = append(repairs, toolRepairs...)
+	repairs = append(repairs, lifecycleRepairs...)
+	return validator, repairs, nil
+}
+
+func interruptedToolCallRepairs(reducer *sessionReducer) []Entry {
 	repairs := make([]Entry, 0, 2*len(reducer.pendingTools))
 	for _, toolCallID := range reducer.pendingTools {
 		tool := reducer.tools[toolCallID]
@@ -45,7 +73,7 @@ func RepairInterruptedToolCalls(entries []Entry) ([]Entry, error) {
 			}),
 		)
 	}
-	return repairs, nil
+	return repairs
 }
 
 func interruptedToolResult(started bool) (code, text string) {

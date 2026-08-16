@@ -58,7 +58,7 @@ func TestSessionPersistsNestedLifecycle(t *testing.T) {
 		t.Fatalf("lifecycle types = %v, want %v", got, want)
 	}
 	assertLifecycleIDs(t, entries, 1, 1, 1)
-	if repairs, err := transcript.RepairInterruptedLifecycle(entries); err != nil || len(repairs) != 0 {
+	if _, repairs, err := transcript.RecoverSession(entries); err != nil || len(repairs) != 0 {
 		t.Fatalf("completed lifecycle repairs = %#v, %v", repairs, err)
 	}
 }

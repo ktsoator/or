@@ -45,38 +45,16 @@ func newSessionJournal(
 			return nil, nil, nil, err
 		}
 		entries = loaded
-		toolRepairs, err := transcript.RepairInterruptedToolCalls(entries)
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("coding: validate session transcript: %w", err)
-		}
-		toolRepairs, err = transcript.SequenceEntries(toolRepairs, int64(len(entries)))
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("coding: sequence session tool recovery: %w", err)
-		}
-		candidate := append(append([]transcript.Entry(nil), entries...), toolRepairs...)
-		lifecycleRepairs, err := transcript.RepairInterruptedLifecycle(candidate)
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("coding: validate session lifecycle: %w", err)
-		}
-		lifecycleRepairs, err = transcript.SequenceEntries(lifecycleRepairs, int64(len(candidate)))
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("coding: sequence session lifecycle recovery: %w", err)
-		}
-		repairs := append(toolRepairs, lifecycleRepairs...)
-		recovered := append(append([]transcript.Entry(nil), entries...), repairs...)
-		if _, err := transcript.ProjectSession(recovered); err != nil {
-			return nil, nil, nil, fmt.Errorf("coding: project session transcript: %w", err)
-		}
-		if len(repairs) > 0 {
-			if err := store.Append(ctx, repairs...); err != nil {
-				return nil, nil, nil, fmt.Errorf("coding: persist session recovery: %w", err)
-			}
-			entries = append(entries, repairs...)
-		}
 	}
-	validator, err := transcript.ValidateSession(entries)
+	validator, repairs, err := transcript.RecoverSession(entries)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("coding: validate recovered session: %w", err)
+		return nil, nil, nil, fmt.Errorf("coding: recover session transcript: %w", err)
+	}
+	if len(repairs) > 0 {
+		if err := store.Append(ctx, repairs...); err != nil {
+			return nil, nil, nil, fmt.Errorf("coding: persist session recovery: %w", err)
+		}
+		entries = append(entries, repairs...)
 	}
 	seed, err := transcript.BuildContext(entries)
 	if err != nil {

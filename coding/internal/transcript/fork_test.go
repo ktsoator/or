@@ -135,7 +135,7 @@ func TestForkAfterAssistantKeepsCompletedLifecycleTail(t *testing.T) {
 	if len(forked) != 8 || forked[len(forked)-1].Type != RunEndEntry {
 		t.Fatalf("forked lifecycle = %#v", forked)
 	}
-	if repairs, err := RepairInterruptedLifecycle(forked); err != nil || len(repairs) != 0 {
+	if _, repairs, err := RecoverSession(forked); err != nil || len(repairs) != 0 {
 		t.Fatalf("completed fork repairs = %#v, %v", repairs, err)
 	}
 }

@@ -8,7 +8,7 @@ import (
 	"github.com/ktsoator/or/llm"
 )
 
-func TestRepairInterruptedToolCallsClassifiesMixedBatchInModelOrder(t *testing.T) {
+func TestRecoverSessionClassifiesInterruptedToolsInModelOrder(t *testing.T) {
 	assistant := repairAssistant(
 		llm.ToolCall{ID: "call-1", Name: "read", Arguments: map[string]any{"path": "one"}},
 		llm.ToolCall{ID: "call-2", Name: "write", Arguments: map[string]any{"path": "two"}},
@@ -21,12 +21,12 @@ func TestRepairInterruptedToolCallsClassifiesMixedBatchInModelOrder(t *testing.T
 	)
 	entries = sequencedForTest(entries...)
 
-	repairs, err := RepairInterruptedToolCalls(entries)
+	_, repairs, err := RecoverSession(entries)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(repairs) != 4 {
-		t.Fatalf("repair entries = %d, want two result/outcome pairs", len(repairs))
+	if len(repairs) != 7 {
+		t.Fatalf("repair entries = %d, want two result/outcome pairs and three boundaries", len(repairs))
 	}
 	assertRepairPair(t, repairs[0:2], "call-1", ToolNotStarted, "did not start")
 	assertRepairPair(t, repairs[2:4], "call-2", ToolOutcomeUnknown, "outcome is unknown")
@@ -38,13 +38,13 @@ func TestRepairInterruptedToolCallsClassifiesMixedBatchInModelOrder(t *testing.T
 	if len(projected) != 4 {
 		t.Fatalf("repaired context messages = %d, want user, assistant, and two results", len(projected))
 	}
-	repaired := sequencedForTest(append(entries, repairs...)...)
-	if more, err := RepairInterruptedToolCalls(repaired); err != nil || len(more) != 0 {
+	repaired := append(entries, repairs...)
+	if _, more, err := RecoverSession(repaired); err != nil || len(more) != 0 {
 		t.Fatalf("second repair = %#v, %v, want no-op", more, err)
 	}
 }
 
-func TestRepairInterruptedToolCallsAcceptsBlockedResultWithoutIntent(t *testing.T) {
+func TestRecoverSessionAcceptsBlockedResultWithoutIntent(t *testing.T) {
 	assistant := repairAssistant(llm.ToolCall{ID: "call-1", Name: "write", Arguments: map[string]any{}})
 	entries := append(repairStepPrefix(true),
 		NewMessage(agent.FromLLM(assistant)),
@@ -55,16 +55,18 @@ func TestRepairInterruptedToolCallsAcceptsBlockedResultWithoutIntent(t *testing.
 	)
 	entries = sequencedForTest(entries...)
 
-	repairs, err := RepairInterruptedToolCalls(entries)
+	_, repairs, err := RecoverSession(entries)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(repairs) != 0 {
-		t.Fatalf("repairs = %#v, want none", repairs)
+	if got := entryTypes(repairs); !equalTypes(got, []EntryType{
+		StepEndEntry, TurnEndEntry, RunEndEntry,
+	}) {
+		t.Fatalf("repairs = %v, want only lifecycle closure", got)
 	}
 }
 
-func TestRepairInterruptedToolCallsAllowsContextAttachmentBeforeResult(t *testing.T) {
+func TestRecoverSessionAllowsContextAttachmentBeforeResult(t *testing.T) {
 	entries := append(repairStepPrefix(false),
 		NewMessage(agent.FromLLM(repairAssistant(
 			llm.ToolCall{ID: "call-1", Name: "Skill", Arguments: map[string]any{"name": "review"}},
@@ -83,17 +85,17 @@ func TestRepairInterruptedToolCallsAllowsContextAttachmentBeforeResult(t *testin
 	)
 	entries = sequencedForTest(entries...)
 
-	repairs, err := RepairInterruptedToolCalls(entries)
+	_, repairs, err := RecoverSession(entries)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(repairs) != 2 {
-		t.Fatalf("repairs = %#v, want one result/outcome pair", repairs)
+	if len(repairs) != 5 {
+		t.Fatalf("repairs = %#v, want one result/outcome pair and three boundaries", repairs)
 	}
-	assertRepairPair(t, repairs, "call-1", ToolOutcomeUnknown, "outcome is unknown")
+	assertRepairPair(t, repairs[:2], "call-1", ToolOutcomeUnknown, "outcome is unknown")
 }
 
-func TestRepairInterruptedToolCallsRejectsInvalidCommittedHistory(t *testing.T) {
+func TestRecoverSessionRejectsInvalidToolHistory(t *testing.T) {
 	tests := []struct {
 		name    string
 		entries []Entry
@@ -155,12 +157,32 @@ func TestRepairInterruptedToolCallsRejectsInvalidCommittedHistory(t *testing.T) 
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := RepairInterruptedToolCalls(sequencedForTest(test.entries...))
+			_, _, err := RecoverSession(sequencedForTest(test.entries...))
 			if err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("RepairInterruptedToolCalls() error = %v, want %q", err, test.want)
+				t.Fatalf("RecoverSession() error = %v, want %q", err, test.want)
 			}
 		})
 	}
+}
+
+func entryTypes(entries []Entry) []EntryType {
+	result := make([]EntryType, len(entries))
+	for index, entry := range entries {
+		result[index] = entry.Type
+	}
+	return result
+}
+
+func equalTypes(left, right []EntryType) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func repairStepPrefix(includeUser bool) []Entry {

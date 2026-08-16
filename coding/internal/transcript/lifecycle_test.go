@@ -8,7 +8,7 @@ import (
 	"github.com/ktsoator/or/llm"
 )
 
-func TestRepairInterruptedLifecycleClosesOpenBoundaries(t *testing.T) {
+func TestRecoverSessionClosesOpenLifecycle(t *testing.T) {
 	entries := []Entry{
 		NewRunStart("run-1"),
 		NewTurnStart("run-1", "turn-1"),
@@ -17,7 +17,7 @@ func TestRepairInterruptedLifecycleClosesOpenBoundaries(t *testing.T) {
 	}
 	entries = sequencedForTest(entries...)
 
-	repairs, err := RepairInterruptedLifecycle(entries)
+	_, repairs, err := RecoverSession(entries)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,13 +36,13 @@ func TestRepairInterruptedLifecycleClosesOpenBoundaries(t *testing.T) {
 			t.Fatalf("interrupted boundary = %#v", entry)
 		}
 	}
-	repaired := sequencedForTest(append(entries, repairs...)...)
-	if more, err := RepairInterruptedLifecycle(repaired); err != nil || len(more) != 0 {
+	repaired := append(entries, repairs...)
+	if _, more, err := RecoverSession(repaired); err != nil || len(more) != 0 {
 		t.Fatalf("second repair = %#v, %v; want no-op", more, err)
 	}
 }
 
-func TestRepairInterruptedLifecycleRejectsInvalidNesting(t *testing.T) {
+func TestRecoverSessionRejectsInvalidLifecycleNesting(t *testing.T) {
 	tests := []struct {
 		name    string
 		entries []Entry
@@ -95,23 +95,27 @@ func TestRepairInterruptedLifecycleRejectsInvalidNesting(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := RepairInterruptedLifecycle(sequencedForTest(test.entries...))
+			_, _, err := RecoverSession(sequencedForTest(test.entries...))
 			if err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("RepairInterruptedLifecycle() error = %v, want %q", err, test.want)
+				t.Fatalf("RecoverSession() error = %v, want %q", err, test.want)
 			}
 		})
 	}
 }
 
-func TestRepairInterruptedLifecycleRequiresToolRepairFirst(t *testing.T) {
+func TestRecoverSessionRepairsToolsBeforeClosingLifecycle(t *testing.T) {
 	entries := append(repairStepPrefix(false), NewMessage(agent.FromLLM(repairAssistant(
 		llm.ToolCall{ID: "call-1", Name: "read", Arguments: map[string]any{}},
 	))))
 	entries = sequencedForTest(entries...)
 
-	_, err := RepairInterruptedLifecycle(entries)
-	if err == nil || !strings.Contains(err.Error(), "unresolved tool call call-1") {
-		t.Fatalf("RepairInterruptedLifecycle() error = %v", err)
+	_, repairs, err := RecoverSession(entries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []EntryType{MessageEntry, ToolOutcomeEntry, StepEndEntry, TurnEndEntry, RunEndEntry}
+	if got := entryTypes(repairs); !equalTypes(got, want) {
+		t.Fatalf("repair order = %v, want %v", got, want)
 	}
 }
 

@@ -4,16 +4,9 @@ import "fmt"
 
 const LifecycleInterruptedReason = "process_interrupted"
 
-// RepairInterruptedLifecycle validates the complete event prefix through the
-// canonical reducer. When the prefix ends inside a lifecycle, it returns the
-// interrupted terminal boundaries without mutating the supplied entries.
-func RepairInterruptedLifecycle(entries []Entry) ([]Entry, error) {
-	reducer := newSessionReducer(len(entries))
-	for index, entry := range entries {
-		if _, err := reducer.Apply(index, entry); err != nil {
-			return nil, err
-		}
-	}
+// interruptedLifecycleRepairs returns terminal boundaries for the open scope
+// in an already validated reducer state.
+func interruptedLifecycleRepairs(reducer *sessionReducer) ([]Entry, error) {
 	if len(reducer.pendingTools) > 0 {
 		return nil, fmt.Errorf(
 			"transcript: cannot close lifecycle with unresolved tool call %s",

@@ -343,8 +343,9 @@ Implemented:
    RunCompleted message correlation consume the lifecycle projection instead.
 9. Context attachments are committed after their owning `step/start`, so their
    Run, Turn, and Step ownership is deterministic.
-10. Projection, validation, tool repair, and lifecycle repair drive one
-    deterministic `sessionReducer`; event ordering invariants have one owner.
+10. Projection and validation drive one deterministic `sessionReducer`; a
+    single `RecoverSession` replay validates the committed prefix, repairs
+    interrupted tools, and then closes its lifecycle boundaries.
 11. Version 6 assigns a contiguous durable `seq` to every entry. Journal writes
     validate each candidate batch on a cloned reducer before persistence and
     install the advanced reducer only after the Store append succeeds.

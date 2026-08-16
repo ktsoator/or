@@ -147,6 +147,8 @@ Refactors must preserve these contracts:
 15. Transcript entries carry contiguous durable sequence numbers. A journal
     append is validated against a cloned reducer before persistence; failed
     validation or persistence does not advance in-memory event state.
+16. Session restore replays the committed prefix once, then validates generated
+    tool and lifecycle repairs incrementally on the recovered validator.
 
 ## Refactoring rules
 
