@@ -167,7 +167,7 @@ func interruptedToolEntries() []transcript.Entry {
 			&llm.ToolCall{ID: "call-write", Name: "write", Arguments: map[string]any{"path": "two"}},
 		},
 	}
-	return []transcript.Entry{
+	entries := []transcript.Entry{
 		transcript.NewRunStart("run-1"),
 		transcript.NewTurnStart("run-1", "turn-1"),
 		transcript.NewMessage(agent.UserMessage("work")),
@@ -187,6 +187,11 @@ func interruptedToolEntries() []transcript.Entry {
 			Arguments:  []byte(`{"path":"two"}`),
 		}),
 	}
+	sequenced, err := transcript.SequenceEntries(entries, 0)
+	if err != nil {
+		panic(err)
+	}
+	return sequenced
 }
 
 func assertRecoveredOutcome(

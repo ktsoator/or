@@ -71,7 +71,43 @@ func newSessionReducer(capacity int) *sessionReducer {
 	}
 }
 
+func (r *sessionReducer) clone() *sessionReducer {
+	clone := &sessionReducer{
+		scope:        r.scope,
+		entryIDs:     cloneSet(r.entryIDs),
+		messageIDs:   cloneSet(r.messageIDs),
+		runIDs:       cloneSet(r.runIDs),
+		turnIDs:      cloneSet(r.turnIDs),
+		stepIDs:      cloneSet(r.stepIDs),
+		toolIDs:      cloneSet(r.toolIDs),
+		tools:        make(map[string]*reducedToolState, len(r.tools)),
+		pendingTools: append([]string(nil), r.pendingTools...),
+	}
+	for id, tool := range r.tools {
+		copied := *tool
+		copied.Request.Arguments = append(json.RawMessage(nil), tool.Request.Arguments...)
+		clone.tools[id] = &copied
+	}
+	return clone
+}
+
+func cloneSet(source map[string]struct{}) map[string]struct{} {
+	clone := make(map[string]struct{}, len(source))
+	for value := range source {
+		clone[value] = struct{}{}
+	}
+	return clone
+}
+
 func (r *sessionReducer) Apply(index int, entry Entry) (sessionTransition, error) {
+	if entry.Seq != int64(index) {
+		return sessionTransition{}, fmt.Errorf(
+			"transcript: entry %s has sequence %d, want %d",
+			entry.ID,
+			entry.Seq,
+			index,
+		)
+	}
 	if err := entry.Validate(); err != nil {
 		return sessionTransition{}, err
 	}

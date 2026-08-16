@@ -10,9 +10,10 @@ import (
 )
 
 // SessionProjection is a disposable, deterministic view of one committed
-// transcript prefix. AppliedEntries is a count, not a durable sequence number.
+// transcript prefix. AsOfSeq identifies the last event included in the view.
 type SessionProjection struct {
 	AppliedEntries int
+	AsOfSeq        int64
 	Runs           []ProjectedRun
 	Messages       []ProjectedMessage
 	ToolCalls      []ProjectedToolCall
@@ -156,6 +157,10 @@ func ProjectSession(entries []Entry) (*SessionProjection, error) {
 		}
 	}
 	projector.projection.AppliedEntries = len(entries)
+	projector.projection.AsOfSeq = -1
+	if len(entries) > 0 {
+		projector.projection.AsOfSeq = entries[len(entries)-1].Seq
+	}
 	projector.projection.Open = ProjectedLifecycle{
 		RunID: reducer.scope.RunID, TurnID: reducer.scope.TurnID, StepID: reducer.scope.StepID,
 	}

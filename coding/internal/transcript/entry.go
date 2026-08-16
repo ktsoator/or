@@ -14,7 +14,10 @@ import (
 	"github.com/ktsoator/or/llm"
 )
 
-const CurrentVersion = 5
+const (
+	CurrentVersion           = 6
+	unassignedSequence int64 = -1
+)
 
 type EntryType string
 
@@ -49,8 +52,10 @@ type Header struct {
 
 func NewHeader() Header { return Header{Type: "session", Version: CurrentVersion} }
 
-// Entry is one item in the session's linear, append-only history.
+// Entry is one item in the session's linear, append-only history. Seq is -1
+// while an entry is being prepared and becomes contiguous when it commits.
 type Entry struct {
+	Seq         int64
 	ID          string
 	Timestamp   time.Time
 	Type        EntryType
@@ -127,6 +132,7 @@ type Compaction struct {
 
 func NewMessage(message agent.AgentMessage) Entry {
 	return Entry{
+		Seq:       unassignedSequence,
 		ID:        NewID(),
 		Timestamp: time.Now().UTC(),
 		Type:      MessageEntry,
@@ -136,6 +142,7 @@ func NewMessage(message agent.AgentMessage) Entry {
 
 func NewToolCall(call ToolCall) Entry {
 	return Entry{
+		Seq:       unassignedSequence,
 		ID:        NewID(),
 		Timestamp: time.Now().UTC(),
 		Type:      ToolCallEntry,
@@ -145,6 +152,7 @@ func NewToolCall(call ToolCall) Entry {
 
 func NewToolOutcome(outcome ToolOutcome) Entry {
 	return Entry{
+		Seq:         unassignedSequence,
 		ID:          NewID(),
 		Timestamp:   time.Now().UTC(),
 		Type:        ToolOutcomeEntry,
@@ -154,6 +162,7 @@ func NewToolOutcome(outcome ToolOutcome) Entry {
 
 func NewContext(context ContextAttachment) Entry {
 	return Entry{
+		Seq:       unassignedSequence,
 		ID:        NewID(),
 		Timestamp: time.Now().UTC(),
 		Type:      ContextEntry,
@@ -163,6 +172,7 @@ func NewContext(context ContextAttachment) Entry {
 
 func NewCompaction(compact Compaction) Entry {
 	return Entry{
+		Seq:        unassignedSequence,
 		ID:         NewID(),
 		Timestamp:  time.Now().UTC(),
 		Type:       CompactionEntry,
@@ -209,7 +219,7 @@ func NewStepEnd(
 
 func newLifecycleEntry(entryType EntryType, lifecycle Lifecycle) Entry {
 	return Entry{
-		ID: NewID(), Timestamp: time.Now().UTC(), Type: entryType,
+		Seq: unassignedSequence, ID: NewID(), Timestamp: time.Now().UTC(), Type: entryType,
 		Lifecycle: &lifecycle,
 	}
 }
@@ -223,6 +233,9 @@ func NewID() string {
 }
 
 func (e Entry) Validate() error {
+	if e.Seq < unassignedSequence {
+		return fmt.Errorf("transcript: entry sequence must be non-negative or unassigned, got %d", e.Seq)
+	}
 	if e.ID == "" {
 		return errors.New("transcript: entry id is empty")
 	}
@@ -329,7 +342,11 @@ func (e Entry) MarshalJSON() ([]byte, error) {
 	if err := e.Validate(); err != nil {
 		return nil, err
 	}
+	if e.Seq == unassignedSequence {
+		return nil, fmt.Errorf("transcript: entry %s sequence is unassigned", e.ID)
+	}
 	wire := struct {
+		Seq         int64              `json:"seq"`
 		ID          string             `json:"id"`
 		Timestamp   time.Time          `json:"timestamp"`
 		Type        EntryType          `json:"type"`
@@ -340,7 +357,7 @@ func (e Entry) MarshalJSON() ([]byte, error) {
 		Compaction  *Compaction        `json:"compaction,omitempty"`
 		Lifecycle   *Lifecycle         `json:"lifecycle,omitempty"`
 	}{
-		ID: e.ID, Timestamp: e.Timestamp, Type: e.Type,
+		Seq: e.Seq, ID: e.ID, Timestamp: e.Timestamp, Type: e.Type,
 		ToolCall: e.ToolCall, ToolOutcome: e.ToolOutcome, Context: e.Context,
 		Compaction: e.Compaction, Lifecycle: e.Lifecycle,
 	}
@@ -360,6 +377,7 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 		return errors.New("transcript: decode into nil entry")
 	}
 	wire := struct {
+		Seq         *int64             `json:"seq"`
 		ID          string             `json:"id"`
 		Timestamp   time.Time          `json:"timestamp"`
 		Type        EntryType          `json:"type"`
@@ -373,8 +391,11 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &wire); err != nil {
 		return err
 	}
+	if wire.Seq == nil || *wire.Seq < 0 {
+		return errors.New("transcript: entry sequence is missing or negative")
+	}
 	decoded := Entry{
-		ID: wire.ID, Timestamp: wire.Timestamp,
+		Seq: *wire.Seq, ID: wire.ID, Timestamp: wire.Timestamp,
 		Type: wire.Type, ToolCall: wire.ToolCall, ToolOutcome: wire.ToolOutcome, Context: wire.Context,
 		Compaction: wire.Compaction, Lifecycle: wire.Lifecycle,
 	}

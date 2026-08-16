@@ -82,7 +82,11 @@ func Fork(entries []Entry, messageID string, mode ForkMode, replacementText stri
 	if hasUnresolvedToolCalls(context) {
 		return nil, fmt.Errorf("%w: fork boundary leaves an unresolved tool call", ErrInvalidForkBoundary)
 	}
-	return forked, nil
+	sequenced, err := SequenceEntries(forked, 0)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidForkBoundary, err)
+	}
+	return sequenced, nil
 }
 
 func completedLifecycleTail(entries []Entry) []Entry {

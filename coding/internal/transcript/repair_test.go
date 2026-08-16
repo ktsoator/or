@@ -19,6 +19,7 @@ func TestRepairInterruptedToolCallsClassifiesMixedBatchInModelOrder(t *testing.T
 			ToolCallID: "call-2", ToolName: "write", Arguments: []byte(`{"path":"two"}`),
 		}),
 	)
+	entries = sequencedForTest(entries...)
 
 	repairs, err := RepairInterruptedToolCalls(entries)
 	if err != nil {
@@ -37,7 +38,8 @@ func TestRepairInterruptedToolCallsClassifiesMixedBatchInModelOrder(t *testing.T
 	if len(projected) != 4 {
 		t.Fatalf("repaired context messages = %d, want user, assistant, and two results", len(projected))
 	}
-	if more, err := RepairInterruptedToolCalls(append(entries, repairs...)); err != nil || len(more) != 0 {
+	repaired := sequencedForTest(append(entries, repairs...)...)
+	if more, err := RepairInterruptedToolCalls(repaired); err != nil || len(more) != 0 {
 		t.Fatalf("second repair = %#v, %v, want no-op", more, err)
 	}
 }
@@ -51,6 +53,7 @@ func TestRepairInterruptedToolCallsAcceptsBlockedResultWithoutIntent(t *testing.
 			Content: []llm.ToolResultContent{&llm.TextContent{Text: "permission denied"}},
 		})),
 	)
+	entries = sequencedForTest(entries...)
 
 	repairs, err := RepairInterruptedToolCalls(entries)
 	if err != nil {
@@ -78,6 +81,7 @@ func TestRepairInterruptedToolCallsAllowsContextAttachmentBeforeResult(t *testin
 			Rendered:     "review instructions",
 		}),
 	)
+	entries = sequencedForTest(entries...)
 
 	repairs, err := RepairInterruptedToolCalls(entries)
 	if err != nil {
@@ -151,7 +155,7 @@ func TestRepairInterruptedToolCallsRejectsInvalidCommittedHistory(t *testing.T) 
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := RepairInterruptedToolCalls(test.entries)
+			_, err := RepairInterruptedToolCalls(sequencedForTest(test.entries...))
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("RepairInterruptedToolCalls() error = %v, want %q", err, test.want)
 			}

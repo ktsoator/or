@@ -18,10 +18,12 @@ import (
 type sessionJournal struct {
 	store transcript.Store
 
+	commitMu     sync.Mutex
 	mu           sync.RWMutex
 	entries      []transcript.Entry
 	persistedLen int
 	usageStart   int
+	validator    *transcript.SessionValidator
 
 	outcomeMu sync.Mutex
 	outcomes  map[string]agent.ToolOutcome // tool-call ID -> terminal outcome
@@ -47,10 +49,18 @@ func newSessionJournal(
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("coding: validate session transcript: %w", err)
 		}
+		toolRepairs, err = transcript.SequenceEntries(toolRepairs, int64(len(entries)))
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("coding: sequence session tool recovery: %w", err)
+		}
 		candidate := append(append([]transcript.Entry(nil), entries...), toolRepairs...)
 		lifecycleRepairs, err := transcript.RepairInterruptedLifecycle(candidate)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("coding: validate session lifecycle: %w", err)
+		}
+		lifecycleRepairs, err = transcript.SequenceEntries(lifecycleRepairs, int64(len(candidate)))
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("coding: sequence session lifecycle recovery: %w", err)
 		}
 		repairs := append(toolRepairs, lifecycleRepairs...)
 		recovered := append(append([]transcript.Entry(nil), entries...), repairs...)
@@ -63,6 +73,10 @@ func newSessionJournal(
 			}
 			entries = append(entries, repairs...)
 		}
+	}
+	validator, err := transcript.ValidateSession(entries)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("coding: validate recovered session: %w", err)
 	}
 	seed, err := transcript.BuildContext(entries)
 	if err != nil {
@@ -90,6 +104,7 @@ func newSessionJournal(
 		entries:      append([]transcript.Entry(nil), entries...),
 		persistedLen: len(seed),
 		usageStart:   usageStart,
+		validator:    validator,
 		outcomes:     outcomes,
 	}
 	return journal, seed, append([]transcript.Entry(nil), entries...), nil
@@ -187,6 +202,9 @@ func (j *sessionJournal) persistMessages(
 	positionedEntries []positionedJournalEntry,
 	additionalEntries ...transcript.Entry,
 ) error {
+	j.commitMu.Lock()
+	defer j.commitMu.Unlock()
+
 	j.mu.RLock()
 	persistedLen := j.persistedLen
 	j.mu.RUnlock()
@@ -249,31 +267,55 @@ func (j *sessionJournal) persistMessages(
 	if len(entries) == 0 {
 		return nil
 	}
+	sequenced, err := transcript.SequenceEntries(entries, j.validator.NextSeq())
+	if err != nil {
+		return fmt.Errorf("coding: sequence session append: %w", err)
+	}
+	nextValidator, err := j.validator.ValidateAppend(sequenced)
+	if err != nil {
+		return fmt.Errorf("coding: validate session append: %w", err)
+	}
 	if j.store != nil {
-		if err := j.store.Append(ctx, entries...); err != nil {
+		if err := j.store.Append(ctx, sequenced...); err != nil {
 			return err
 		}
 	}
 	j.mu.Lock()
-	j.entries = append(j.entries, entries...)
+	j.entries = append(j.entries, sequenced...)
 	j.persistedLen = len(all)
+	j.validator = nextValidator
 	j.mu.Unlock()
 	return nil
 }
 
 func (j *sessionJournal) appendCompaction(ctx context.Context, entry transcript.Entry) error {
-	if j.store == nil {
-		return nil
+	j.commitMu.Lock()
+	defer j.commitMu.Unlock()
+
+	sequenced, err := transcript.SequenceEntries([]transcript.Entry{entry}, j.validator.NextSeq())
+	if err != nil {
+		return fmt.Errorf("coding: sequence compaction append: %w", err)
 	}
-	return j.store.Append(ctx, entry)
+	nextValidator, err := j.validator.ValidateAppend(sequenced)
+	if err != nil {
+		return fmt.Errorf("coding: validate compaction append: %w", err)
+	}
+	if j.store != nil {
+		if err := j.store.Append(ctx, sequenced...); err != nil {
+			return err
+		}
+	}
+	j.mu.Lock()
+	j.entries = append(j.entries, sequenced[0])
+	j.validator = nextValidator
+	j.mu.Unlock()
+	return nil
 }
 
 func (j *sessionJournal) applyCompaction(
-	entries []transcript.Entry,
 	projectedLen int,
 ) {
 	j.mu.Lock()
-	j.entries = append([]transcript.Entry(nil), entries...)
 	j.usageStart = projectedLen
 	j.persistedLen = projectedLen
 	j.mu.Unlock()

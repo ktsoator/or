@@ -144,6 +144,9 @@ Refactors must preserve these contracts:
     IDs; an attempt number is presentation metadata, not identity.
 14. Session projection and interrupted-tail repair share one transcript reducer;
     ordering and ownership rules must not be reimplemented by consumers.
+15. Transcript entries carry contiguous durable sequence numbers. A journal
+    append is validated against a cloned reducer before persistence; failed
+    validation or persistence does not advance in-memory event state.
 
 ## Refactoring rules
 

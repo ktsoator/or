@@ -181,7 +181,11 @@ func seededTurns(count int) []transcript.Entry {
 			transcript.NewRunEnd(runID, transcript.LifecycleCompleted, ""),
 		)
 	}
-	return entries
+	sequenced, err := transcript.SequenceEntries(entries, 0)
+	if err != nil {
+		panic(err)
+	}
+	return sequenced
 }
 
 func fixedResponse(text string) agent.StreamFn {

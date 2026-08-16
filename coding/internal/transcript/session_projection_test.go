@@ -64,8 +64,14 @@ func TestProjectSessionBuildsLifecycleAndToolAssociations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if projection.AppliedEntries != len(entries) || projection.Open != (ProjectedLifecycle{}) {
-		t.Fatalf("projection boundary = entries %d open %#v", projection.AppliedEntries, projection.Open)
+	if projection.AppliedEntries != len(entries) || projection.AsOfSeq != int64(len(entries)-1) ||
+		projection.Open != (ProjectedLifecycle{}) {
+		t.Fatalf(
+			"projection boundary = entries %d seq %d open %#v",
+			projection.AppliedEntries,
+			projection.AsOfSeq,
+			projection.Open,
+		)
 	}
 	replayed, err := ProjectSession(entries)
 	if err != nil || !reflect.DeepEqual(projection, replayed) {
@@ -336,6 +342,7 @@ func TestProjectSessionRejectsInvalidEventRelationships(t *testing.T) {
 func stampProjectionEntries(entries []Entry) {
 	base := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
 	for index := range entries {
+		entries[index].Seq = int64(index)
 		entries[index].Timestamp = base.Add(time.Duration(index) * time.Second)
 	}
 }

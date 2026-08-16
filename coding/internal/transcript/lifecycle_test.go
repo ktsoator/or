@@ -15,6 +15,7 @@ func TestRepairInterruptedLifecycleClosesOpenBoundaries(t *testing.T) {
 		NewMessage(agent.UserMessage("continue the work")),
 		NewStepStart("run-1", "turn-1", "step-1"),
 	}
+	entries = sequencedForTest(entries...)
 
 	repairs, err := RepairInterruptedLifecycle(entries)
 	if err != nil {
@@ -35,7 +36,8 @@ func TestRepairInterruptedLifecycleClosesOpenBoundaries(t *testing.T) {
 			t.Fatalf("interrupted boundary = %#v", entry)
 		}
 	}
-	if more, err := RepairInterruptedLifecycle(append(entries, repairs...)); err != nil || len(more) != 0 {
+	repaired := sequencedForTest(append(entries, repairs...)...)
+	if more, err := RepairInterruptedLifecycle(repaired); err != nil || len(more) != 0 {
 		t.Fatalf("second repair = %#v, %v; want no-op", more, err)
 	}
 }
@@ -93,7 +95,7 @@ func TestRepairInterruptedLifecycleRejectsInvalidNesting(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := RepairInterruptedLifecycle(test.entries)
+			_, err := RepairInterruptedLifecycle(sequencedForTest(test.entries...))
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("RepairInterruptedLifecycle() error = %v, want %q", err, test.want)
 			}
@@ -105,6 +107,7 @@ func TestRepairInterruptedLifecycleRequiresToolRepairFirst(t *testing.T) {
 	entries := append(repairStepPrefix(false), NewMessage(agent.FromLLM(repairAssistant(
 		llm.ToolCall{ID: "call-1", Name: "read", Arguments: map[string]any{}},
 	))))
+	entries = sequencedForTest(entries...)
 
 	_, err := RepairInterruptedLifecycle(entries)
 	if err == nil || !strings.Contains(err.Error(), "unresolved tool call call-1") {

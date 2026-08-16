@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -560,6 +561,11 @@ func TestSessionRetriesFinalFlushAfterTransientCheckpointFailure(t *testing.T) {
 		t.Fatalf("model requests = %d, want 0", modelCalls)
 	}
 	entries, batches, appendCalls := store.snapshot()
+	for index, entry := range entries {
+		if entry.Seq != int64(index) {
+			t.Fatalf("durable entry %d sequence = %d", index, entry.Seq)
+		}
+	}
 	entries = withoutLifecycle(entries)
 	if appendCalls != 2 {
 		t.Fatalf("store append attempts = %d, want checkpoint and final flush", appendCalls)
@@ -572,6 +578,42 @@ func TestSessionRetriesFinalFlushAfterTransientCheckpointFailure(t *testing.T) {
 	}
 	if _, ok := llmEntry(entries[0]).(*llm.UserMessage); !ok {
 		t.Fatalf("durable message = %T, want user", llmEntry(entries[0]))
+	}
+}
+
+func TestSessionJournalRejectsInvalidBatchBeforeStoreAppend(t *testing.T) {
+	ctx := context.Background()
+	store := &checkpointStore{}
+	journal, _, _, err := newSessionJournal(ctx, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	messages := []agent.AgentMessage{agent.UserMessage("question")}
+	if err := journal.persistMessages(ctx, messages, nil, nil); err == nil ||
+		!strings.Contains(err.Error(), "has no open turn") {
+		t.Fatalf("persistMessages() error = %v", err)
+	}
+	entries, _, appendCalls := store.snapshot()
+	if appendCalls != 0 || len(entries) != 0 {
+		t.Fatalf("invalid batch reached store: calls=%d entries=%#v", appendCalls, entries)
+	}
+
+	positioned := positionedLifecycle(
+		0,
+		transcript.NewRunStart("run-1"),
+		transcript.NewTurnStart("run-1", "turn-1"),
+	)
+	if err := journal.persistMessages(ctx, messages, nil, positioned); err != nil {
+		t.Fatalf("valid append after rejection: %v", err)
+	}
+	entries, _, appendCalls = store.snapshot()
+	if appendCalls != 1 || len(entries) != 3 {
+		t.Fatalf("valid batch = calls=%d entries=%#v", appendCalls, entries)
+	}
+	for index, entry := range entries {
+		if entry.Seq != int64(index) {
+			t.Fatalf("entry %d sequence = %d", index, entry.Seq)
+		}
 	}
 }
 

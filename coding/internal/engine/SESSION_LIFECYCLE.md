@@ -165,12 +165,14 @@ Raw assistant chunks, request snapshots, provider attempts, timings, and costs
 may remain diagnostic data. They become session events only if replay or product
 behavior is defined to require them.
 
-The version 5 transcript persists and validates `run/start`,
+The version 6 transcript persists and validates `run/start`,
 `run/end`, `turn/start`, `turn/end`, `step/start`, and `step/end`. Existing
 message, context, compaction, tool-call, and tool-outcome entries supply the
 other implemented durable facts. Product history and run timing are projected
-from explicit lifecycle boundaries; no derived `run` entry exists. Versions 4
-and earlier are rejected explicitly and are not migrated on load or append.
+from explicit lifecycle boundaries; no derived `run` entry exists. Every entry
+carries a contiguous durable `seq`, and append/replace reject gaps or restated
+positions. Versions 5 and earlier are rejected explicitly and are not migrated
+on load or append.
 
 Every session event has at least:
 
@@ -343,15 +345,18 @@ Implemented:
    Run, Turn, and Step ownership is deterministic.
 10. Projection, validation, tool repair, and lifecycle repair drive one
     deterministic `sessionReducer`; event ordering invariants have one owner.
+11. Version 6 assigns a contiguous durable `seq` to every entry. Journal writes
+    validate each candidate batch on a cloned reducer before persistence and
+    install the advanced reducer only after the Store append succeeds.
 
 Remaining:
 
-1. Add durable sequence numbers and drive the reducer incrementally as entries
-   commit instead of replaying the complete prefix for each read model.
+1. Drive read models incrementally as entries commit instead of replaying the
+   complete prefix for each query.
 2. Switch model-context and trace consumers from their current scans
    to registered session projections.
-3. Persist request-header facts and a durable sequence so each provider input
-   can be reconstructed from a precise committed event boundary.
+3. Persist request-header facts so each provider input can be reconstructed
+   from a precise committed event boundary.
 
 Observability now emits real Turn and Step lifecycle events. Provider requests
 carry both parent IDs, and each physical provider dispatch has a stable

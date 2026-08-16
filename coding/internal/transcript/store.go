@@ -27,6 +27,9 @@ func (m *Memory) Load(context.Context) ([]Entry, error) {
 func (m *Memory) Append(_ context.Context, entries ...Entry) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := validateAppend(entries, int64(len(m.entries))); err != nil {
+		return err
+	}
 	m.entries = append(m.entries, entries...)
 	return nil
 }
