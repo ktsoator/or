@@ -51,7 +51,8 @@ type InspectorMode = 'summary' | 'content' | 'input' | 'raw' | 'tools'
 const TRAJECTORY_VIRTUALIZATION_THRESHOLD = 100
 const TRAJECTORY_OVERSCAN = 12
 const TRAJECTORY_ROW_HEIGHT_REM = 2.25
-const TRAJECTORY_TASK_HEADER_HEIGHT_REM = 1.75
+const TRAJECTORY_TURN_HEADER_HEIGHT_REM = 2
+const TRAJECTORY_STEP_HEADER_HEIGHT_REM = 2
 const TIMELINE_COLUMN_WIDTH = 50
 const TIMELINE_EDGE_PADDING = 8
 const DEFAULT_INSPECTOR_RATIO = 0.36
@@ -376,7 +377,7 @@ function PageState({ icon, children }: { icon: ReactNode; children: ReactNode })
 
 function emptyTraceBundle(sessionID: string, selectedTaskID?: string): TraceBundle {
   return {
-    version: 1,
+    version: 2,
     generatedAt: new Date().toISOString(),
     sessionId: sessionID,
     selectedTaskId: selectedTaskID ?? '',
@@ -418,7 +419,6 @@ type TrajectoryItem = {
   id: string
   kind: TrajectoryKind
   task: TraceBundleTask
-  taskNumber: number
   request?: TraceBundleRequest
   tool?: TraceBundleTool
   attachment?: RequestSnapshotAttachment
@@ -426,7 +426,23 @@ type TrajectoryItem = {
   preview: string
   thinking?: string
   thinkingOnly?: boolean
+  hierarchy?: TrajectoryHierarchy
   raw: unknown
+}
+
+type TrajectoryHierarchy = {
+  turnKey: string
+  turnID?: string
+  turnNumber: number
+  turnStepCount: number
+  stepKey: string
+  stepID?: string
+  stepNumber: number
+}
+
+type TrajectoryHierarchyIndex = {
+  tasks: Map<string, TrajectoryHierarchy>
+  requests: Map<string, TrajectoryHierarchy>
 }
 
 function ConversationTrace({
@@ -954,14 +970,18 @@ function TrajectoryLedger({
     return Number.parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 16
   }, [])
   const rowEstimate = rootFontSize * TRAJECTORY_ROW_HEIGHT_REM
-  const taskHeaderHeight = rootFontSize * TRAJECTORY_TASK_HEADER_HEIGHT_REM
+  const turnHeaderHeight = rootFontSize * TRAJECTORY_TURN_HEADER_HEIGHT_REM
+  const stepHeaderHeight = rootFontSize * TRAJECTORY_STEP_HEADER_HEIGHT_REM
   const rowVirtualizer = useVirtualizer({
     count: filtered.length,
     enabled: virtualized,
     getScrollElement: () => scrollRef.current,
     getItemKey: (index) => filtered[index]?.id ?? index,
-    estimateSize: (index) => rowEstimate +
-      (filtered[index]?.kind === 'user' ? taskHeaderHeight : 0),
+    estimateSize: (index) => rowEstimate + trajectoryHeaderHeight(
+      trajectoryHeaderFlags(filtered, index),
+      turnHeaderHeight,
+      stepHeaderHeight,
+    ),
     overscan: TRAJECTORY_OVERSCAN,
     useFlushSync: false,
   })
@@ -969,11 +989,10 @@ function TrajectoryLedger({
   const visibleVirtualRow = virtualRows.find((row) =>
     row.end > (rowVirtualizer.scrollOffset ?? 0))
   const visibleItem = visibleVirtualRow ? filtered[visibleVirtualRow.index] : undefined
-  const currentTaskNumber = visibleVirtualRow
-    ? filtered.slice(0, visibleVirtualRow.index + 1)
-        .findLast((item) => item.kind === 'user')?.taskNumber
-    : undefined
-  const overlayTaskNumber = visibleItem?.kind === 'user' ? undefined : currentTaskNumber
+  const currentTurn = visibleItem?.kind === 'system' ? undefined : visibleItem?.hierarchy
+  const overlayTurn = visibleVirtualRow && trajectoryHeaderFlags(filtered, visibleVirtualRow.index).turn
+    ? undefined
+    : currentTurn
 
   const restoreAnchor = useCallback((anchor: TrajectoryAnchor) => {
     const scrollArea = scrollRef.current
@@ -1000,13 +1019,17 @@ function TrajectoryLedger({
       const desiredOffset = anchor.viewportTop === undefined
         ? anchor.offset
         : anchor.viewportTop - scrollArea.getBoundingClientRect().top
-      const rowInset = filtered[index]?.kind === 'user' ? taskHeaderHeight : 0
+      const rowInset = trajectoryHeaderHeight(
+        trajectoryHeaderFlags(filtered, index),
+        turnHeaderHeight,
+        stepHeaderHeight,
+      )
       rowVirtualizer.scrollToOffset(itemOffset + rowInset - desiredOffset)
       window.requestAnimationFrame(() => {
         window.requestAnimationFrame(adjustToMeasuredRow)
       })
     })
-  }, [filtered, rowVirtualizer, taskHeaderHeight, virtualized])
+  }, [filtered, rowVirtualizer, stepHeaderHeight, turnHeaderHeight, virtualized])
 
   const initialPositionRestoredRef = useRef(false)
   useLayoutEffect(() => {
@@ -1052,7 +1075,7 @@ function TrajectoryLedger({
     if (!scrollArea) return undefined
     const scrollBounds = scrollArea.getBoundingClientRect()
     const visibleTop = scrollBounds.top +
-      (virtualized && currentTaskNumber !== undefined ? taskHeaderHeight : 0)
+      (virtualized && currentTurn ? turnHeaderHeight : 0)
     const row = [...scrollArea.querySelectorAll<HTMLElement>('[data-trajectory-item-id]')]
       .find((candidate) => candidate.getBoundingClientRect().bottom > visibleTop)
     if (!row?.dataset.trajectoryItemId) return undefined
@@ -1118,6 +1141,7 @@ function TrajectoryLedger({
             >
               {virtualRows.map((virtualRow) => {
                 const item = filtered[virtualRow.index]!
+                const headers = trajectoryHeaderFlags(filtered, virtualRow.index)
                 return (
                   <div
                     key={virtualRow.key}
@@ -1130,24 +1154,27 @@ function TrajectoryLedger({
                       item={item}
                       index={trajectorySequenceIndex(items, item)}
                       active={item.id === selectedItemID}
+                      headers={headers}
                       onSelect={() => onSelect(item)}
                     />
                   </div>
                 )
               })}
             </div>
-          ) : filtered.map((item) => (
+          ) : filtered.map((item, index) => (
             <TrajectoryRow
               key={item.id}
               item={item}
               index={trajectorySequenceIndex(items, item)}
               active={item.id === selectedItemID}
+              headers={trajectoryHeaderFlags(filtered, index)}
+              stickyTurn
               onSelect={() => onSelect(item)}
             />
           ))}
         </div>
-        {virtualized && overlayTaskNumber !== undefined && (
-          <TaskHeader taskNumber={overlayTaskNumber} overlay />
+        {virtualized && overlayTurn && (
+          <TurnHeader hierarchy={overlayTurn} overlay />
         )}
       </div>
     </section>
@@ -1158,13 +1185,15 @@ function TrajectoryRow({
   item,
   index,
   active,
-  showTaskHeader = true,
+  headers,
+  stickyTurn = false,
   onSelect,
 }: {
   item: TrajectoryItem
   index: number
   active: boolean
-  showTaskHeader?: boolean
+  headers: TrajectoryHeaderFlags
+  stickyTurn?: boolean
   onSelect: () => void
 }) {
   const { t } = useI18n()
@@ -1175,8 +1204,9 @@ function TrajectoryRow({
     : singleLine(item.preview)
   return (
     <>
-      {showTaskHeader && item.kind === 'user' && (
-        <TaskHeader taskNumber={item.taskNumber} />
+      {headers.turn && item.hierarchy && <TurnHeader hierarchy={item.hierarchy} sticky={stickyTurn} />}
+      {headers.step && item.hierarchy && item.request && (
+        <StepHeader hierarchy={item.hierarchy} request={item.request} />
       )}
       <button
         id={trajectoryDOMID(item.id)}
@@ -1222,17 +1252,101 @@ function TrajectoryRow({
   )
 }
 
-function TaskHeader({ taskNumber, overlay = false }: { taskNumber: number; overlay?: boolean }) {
+type TrajectoryHeaderFlags = {
+  turn: boolean
+  step: boolean
+}
+
+function trajectoryHeaderFlags(items: TrajectoryItem[], index: number): TrajectoryHeaderFlags {
+  const item = items[index]
+  if (!item || item.kind === 'system') return { turn: false, step: false }
+  const previous = index > 0 && items[index - 1]?.kind !== 'system' ? items[index - 1] : undefined
+  if (!item.hierarchy) return { turn: false, step: false }
+  const turn = !previous?.hierarchy || previous.hierarchy.turnKey !== item.hierarchy.turnKey
+  const step = Boolean(item.request) && (
+    turn || !previous?.hierarchy || previous.hierarchy.stepKey !== item.hierarchy.stepKey
+  )
+  return { turn, step }
+}
+
+function trajectoryHeaderHeight(
+  headers: TrajectoryHeaderFlags,
+  turnHeight: number,
+  stepHeight: number,
+): number {
+  return (headers.turn ? turnHeight : 0) +
+    (headers.step ? stepHeight : 0)
+}
+
+function TurnHeader({
+  hierarchy,
+  sticky = false,
+  overlay = false,
+}: {
+  hierarchy: TrajectoryHierarchy
+  sticky?: boolean
+  overlay?: boolean
+}) {
   const { t } = useI18n()
   return (
-    <div className={cn(
-      'z-10 flex h-7 items-center gap-3 border-b border-edge-soft bg-canvas-raised/95 px-3 backdrop-blur-sm',
-      overlay ? 'pointer-events-none absolute inset-x-0 top-0' : 'sticky top-0',
-    )}>
-      <span className="font-mono text-[0.71875rem] font-medium text-info">
-        {t('diagnostics.taskLabel', { count: taskNumber })}
+    <div
+      className={cn(
+        'z-10 flex h-8 items-center gap-3 border-b border-edge-soft bg-canvas-raised/95 px-3 backdrop-blur-sm',
+        sticky && 'sticky top-0',
+        overlay && 'pointer-events-none absolute inset-x-0 top-0',
+      )}
+      data-testid="trajectory-turn-header"
+      data-trajectory-turn-id={hierarchy.turnID}
+      title={hierarchy.turnID}
+    >
+      <span className="font-mono text-[0.75rem] font-semibold text-ink">
+        {t('diagnostics.turnLabel', { count: hierarchy.turnNumber })}
+      </span>
+      <span className="text-[0.71875rem] text-ink-muted">
+        {hierarchy.turnStepCount === 1
+          ? t('diagnostics.stepCountSingle')
+          : t('diagnostics.stepCount', { count: hierarchy.turnStepCount })}
       </span>
       <span className="h-px flex-1 bg-edge-soft" aria-hidden="true" />
+    </div>
+  )
+}
+
+function StepHeader({
+  hierarchy,
+  request,
+}: {
+  hierarchy: TrajectoryHierarchy
+  request: TraceBundleRequest
+}) {
+  const { t } = useI18n()
+  const model = [request.provider, request.model].filter(Boolean).join(' / ')
+  const needsAttention = requestNeedsAttention(request)
+  return (
+    <div
+      className="grid h-8 grid-cols-[2.75rem_7.25rem_minmax(0,1fr)] items-center gap-2 border-b border-edge-soft bg-canvas-sunken/45 px-2 max-sm:grid-cols-[2.25rem_auto_minmax(0,1fr)]"
+      data-testid="trajectory-step-header"
+      data-trajectory-step-id={hierarchy.stepID}
+      data-trajectory-request-id={request.id}
+      title={hierarchy.stepID}
+    >
+      <span className="flex justify-end" aria-hidden="true">
+        <span className="h-px w-3 bg-edge" />
+      </span>
+      <span className="font-mono text-[0.71875rem] font-medium text-ink-soft">
+        {t('diagnostics.stepLabel', { count: hierarchy.stepNumber })}
+      </span>
+      <span className="flex min-w-0 items-center gap-3 text-[0.75rem]">
+        <span className="shrink-0 text-ink-soft">
+          {t('diagnostics.requestNumber', { count: request.number })}
+        </span>
+        {model && <span className="min-w-0 truncate text-ink-muted max-sm:hidden">{model}</span>}
+        <span className="flex-1" aria-hidden="true" />
+        <span className="shrink-0 font-mono text-ink-muted">{formatDuration(request.durationMs)}</span>
+        <span className={cn('shrink-0 text-ink-muted', needsAttention && 'text-danger')}>
+          {requestStatusLabel(request, t)}
+        </span>
+      </span>
     </div>
   )
 }
@@ -1296,7 +1410,7 @@ function TrajectoryInspector({
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-edge-soft px-3">
         <TraceBadge kind={item.kind}>{trajectoryKindLabel(item.kind, t)}</TraceBadge>
         <span className="min-w-0 flex-1 truncate text-[0.75rem] text-ink-muted">
-          {request ? t('diagnostics.requestNumber', { count: request.number }) : t('diagnostics.taskLabel', { count: item.taskNumber })}
+          {trajectoryHierarchyLabel(item, t)}
         </span>
         <button
           type="button"
@@ -1335,7 +1449,7 @@ function TrajectoryInspector({
         ) : request && activeMode === 'content' ? (
           <ResponseContent request={request} />
         ) : request ? (
-          <ResponseSummary request={request} />
+          <ResponseSummary request={request} runID={item.task.id} />
         ) : null}
       </div>
     </aside>
@@ -1405,7 +1519,7 @@ function ContextDetail({ item }: { item: TrajectoryItem }) {
   )
 }
 
-function ResponseSummary({ request }: { request: TraceBundleRequest }) {
+function ResponseSummary({ request, runID }: { request: TraceBundleRequest; runID: string }) {
   const { t } = useI18n()
   const response = responseParts(request)
   const generationMS = request.durationMs !== undefined && request.timeToFirstOutputMs !== undefined
@@ -1421,6 +1535,7 @@ function ResponseSummary({ request }: { request: TraceBundleRequest }) {
     <div className="px-5 py-5 max-sm:px-4">
       <dl className="grid grid-cols-[8.5rem_minmax(0,1fr)] gap-x-4 gap-y-2 text-[0.875rem] leading-5 max-sm:grid-cols-[7rem_minmax(0,1fr)]">
         <SummaryRow label={t('diagnostics.detailSource')} value={t('diagnostics.requestNumber', { count: request.number })} />
+        <SummaryRow label={t('diagnostics.detailRun')} value={runID} />
         <SummaryRow label={t('diagnostics.detailStatus')} value={requestStatusLabel(request, t)} />
         <SummaryRow label={t('diagnostics.tokens')} value={token(request.totalTokens)} />
         <SummaryRow nested label={t('diagnostics.tokenInput')} value={request.inputUnknown ? '—' : token(request.inputTokens)} />
@@ -2080,6 +2195,7 @@ function TraceEmpty({ title, description }: { title: string; description: string
 function buildTrajectoryItems(tasks: TraceBundleTask[], t: Translate): TrajectoryItem[] {
   const items: TrajectoryItem[] = []
   const seenContext = new Set<string>()
+  const hierarchy = buildTrajectoryHierarchy(tasks)
   for (let taskIndex = 0; taskIndex < tasks.length; taskIndex++) {
     const task = tasks[taskIndex]!
     const request = task.requests.find((candidate) => candidate.input?.systemPrompt?.trim())
@@ -2089,25 +2205,25 @@ function buildTrajectoryItems(tasks: TraceBundleTask[], t: Translate): Trajector
       id: `system:${request.id}`,
       kind: 'system',
       task,
-      taskNumber: taskIndex + 1,
       request,
       preview: systemPrompt,
       raw: { systemPrompt, providerRequestId: request.id },
     })
     break
   }
-  tasks.forEach((task, taskIndex) => {
+  tasks.forEach((task) => {
     const firstRequest = task.requests[0]
     items.push({
       id: `task:${task.id}:user`,
       kind: 'user',
       task,
-      taskNumber: taskIndex + 1,
       request: firstRequest,
+      hierarchy: hierarchy.tasks.get(task.id),
       preview: task.prompt || t('diagnostics.taskPromptUnavailable'),
-      raw: { taskId: task.id, prompt: task.prompt },
+      raw: { runId: task.id, prompt: task.prompt },
     })
     task.requests.forEach((request) => {
+      const requestHierarchy = hierarchy.requests.get(request.id)
       request.attachments?.forEach((attachment) => {
         const message = request.input?.messages[attachment.messageIndex]
         if (!message || !shouldShowContextAttachment(attachment, message, seenContext)) return
@@ -2115,8 +2231,8 @@ function buildTrajectoryItems(tasks: TraceBundleTask[], t: Translate): Trajector
           id: `request:${request.id}:context:${attachment.id || `${attachment.kind}:${attachment.messageIndex}`}`,
           kind: 'context',
           task,
-          taskNumber: taskIndex + 1,
           request,
+          hierarchy: requestHierarchy,
           attachment,
           message,
           preview: messageText(message),
@@ -2128,8 +2244,8 @@ function buildTrajectoryItems(tasks: TraceBundleTask[], t: Translate): Trajector
         id: `request:${request.id}:response`,
         kind: 'assistant',
         task,
-        taskNumber: taskIndex + 1,
         request,
+        hierarchy: requestHierarchy,
         preview: response.text || response.thinking || t('diagnostics.noResponse'),
         thinking: response.thinking || undefined,
         thinkingOnly: !response.text && Boolean(response.thinking),
@@ -2140,8 +2256,8 @@ function buildTrajectoryItems(tasks: TraceBundleTask[], t: Translate): Trajector
           id: `request:${request.id}:tool:${tool.id}`,
           kind: 'tool',
           task,
-          taskNumber: taskIndex + 1,
           request,
+          hierarchy: requestHierarchy,
           tool,
           preview: toolPreview(tool),
           raw: tool,
@@ -2150,6 +2266,74 @@ function buildTrajectoryItems(tasks: TraceBundleTask[], t: Translate): Trajector
     })
   })
   return items
+}
+
+function buildTrajectoryHierarchy(tasks: TraceBundleTask[]): TrajectoryHierarchyIndex {
+  const turnNumbers = new Map<string, number>()
+  const stepNumbers = new Map<string, Map<string, number>>()
+  const taskTurns = new Map<string, { turnKey: string; turnID?: string }>()
+  const pending: Array<{
+    request: TraceBundleRequest
+    turnKey: string
+    turnID?: string
+    stepKey: string
+    stepID?: string
+  }> = []
+
+  const ensureTurn = (turnKey: string) => {
+    if (!turnNumbers.has(turnKey)) turnNumbers.set(turnKey, turnNumbers.size + 1)
+    if (!stepNumbers.has(turnKey)) stepNumbers.set(turnKey, new Map())
+  }
+
+  for (const task of tasks) {
+    const semanticHierarchy = task.requests.some((request) => Boolean(request.stepId))
+    let activeTurnKey = semanticHierarchy ? `turn:${task.id}` : `legacy-turn:${task.id}`
+    let activeTurnID: string | undefined
+    if (task.requests.length === 0) {
+      ensureTurn(activeTurnKey)
+      taskTurns.set(task.id, { turnKey: activeTurnKey })
+      continue
+    }
+
+    for (const request of task.requests) {
+      if (semanticHierarchy && request.turnId) {
+        activeTurnKey = `turn:${request.turnId}`
+        activeTurnID = request.turnId
+      }
+      const turnKey = semanticHierarchy ? activeTurnKey : `legacy-turn:${task.id}`
+      const turnID = semanticHierarchy ? activeTurnID : undefined
+      ensureTurn(turnKey)
+      if (!taskTurns.has(task.id)) taskTurns.set(task.id, { turnKey, turnID })
+      const steps = stepNumbers.get(turnKey)!
+      const stepKey = request.stepId ? `step:${request.stepId}` : `request:${request.id}`
+      if (!steps.has(stepKey)) steps.set(stepKey, steps.size + 1)
+      pending.push({ request, turnKey, turnID, stepKey, stepID: request.stepId })
+    }
+  }
+
+  const requests = new Map(pending.map((entry) => [entry.request.id, {
+    turnKey: entry.turnKey,
+    turnID: entry.turnID,
+    turnNumber: turnNumbers.get(entry.turnKey)!,
+    turnStepCount: stepNumbers.get(entry.turnKey)?.size ?? 0,
+    stepKey: entry.stepKey,
+    stepID: entry.stepID,
+    stepNumber: stepNumbers.get(entry.turnKey)?.get(entry.stepKey) ?? 0,
+  }]))
+  const taskHierarchy = new Map(tasks.map((task) => {
+    const requestHierarchy = requests.get(task.requests[0]?.id ?? '')
+    if (requestHierarchy) return [task.id, requestHierarchy]
+    const turn = taskTurns.get(task.id)!
+    return [task.id, {
+      turnKey: turn.turnKey,
+      turnID: turn.turnID,
+      turnNumber: turnNumbers.get(turn.turnKey)!,
+      turnStepCount: 0,
+      stepKey: `empty-step:${task.id}`,
+      stepNumber: 0,
+    }]
+  }))
+  return { tasks: taskHierarchy, requests }
 }
 
 function trajectorySequenceIndex(items: TrajectoryItem[], item: TrajectoryItem): number {
@@ -2284,6 +2468,21 @@ function trajectoryItemTitle(item: TrajectoryItem, t: Translate): string {
   if (item.kind === 'system') return `${label} · ${t('diagnostics.initialSystemPrompt')}`
   if (item.kind === 'context' && item.attachment) return `${label} · ${attachmentLabel(item.attachment.kind, t)}`
   return item.request ? `${label} · ${t('diagnostics.requestNumber', { count: item.request.number })}` : label
+}
+
+function trajectoryHierarchyLabel(item: TrajectoryItem, t: Translate): string {
+  if (!item.hierarchy || !item.request) {
+    return item.request
+      ? t('diagnostics.requestNumber', { count: item.request.number })
+      : item.hierarchy
+        ? t('diagnostics.turnLabel', { count: item.hierarchy.turnNumber })
+        : ''
+  }
+  return [
+    t('diagnostics.turnLabel', { count: item.hierarchy.turnNumber }),
+    t('diagnostics.stepLabel', { count: item.hierarchy.stepNumber }),
+    t('diagnostics.requestNumber', { count: item.request.number }),
+  ].join(' · ')
 }
 
 function trajectorySearchText(item: TrajectoryItem): string {

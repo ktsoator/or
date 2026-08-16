@@ -618,7 +618,7 @@ async function openDesktopClient(
     if (path === '/api/diagnostics/trace') {
       status = options.diagnosticsStatus ?? status
       body = {
-        version: 1,
+        version: 2,
         generatedAt: '2026-07-22T00:00:05Z',
         sessionId: 'test-session',
         selectedTaskId: 'run-diagnostics',
@@ -642,6 +642,8 @@ async function openDesktopClient(
             {
               id: 'request-1',
               number: 1,
+              turnId: 'turn-diagnostics-1',
+              stepId: 'step-diagnostics-1',
               status: 'completed',
               lifecycle: 'complete',
               startedAt: '2026-07-22T00:00:00Z',
@@ -703,6 +705,8 @@ async function openDesktopClient(
             {
               id: 'request-2',
               number: 2,
+              turnId: 'turn-diagnostics-1',
+              stepId: 'step-diagnostics-2',
               status: 'completed',
               lifecycle: 'complete',
               startedAt: '2026-07-22T00:00:02.3Z',
@@ -771,6 +775,8 @@ async function openDesktopClient(
           requests: [{
             id: 'request-3',
             number: 3,
+            turnId: 'turn-diagnostics-2',
+            stepId: 'step-diagnostics-3',
             status: 'completed',
             lifecycle: 'complete',
             startedAt: '2026-07-22T00:01:00Z',
@@ -1100,6 +1106,22 @@ test('conversation diagnostics uses one session-scoped header entry', async ({ p
   await expect(page.getByText('Create a short release note')).toBeVisible()
   await expect(page.getByText('Check the release status')).toBeVisible()
   await expect(page.getByRole('combobox', { name: 'Select run' })).toHaveCount(0)
+  const firstTurn = page.locator('[data-trajectory-turn-id="turn-diagnostics-1"]')
+  const secondTurn = page.locator('[data-trajectory-turn-id="turn-diagnostics-2"]')
+  const firstStep = page.locator('[data-trajectory-step-id="step-diagnostics-1"]')
+  const secondStep = page.locator('[data-trajectory-step-id="step-diagnostics-2"]')
+  await expect(firstTurn).toContainText('Turn 1')
+  await expect(firstTurn).toContainText('2 steps')
+  await expect(secondTurn).toContainText('Turn 2')
+  await expect(secondTurn).toContainText('1 step')
+  await expect(page.getByTestId('trajectory-run-header')).toHaveCount(0)
+  await expect(firstStep).toContainText('Step 1')
+  await expect(firstStep).toContainText('Request #1')
+  await expect(firstStep).toContainText('test-model')
+  await expect(firstStep).toContainText('2.00 s')
+  await expect(firstStep).toContainText('Completed')
+  await expect(secondStep).toContainText('Step 2')
+  await expect(secondStep).toContainText('Request #2')
   const firstRequestBar = page.getByRole('button', { name: 'Assistant · Request #1', exact: true })
   const secondRequestBar = page.getByRole('button', { name: 'Assistant · Request #2', exact: true })
   await expect(firstRequestBar).toBeVisible()
@@ -1161,16 +1183,18 @@ test('conversation diagnostics uses one session-scoped header entry', async ({ p
   await expect(responseToolCalls.getByText('bash', { exact: true })).toBeVisible()
   await expect(responseToolCalls).toContainText('{"command":"git status"}')
   await expect(responseToolCalls).toContainText('Success · 100 ms')
-  await expect(page.getByText(/Turn \d/)).toHaveCount(0)
   await expect.poll(() => {
     const request = requests.find((candidate) => candidate.path === '/api/diagnostics/trace')
     return request ? new URL(request.url).searchParams.get('sessionId') : undefined
   }).toBe('test-session')
   await firstRequestBar.click()
   const responseInspector = page.getByRole('complementary', { name: 'Assistant · Request #1' })
+  await expect(responseInspector.getByText('Turn 1 · Step 1 · Request #1', { exact: true })).toBeVisible()
   await expect(responseInspector.getByRole('tab', { name: 'System prompt' })).toHaveCount(0)
   await expect(responseInspector.getByRole('tab', { name: 'Tools 1' })).toHaveCount(0)
   await expect(responseInspector.getByText('Source', { exact: true })).toBeVisible()
+  await expect(responseInspector.getByText('Run ID', { exact: true })).toBeVisible()
+  await expect(responseInspector.getByText('run-diagnostics', { exact: true })).toBeVisible()
   await expect(responseInspector.getByText('Status', { exact: true })).toBeVisible()
   await expect(responseInspector.getByText('250 tok', { exact: true })).toBeVisible()
   await expect(responseInspector.getByText('250 tok', { exact: true })).toHaveCSS('font-weight', '400')
@@ -1197,6 +1221,30 @@ test('conversation diagnostics uses one session-scoped header entry', async ({ p
   await page.setViewportSize({ width: 700, height: 820 })
   await expect(executionTimeline).toBeVisible()
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})
+
+test('conversation diagnostics hierarchy fits a narrow viewport', async ({ page }) => {
+  await openDesktopClient(page, { existingSession: true })
+  await page.getByTestId('conversation-diagnostics-button').click()
+  await page.setViewportSize({ width: 390, height: 844 })
+
+  const inspector = page.getByRole('complementary', { name: 'Assistant · Request #2' })
+  await inspector.getByRole('button', { name: 'Close' }).click()
+  const ledger = page.getByTestId('diagnostics-ledger-scroll')
+  const firstStep = page.locator('[data-trajectory-step-id="step-diagnostics-1"]')
+  await firstStep.scrollIntoViewIfNeeded()
+  await expect(firstStep.getByText('Step 1', { exact: true })).toBeVisible()
+  await expect(firstStep.getByText('Request #1', { exact: true })).toBeVisible()
+  await expect(firstStep.getByText('test-model', { exact: true })).toBeHidden()
+  await expect(firstStep.getByText('2.00 s', { exact: true })).toBeVisible()
+  await expect(firstStep.getByText('Completed', { exact: true })).toBeVisible()
+
+  const ledgerBox = await ledger.boundingBox()
+  const stepBox = await firstStep.boundingBox()
+  expect(ledgerBox).not.toBeNull()
+  expect(stepBox).not.toBeNull()
+  expect(stepBox!.x).toBeGreaterThanOrEqual(ledgerBox!.x)
+  expect(stepBox!.x + stepBox!.width).toBeLessThanOrEqual(ledgerBox!.x + ledgerBox!.width + 1)
 })
 
 test('conversation diagnostics treats a missing new-session trace as empty', async ({ page }) => {
