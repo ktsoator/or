@@ -197,6 +197,9 @@ func (s *Session) beginObservedTurn() {
 }
 
 func (s *Session) turnStatus(event agent.AgentEvent) (status, errorCode string) {
+	if s.runPersistenceError() != nil {
+		return "failed", "checkpoint_failed"
+	}
 	message, ok := eventAssistantMessage(event.Message)
 	if !ok {
 		return "failed", "assistant_message_missing"
@@ -205,9 +208,6 @@ func (s *Session) turnStatus(event agent.AgentEvent) (status, errorCode string) 
 	case llm.StopReasonAborted:
 		return "cancelled", "context_cancelled"
 	case llm.StopReasonError:
-		if s.runPersistenceError() != nil {
-			return "failed", "checkpoint_failed"
-		}
 		return "failed", "provider_request_failed"
 	default:
 		return "completed", ""

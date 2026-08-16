@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,17 +47,21 @@ func TestJSONLLoadRejectsLegacyMessagesWithoutRewriting(t *testing.T) {
 	}
 }
 
-func TestJSONLRejectsVersion2(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "session.jsonl")
-	data := []byte("{\"type\":\"session\",\"version\":2}\n")
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		t.Fatal(err)
-	}
+func TestJSONLRejectsOlderVersions(t *testing.T) {
+	for _, version := range []int{2, 3} {
+		t.Run(fmt.Sprintf("version_%d", version), func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "session.jsonl")
+			data := []byte(fmt.Sprintf("{\"type\":\"session\",\"version\":%d}\n", version))
+			if err := os.WriteFile(path, data, 0o644); err != nil {
+				t.Fatal(err)
+			}
 
-	store := NewJSONL(path)
-	if _, err := store.Load(context.Background()); err == nil ||
-		!strings.Contains(err.Error(), "unsupported session version 2") {
-		t.Fatalf("Load() error = %v, want unsupported version 2", err)
+			store := NewJSONL(path)
+			if _, err := store.Load(context.Background()); err == nil ||
+				!strings.Contains(err.Error(), fmt.Sprintf("unsupported session version %d", version)) {
+				t.Fatalf("Load() error = %v, want unsupported version %d", err, version)
+			}
+		})
 	}
 }
 
@@ -73,8 +78,8 @@ func TestJSONLRoundTripsRunTiming(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(data, []byte(`"version":3`)) {
-		t.Fatalf("session header is not v3:\n%s", data)
+	if !bytes.Contains(data, []byte(`"version":4`)) {
+		t.Fatalf("session header is not v4:\n%s", data)
 	}
 	if bytes.Contains(data, []byte(`"parentId"`)) {
 		t.Fatalf("linear session contains parentId:\n%s", data)
@@ -89,6 +94,56 @@ func TestJSONLRoundTripsRunTiming(t *testing.T) {
 	}
 	if entries[1].Run.FirstEntryID != message.ID || !entries[1].Run.StartedAt.Equal(startedAt) {
 		t.Fatalf("run timing = %#v", entries[1].Run)
+	}
+}
+
+func TestJSONLRoundTripsToolCall(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	entry := NewToolCall(ToolCall{
+		ToolCallID: "call-17",
+		ToolName:   "write_file",
+		Arguments:  json.RawMessage(`{"path":"notes.txt","text":"hello"}`),
+	})
+	store := NewJSONL(path)
+	if err := store.Append(context.Background(), entry); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := store.Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Type != ToolCallEntry || entries[0].ToolCall == nil {
+		t.Fatalf("entries = %#v", entries)
+	}
+	got := entries[0].ToolCall
+	if got.ToolCallID != "call-17" || got.ToolName != "write_file" ||
+		!bytes.Equal(got.Arguments, entry.ToolCall.Arguments) {
+		t.Fatalf("tool call = %#v", got)
+	}
+}
+
+func TestToolCallEntryValidatesRequiredFieldsAndArguments(t *testing.T) {
+	tests := []struct {
+		name string
+		call ToolCall
+	}{
+		{name: "tool call id", call: ToolCall{ToolName: "read", Arguments: json.RawMessage(`{}`)}},
+		{name: "tool name", call: ToolCall{ToolCallID: "call-1", Arguments: json.RawMessage(`{}`)}},
+		{name: "arguments", call: ToolCall{ToolCallID: "call-1", ToolName: "read"}},
+		{
+			name: "invalid arguments",
+			call: ToolCall{
+				ToolCallID: "call-1", ToolName: "read", Arguments: json.RawMessage(`{"unterminated"`),
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if err := NewToolCall(test.call).Validate(); err == nil {
+				t.Fatal("Validate() succeeded for an invalid tool call")
+			}
+		})
 	}
 }
 

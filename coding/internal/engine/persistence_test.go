@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"testing"
 
 	"github.com/ktsoator/or/agent"
+	"github.com/ktsoator/or/coding/internal/observability"
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/transcript"
 	"github.com/ktsoator/or/llm"
@@ -53,6 +55,14 @@ func (s *checkpointStore) snapshot() ([]transcript.Entry, [][]transcript.Entry, 
 		batches[index] = append([]transcript.Entry(nil), s.batches[index]...)
 	}
 	return entries, batches, s.appendCalls
+}
+
+func (s *checkpointStore) failNext(err error) {
+	s.mu.Lock()
+	s.failErr = err
+	s.failOnce = true
+	s.failed = false
+	s.mu.Unlock()
 }
 
 func TestSessionCheckpointsPromptBeforeModelRequest(t *testing.T) {
@@ -109,6 +119,78 @@ func TestSessionCheckpointsPromptBeforeModelRequest(t *testing.T) {
 
 type checkpointToolArgs struct {
 	Text string `json:"text"`
+}
+
+func TestSessionCheckpointsToolIntentBeforeExecution(t *testing.T) {
+	ctx := context.Background()
+	store := &checkpointStore{}
+	modelCalls := 0
+	toolCalls := 0
+	var bodyErr error
+
+	tool := tools.Tool{
+		AgentTool: agent.AgentTool{
+			Definition: llm.MustTool[checkpointToolArgs]("echo", "echo text"),
+			Execute: func(
+				_ context.Context,
+				_ string,
+				_ json.RawMessage,
+				_ func(agent.ToolProgress),
+			) (agent.ToolResult, error) {
+				toolCalls++
+				entries, _, _ := store.snapshot()
+				if len(entries) != 4 {
+					bodyErr = fmt.Errorf("entries before tool body = %d, want context, user, assistant, intent", len(entries))
+				} else if _, ok := llmEntry(entries[2]).(*llm.AssistantMessage); !ok {
+					bodyErr = fmt.Errorf("checkpoint[2] = %T, want assistant", llmEntry(entries[2]))
+				} else if intent := entries[3]; intent.Type != transcript.ToolCallEntry ||
+					intent.ToolCall == nil || intent.ToolCall.ToolCallID != "call-1" ||
+					intent.ToolCall.ToolName != "echo" ||
+					string(intent.ToolCall.Arguments) != `{"text":"one"}` {
+					bodyErr = fmt.Errorf("checkpoint[3] = %#v, want durable tool intent", intent)
+				}
+				return agent.ToolResult{
+					Content: []llm.ToolResultContent{&llm.TextContent{Text: "one"}},
+				}, nil
+			},
+		},
+		AccessFor: tools.InternalAccess,
+	}
+	session, err := New(ctx, Options{
+		Model: llm.Model{Provider: "test", ID: "model"},
+		Tools: []tools.Tool{tool},
+		Store: store,
+		StreamFn: func(
+			_ context.Context,
+			model llm.Model,
+			_ llm.Context,
+			_ llm.StreamOptions,
+		) (<-chan llm.Event, error) {
+			modelCalls++
+			if modelCalls == 1 {
+				message := llm.NewAssistantMessage(model)
+				message.StopReason = llm.StopReasonToolUse
+				message.Content = []llm.AssistantContent{
+					&llm.ToolCall{ID: "call-1", Name: "echo", Arguments: map[string]any{"text": "one"}},
+				}
+				return finalEvents(llm.EventDone, &message), nil
+			}
+			return assistantEvents(model, "done"), nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := session.Prompt(ctx, "use the tool"); err != nil {
+		t.Fatal(err)
+	}
+	if bodyErr != nil {
+		t.Fatal(bodyErr)
+	}
+	if toolCalls != 1 || modelCalls != 2 {
+		t.Fatalf("tool executions = %d, model requests = %d, want 1 and 2", toolCalls, modelCalls)
+	}
 }
 
 func TestSessionCheckpointsCompleteToolBatchBeforeNextModelRequest(t *testing.T) {
@@ -206,14 +288,14 @@ func TestSessionCheckpointsCompleteToolBatchBeforeNextModelRequest(t *testing.T)
 	}
 
 	entries, batches, _ := store.snapshot()
-	if len(entries) != 9 {
+	if len(entries) != 11 {
 		t.Fatalf(
-			"durable entries = %d, want context, user, tool call, two result/outcome pairs, final assistant, run",
+			"durable entries = %d, want context, user, assistant, two tool intents, two result/outcome pairs, final assistant, run",
 			len(entries),
 		)
 	}
-	if len(batches) != 3 || len(batches[0]) != 2 || len(batches[1]) != 5 || len(batches[2]) != 2 {
-		t.Fatalf("append batch sizes = %v, want [2 5 2]", batchSizes(batches))
+	if got := batchSizes(batches); !slices.Equal(got, []int{2, 2, 1, 4, 2}) {
+		t.Fatalf("append batch sizes = %v, want [2 2 1 4 2]", got)
 	}
 
 	restored, err := New(ctx, Options{
@@ -244,6 +326,102 @@ func TestSessionCheckpointsCompleteToolBatchBeforeNextModelRequest(t *testing.T)
 	}
 	if change, ok := second.Data.(tools.FileChange); !ok || change.Path != "two.txt" || change.Additions != 2 {
 		t.Fatalf("restored call-2 data = %#v", second.Data)
+	}
+}
+
+func TestSessionToolCheckpointFailureDoesNotExecuteToolOrContinueModel(t *testing.T) {
+	ctx := context.Background()
+	storeErr := errors.New("tool checkpoint unavailable")
+	store := &checkpointStore{}
+	recorder := &memoryRecorder{}
+	modelCalls := 0
+	toolCalls := 0
+
+	tool := tools.Tool{
+		AgentTool: agent.AgentTool{
+			Definition: llm.MustTool[checkpointToolArgs]("echo", "echo text"),
+			Execute: func(
+				context.Context,
+				string,
+				json.RawMessage,
+				func(agent.ToolProgress),
+			) (agent.ToolResult, error) {
+				toolCalls++
+				return agent.ToolResult{
+					Content: []llm.ToolResultContent{&llm.TextContent{Text: "must not execute"}},
+				}, nil
+			},
+		},
+		AccessFor: tools.InternalAccess,
+	}
+	session, err := New(ctx, Options{
+		SessionID: "session-tool-checkpoint-failure",
+		Recorder:  recorder,
+		Model:     llm.Model{Provider: "test", ID: "model"},
+		Tools:     []tools.Tool{tool},
+		Store:     store,
+		StreamFn: func(
+			_ context.Context,
+			model llm.Model,
+			_ llm.Context,
+			_ llm.StreamOptions,
+		) (<-chan llm.Event, error) {
+			modelCalls++
+			if modelCalls > 1 {
+				return nil, errors.New("model must not continue after a tool checkpoint failure")
+			}
+			store.failNext(storeErr)
+			message := llm.NewAssistantMessage(model)
+			message.StopReason = llm.StopReasonToolUse
+			message.Content = []llm.AssistantContent{
+				&llm.ToolCall{ID: "call-1", Name: "echo", Arguments: map[string]any{"text": "one"}},
+				&llm.ToolCall{ID: "call-2", Name: "echo", Arguments: map[string]any{"text": "two"}},
+			}
+			return finalEvents(llm.EventDone, &message), nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = session.Prompt(ctx, "use the tool")
+	if !errors.Is(err, storeErr) {
+		t.Fatalf("Prompt error = %v, want tool checkpoint error", err)
+	}
+	if toolCalls != 0 {
+		t.Fatalf("tool executions = %d, want 0", toolCalls)
+	}
+	if modelCalls != 1 {
+		t.Fatalf("model requests = %d, want 1", modelCalls)
+	}
+	entries, batches, appendCalls := store.snapshot()
+	if appendCalls != 3 {
+		t.Fatalf("store append attempts = %d, want provider checkpoint, failed tool checkpoint, and final flush", appendCalls)
+	}
+	if got := batchSizes(batches); !slices.Equal(got, []int{2, 6}) {
+		t.Fatalf("successful append batch sizes = %v, want [2 6]", got)
+	}
+	for _, entry := range entries {
+		if entry.Type == transcript.ToolCallEntry {
+			t.Fatalf("failed checkpoint persisted tool intent %#v", entry)
+		}
+	}
+	var checkpointFailure *observability.Event
+	for _, event := range recorder.snapshot() {
+		if event.Name == observability.CheckpointFailed && event.Reason == "tool_dispatch" {
+			copy := event
+			checkpointFailure = &copy
+			break
+		}
+	}
+	if checkpointFailure == nil || checkpointFailure.ToolCallID != "call-1" ||
+		checkpointFailure.ToolName != "echo" || checkpointFailure.ErrorCode != "checkpoint_persist_failed" {
+		t.Fatalf("tool checkpoint failure event = %#v", checkpointFailure)
+	}
+	for _, event := range recorder.snapshot() {
+		if event.Name == observability.CheckpointCompleted && event.ToolCallID == "call-2" {
+			t.Fatalf("later tool checkpoint continued after failure: %#v", event)
+		}
 	}
 }
 
@@ -448,8 +626,8 @@ func TestSessionRetryDoesNotPersistFailedAssistantOrDuplicatePrompt(t *testing.T
 
 func validateToolCheckpoint(entries []transcript.Entry) error {
 	// The base context is checkpointed once, ahead of the first user message.
-	if len(entries) != 7 {
-		return fmt.Errorf("entries before second model request = %d, want 7", len(entries))
+	if len(entries) != 9 {
+		return fmt.Errorf("entries before second model request = %d, want 9", len(entries))
 	}
 	if entries[0].Type != transcript.ContextEntry {
 		return fmt.Errorf("checkpoint[0] = %q, want context", entries[0].Type)
@@ -462,7 +640,13 @@ func validateToolCheckpoint(entries []transcript.Entry) error {
 		return fmt.Errorf("checkpoint[2] = %#v, want assistant with two tool calls", assistant)
 	}
 	for index, callID := range []string{"call-1", "call-2"} {
-		messageIndex := 3 + index*2
+		intentIndex := 3 + index
+		intent := entries[intentIndex]
+		if intent.Type != transcript.ToolCallEntry || intent.ToolCall == nil ||
+			intent.ToolCall.ToolCallID != callID {
+			return fmt.Errorf("checkpoint[%d] = %#v, want tool intent %s", intentIndex, intent, callID)
+		}
+		messageIndex := 5 + index*2
 		outcomeIndex := messageIndex + 1
 		result, ok := llmEntry(entries[messageIndex]).(*llm.ToolResultMessage)
 		if !ok || result.ToolCallID != callID {

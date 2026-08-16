@@ -14,12 +14,13 @@ import (
 	"github.com/ktsoator/or/llm"
 )
 
-const CurrentVersion = 3
+const CurrentVersion = 4
 
 type EntryType string
 
 const (
 	MessageEntry     EntryType = "message"
+	ToolCallEntry    EntryType = "tool_call"
 	ToolOutcomeEntry EntryType = "tool_outcome"
 	ContextEntry     EntryType = "context"
 	CompactionEntry  EntryType = "compaction"
@@ -40,10 +41,20 @@ type Entry struct {
 	Timestamp   time.Time
 	Type        EntryType
 	Message     agent.AgentMessage
+	ToolCall    *ToolCall
 	ToolOutcome *ToolOutcome
 	Context     *ContextAttachment
 	Compaction  *Compaction
 	Run         *Run
+}
+
+// ToolCall is a durable dispatch intent. Its presence means validation and
+// authorization completed and the tool body may have started. Arguments are
+// the normalized JSON value passed to the tool, not a presentation summary.
+type ToolCall struct {
+	ToolCallID string          `json:"toolCallId"`
+	ToolName   string          `json:"toolName"`
+	Arguments  json.RawMessage `json:"arguments"`
 }
 
 // ToolOutcome records the product-facing result associated with one model-
@@ -105,6 +116,15 @@ func NewMessage(message agent.AgentMessage) Entry {
 		Timestamp: time.Now().UTC(),
 		Type:      MessageEntry,
 		Message:   message,
+	}
+}
+
+func NewToolCall(call ToolCall) Entry {
+	return Entry{
+		ID:        NewID(),
+		Timestamp: time.Now().UTC(),
+		Type:      ToolCallEntry,
+		ToolCall:  &call,
 	}
 }
 
@@ -171,14 +191,25 @@ func (e Entry) Validate() error {
 	}
 	switch e.Type {
 	case MessageEntry:
-		if e.Message == nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Run != nil {
+		if e.Message == nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Run != nil {
 			return fmt.Errorf("transcript: message entry %s has invalid payload", e.ID)
 		}
 		if _, ok := agent.ToLLM(e.Message); !ok {
 			return fmt.Errorf("transcript: cannot persist custom message %T", e.Message)
 		}
+	case ToolCallEntry:
+		if e.Message != nil || e.ToolCall == nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Run != nil {
+			return fmt.Errorf("transcript: tool call entry %s has invalid payload", e.ID)
+		}
+		if e.ToolCall.ToolCallID == "" || e.ToolCall.ToolName == "" ||
+			len(e.ToolCall.Arguments) == 0 {
+			return fmt.Errorf("transcript: tool call entry %s is incomplete", e.ID)
+		}
+		if !json.Valid(e.ToolCall.Arguments) {
+			return fmt.Errorf("transcript: tool call entry %s has invalid arguments", e.ID)
+		}
 	case ToolOutcomeEntry:
-		if e.Message != nil || e.ToolOutcome == nil || e.Context != nil || e.Compaction != nil || e.Run != nil {
+		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome == nil || e.Context != nil || e.Compaction != nil || e.Run != nil {
 			return fmt.Errorf("transcript: tool outcome entry %s has invalid payload", e.ID)
 		}
 		if e.ToolOutcome.ToolCallID == "" || e.ToolOutcome.Status == "" {
@@ -188,7 +219,7 @@ func (e Entry) Validate() error {
 			return fmt.Errorf("transcript: tool outcome entry %s has invalid data", e.ID)
 		}
 	case ContextEntry:
-		if e.Message != nil || e.ToolOutcome != nil || e.Context == nil || e.Compaction != nil || e.Run != nil {
+		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context == nil || e.Compaction != nil || e.Run != nil {
 			return fmt.Errorf("transcript: context entry %s has invalid payload", e.ID)
 		}
 		if e.Context.AttachmentID == "" ||
@@ -200,14 +231,14 @@ func (e Entry) Validate() error {
 			return fmt.Errorf("transcript: context entry %s is incomplete", e.ID)
 		}
 	case CompactionEntry:
-		if e.Message != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction == nil || e.Run != nil {
+		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction == nil || e.Run != nil {
 			return fmt.Errorf("transcript: compaction entry %s has invalid payload", e.ID)
 		}
 		if e.Compaction.Summary == "" || e.Compaction.FirstKeptEntryID == "" {
 			return fmt.Errorf("transcript: compaction entry %s is incomplete", e.ID)
 		}
 	case RunEntry:
-		if e.Message != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Run == nil {
+		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Run == nil {
 			return fmt.Errorf("transcript: run entry %s has invalid payload", e.ID)
 		}
 		if e.Run.StartedAt.IsZero() || e.Run.CompletedAt.IsZero() {
@@ -231,13 +262,14 @@ func (e Entry) MarshalJSON() ([]byte, error) {
 		Timestamp   time.Time          `json:"timestamp"`
 		Type        EntryType          `json:"type"`
 		Message     json.RawMessage    `json:"message,omitempty"`
+		ToolCall    *ToolCall          `json:"toolCall,omitempty"`
 		ToolOutcome *ToolOutcome       `json:"toolOutcome,omitempty"`
 		Context     *ContextAttachment `json:"context,omitempty"`
 		Compaction  *Compaction        `json:"compaction,omitempty"`
 		Run         *Run               `json:"run,omitempty"`
 	}{
 		ID: e.ID, Timestamp: e.Timestamp, Type: e.Type,
-		ToolOutcome: e.ToolOutcome, Context: e.Context,
+		ToolCall: e.ToolCall, ToolOutcome: e.ToolOutcome, Context: e.Context,
 		Compaction: e.Compaction, Run: e.Run,
 	}
 	if e.Message != nil {
@@ -260,6 +292,7 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 		Timestamp   time.Time          `json:"timestamp"`
 		Type        EntryType          `json:"type"`
 		Message     json.RawMessage    `json:"message"`
+		ToolCall    *ToolCall          `json:"toolCall"`
 		ToolOutcome *ToolOutcome       `json:"toolOutcome"`
 		Context     *ContextAttachment `json:"context"`
 		Compaction  *Compaction        `json:"compaction"`
@@ -270,7 +303,7 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 	}
 	decoded := Entry{
 		ID: wire.ID, Timestamp: wire.Timestamp,
-		Type: wire.Type, ToolOutcome: wire.ToolOutcome, Context: wire.Context,
+		Type: wire.Type, ToolCall: wire.ToolCall, ToolOutcome: wire.ToolOutcome, Context: wire.Context,
 		Compaction: wire.Compaction, Run: wire.Run,
 	}
 	if len(wire.Message) > 0 && string(wire.Message) != "null" {

@@ -41,6 +41,7 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 				SessionID: s.sessionID, RunID: correlation.runID,
 				TurnID: correlation.turnID, RequestID: correlation.requestID,
 				Status: "failed", ErrorCode: "checkpoint_persist_failed",
+				Reason:    "provider_request",
 				StartedAt: checkpointStarted, Duration: time.Since(checkpointStarted),
 				MessageCount: len(input.Messages), AttachmentCount: len(prepared.Pending),
 			})
@@ -52,7 +53,7 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 			Name:      observability.CheckpointCompleted,
 			SessionID: s.sessionID, RunID: correlation.runID,
 			TurnID: correlation.turnID, RequestID: correlation.requestID,
-			Status: "completed", StartedAt: checkpointStarted,
+			Status: "completed", Reason: "provider_request", StartedAt: checkpointStarted,
 			Duration: time.Since(checkpointStarted), MessageCount: len(input.Messages),
 			AttachmentCount: len(prepared.Pending),
 		})

@@ -26,6 +26,9 @@ func (s *Session) shouldAutoCompact(usedTokens int64) bool {
 // installs the compacted projection into both the long-lived Agent and the
 // current loop, so a long single run can reclaim context without restarting.
 func (s *Session) prepareNextTurn(turn agent.TurnCtx) *agent.TurnUpdate {
+	if s.runPersistenceError() != nil {
+		return nil
+	}
 	if len(turn.ToolResults) == 0 && !s.agent.HasQueuedMessages() {
 		return nil
 	}

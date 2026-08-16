@@ -156,6 +156,7 @@ func (j *sessionJournal) persistMessages(
 	runID string,
 	runEntryStart int,
 	startedAt, completedAt time.Time,
+	additionalEntries ...transcript.Entry,
 ) error {
 	j.mu.RLock()
 	persistedLen := j.persistedLen
@@ -173,7 +174,11 @@ func (j *sessionJournal) persistMessages(
 		added = all[persistedLen:]
 	}
 	outcomes := j.snapshotOutcomes()
-	entries := make([]transcript.Entry, 0, len(contextEntries)+2*len(added)+1)
+	entries := make(
+		[]transcript.Entry,
+		0,
+		len(contextEntries)+2*len(added)+len(additionalEntries)+1,
+	)
 	entries = append(entries, contextEntries...)
 	for _, message := range added {
 		entries = append(entries, transcript.NewMessage(message))
@@ -193,6 +198,7 @@ func (j *sessionJournal) persistMessages(
 			encodeOutcome(result.ToolCallID, outcome),
 		))
 	}
+	entries = append(entries, additionalEntries...)
 	if !startedAt.IsZero() && !completedAt.IsZero() {
 		candidate := append(existing, entries...)
 		firstEntryID := firstMessageFrom(candidate, runEntryStart)

@@ -505,6 +505,11 @@ func TestToolObservabilityRecordsDeniedApprovalWithoutExecution(t *testing.T) {
 		toolFailure.ToolCallID != approval.ToolCallID {
 		t.Fatalf("blocked tool = %#v, approval = %#v", toolFailure, approval)
 	}
+	for _, event := range events {
+		if event.Reason == "tool_dispatch" {
+			t.Fatalf("denied tool recorded a dispatch checkpoint: %#v", event)
+		}
+	}
 	if strings.Contains(fmt.Sprintf("%#v", events), "private/path") {
 		t.Fatalf("tool events leaked access path: %#v", events)
 	}
@@ -630,10 +635,20 @@ func TestObservabilityUsesDistinctCorrelationForToolLoopTurns(t *testing.T) {
 	turnEnds := eventsNamed(events, observability.TurnCompleted)
 	providers := eventsNamed(events, observability.ProviderCompleted)
 	checkpoints := eventsNamed(events, observability.CheckpointCompleted)
-	if len(turnStarts) != 2 || len(turnEnds) != 2 || len(providers) != 2 || len(checkpoints) != 2 {
+	var providerCheckpoints, toolCheckpoints []observability.Event
+	for _, checkpoint := range checkpoints {
+		switch checkpoint.Reason {
+		case "provider_request":
+			providerCheckpoints = append(providerCheckpoints, checkpoint)
+		case "tool_dispatch":
+			toolCheckpoints = append(toolCheckpoints, checkpoint)
+		}
+	}
+	if len(turnStarts) != 2 || len(turnEnds) != 2 || len(providers) != 2 ||
+		len(providerCheckpoints) != 2 || len(toolCheckpoints) != 1 {
 		t.Fatalf(
-			"tool-loop events = turn starts %d, turn ends %d, providers %d, checkpoints %d",
-			len(turnStarts), len(turnEnds), len(providers), len(checkpoints),
+			"tool-loop events = turn starts %d, turn ends %d, providers %d, provider checkpoints %d, tool checkpoints %d",
+			len(turnStarts), len(turnEnds), len(providers), len(providerCheckpoints), len(toolCheckpoints),
 		)
 	}
 	if turnStarts[0].TurnID == turnStarts[1].TurnID || providers[0].RequestID == providers[1].RequestID {
@@ -641,14 +656,20 @@ func TestObservabilityUsesDistinctCorrelationForToolLoopTurns(t *testing.T) {
 	}
 	for index := range turnStarts {
 		if turnStarts[index].RunID != run.RunID || turnEnds[index].RunID != run.RunID ||
-			providers[index].RunID != run.RunID || checkpoints[index].RunID != run.RunID ||
+			providers[index].RunID != run.RunID || providerCheckpoints[index].RunID != run.RunID ||
 			turnEnds[index].TurnID != turnStarts[index].TurnID ||
 			providers[index].TurnID != turnStarts[index].TurnID ||
-			checkpoints[index].TurnID != turnStarts[index].TurnID ||
+			providerCheckpoints[index].TurnID != turnStarts[index].TurnID ||
 			turnEnds[index].RequestID != providers[index].RequestID ||
-			checkpoints[index].RequestID != providers[index].RequestID {
-			t.Fatalf("tool-loop correlation at turn %d: starts %#v, ends %#v, provider %#v, checkpoint %#v", index, turnStarts[index], turnEnds[index], providers[index], checkpoints[index])
+			providerCheckpoints[index].RequestID != providers[index].RequestID {
+			t.Fatalf("tool-loop correlation at turn %d: starts %#v, ends %#v, provider %#v, checkpoint %#v", index, turnStarts[index], turnEnds[index], providers[index], providerCheckpoints[index])
 		}
+	}
+	toolCheckpoint := toolCheckpoints[0]
+	if toolCheckpoint.RunID != run.RunID || toolCheckpoint.TurnID != turnStarts[0].TurnID ||
+		toolCheckpoint.RequestID != providers[0].RequestID || toolCheckpoint.ToolCallID != "call-1" ||
+		toolCheckpoint.ToolName != "observe" {
+		t.Fatalf("tool checkpoint correlation = %#v", toolCheckpoint)
 	}
 
 	captured := snapshots.allSnapshots()
