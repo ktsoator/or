@@ -125,6 +125,9 @@ Refactors must preserve these contracts:
 10. An authorized tool invocation is durable before its body can execute; a
     failed tool checkpoint stops the remaining run before another side effect or
     provider request.
+11. Session restore validates and durably repairs interrupted tool-call tails
+    before model-context and product-history projection. A dispatched call with
+    no durable result has an unknown outcome and is never retried implicitly.
 
 ## Refactoring rules
 

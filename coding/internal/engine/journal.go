@@ -38,6 +38,16 @@ func newSessionJournal(
 			return nil, nil, nil, err
 		}
 		entries = loaded
+		repairs, err := transcript.RepairInterruptedToolCalls(entries)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("coding: validate session transcript: %w", err)
+		}
+		if len(repairs) > 0 {
+			if err := store.Append(ctx, repairs...); err != nil {
+				return nil, nil, nil, fmt.Errorf("coding: persist session recovery: %w", err)
+			}
+			entries = append(entries, repairs...)
+		}
 	}
 	seed, err := transcript.BuildContext(entries)
 	if err != nil {
