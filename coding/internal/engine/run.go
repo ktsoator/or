@@ -50,6 +50,7 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 		Name: observability.RunStarted, SessionID: s.sessionID, RunID: runID,
 		StartedAt: startedAt, Status: "running",
 	})
+	s.recordTurnStarted(runID, turnID, startedAt)
 
 	if s.shouldAutoCompact(s.ContextUsage().UsedTokens) {
 		_, _ = s.autoCompact(ctx)
@@ -105,6 +106,18 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 		completedAt,
 		lifecycleStatus,
 		lifecycleReason,
+	)
+	// The durable terminal entries above describe execution and are part of the
+	// batch that may fail. Diagnostics run after that attempt, so they can expose
+	// persistence_failed without claiming that failure was durably committed.
+	turnStatus := "completed"
+	turnErrorCode := ""
+	if finalErr := errors.Join(runErr, persistErr); finalErr != nil {
+		turnStatus, turnErrorCode = runFailure(finalErr, checkpointErr, persistErr)
+	}
+	activeRunID, activeTurnID, turnStartedAt := s.activeLifecycleTurn()
+	s.recordTurnTerminal(
+		activeRunID, activeTurnID, turnStatus, turnErrorCode, turnStartedAt, completedAt,
 	)
 	userMessageIDs, assistantMessageID := s.persistedRunMessageIDs(runID)
 	s.dispatchEvent(Event{

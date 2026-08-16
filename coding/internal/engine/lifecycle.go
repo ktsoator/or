@@ -46,10 +46,15 @@ func (s *Session) queueStepEnd(
 func (s *Session) queueFollowUpTurn() {
 	messageIndex := len(s.agent.Snapshot().Messages)
 	nextTurnID := observability.NewID("turn")
-	runID, previousTurnID := s.transitionLifecycleTurn(nextTurnID)
+	startedAt := time.Now().UTC()
+	runID, previousTurnID, previousStartedAt := s.transitionLifecycleTurn(nextTurnID, startedAt)
 	if runID == "" || previousTurnID == "" {
 		return
 	}
+	s.recordTurnTerminal(
+		runID, previousTurnID, "completed", "", previousStartedAt, startedAt,
+	)
+	s.recordTurnStarted(runID, nextTurnID, startedAt)
 	s.queueLifecycle(
 		positionedJournalEntry{
 			messageIndex: messageIndex,

@@ -18,14 +18,15 @@ func TestReadDiagnosticReportAggregatesAndFiltersRuns(t *testing.T) {
 	startedAt := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
 	for _, event := range []Event{
 		{Name: RunStarted, Timestamp: startedAt, SessionID: "session-1", RunID: "run-1", Status: "running", StartedAt: startedAt},
-		{Name: ProviderStarted, Timestamp: startedAt.Add(time.Millisecond), SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", RequestID: "request-1", Status: "running"},
-		{Name: CheckpointCompleted, Timestamp: startedAt.Add(2 * time.Millisecond), SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", RequestID: "request-1", Status: "completed", Duration: 12 * time.Millisecond},
-		{Name: ApprovalStarted, Timestamp: startedAt.Add(3 * time.Millisecond), SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", RequestID: "request-1", ToolCallID: "call-1", ToolName: "shell", Status: "waiting"},
-		{Name: ApprovalCompleted, Timestamp: startedAt.Add(4 * time.Millisecond), SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", RequestID: "request-1", ToolCallID: "call-1", ToolName: "shell", Status: "allowed", Duration: 20 * time.Millisecond},
-		{Name: ToolStarted, Timestamp: startedAt.Add(5 * time.Millisecond), SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", RequestID: "request-1", ToolCallID: "call-1", ToolName: "shell", Status: "running"},
-		{Name: ToolCompleted, Timestamp: startedAt.Add(6 * time.Millisecond), SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", RequestID: "request-1", ToolCallID: "call-1", ToolName: "shell", Status: "success", Duration: 45 * time.Millisecond},
-		{Name: TurnDiscarded, Timestamp: startedAt.Add(7 * time.Millisecond), SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", RequestID: "request-1", Status: "discarded", Reason: "retry"},
-		{Name: ProviderCompleted, Timestamp: startedAt.Add(8 * time.Millisecond), SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", RequestID: "request-1", Status: "completed", Duration: 80 * time.Millisecond, TimeToFirstOutput: 25 * time.Millisecond, InputTokens: 10, OutputTokens: 5, CacheReadTokens: 3, CacheWriteTokens: 2, TotalTokens: 20, CostTotal: 0.12},
+		{Name: ProviderStarted, Timestamp: startedAt.Add(time.Millisecond), SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", StepID: "step-1", RequestID: "request-1", Status: "running"},
+		{Name: CheckpointCompleted, Timestamp: startedAt.Add(2 * time.Millisecond), SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", StepID: "step-1", RequestID: "request-1", Status: "completed", Duration: 12 * time.Millisecond},
+		{Name: HTTPAttemptStarted, Timestamp: startedAt.Add(2500 * time.Microsecond), SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", StepID: "step-1", RequestID: "request-1", AttemptID: "attempt-1", Attempt: 1, Status: "running"},
+		{Name: ApprovalStarted, Timestamp: startedAt.Add(3 * time.Millisecond), SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", StepID: "step-1", RequestID: "request-1", ToolCallID: "call-1", ToolName: "shell", Status: "waiting"},
+		{Name: ApprovalCompleted, Timestamp: startedAt.Add(4 * time.Millisecond), SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", StepID: "step-1", RequestID: "request-1", ToolCallID: "call-1", ToolName: "shell", Status: "allowed", Duration: 20 * time.Millisecond},
+		{Name: ToolStarted, Timestamp: startedAt.Add(5 * time.Millisecond), SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", StepID: "step-1", RequestID: "request-1", ToolCallID: "call-1", ToolName: "shell", Status: "running"},
+		{Name: ToolCompleted, Timestamp: startedAt.Add(6 * time.Millisecond), SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", StepID: "step-1", RequestID: "request-1", ToolCallID: "call-1", ToolName: "shell", Status: "success", Duration: 45 * time.Millisecond},
+		{Name: StepDiscarded, Timestamp: startedAt.Add(7 * time.Millisecond), SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", StepID: "step-1", RequestID: "request-1", Status: "discarded", Reason: "retry"},
+		{Name: ProviderCompleted, Timestamp: startedAt.Add(8 * time.Millisecond), SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", StepID: "step-1", RequestID: "request-1", Status: "completed", Duration: 80 * time.Millisecond, TimeToFirstOutput: 25 * time.Millisecond, InputTokens: 10, OutputTokens: 5, CacheReadTokens: 3, CacheWriteTokens: 2, TotalTokens: 20, CostTotal: 0.12},
 		{Name: RunCompleted, Timestamp: startedAt.Add(100 * time.Millisecond), SessionID: "session-1", RunID: "run-1", Status: "completed", StartedAt: startedAt, Duration: 100 * time.Millisecond},
 		{Name: RunCompleted, Timestamp: startedAt.Add(time.Second), SessionID: "session-2", RunID: "run-2", Status: "completed", StartedAt: startedAt, Duration: time.Second},
 	} {
@@ -52,10 +53,14 @@ func TestReadDiagnosticReportAggregatesAndFiltersRuns(t *testing.T) {
 		run.TotalTokens != 20 || run.CostTotalUSD != 0.12 {
 		t.Fatalf("run = %#v", run)
 	}
-	if len(run.Events) != 10 || run.Events[3].ToolCallID != "call-1" || run.Events[3].ToolName != "shell" {
+	if len(run.Events) != 11 || run.Events[4].ToolCallID != "call-1" || run.Events[4].ToolName != "shell" {
 		t.Fatalf("events = %#v", run.Events)
 	}
-	provider := run.Events[8]
+	attempt := run.Events[3]
+	if attempt.StepID != "step-1" || attempt.AttemptID != "attempt-1" || attempt.Attempt != 1 {
+		t.Fatalf("attempt event = %#v", attempt)
+	}
+	provider := run.Events[9]
 	if provider.InputTokens != 10 || provider.OutputTokens != 5 ||
 		provider.CacheReadTokens != 3 || provider.CacheWriteTokens != 2 ||
 		provider.TotalTokens != 20 {

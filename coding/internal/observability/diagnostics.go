@@ -75,7 +75,9 @@ type DiagnosticEvent struct {
 	Name                string    `json:"name"`
 	Timestamp           time.Time `json:"timestamp"`
 	TurnID              string    `json:"turnId,omitempty"`
+	StepID              string    `json:"stepId,omitempty"`
 	ProviderRequestID   string    `json:"providerRequestId,omitempty"`
+	AttemptID           string    `json:"attemptId,omitempty"`
 	ToolCallID          string    `json:"toolCallId,omitempty"`
 	ToolName            string    `json:"toolName,omitempty"`
 	Status              string    `json:"status,omitempty"`
@@ -102,7 +104,9 @@ type storedEvent struct {
 	SessionID           string    `json:"session_id"`
 	RunID               string    `json:"run_id"`
 	TurnID              string    `json:"turn_id"`
+	StepID              string    `json:"step_id"`
 	ProviderRequestID   string    `json:"provider_request_id"`
+	AttemptID           string    `json:"attempt_id"`
 	ToolCallID          string    `json:"tool_call_id"`
 	ToolName            string    `json:"tool_name"`
 	Status              string    `json:"status"`
@@ -315,7 +319,7 @@ func addStoredEvent(runs map[string]*DiagnosticRun, event storedEvent) {
 		run.ApprovalRequests++
 	case ApprovalCompleted, ApprovalFailed:
 		run.ApprovalDurationMS += event.DurationMS
-	case TurnDiscarded:
+	case StepDiscarded, TurnDiscarded:
 		if event.Reason == "retry" {
 			run.Retries++
 		} else if event.Reason == "context_overflow" {
@@ -324,7 +328,8 @@ func addStoredEvent(runs map[string]*DiagnosticRun, event storedEvent) {
 	}
 	run.Events = append(run.Events, DiagnosticEvent{
 		Name: event.Name, Timestamp: event.Timestamp,
-		TurnID: event.TurnID, ProviderRequestID: event.ProviderRequestID,
+		TurnID: event.TurnID, StepID: event.StepID,
+		ProviderRequestID: event.ProviderRequestID, AttemptID: event.AttemptID,
 		ToolCallID: event.ToolCallID, ToolName: event.ToolName,
 		Status: event.Status, ErrorCode: event.ErrorCode, Reason: event.Reason,
 		DurationMS: event.DurationMS, TimeToFirstOutputMS: event.TimeToFirstOutputMS,
@@ -340,6 +345,7 @@ func addStoredEvent(runs map[string]*DiagnosticRun, event storedEvent) {
 var diagnosticEventNames = map[string]bool{
 	RunStarted: true, RunCompleted: true, RunFailed: true,
 	TurnStarted: true, TurnCompleted: true, TurnDiscarded: true,
+	StepStarted: true, StepCompleted: true, StepDiscarded: true,
 	ProviderStarted: true, ProviderCompleted: true, ProviderFailed: true,
 	HTTPAttemptStarted: true, HTTPAttemptResponse: true,
 	CheckpointCompleted: true, CheckpointFailed: true,

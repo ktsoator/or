@@ -37,7 +37,7 @@ func TestFileStoreRoundTripsPrivateSanitizedSnapshot(t *testing.T) {
 		}},
 	}
 	snapshot := NewSnapshot(
-		"session-1", "run-1", "turn-1", "request-1", "test", "model", input,
+		"session-1", "run-1", "turn-1", "step-1", "request-1", "test", "model", input,
 		[]Attachment{{ID: "context-1", Kind: "base", Placement: "prefix", MessageIndex: 0}},
 	)
 	if err := store.Save(snapshot); err != nil {
@@ -58,6 +58,9 @@ func TestFileStoreRoundTripsPrivateSanitizedSnapshot(t *testing.T) {
 	}
 	if loaded.Input.SystemPrompt != "system instructions\nAuthorization: Bearer [redacted]" || len(loaded.Input.Messages) != 2 || len(loaded.Input.Tools) != 1 {
 		t.Fatalf("loaded snapshot = %#v", loaded)
+	}
+	if loaded.Version != CurrentVersion || loaded.TurnID != "turn-1" || loaded.StepID != "step-1" {
+		t.Fatalf("snapshot lifecycle correlation = %#v", loaded)
 	}
 	if loaded.Output == nil || loaded.Output.Message.Content[0].Text != "answer with api_key=[redacted]" || loaded.Output.StopReason != "stop" {
 		t.Fatalf("loaded output = %#v", loaded.Output)
@@ -119,7 +122,7 @@ func TestFileStorePrunesOldestSnapshots(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, requestID := range []string{"request-1", "request-2", "request-3"} {
-		if err := store.Save(NewSnapshot("session", "run", "turn", requestID, "test", "model", llm.Context{}, nil)); err != nil {
+		if err := store.Save(NewSnapshot("session", "run", "turn", "step", requestID, "test", "model", llm.Context{}, nil)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -139,9 +142,9 @@ func TestFileStoreDeletesSnapshotsForOneSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, snapshot := range []Snapshot{
-		NewSnapshot("session-1", "run-1", "turn-1", "request-1", "test", "model", llm.Context{}, nil),
-		NewSnapshot("session-1", "run-2", "turn-2", "request-2", "test", "model", llm.Context{}, nil),
-		NewSnapshot("session-2", "run-3", "turn-3", "request-3", "test", "model", llm.Context{}, nil),
+		NewSnapshot("session-1", "run-1", "turn-1", "step-1", "request-1", "test", "model", llm.Context{}, nil),
+		NewSnapshot("session-1", "run-2", "turn-2", "step-2", "request-2", "test", "model", llm.Context{}, nil),
+		NewSnapshot("session-2", "run-3", "turn-3", "step-3", "request-3", "test", "model", llm.Context{}, nil),
 	} {
 		if err := store.Save(snapshot); err != nil {
 			t.Fatal(err)

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ktsoator/or/agent"
+	"github.com/ktsoator/or/coding/internal/observability"
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/transcript"
 	"github.com/ktsoator/or/llm"
@@ -64,11 +65,13 @@ func TestSessionPersistsNestedLifecycle(t *testing.T) {
 
 func TestSessionFollowUpStartsNewTurnBetweenMessages(t *testing.T) {
 	store := &checkpointStore{}
+	recorder := &memoryRecorder{}
 	call := 0
 	session, err := New(context.Background(), Options{
-		Model: llm.Model{Provider: "test", ID: "model"},
-		Tools: []tools.Tool{},
-		Store: store,
+		Model:    llm.Model{Provider: "test", ID: "model"},
+		Tools:    []tools.Tool{},
+		Store:    store,
+		Recorder: recorder,
 		StreamFn: func(
 			_ context.Context,
 			model llm.Model,
@@ -127,17 +130,35 @@ func TestSessionFollowUpStartsNewTurnBetweenMessages(t *testing.T) {
 			secondStepStart,
 		)
 	}
+	observed := recorder.snapshot()
+	turnStarts := eventsNamed(observed, observability.TurnStarted)
+	turnEnds := eventsNamed(observed, observability.TurnCompleted)
+	stepStarts := eventsNamed(observed, observability.StepStarted)
+	if len(turnStarts) != 2 || len(turnEnds) != 2 || len(stepStarts) != 2 {
+		t.Fatalf("follow-up diagnostics = turns %d/%d, steps %d", len(turnStarts), len(turnEnds), len(stepStarts))
+	}
+	for index := range turnStarts {
+		if turnStarts[index].TurnID == "" || turnEnds[index].TurnID != turnStarts[index].TurnID ||
+			stepStarts[index].TurnID != turnStarts[index].TurnID || stepStarts[index].StepID == "" {
+			t.Fatalf("follow-up diagnostic correlation at turn %d: starts %#v, ends %#v, step %#v", index, turnStarts[index], turnEnds[index], stepStarts[index])
+		}
+	}
+	if turnStarts[0].TurnID == turnStarts[1].TurnID || stepStarts[0].StepID == stepStarts[1].StepID {
+		t.Fatalf("follow-up reused lifecycle IDs: turns %#v, steps %#v", turnStarts, stepStarts)
+	}
 }
 
 func TestSessionSteeringStaysInCurrentTurn(t *testing.T) {
 	store := &checkpointStore{}
+	recorder := &memoryRecorder{}
 	call := 0
 	var session *Session
 	var err error
 	session, err = New(context.Background(), Options{
-		Model: llm.Model{Provider: "test", ID: "model"},
-		Tools: []tools.Tool{},
-		Store: store,
+		Model:    llm.Model{Provider: "test", ID: "model"},
+		Tools:    []tools.Tool{},
+		Store:    store,
+		Recorder: recorder,
 		StreamFn: func(
 			_ context.Context,
 			model llm.Model,
@@ -189,6 +210,19 @@ func TestSessionSteeringStaysInCurrentTurn(t *testing.T) {
 			steering,
 			secondStepStart,
 		)
+	}
+	observed := recorder.snapshot()
+	turnStarts := eventsNamed(observed, observability.TurnStarted)
+	turnEnds := eventsNamed(observed, observability.TurnCompleted)
+	stepStarts := eventsNamed(observed, observability.StepStarted)
+	if len(turnStarts) != 1 || len(turnEnds) != 1 || len(stepStarts) != 2 {
+		t.Fatalf("steering diagnostics = turns %d/%d, steps %d", len(turnStarts), len(turnEnds), len(stepStarts))
+	}
+	if turnEnds[0].TurnID != turnStarts[0].TurnID ||
+		stepStarts[0].TurnID != turnStarts[0].TurnID ||
+		stepStarts[1].TurnID != turnStarts[0].TurnID ||
+		stepStarts[0].StepID == stepStarts[1].StepID {
+		t.Fatalf("steering diagnostic correlation = turn %#v/%#v, steps %#v", turnStarts[0], turnEnds[0], stepStarts)
 	}
 }
 

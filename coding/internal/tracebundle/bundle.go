@@ -13,7 +13,7 @@ import (
 	"github.com/ktsoator/or/coding/internal/requestsnapshot"
 )
 
-const CurrentVersion = 1
+const CurrentVersion = 2
 
 var ErrTaskNotFound = errors.New("trace task not found")
 
@@ -73,6 +73,7 @@ type Request struct {
 	ID                   string                          `json:"id"`
 	Number               int                             `json:"number"`
 	TurnID               string                          `json:"turnId,omitempty"`
+	StepID               string                          `json:"stepId,omitempty"`
 	Status               string                          `json:"status,omitempty"`
 	ErrorCode            string                          `json:"errorCode,omitempty"`
 	Lifecycle            string                          `json:"lifecycle"`
@@ -102,6 +103,7 @@ type Request struct {
 }
 
 type Attempt struct {
+	ID          string                          `json:"id"`
 	Number      int                             `json:"number"`
 	Status      string                          `json:"status,omitempty"`
 	Lifecycle   string                          `json:"lifecycle"`
@@ -146,11 +148,18 @@ type lifecycleGroup struct {
 type requestGroup struct {
 	id          string
 	turnID      string
+	stepID      string
 	lifecycle   lifecycleGroup
 	events      []observability.DiagnosticEvent
-	attempts    map[int]*lifecycleGroup
+	attempts    map[string]*attemptGroup
 	checkpoints []observability.DiagnosticEvent
 	tools       map[string]*toolGroup
+}
+
+type attemptGroup struct {
+	id        string
+	number    int
+	lifecycle lifecycleGroup
 }
 
 type toolGroup struct {
@@ -283,10 +292,16 @@ func buildRequests(
 }
 
 func groupRun(run observability.DiagnosticRun) []*requestGroup {
-	turnRequests := make(map[string]string)
+	stepRequests := make(map[string]string)
+	legacyTurnRequests := make(map[string]string)
 	for _, event := range run.Events {
-		if event.ProviderRequestID != "" && event.TurnID != "" {
-			turnRequests[event.TurnID] = event.ProviderRequestID
+		if event.ProviderRequestID == "" {
+			continue
+		}
+		if event.StepID != "" {
+			stepRequests[event.StepID] = event.ProviderRequestID
+		} else if event.TurnID != "" {
+			legacyTurnRequests[event.TurnID] = event.ProviderRequestID
 		}
 	}
 	groups := make(map[string]*requestGroup)
@@ -294,11 +309,18 @@ func groupRun(run observability.DiagnosticRun) []*requestGroup {
 	toolCounter := 0
 	for _, event := range run.Events {
 		requestID := event.ProviderRequestID
-		if requestID == "" {
-			requestID = turnRequests[event.TurnID]
+		if requestID == "" && event.StepID != "" {
+			requestID = stepRequests[event.StepID]
 		}
-		if requestID == "" && event.TurnID != "" && strings.HasPrefix(event.Name, "provider.") {
-			requestID = "turn:" + event.TurnID
+		if requestID == "" && event.StepID == "" {
+			requestID = legacyTurnRequests[event.TurnID]
+		}
+		if requestID == "" && strings.HasPrefix(event.Name, "provider.") {
+			if event.StepID != "" {
+				requestID = "step:" + event.StepID
+			} else if event.TurnID != "" {
+				requestID = "turn:" + event.TurnID
+			}
 		}
 		if requestID == "" {
 			continue
@@ -306,13 +328,16 @@ func groupRun(run observability.DiagnosticRun) []*requestGroup {
 		group := groups[requestID]
 		if group == nil {
 			group = &requestGroup{
-				id: requestID, turnID: event.TurnID,
-				attempts: make(map[int]*lifecycleGroup), tools: make(map[string]*toolGroup),
+				id: requestID, turnID: event.TurnID, stepID: event.StepID,
+				attempts: make(map[string]*attemptGroup), tools: make(map[string]*toolGroup),
 			}
 			groups[requestID] = group
 		}
 		if group.turnID == "" {
 			group.turnID = event.TurnID
+		}
+		if group.stepID == "" {
+			group.stepID = event.StepID
 		}
 		group.events = append(group.events, event)
 		switch event.Name {
@@ -323,27 +348,31 @@ func groupRun(run observability.DiagnosticRun) []*requestGroup {
 			group.lifecycle.events = append(group.lifecycle.events, event)
 			group.lifecycle.terminal = eventPointer(event)
 		case observability.HTTPAttemptStarted, observability.HTTPAttemptResponse:
-			attempt := event.Attempt
-			if attempt <= 0 {
-				attempt = 1
+			attemptNumber := event.Attempt
+			if attemptNumber <= 0 {
+				attemptNumber = 1
 			}
-			attemptGroup := group.attempts[attempt]
-			if attemptGroup == nil {
-				attemptGroup = &lifecycleGroup{}
-				group.attempts[attempt] = attemptGroup
+			attemptID := event.AttemptID
+			if attemptID == "" {
+				attemptID = "attempt:" + strconv.Itoa(attemptNumber)
 			}
-			attemptGroup.events = append(attemptGroup.events, event)
+			attempt := group.attempts[attemptID]
+			if attempt == nil {
+				attempt = &attemptGroup{id: attemptID, number: attemptNumber}
+				group.attempts[attemptID] = attempt
+			}
+			attempt.lifecycle.events = append(attempt.lifecycle.events, event)
 			if event.Name == observability.HTTPAttemptStarted {
-				attemptGroup.started = eventPointer(event)
+				attempt.lifecycle.started = eventPointer(event)
 			} else {
-				attemptGroup.terminal = eventPointer(event)
+				attempt.lifecycle.terminal = eventPointer(event)
 			}
 		case observability.CheckpointCompleted, observability.CheckpointFailed:
 			group.checkpoints = append(group.checkpoints, event)
 		case observability.ToolStarted, observability.ToolCompleted, observability.ToolFailed,
 			observability.ApprovalStarted, observability.ApprovalCompleted, observability.ApprovalFailed:
 			toolID := event.ToolCallID
-			scope := event.TurnID + ":" + event.ToolName
+			scope := event.StepID + ":" + event.TurnID + ":" + event.ToolName
 			if toolID == "" {
 				toolID = toolFallbacks[scope]
 				if toolID == "" || event.Name == observability.ToolStarted {
@@ -386,7 +415,8 @@ func requestFromGroup(group *requestGroup) Request {
 		current = group.lifecycle.started
 	}
 	request := Request{
-		ID: group.id, TurnID: group.turnID, Lifecycle: lifecycleState(group.lifecycle),
+		ID: group.id, TurnID: group.turnID, StepID: group.stepID,
+		Lifecycle: lifecycleState(group.lifecycle),
 		StartedAt: lifecycleStart(group.lifecycle), CompletedAt: lifecycleCompleted(group.lifecycle),
 		Attempts: []Attempt{}, Checkpoints: []Checkpoint{}, Tools: []Tool{},
 		SnapshotState: SnapshotMissing,
@@ -409,10 +439,16 @@ func requestFromGroup(group *requestGroup) Request {
 		request.TotalTokens = terminal.TotalTokens
 		request.CostTotalUSD = terminal.CostTotalUSD
 	}
-	for number, group := range group.attempts {
-		request.Attempts = append(request.Attempts, attemptFromGroup(number, *group))
+	for _, attempt := range group.attempts {
+		request.Attempts = append(
+			request.Attempts,
+			attemptFromGroup(attempt.id, attempt.number, attempt.lifecycle),
+		)
 	}
 	sort.Slice(request.Attempts, func(i, j int) bool {
+		if request.Attempts[i].Number == request.Attempts[j].Number {
+			return request.Attempts[i].ID < request.Attempts[j].ID
+		}
 		return request.Attempts[i].Number < request.Attempts[j].Number
 	})
 	for _, event := range group.checkpoints {
@@ -436,13 +472,13 @@ func requestFromGroup(group *requestGroup) Request {
 	return request
 }
 
-func attemptFromGroup(number int, group lifecycleGroup) Attempt {
+func attemptFromGroup(id string, number int, group lifecycleGroup) Attempt {
 	current := group.terminal
 	if current == nil {
 		current = group.started
 	}
 	attempt := Attempt{
-		Number: number, Lifecycle: lifecycleState(group), StartedAt: lifecycleStart(group),
+		ID: id, Number: number, Lifecycle: lifecycleState(group), StartedAt: lifecycleStart(group),
 		CompletedAt: lifecycleCompleted(group), RawEvents: append([]observability.DiagnosticEvent(nil), group.events...),
 	}
 	if current != nil {
@@ -484,7 +520,7 @@ func toolFromGroup(group toolGroup) Tool {
 }
 
 func loadSnapshot(request *Request, run observability.DiagnosticRun, reader requestsnapshot.Reader) {
-	if reader == nil || strings.HasPrefix(request.ID, "turn:") {
+	if reader == nil || strings.HasPrefix(request.ID, "turn:") || strings.HasPrefix(request.ID, "step:") {
 		return
 	}
 	snapshot, err := reader.Load(request.ID)
@@ -495,7 +531,18 @@ func loadSnapshot(request *Request, run observability.DiagnosticRun, reader requ
 		request.SnapshotState = SnapshotError
 		return
 	}
+	if (request.TurnID != "" && snapshot.TurnID != "" && request.TurnID != snapshot.TurnID) ||
+		(request.StepID != "" && snapshot.StepID != "" && request.StepID != snapshot.StepID) {
+		request.SnapshotState = SnapshotError
+		return
+	}
 	request.SnapshotState = SnapshotAvailable
+	if request.TurnID == "" {
+		request.TurnID = snapshot.TurnID
+	}
+	if request.StepID == "" {
+		request.StepID = snapshot.StepID
+	}
 	request.CapturedAt = timePointer(snapshot.CapturedAt)
 	input := snapshot.Input
 	request.Input = &input

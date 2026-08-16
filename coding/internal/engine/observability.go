@@ -24,14 +24,16 @@ func (s *Session) observeAgentEvent(event agent.AgentEvent) {
 		completedAt := time.Now().UTC()
 		step := s.finishStep()
 		correlation := requestCorrelation{
-			runID: step.runID, turnID: step.stepID, requestID: step.requestID,
+			runID: step.runID, turnID: step.lifecycleTurnID,
+			stepID: step.stepID, requestID: step.requestID,
 		}
 		status, errorCode := s.stepStatus(event)
 		lifecycleStatus, lifecycleReason := lifecycleTerminal(status, errorCode)
 		s.queueStepEnd(step, lifecycleStatus, lifecycleReason)
 		s.recorder.Record(observability.Event{
-			Name: observability.TurnCompleted, SessionID: s.sessionID,
+			Name: observability.StepCompleted, SessionID: s.sessionID,
 			RunID: correlation.runID, TurnID: correlation.turnID,
+			StepID:    correlation.stepID,
 			RequestID: correlation.requestID, Status: status, ErrorCode: errorCode,
 			StartedAt: step.startedAt, Duration: elapsed(step.startedAt, completedAt),
 		})
@@ -131,6 +133,7 @@ func toolEvent(
 		Name: name, Level: level,
 		SessionID: s.sessionID, RunID: state.correlation.runID,
 		TurnID: state.correlation.turnID, RequestID: state.correlation.requestID,
+		StepID:     state.correlation.stepID,
 		ToolCallID: state.toolCallID, ToolName: state.toolName,
 		Status: status, ErrorCode: errorCode, StartedAt: startedAt,
 	}
@@ -198,11 +201,32 @@ func (s *Session) beginObservedStep() stepCorrelationState {
 	stepID := observability.NewID("step")
 	step := s.beginStep(stepID, startedAt)
 	s.recorder.Record(observability.Event{
-		Name: observability.TurnStarted, SessionID: s.sessionID,
-		// TurnID remains the compatibility field for the assistant-cycle Step.
-		RunID: step.runID, TurnID: stepID, Status: "running", StartedAt: startedAt,
+		Name: observability.StepStarted, SessionID: s.sessionID,
+		RunID: step.runID, TurnID: step.lifecycleTurnID, StepID: stepID,
+		Status: "running", StartedAt: startedAt,
 	})
 	return step
+}
+
+func (s *Session) recordTurnStarted(runID, turnID string, startedAt time.Time) {
+	s.recorder.Record(observability.Event{
+		Name: observability.TurnStarted, SessionID: s.sessionID,
+		RunID: runID, TurnID: turnID, Status: "running", StartedAt: startedAt,
+	})
+}
+
+func (s *Session) recordTurnTerminal(
+	runID, turnID, status, errorCode string,
+	startedAt, completedAt time.Time,
+) {
+	if runID == "" || turnID == "" {
+		return
+	}
+	s.recorder.Record(observability.Event{
+		Name: observability.TurnCompleted, SessionID: s.sessionID,
+		RunID: runID, TurnID: turnID, Status: status, ErrorCode: errorCode,
+		StartedAt: startedAt, Duration: elapsed(startedAt, completedAt),
+	})
 }
 
 func (s *Session) stepStatus(event agent.AgentEvent) (status, errorCode string) {
@@ -223,16 +247,15 @@ func (s *Session) stepStatus(event agent.AgentEvent) (status, errorCode string) 
 	}
 }
 
-// recordStepDiscarded emits the legacy TurnDiscarded diagnostic event for a
-// discarded assistant-cycle Step.
 func (s *Session) recordStepDiscarded(reason string) {
-	correlation := s.lastTurnCorrelation()
-	if correlation.turnID == "" {
+	correlation := s.lastStepCorrelation()
+	if correlation.stepID == "" {
 		return
 	}
 	s.recorder.Record(observability.Event{
-		Name: observability.TurnDiscarded, SessionID: s.sessionID,
+		Name: observability.StepDiscarded, SessionID: s.sessionID,
 		RunID: correlation.runID, TurnID: correlation.turnID,
+		StepID:    correlation.stepID,
 		RequestID: correlation.requestID,
 		Status:    "discarded", Reason: reason,
 	})

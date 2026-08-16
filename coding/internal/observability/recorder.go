@@ -21,6 +21,9 @@ const (
 	TurnStarted         = "turn.started"
 	TurnCompleted       = "turn.completed"
 	TurnDiscarded       = "turn.discarded"
+	StepStarted         = "step.started"
+	StepCompleted       = "step.completed"
+	StepDiscarded       = "step.discarded"
 	ProviderStarted     = "provider.request.started"
 	ProviderCompleted   = "provider.request.completed"
 	ProviderFailed      = "provider.request.failed"
@@ -48,7 +51,9 @@ type Event struct {
 	SessionID         string
 	RunID             string
 	TurnID            string
+	StepID            string
 	RequestID         string
+	AttemptID         string
 	Status            string
 	ErrorCode         string
 	Reason            string
@@ -145,8 +150,14 @@ func recordWithHandler(handler slog.Handler, event Event) {
 	if event.TurnID != "" {
 		record.AddAttrs(slog.String("turn_id", event.TurnID))
 	}
+	if event.StepID != "" {
+		record.AddAttrs(slog.String("step_id", event.StepID))
+	}
 	if event.RequestID != "" {
 		record.AddAttrs(slog.String("provider_request_id", event.RequestID))
+	}
+	if event.AttemptID != "" {
+		record.AddAttrs(slog.String("attempt_id", event.AttemptID))
 	}
 	if event.Status != "" {
 		record.AddAttrs(slog.String("status", event.Status))

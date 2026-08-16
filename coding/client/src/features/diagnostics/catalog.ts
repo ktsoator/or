@@ -4,7 +4,9 @@ export type DiagnosticEvent = {
   name: string
   timestamp: string
   turnId?: string
+  stepId?: string
   providerRequestId?: string
+  attemptId?: string
   toolCallId?: string
   toolName?: string
   status?: string
@@ -72,6 +74,7 @@ export type RequestSnapshot = {
 	sessionId: string
 	runId: string
 	turnId: string
+	stepId?: string
 	providerRequestId: string
 	provider: string
 	model: string
@@ -90,6 +93,7 @@ export type RequestSnapshot = {
 }
 
 export type TraceBundleAttempt = {
+	id: string
 	number: number
 	status?: string
 	lifecycle: 'complete' | 'in-progress' | 'missing-start'
@@ -129,6 +133,7 @@ export type TraceBundleRequest = {
 	id: string
 	number: number
 	turnId?: string
+	stepId?: string
 	status?: string
 	errorCode?: string
 	lifecycle: 'complete' | 'in-progress' | 'missing-start'

@@ -148,29 +148,72 @@ func TestRunObservabilityUsesDurableRunIdentity(t *testing.T) {
 	}
 }
 
-func TestTurnCorrelationQueuesNextTurnBeforePriorTurnEnds(t *testing.T) {
+func TestRunObservabilityReportsFinalPersistenceFailure(t *testing.T) {
+	recorder := &memoryRecorder{}
+	store := &checkpointStore{}
+	storeErr := errors.New("final persistence unavailable")
+	stream := fixedResponse("answer")
+	session, err := New(context.Background(), Options{
+		SessionID: "session-final-persistence",
+		Recorder:  recorder,
+		Model:     llm.Model{Provider: "test", ID: "model"},
+		Tools:     []tools.Tool{},
+		Store:     store,
+		StreamFn: func(
+			ctx context.Context,
+			model llm.Model,
+			input llm.Context,
+			options llm.StreamOptions,
+		) (<-chan llm.Event, error) {
+			store.failNext(storeErr)
+			return stream(ctx, model, input, options)
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := session.Prompt(context.Background(), "question"); !errors.Is(err, storeErr) {
+		t.Fatalf("Prompt error = %v, want final persistence failure", err)
+	}
+
+	events := recorder.snapshot()
+	step := onlyEvent(t, events, observability.StepCompleted)
+	turn := onlyEvent(t, events, observability.TurnCompleted)
+	run := onlyEvent(t, events, observability.RunFailed)
+	if step.Status != "completed" || step.ErrorCode != "" ||
+		turn.Status != "failed" || turn.ErrorCode != "persistence_failed" ||
+		run.Status != "failed" || run.ErrorCode != "persistence_failed" {
+		t.Fatalf("terminal events = step %#v, turn %#v, run %#v", step, turn, run)
+	}
+	if failed := eventsNamed(events, observability.CheckpointFailed); len(failed) != 0 {
+		t.Fatalf("final persistence failure recorded as checkpoint failure: %#v", failed)
+	}
+}
+
+func TestStepCorrelationQueuesNextStepBeforePriorStepEnds(t *testing.T) {
 	session := &Session{}
 	startedAt := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
 	session.setRunState(context.Background(), "run-1", "lifecycle-turn-1", startedAt, 0)
 	defer session.clearRunState()
 
-	session.beginStep("turn-1", startedAt.Add(time.Millisecond))
+	session.beginStep("step-1", startedAt.Add(time.Millisecond))
 	firstRequest := session.attachRequest("request-1")
-	session.beginStep("turn-2", startedAt.Add(2*time.Millisecond))
+	session.beginStep("step-2", startedAt.Add(2*time.Millisecond))
 	secondRequest := session.attachRequest("request-2")
-	firstTurn := session.finishStep()
-	secondTurn := session.finishStep()
+	firstStep := session.finishStep()
+	secondStep := session.finishStep()
 
-	if firstRequest.turnID != "turn-1" || secondRequest.turnID != "turn-2" {
+	if firstRequest.turnID != "lifecycle-turn-1" || secondRequest.turnID != "lifecycle-turn-1" ||
+		firstRequest.stepID != "step-1" || secondRequest.stepID != "step-2" {
 		t.Fatalf("request correlations = first %#v, second %#v", firstRequest, secondRequest)
 	}
-	if firstTurn.stepID != "turn-1" || firstTurn.requestID != "request-1" ||
-		!firstTurn.startedAt.Equal(startedAt.Add(time.Millisecond)) {
-		t.Fatalf("first turn = %#v at %v", firstTurn, firstTurn.startedAt)
+	if firstStep.stepID != "step-1" || firstStep.requestID != "request-1" ||
+		!firstStep.startedAt.Equal(startedAt.Add(time.Millisecond)) {
+		t.Fatalf("first step = %#v at %v", firstStep, firstStep.startedAt)
 	}
-	if secondTurn.stepID != "turn-2" || secondTurn.requestID != "request-2" ||
-		!secondTurn.startedAt.Equal(startedAt.Add(2*time.Millisecond)) {
-		t.Fatalf("second turn = %#v at %v", secondTurn, secondTurn.startedAt)
+	if secondStep.stepID != "step-2" || secondStep.requestID != "request-2" ||
+		!secondStep.startedAt.Equal(startedAt.Add(2*time.Millisecond)) {
+		t.Fatalf("second step = %#v at %v", secondStep, secondStep.startedAt)
 	}
 }
 
@@ -253,17 +296,21 @@ func TestProviderObservabilityCorrelatesPerformanceUsageAndAttempts(t *testing.T
 	events := recorder.snapshot()
 	runStarted := onlyEvent(t, events, observability.RunStarted)
 	turnStarted := onlyEvent(t, events, observability.TurnStarted)
+	stepStarted := onlyEvent(t, events, observability.StepStarted)
 	checkpoint := onlyEvent(t, events, observability.CheckpointCompleted)
 	providerStarted := onlyEvent(t, events, observability.ProviderStarted)
 	providerCompleted := onlyEvent(t, events, observability.ProviderCompleted)
 	turnCompleted := onlyEvent(t, events, observability.TurnCompleted)
+	stepCompleted := onlyEvent(t, events, observability.StepCompleted)
 	captured := snapshots.snapshot()
 
-	if runStarted.RunID == "" || turnStarted.TurnID == "" || providerStarted.RequestID == "" {
+	if runStarted.RunID == "" || turnStarted.TurnID == "" || stepStarted.StepID == "" ||
+		providerStarted.RequestID == "" {
 		t.Fatalf("missing correlation IDs: run %#v, turn %#v, provider %#v", runStarted, turnStarted, providerStarted)
 	}
 	if captured.SessionID != "session-provider" || captured.RunID != runStarted.RunID ||
-		captured.TurnID != turnStarted.TurnID || captured.ProviderRequestID != providerStarted.RequestID ||
+		captured.TurnID != turnStarted.TurnID || captured.StepID != stepStarted.StepID ||
+		captured.ProviderRequestID != providerStarted.RequestID ||
 		captured.Provider != model.Provider || captured.Model != model.ID {
 		t.Fatalf("request snapshot correlation = %#v", captured)
 	}
@@ -276,11 +323,16 @@ func TestProviderObservabilityCorrelatesPerformanceUsageAndAttempts(t *testing.T
 		captured.Output.Message.ProviderRequestID != providerStarted.RequestID {
 		t.Fatalf("request snapshot output = %#v", captured.Output)
 	}
-	for _, event := range []observability.Event{checkpoint, providerStarted, providerCompleted, turnCompleted} {
+	for _, event := range []observability.Event{checkpoint, providerStarted, providerCompleted, stepCompleted} {
 		if event.SessionID != "session-provider" || event.RunID != runStarted.RunID ||
-			event.TurnID != turnStarted.TurnID || event.RequestID != providerStarted.RequestID {
+			event.TurnID != turnStarted.TurnID || event.StepID != stepStarted.StepID ||
+			event.RequestID != providerStarted.RequestID {
 			t.Fatalf("correlation mismatch: %#v", event)
 		}
+	}
+	if turnCompleted.RunID != runStarted.RunID || turnCompleted.TurnID != turnStarted.TurnID ||
+		turnCompleted.StepID != "" || turnCompleted.RequestID != "" {
+		t.Fatalf("turn correlation = start %#v, completed %#v", turnStarted, turnCompleted)
 	}
 	if checkpoint.MessageCount != 1 || checkpoint.AttachmentCount == 0 || checkpoint.Duration < 0 {
 		t.Fatalf("checkpoint event = %#v", checkpoint)
@@ -307,10 +359,17 @@ func TestProviderObservabilityCorrelatesPerformanceUsageAndAttempts(t *testing.T
 	for index := range attemptStarts {
 		wantAttempt := index + 1
 		if attemptStarts[index].Attempt != wantAttempt || attemptResponses[index].Attempt != wantAttempt ||
+			attemptStarts[index].AttemptID == "" ||
+			attemptStarts[index].AttemptID != attemptResponses[index].AttemptID ||
 			attemptStarts[index].RequestID != providerStarted.RequestID ||
-			attemptResponses[index].RequestID != providerStarted.RequestID {
+			attemptResponses[index].RequestID != providerStarted.RequestID ||
+			attemptStarts[index].StepID != stepStarted.StepID ||
+			attemptResponses[index].StepID != stepStarted.StepID {
 			t.Fatalf("attempt %d correlation = start %#v, response %#v", wantAttempt, attemptStarts[index], attemptResponses[index])
 		}
+	}
+	if attemptStarts[0].AttemptID == attemptStarts[1].AttemptID {
+		t.Fatalf("attempt ID reused: %#v", attemptStarts)
 	}
 	if attemptResponses[0].HTTPStatus != 503 || attemptResponses[1].HTTPStatus != 200 {
 		t.Fatalf("attempt responses = %#v", attemptResponses)
@@ -420,6 +479,7 @@ func TestToolObservabilityRecordsApprovalAndExecutionLatency(t *testing.T) {
 
 	events := recorder.snapshot()
 	turn := eventsNamed(events, observability.TurnStarted)[0]
+	step := eventsNamed(events, observability.StepStarted)[0]
 	provider := eventsNamed(events, observability.ProviderCompleted)[0]
 	toolStarted := onlyEvent(t, events, observability.ToolStarted)
 	toolCompleted := onlyEvent(t, events, observability.ToolCompleted)
@@ -429,7 +489,8 @@ func TestToolObservabilityRecordsApprovalAndExecutionLatency(t *testing.T) {
 		toolStarted, toolCompleted, approvalStarted, approvalCompleted,
 	} {
 		if event.SessionID != "session-tool" || event.RunID != turn.RunID ||
-			event.TurnID != turn.TurnID || event.RequestID != provider.RequestID ||
+			event.TurnID != turn.TurnID || event.StepID != step.StepID ||
+			event.RequestID != provider.RequestID ||
 			event.ToolCallID != toolCallID || event.ToolName != "shell" {
 			t.Fatalf("tool correlation = %#v", event)
 		}
@@ -574,7 +635,7 @@ func toolThenStopStream(call *int, toolCall llm.ToolCall) agent.StreamFn {
 	}
 }
 
-func TestObservabilityUsesDistinctCorrelationForToolLoopTurns(t *testing.T) {
+func TestObservabilityUsesDistinctStepCorrelationForToolLoop(t *testing.T) {
 	recorder := &memoryRecorder{}
 	snapshots := &memorySnapshotWriter{}
 	call := 0
@@ -633,6 +694,8 @@ func TestObservabilityUsesDistinctCorrelationForToolLoopTurns(t *testing.T) {
 	run := onlyEvent(t, events, observability.RunStarted)
 	turnStarts := eventsNamed(events, observability.TurnStarted)
 	turnEnds := eventsNamed(events, observability.TurnCompleted)
+	stepStarts := eventsNamed(events, observability.StepStarted)
+	stepEnds := eventsNamed(events, observability.StepCompleted)
 	providers := eventsNamed(events, observability.ProviderCompleted)
 	checkpoints := eventsNamed(events, observability.CheckpointCompleted)
 	var providerCheckpoints, toolCheckpoints []observability.Event
@@ -644,29 +707,36 @@ func TestObservabilityUsesDistinctCorrelationForToolLoopTurns(t *testing.T) {
 			toolCheckpoints = append(toolCheckpoints, checkpoint)
 		}
 	}
-	if len(turnStarts) != 2 || len(turnEnds) != 2 || len(providers) != 2 ||
+	if len(turnStarts) != 1 || len(turnEnds) != 1 ||
+		len(stepStarts) != 2 || len(stepEnds) != 2 || len(providers) != 2 ||
 		len(providerCheckpoints) != 2 || len(toolCheckpoints) != 1 {
 		t.Fatalf(
-			"tool-loop events = turn starts %d, turn ends %d, providers %d, provider checkpoints %d, tool checkpoints %d",
-			len(turnStarts), len(turnEnds), len(providers), len(providerCheckpoints), len(toolCheckpoints),
+			"tool-loop events = turns %d/%d, steps %d/%d, providers %d, provider checkpoints %d, tool checkpoints %d",
+			len(turnStarts), len(turnEnds), len(stepStarts), len(stepEnds),
+			len(providers), len(providerCheckpoints), len(toolCheckpoints),
 		)
 	}
-	if turnStarts[0].TurnID == turnStarts[1].TurnID || providers[0].RequestID == providers[1].RequestID {
-		t.Fatalf("tool-loop IDs were reused: turns %#v, providers %#v", turnStarts, providers)
+	if stepStarts[0].StepID == stepStarts[1].StepID || providers[0].RequestID == providers[1].RequestID {
+		t.Fatalf("tool-loop IDs were reused: steps %#v, providers %#v", stepStarts, providers)
 	}
-	for index := range turnStarts {
-		if turnStarts[index].RunID != run.RunID || turnEnds[index].RunID != run.RunID ||
+	for index := range stepStarts {
+		if stepStarts[index].RunID != run.RunID || stepEnds[index].RunID != run.RunID ||
 			providers[index].RunID != run.RunID || providerCheckpoints[index].RunID != run.RunID ||
-			turnEnds[index].TurnID != turnStarts[index].TurnID ||
-			providers[index].TurnID != turnStarts[index].TurnID ||
-			providerCheckpoints[index].TurnID != turnStarts[index].TurnID ||
-			turnEnds[index].RequestID != providers[index].RequestID ||
+			stepStarts[index].TurnID != turnStarts[0].TurnID ||
+			stepEnds[index].TurnID != turnStarts[0].TurnID ||
+			providers[index].TurnID != turnStarts[0].TurnID ||
+			providerCheckpoints[index].TurnID != turnStarts[0].TurnID ||
+			stepEnds[index].StepID != stepStarts[index].StepID ||
+			providers[index].StepID != stepStarts[index].StepID ||
+			providerCheckpoints[index].StepID != stepStarts[index].StepID ||
+			stepEnds[index].RequestID != providers[index].RequestID ||
 			providerCheckpoints[index].RequestID != providers[index].RequestID {
-			t.Fatalf("tool-loop correlation at turn %d: starts %#v, ends %#v, provider %#v, checkpoint %#v", index, turnStarts[index], turnEnds[index], providers[index], providerCheckpoints[index])
+			t.Fatalf("tool-loop correlation at step %d: starts %#v, ends %#v, provider %#v, checkpoint %#v", index, stepStarts[index], stepEnds[index], providers[index], providerCheckpoints[index])
 		}
 	}
 	toolCheckpoint := toolCheckpoints[0]
 	if toolCheckpoint.RunID != run.RunID || toolCheckpoint.TurnID != turnStarts[0].TurnID ||
+		toolCheckpoint.StepID != stepStarts[0].StepID ||
 		toolCheckpoint.RequestID != providers[0].RequestID || toolCheckpoint.ToolCallID != "call-1" ||
 		toolCheckpoint.ToolName != "observe" {
 		t.Fatalf("tool checkpoint correlation = %#v", toolCheckpoint)
@@ -731,24 +801,28 @@ func TestObservabilityRecordsRetryReasonAndNewCorrelation(t *testing.T) {
 	}
 
 	events := recorder.snapshot()
-	turns := eventsNamed(events, observability.TurnCompleted)
+	turnStarted := onlyEvent(t, events, observability.TurnStarted)
+	turnCompleted := onlyEvent(t, events, observability.TurnCompleted)
+	steps := eventsNamed(events, observability.StepCompleted)
 	providers := append(
 		eventsNamed(events, observability.ProviderFailed),
 		eventsNamed(events, observability.ProviderCompleted)...,
 	)
-	discarded := onlyEvent(t, events, observability.TurnDiscarded)
-	if len(turns) != 2 || len(providers) != 2 {
-		t.Fatalf("retry lifecycle = turns %#v, providers %#v", turns, providers)
+	discarded := onlyEvent(t, events, observability.StepDiscarded)
+	if len(steps) != 2 || len(providers) != 2 {
+		t.Fatalf("retry lifecycle = steps %#v, providers %#v", steps, providers)
 	}
-	if turns[0].TurnID == turns[1].TurnID || turns[0].RequestID == turns[1].RequestID {
-		t.Fatalf("retry reused correlation: %#v", turns)
+	if turnCompleted.TurnID != turnStarted.TurnID ||
+		steps[0].TurnID != turnStarted.TurnID || steps[1].TurnID != turnStarted.TurnID ||
+		steps[0].StepID == steps[1].StepID || steps[0].RequestID == steps[1].RequestID {
+		t.Fatalf("retry correlation = turn %#v/%#v, steps %#v", turnStarted, turnCompleted, steps)
 	}
-	if discarded.Reason != "retry" || discarded.TurnID != turns[0].TurnID ||
-		discarded.RequestID != turns[0].RequestID {
-		t.Fatalf("retry discard = %#v, first turn = %#v", discarded, turns[0])
+	if discarded.Reason != "retry" || discarded.TurnID != steps[0].TurnID ||
+		discarded.StepID != steps[0].StepID || discarded.RequestID != steps[0].RequestID {
+		t.Fatalf("retry discard = %#v, first step = %#v", discarded, steps[0])
 	}
-	if turns[0].Status != "failed" || turns[1].Status != "completed" {
-		t.Fatalf("retry turn statuses = %#v", turns)
+	if steps[0].Status != "failed" || steps[1].Status != "completed" {
+		t.Fatalf("retry step statuses = %#v", steps)
 	}
 }
 
@@ -798,17 +872,19 @@ func TestObservabilityRecordsContextOverflowCompactionReason(t *testing.T) {
 	}
 
 	events := recorder.snapshot()
-	turns := eventsNamed(events, observability.TurnCompleted)
-	discarded := onlyEvent(t, events, observability.TurnDiscarded)
-	if len(turns) != 2 {
-		t.Fatalf("overflow turns = %#v", turns)
+	turn := onlyEvent(t, events, observability.TurnStarted)
+	steps := eventsNamed(events, observability.StepCompleted)
+	discarded := onlyEvent(t, events, observability.StepDiscarded)
+	if len(steps) != 2 {
+		t.Fatalf("overflow steps = %#v", steps)
 	}
-	if discarded.Reason != "context_overflow" || discarded.TurnID != turns[0].TurnID ||
-		discarded.RequestID != turns[0].RequestID {
-		t.Fatalf("overflow discard = %#v, first turn = %#v", discarded, turns[0])
+	if discarded.Reason != "context_overflow" || discarded.TurnID != turn.TurnID ||
+		discarded.StepID != steps[0].StepID || discarded.RequestID != steps[0].RequestID {
+		t.Fatalf("overflow discard = %#v, first step = %#v", discarded, steps[0])
 	}
-	if turns[0].TurnID == turns[1].TurnID || turns[0].RequestID == turns[1].RequestID {
-		t.Fatalf("overflow recovery reused correlation: %#v", turns)
+	if steps[0].TurnID != steps[1].TurnID || steps[0].StepID == steps[1].StepID ||
+		steps[0].RequestID == steps[1].RequestID {
+		t.Fatalf("overflow recovery correlation = %#v", steps)
 	}
 }
 
@@ -841,12 +917,14 @@ func TestRunObservabilityClassifiesFailureWithoutErrorText(t *testing.T) {
 
 	events := recorder.snapshot()
 	providerFailure := onlyEvent(t, events, observability.ProviderFailed)
+	stepFailure := onlyEvent(t, events, observability.StepCompleted)
 	turnFailure := onlyEvent(t, events, observability.TurnCompleted)
 	runFailure := onlyEvent(t, events, observability.RunFailed)
 	if providerFailure.Status != "failed" || providerFailure.ErrorCode != "provider_setup_failed" ||
-		turnFailure.Status != "failed" || turnFailure.ErrorCode != "provider_request_failed" ||
+		stepFailure.Status != "failed" || stepFailure.ErrorCode != "provider_request_failed" ||
+		turnFailure.Status != "failed" || turnFailure.ErrorCode != "run_failed" ||
 		runFailure.Status != "failed" || runFailure.ErrorCode != "run_failed" {
-		t.Fatalf("failure events = provider %#v, turn %#v, run %#v", providerFailure, turnFailure, runFailure)
+		t.Fatalf("failure events = provider %#v, step %#v, turn %#v, run %#v", providerFailure, stepFailure, turnFailure, runFailure)
 	}
 	attempts := eventsNamed(events, observability.HTTPAttemptResponse)
 	if len(attempts) != 1 || attempts[0].Status != "failed" ||
@@ -978,18 +1056,23 @@ func TestCheckpointFailureIsCorrelatedAndPreventsProviderRequest(t *testing.T) {
 
 	events := recorder.snapshot()
 	turnStarted := onlyEvent(t, events, observability.TurnStarted)
+	stepStarted := onlyEvent(t, events, observability.StepStarted)
 	checkpoint := onlyEvent(t, events, observability.CheckpointFailed)
 	turnCompleted := onlyEvent(t, events, observability.TurnCompleted)
-	discarded := onlyEvent(t, events, observability.TurnDiscarded)
+	stepCompleted := onlyEvent(t, events, observability.StepCompleted)
+	discarded := onlyEvent(t, events, observability.StepDiscarded)
 	runFailed := onlyEvent(t, events, observability.RunFailed)
 	if checkpoint.ErrorCode != "checkpoint_persist_failed" || checkpoint.Status != "failed" ||
-		checkpoint.RequestID == "" || checkpoint.TurnID != turnStarted.TurnID {
+		checkpoint.RequestID == "" || checkpoint.TurnID != turnStarted.TurnID ||
+		checkpoint.StepID != stepStarted.StepID {
 		t.Fatalf("checkpoint failure = %#v", checkpoint)
 	}
-	if turnCompleted.ErrorCode != "checkpoint_failed" || turnCompleted.RequestID != checkpoint.RequestID ||
-		discarded.Reason != "persistence_failure" || discarded.RequestID != checkpoint.RequestID ||
+	if stepCompleted.ErrorCode != "checkpoint_failed" || stepCompleted.RequestID != checkpoint.RequestID ||
+		turnCompleted.ErrorCode != "checkpoint_failed" || turnCompleted.RequestID != "" ||
+		discarded.Reason != "persistence_failure" || discarded.StepID != checkpoint.StepID ||
+		discarded.RequestID != checkpoint.RequestID ||
 		runFailed.ErrorCode != "checkpoint_failed" {
-		t.Fatalf("checkpoint lifecycle = turn %#v, discarded %#v, run %#v", turnCompleted, discarded, runFailed)
+		t.Fatalf("checkpoint lifecycle = step %#v, turn %#v, discarded %#v, run %#v", stepCompleted, turnCompleted, discarded, runFailed)
 	}
 	if providers := eventsNamed(events, observability.ProviderStarted); len(providers) != 0 {
 		t.Fatalf("provider request started after checkpoint failure: %#v", providers)

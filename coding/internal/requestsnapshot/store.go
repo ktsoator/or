@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	CurrentVersion            = 3
+	CurrentVersion            = 4
 	DefaultMaxSnapshots       = 200
 	DefaultMaxBytes     int64 = 128 << 20
 	DefaultMaxFileBytes       = 32 << 20
@@ -107,6 +107,7 @@ type Snapshot struct {
 	SessionID         string       `json:"sessionId"`
 	RunID             string       `json:"runId"`
 	TurnID            string       `json:"turnId"`
+	StepID            string       `json:"stepId"`
 	ProviderRequestID string       `json:"providerRequestId"`
 	Provider          string       `json:"provider"`
 	Model             string       `json:"model"`
@@ -191,13 +192,13 @@ func NewFileStore(dir string, options Options) (*FileStore, error) {
 // NewSnapshot removes replay-only signatures and image payloads while keeping
 // every piece of content a person can meaningfully inspect.
 func NewSnapshot(
-	sessionID, runID, turnID, requestID, provider, model string,
+	sessionID, runID, turnID, stepID, requestID, provider, model string,
 	input llm.Context,
 	attachments []Attachment,
 ) Snapshot {
 	return Snapshot{
 		Version: CurrentVersion, CapturedAt: time.Now().UTC(),
-		SessionID: sessionID, RunID: runID, TurnID: turnID,
+		SessionID: sessionID, RunID: runID, TurnID: turnID, StepID: stepID,
 		ProviderRequestID: requestID, Provider: provider, Model: model,
 		Input:       sanitizeInput(input),
 		Attachments: append([]Attachment(nil), attachments...),

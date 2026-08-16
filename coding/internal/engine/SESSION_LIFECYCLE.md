@@ -107,10 +107,9 @@ boundaries.
 | Product app-level retry | New `Step` and `ProviderRequest` | Keep the active Turn identity. |
 | Overflow recovery with rebuilt context | New `Step` and `ProviderRequest` | Keep the active Turn identity. |
 
-Compatibility adapters continue exposing old names while durable storage uses
-the precise lifecycle. In particular, the legacy observability `TurnID` field
-currently carries the durable Step ID until diagnostics adds an explicit
-`StepID`.
+Compatibility adapters continue exposing old product event names where needed,
+while durable storage and diagnostics use the precise lifecycle. Diagnostic
+events carry separate `TurnID` and `StepID` fields.
 
 ## Durable events and diagnostic events
 
@@ -340,8 +339,15 @@ Remaining:
    explicit lifecycle events.
 2. Finish treating context and history views as projections of the full version
    4 event vocabulary rather than compatibility-shaped entries.
-3. Add explicit Step identity to observability, align request and attempt
-   semantics, and project the new lifecycle into the trace UI.
+3. Project Turn and Step as visible groups in the trace UI instead of presenting
+   only a flat provider-request list.
+
+Observability now emits real Turn and Step lifecycle events. Provider requests
+carry both parent IDs, and each physical provider dispatch has a stable
+`AttemptID`; the attempt number remains presentation metadata. Request snapshots
+and the version 2 trace bundle preserve the same correlation chain. Older local
+diagnostic logs remain readable through a projection fallback, but new events
+do not overload `TurnID` with Step identity.
 
 Each phase should be independently releasable. A storage-version change must
 be rejected explicitly rather than partially decoded as the current format.

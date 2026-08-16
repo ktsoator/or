@@ -60,6 +60,7 @@ func (s *Session) recordToolCheckpoint(
 		Name:      observability.CheckpointCompleted,
 		SessionID: s.sessionID, RunID: correlation.runID,
 		TurnID: correlation.turnID, RequestID: correlation.requestID,
+		StepID:     correlation.stepID,
 		ToolCallID: call.ToolCall.ID, ToolName: call.ToolCall.Name,
 		Status: "completed", Reason: "tool_dispatch",
 		StartedAt: startedAt, Duration: time.Since(startedAt),

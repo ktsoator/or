@@ -52,6 +52,7 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 				Name: observability.CheckpointFailed, Level: slog.LevelError,
 				SessionID: s.sessionID, RunID: correlation.runID,
 				TurnID: correlation.turnID, RequestID: correlation.requestID,
+				StepID: correlation.stepID,
 				Status: "failed", ErrorCode: "checkpoint_persist_failed",
 				Reason:    "provider_request",
 				StartedAt: checkpointStarted, Duration: time.Since(checkpointStarted),
@@ -67,6 +68,7 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 			Name:      observability.CheckpointCompleted,
 			SessionID: s.sessionID, RunID: correlation.runID,
 			TurnID: correlation.turnID, RequestID: correlation.requestID,
+			StepID: correlation.stepID,
 			Status: "completed", Reason: "provider_request", StartedAt: checkpointStarted,
 			Duration: time.Since(checkpointStarted), MessageCount: len(input.Messages),
 			AttachmentCount: len(prepared.Pending),
@@ -77,7 +79,8 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 		// Content snapshots are diagnostic and deliberately fail-open: a local
 		// write failure must never prevent a provider request from running.
 		_ = s.requestSnapshots.Save(requestsnapshot.NewSnapshot(
-			s.sessionID, correlation.runID, correlation.turnID, correlation.requestID,
+			s.sessionID, correlation.runID, correlation.turnID, correlation.stepID,
+			correlation.requestID,
 			model.Provider, model.ID, prepared.Input,
 			projectedSnapshotAttachments(prepared.Attachments),
 		))
@@ -111,6 +114,7 @@ func (s *Session) observeProviderStream(
 	s.recorder.Record(observability.Event{
 		Name: observability.ProviderStarted, SessionID: s.sessionID,
 		RunID: correlation.runID, TurnID: correlation.turnID,
+		StepID:    correlation.stepID,
 		RequestID: correlation.requestID, Status: "running",
 		StartedAt: startedAt, Provider: model.Provider, Model: model.ID,
 	})
@@ -195,6 +199,7 @@ func (s *Session) recordProviderTerminal(
 	record := observability.Event{
 		Name: observability.ProviderCompleted, SessionID: s.sessionID,
 		RunID: correlation.runID, TurnID: correlation.turnID,
+		StepID:    correlation.stepID,
 		RequestID: correlation.requestID, Status: "completed",
 		StartedAt: startedAt, Duration: time.Since(startedAt),
 		TimeToFirstOutput: elapsed(startedAt, firstOutputAt),
@@ -224,6 +229,7 @@ func (s *Session) recordProviderFailure(
 		Name: observability.ProviderFailed, Level: slog.LevelError,
 		SessionID: s.sessionID, RunID: correlation.runID,
 		TurnID: correlation.turnID, RequestID: correlation.requestID,
+		StepID: correlation.stepID,
 		Status: status, ErrorCode: errorCode, StartedAt: startedAt,
 		Duration: time.Since(startedAt), TimeToFirstOutput: timeToFirstOutput,
 		Provider: model.Provider, Model: model.ID,
@@ -245,6 +251,7 @@ type providerAttemptObserver struct {
 
 	mu        sync.Mutex
 	attempt   int
+	attemptID string
 	startedAt time.Time
 }
 
@@ -278,6 +285,7 @@ func (o *providerAttemptObserver) startAttempt() {
 	o.mu.Lock()
 	pending, hasPending := o.pendingEventLocked("no_response")
 	o.attempt++
+	o.attemptID = observability.NewID("attempt")
 	o.startedAt = time.Now().UTC()
 	event := o.event(observability.HTTPAttemptStarted, "running", "", o.attempt, 0)
 	event.StartedAt = o.startedAt
@@ -291,13 +299,14 @@ func (o *providerAttemptObserver) startAttempt() {
 func (o *providerAttemptObserver) finishResponse(status int) {
 	o.mu.Lock()
 	startedAt := o.startedAt
-	attempt := o.attempt
-	o.startedAt = time.Time{}
-	o.mu.Unlock()
 	if startedAt.IsZero() {
+		o.mu.Unlock()
 		return
 	}
-	event := o.event(observability.HTTPAttemptResponse, "completed", "", attempt, status)
+	event := o.event(observability.HTTPAttemptResponse, "completed", "", o.attempt, status)
+	o.startedAt = time.Time{}
+	o.attemptID = ""
+	o.mu.Unlock()
 	event.StartedAt = startedAt
 	event.Duration = time.Since(startedAt)
 	o.session.recorder.Record(event)
@@ -321,6 +330,7 @@ func (o *providerAttemptObserver) pendingEventLocked(errorCode string) (observab
 	event.StartedAt = o.startedAt
 	event.Duration = time.Since(o.startedAt)
 	o.startedAt = time.Time{}
+	o.attemptID = ""
 	return event, true
 }
 
@@ -331,9 +341,10 @@ func (o *providerAttemptObserver) event(
 	return observability.Event{
 		Name: name, SessionID: o.session.sessionID,
 		RunID: o.correlation.runID, TurnID: o.correlation.turnID,
+		StepID:    o.correlation.stepID,
 		RequestID: o.correlation.requestID, Status: status, ErrorCode: errorCode,
 		Provider: o.model.Provider, Model: o.model.ID,
-		Attempt: attempt, HTTPStatus: httpStatus,
+		AttemptID: o.attemptID, Attempt: attempt, HTTPStatus: httpStatus,
 	}
 }
 

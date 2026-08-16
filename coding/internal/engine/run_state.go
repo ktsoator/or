@@ -12,12 +12,13 @@ type sessionRunState struct {
 	ctx                  context.Context
 	runID                string
 	lifecycleTurnID      string
+	lifecycleTurnStarted time.Time
 	startedAt            time.Time
 	entryStart           int
 	pendingSteps         []stepCorrelationState
 	pendingLifecycle     []positionedJournalEntry
 	toolCalls            map[string]toolCorrelationState
-	lastTurnID           string
+	lastStepID           string
 	lastRequestID        string
 	autoCompactAttempted bool
 	persistenceErr       error
@@ -33,12 +34,13 @@ func (s *Session) setRunState(
 	s.runState.ctx = ctx
 	s.runState.runID = runID
 	s.runState.lifecycleTurnID = lifecycleTurnID
+	s.runState.lifecycleTurnStarted = startedAt
 	s.runState.startedAt = startedAt
 	s.runState.entryStart = entryStart
 	s.runState.pendingSteps = nil
 	s.runState.pendingLifecycle = nil
 	s.runState.toolCalls = nil
-	s.runState.lastTurnID = ""
+	s.runState.lastStepID = ""
 	s.runState.lastRequestID = ""
 	s.runState.autoCompactAttempted = false
 	s.runState.persistenceErr = nil
@@ -50,12 +52,13 @@ func (s *Session) clearRunState() {
 	s.runState.ctx = nil
 	s.runState.runID = ""
 	s.runState.lifecycleTurnID = ""
+	s.runState.lifecycleTurnStarted = time.Time{}
 	s.runState.startedAt = time.Time{}
 	s.runState.entryStart = 0
 	s.runState.pendingSteps = nil
 	s.runState.pendingLifecycle = nil
 	s.runState.toolCalls = nil
-	s.runState.lastTurnID = ""
+	s.runState.lastStepID = ""
 	s.runState.lastRequestID = ""
 	s.runState.autoCompactAttempted = false
 	s.runState.persistenceErr = nil
@@ -86,10 +89,9 @@ func (s *Session) activeRunState() (context.Context, time.Time, int) {
 }
 
 type requestCorrelation struct {
-	runID string
-	// turnID is the legacy observability field. It carries the durable Step ID
-	// until the diagnostic schema exposes StepID explicitly.
+	runID     string
 	turnID    string
+	stepID    string
 	requestID string
 }
 
@@ -124,14 +126,17 @@ func (s *Session) attachRequest(requestID string) requestCorrelation {
 	s.runState.mu.Lock()
 	defer s.runState.mu.Unlock()
 	turnID := ""
+	stepID := ""
 	if count := len(s.runState.pendingSteps); count > 0 {
 		current := &s.runState.pendingSteps[count-1]
 		current.requestID = requestID
-		turnID = current.stepID
+		turnID = current.lifecycleTurnID
+		stepID = current.stepID
 	}
 	return requestCorrelation{
 		runID:     s.runState.runID,
 		turnID:    turnID,
+		stepID:    stepID,
 		requestID: requestID,
 	}
 }
@@ -144,7 +149,7 @@ func (s *Session) finishStep() stepCorrelationState {
 	}
 	step := s.runState.pendingSteps[0]
 	s.runState.pendingSteps = s.runState.pendingSteps[1:]
-	s.runState.lastTurnID = step.stepID
+	s.runState.lastStepID = step.stepID
 	s.runState.lastRequestID = step.requestID
 	return step
 }
@@ -156,7 +161,7 @@ func (s *Session) finishOpenSteps() []stepCorrelationState {
 	s.runState.pendingSteps = nil
 	if len(open) > 0 {
 		last := open[len(open)-1]
-		s.runState.lastTurnID = last.stepID
+		s.runState.lastStepID = last.stepID
 		s.runState.lastRequestID = last.requestID
 	}
 	return open
@@ -179,12 +184,23 @@ func (s *Session) lifecycleIDs() (runID, turnID string) {
 	return s.runState.runID, s.runState.lifecycleTurnID
 }
 
-func (s *Session) transitionLifecycleTurn(turnID string) (runID, previousTurnID string) {
+func (s *Session) transitionLifecycleTurn(
+	turnID string,
+	startedAt time.Time,
+) (runID, previousTurnID string, previousStartedAt time.Time) {
 	s.runState.mu.Lock()
 	defer s.runState.mu.Unlock()
 	previousTurnID = s.runState.lifecycleTurnID
+	previousStartedAt = s.runState.lifecycleTurnStarted
 	s.runState.lifecycleTurnID = turnID
-	return s.runState.runID, previousTurnID
+	s.runState.lifecycleTurnStarted = startedAt
+	return s.runState.runID, previousTurnID, previousStartedAt
+}
+
+func (s *Session) activeLifecycleTurn() (runID, turnID string, startedAt time.Time) {
+	s.runState.mu.RLock()
+	defer s.runState.mu.RUnlock()
+	return s.runState.runID, s.runState.lifecycleTurnID, s.runState.lifecycleTurnStarted
 }
 
 func (s *Session) queueLifecycle(entries ...positionedJournalEntry) {
@@ -228,12 +244,13 @@ func (s *Session) rewindPendingLifecycle(messageCount int) {
 	s.runState.mu.Unlock()
 }
 
-func (s *Session) lastTurnCorrelation() requestCorrelation {
+func (s *Session) lastStepCorrelation() requestCorrelation {
 	s.runState.mu.RLock()
 	defer s.runState.mu.RUnlock()
 	return requestCorrelation{
 		runID:     s.runState.runID,
-		turnID:    s.runState.lastTurnID,
+		turnID:    s.runState.lifecycleTurnID,
+		stepID:    s.runState.lastStepID,
 		requestID: s.runState.lastRequestID,
 	}
 }
@@ -245,7 +262,8 @@ func (s *Session) activeRequestCorrelation() requestCorrelation {
 		step := s.runState.pendingSteps[index]
 		if step.requestID != "" {
 			return requestCorrelation{
-				runID: s.runState.runID, turnID: step.stepID, requestID: step.requestID,
+				runID: s.runState.runID, turnID: step.lifecycleTurnID,
+				stepID: step.stepID, requestID: step.requestID,
 			}
 		}
 	}
@@ -284,7 +302,8 @@ func (s *Session) beginTool(
 	correlation := requestCorrelation{runID: s.runState.runID}
 	if len(s.runState.pendingSteps) > 0 {
 		step := s.runState.pendingSteps[0]
-		correlation.turnID = step.stepID
+		correlation.turnID = step.lifecycleTurnID
+		correlation.stepID = step.stepID
 		correlation.requestID = step.requestID
 	}
 	state := toolCorrelationState{

@@ -45,7 +45,8 @@ Owns one coding session's execution policy:
 - persist explicit run, turn, and step lifecycle boundaries;
 - persist terminal messages, tool outcomes, and run metadata;
 - apply retry, compaction, and context-overflow recovery policy;
-- expose product events, history, usage, and background-task state.
+- expose product events, history, usage, background-task state, and diagnostic
+  correlations across Run, Turn, Step, provider request, attempt, and tool call.
 
 It must not own HTTP/SSE wire formats, the global session registry, provider
 settings storage, or reusable SDK abstractions.
@@ -138,6 +139,10 @@ Refactors must preserve these contracts:
 12. Durable Run, Turn, and Step IDs are nested and never reused. Follow-up input
     starts a Turn; steering, tool loops, and provider retries stay in the active
     Turn and create Steps.
+13. Diagnostic events use the same Turn and Step identities as lifecycle
+    checkpoints. A Step whose checkpoint fails remains diagnostic-only.
+    Provider requests and physical HTTP attempts add stable request and attempt
+    IDs; an attempt number is presentation metadata, not identity.
 
 ## Refactoring rules
 

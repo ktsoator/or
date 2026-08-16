@@ -63,7 +63,7 @@ func TestDiagnosticRequestReturnsCorrelatedSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	snapshot := requestsnapshot.NewSnapshot(
-		"session-1", "run-1", "turn-1", "request-1", "test", "model",
+		"session-1", "run-1", "turn-1", "step-1", "request-1", "test", "model",
 		llm.Context{SystemPrompt: "system", Messages: []llm.Message{llm.UserText("question")}}, nil,
 	)
 	if err := store.Save(snapshot); err != nil {
@@ -96,7 +96,7 @@ func TestDiagnosticRequestRejectsMismatchedRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := store.Save(requestsnapshot.NewSnapshot(
-		"session-1", "run-1", "turn-1", "request-1", "test", "model", llm.Context{}, nil,
+		"session-1", "run-1", "turn-1", "step-1", "request-1", "test", "model", llm.Context{}, nil,
 	)); err != nil {
 		t.Fatal(err)
 	}
