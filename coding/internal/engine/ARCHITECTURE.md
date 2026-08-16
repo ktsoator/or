@@ -142,6 +142,8 @@ Refactors must preserve these contracts:
     checkpoints. A Step whose checkpoint fails remains diagnostic-only.
     Provider requests and physical HTTP attempts add stable request and attempt
     IDs; an attempt number is presentation metadata, not identity.
+14. Session projection and interrupted-tail repair share one transcript reducer;
+    ordering and ownership rules must not be reimplemented by consumers.
 
 ## Refactoring rules
 

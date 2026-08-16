@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ktsoator/or/agent"
+	"github.com/ktsoator/or/llm"
 )
 
 func TestRepairInterruptedLifecycleClosesOpenBoundaries(t *testing.T) {
@@ -97,6 +98,17 @@ func TestRepairInterruptedLifecycleRejectsInvalidNesting(t *testing.T) {
 				t.Fatalf("RepairInterruptedLifecycle() error = %v, want %q", err, test.want)
 			}
 		})
+	}
+}
+
+func TestRepairInterruptedLifecycleRequiresToolRepairFirst(t *testing.T) {
+	entries := append(repairStepPrefix(false), NewMessage(agent.FromLLM(repairAssistant(
+		llm.ToolCall{ID: "call-1", Name: "read", Arguments: map[string]any{}},
+	))))
+
+	_, err := RepairInterruptedLifecycle(entries)
+	if err == nil || !strings.Contains(err.Error(), "unresolved tool call call-1") {
+		t.Fatalf("RepairInterruptedLifecycle() error = %v", err)
 	}
 }
 

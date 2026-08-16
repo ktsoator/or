@@ -341,12 +341,14 @@ Implemented:
    RunCompleted message correlation consume the lifecycle projection instead.
 9. Context attachments are committed after their owning `step/start`, so their
    Run, Turn, and Step ownership is deterministic.
+10. Projection, validation, tool repair, and lifecycle repair drive one
+    deterministic `sessionReducer`; event ordering invariants have one owner.
 
 Remaining:
 
-1. Share one incremental lifecycle/tool reducer between validation, repair, and
-   projection so their invariants cannot drift.
-2. Switch model-context, recovery, and trace consumers from their current scans
+1. Add durable sequence numbers and drive the reducer incrementally as entries
+   commit instead of replaying the complete prefix for each read model.
+2. Switch model-context and trace consumers from their current scans
    to registered session projections.
 3. Persist request-header facts and a durable sequence so each provider input
    can be reconstructed from a precise committed event boundary.
