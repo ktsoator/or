@@ -41,10 +41,9 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 	runID := observability.NewID("run")
 	turnID := observability.NewID("turn")
 	startedAt := time.Now().UTC()
-	runEntryStart := len(s.snapshotTranscript())
-	s.setRunState(ctx, runID, turnID, startedAt, runEntryStart)
+	s.setRunState(ctx, runID, turnID, startedAt)
 	defer s.clearRunState()
-	s.queueRunLifecycleStart(runID, turnID)
+	s.queueRunLifecycleStart(runID, turnID, startedAt)
 	s.dispatchEvent(Event{Type: RunStarted, RunID: runID, StartedAt: startedAt})
 	s.recorder.Record(observability.Event{
 		Name: observability.RunStarted, SessionID: s.sessionID, RunID: runID,
@@ -98,11 +97,9 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 		lifecycleStatus, lifecycleReason = lifecycleTerminal(status, reason)
 	}
 	s.closeOpenSteps(lifecycleStatus, lifecycleReason)
-	persistErr := s.persistNewRun(
+	persistErr := s.persistRunTerminal(
 		ctx,
 		runID,
-		runEntryStart,
-		startedAt,
 		completedAt,
 		lifecycleStatus,
 		lifecycleReason,
@@ -135,35 +132,15 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 }
 
 func (s *Session) persistedRunMessageIDs(runID string) ([]string, string) {
-	entries := s.Entries()
-	runIndex := -1
-	firstEntryID := ""
-	for index := len(entries) - 1; index >= 0; index-- {
-		entry := entries[index]
-		if entry.ID == runID && entry.Type == transcript.RunEntry && entry.Run != nil {
-			runIndex = index
-			firstEntryID = entry.Run.FirstEntryID
-			break
-		}
-	}
-	if runIndex < 0 || firstEntryID == "" {
-		return nil, ""
-	}
-	firstIndex := -1
-	for index := 0; index < runIndex; index++ {
-		if entries[index].ID == firstEntryID {
-			firstIndex = index
-			break
-		}
-	}
-	if firstIndex < 0 {
+	projection, err := transcript.ProjectSession(s.Entries())
+	if err != nil {
 		return nil, ""
 	}
 
 	var userMessageIDs []string
 	assistantMessageID := ""
-	for _, entry := range entries[firstIndex:runIndex] {
-		if entry.Type != transcript.MessageEntry {
+	for _, entry := range projection.Messages {
+		if entry.RunID != runID {
 			continue
 		}
 		message, ok := agent.ToLLM(entry.Message)
@@ -172,10 +149,10 @@ func (s *Session) persistedRunMessageIDs(runID string) ([]string, string) {
 		}
 		switch typed := message.(type) {
 		case *llm.UserMessage:
-			userMessageIDs = append(userMessageIDs, entry.ID)
+			userMessageIDs = append(userMessageIDs, entry.EntryID)
 		case *llm.AssistantMessage:
 			if typed != nil && (typed.StopReason == llm.StopReasonStop || typed.StopReason == llm.StopReasonLength) {
-				assistantMessageID = entry.ID
+				assistantMessageID = entry.EntryID
 			}
 		}
 	}

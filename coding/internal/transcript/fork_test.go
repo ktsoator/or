@@ -3,7 +3,6 @@ package transcript
 import (
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/llm"
@@ -114,33 +113,9 @@ func TestForkBeforeUserRejectsEmptyReplacement(t *testing.T) {
 	}
 }
 
-func TestForkAfterAssistantKeepsOnlyAnImmediateCompletedRun(t *testing.T) {
-	user := NewMessage(agent.UserMessage("question"))
-	answer := NewMessage(forkAssistant("answer"))
-	run := NewRun(user.ID, time.Now().Add(-time.Second), time.Now())
-	later := NewMessage(agent.UserMessage("later"))
-
-	forked, err := Fork([]Entry{user, answer, run, later}, answer.ID, ForkAfterAssistant, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(forked) != 3 || forked[2].Type != RunEntry || forked[2].ID != run.ID {
-		t.Fatalf("forked entries = %#v, want completed run", forked)
-	}
-
-	forked, err = Fork([]Entry{user, answer, later, run}, answer.ID, ForkAfterAssistant, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(forked) != 2 {
-		t.Fatalf("forked entries = %#v, want boundary at assistant", forked)
-	}
-}
-
 func TestForkAfterAssistantKeepsCompletedLifecycleTail(t *testing.T) {
 	user := NewMessage(agent.UserMessage("question"))
 	answer := NewMessage(agent.FromLLM(assistant("answer")))
-	startedAt := time.Now().Add(-time.Second)
 	entries := []Entry{
 		NewRunStart("run-1"),
 		NewTurnStart("run-1", "turn-1"),
@@ -150,7 +125,6 @@ func TestForkAfterAssistantKeepsCompletedLifecycleTail(t *testing.T) {
 		NewStepEnd("run-1", "turn-1", "step-1", LifecycleCompleted, ""),
 		NewTurnEnd("run-1", "turn-1", LifecycleCompleted, ""),
 		NewRunEnd("run-1", LifecycleCompleted, ""),
-		NewRunWithID("run-1", user.ID, startedAt, time.Now()),
 		NewMessage(agent.UserMessage("later")),
 	}
 
@@ -158,7 +132,7 @@ func TestForkAfterAssistantKeepsCompletedLifecycleTail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(forked) != 9 || forked[len(forked)-1].Type != RunEntry {
+	if len(forked) != 8 || forked[len(forked)-1].Type != RunEndEntry {
 		t.Fatalf("forked lifecycle = %#v", forked)
 	}
 	if repairs, err := RepairInterruptedLifecycle(forked); err != nil || len(repairs) != 0 {

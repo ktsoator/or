@@ -8,12 +8,10 @@ import (
 )
 
 func TestRepairInterruptedLifecycleClosesOpenBoundaries(t *testing.T) {
-	runStart := NewRunStart("run-1")
-	user := NewMessage(agent.UserMessage("continue the work"))
 	entries := []Entry{
-		runStart,
+		NewRunStart("run-1"),
 		NewTurnStart("run-1", "turn-1"),
-		user,
+		NewMessage(agent.UserMessage("continue the work")),
 		NewStepStart("run-1", "turn-1", "step-1"),
 	}
 
@@ -21,7 +19,7 @@ func TestRepairInterruptedLifecycleClosesOpenBoundaries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantTypes := []EntryType{StepEndEntry, TurnEndEntry, RunEndEntry, RunEntry}
+	wantTypes := []EntryType{StepEndEntry, TurnEndEntry, RunEndEntry}
 	if len(repairs) != len(wantTypes) {
 		t.Fatalf("repairs = %#v", repairs)
 	}
@@ -30,19 +28,12 @@ func TestRepairInterruptedLifecycleClosesOpenBoundaries(t *testing.T) {
 			t.Fatalf("repairs[%d].Type = %q, want %q", index, repairs[index].Type, want)
 		}
 	}
-	for _, entry := range repairs[:3] {
+	for _, entry := range repairs {
 		if entry.Lifecycle.Status != LifecycleInterrupted ||
 			entry.Lifecycle.Reason != LifecycleInterruptedReason {
 			t.Fatalf("interrupted boundary = %#v", entry)
 		}
 	}
-	compatibilityRun := repairs[3]
-	if compatibilityRun.ID != "run-1" || compatibilityRun.Run == nil ||
-		compatibilityRun.Run.FirstEntryID != user.ID ||
-		!compatibilityRun.Run.StartedAt.Equal(runStart.Timestamp) {
-		t.Fatalf("compatibility run = %#v", compatibilityRun)
-	}
-
 	if more, err := RepairInterruptedLifecycle(append(entries, repairs...)); err != nil || len(more) != 0 {
 		t.Fatalf("second repair = %#v, %v; want no-op", more, err)
 	}

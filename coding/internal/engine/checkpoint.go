@@ -35,15 +35,17 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 		correlation := s.attachRequest(requestID)
 		prepared := s.contextProjection.PrepareStep(input)
 		pendingLifecycle := s.pendingLifecycle()
+		stepStart := transcript.NewStepStart(
+			step.runID,
+			step.lifecycleTurnID,
+			step.stepID,
+		)
+		stepStart.Timestamp = step.startedAt
 		positioned := append(
 			append([]positionedJournalEntry(nil), pendingLifecycle...),
 			positionedJournalEntry{
 				messageIndex: len(input.Messages),
-				entry: transcript.NewStepStart(
-					step.runID,
-					step.lifecycleTurnID,
-					step.stepID,
-				),
+				entry:        stepStart,
 			},
 		)
 		checkpointStarted := time.Now().UTC()
@@ -379,9 +381,5 @@ func (s *Session) persistModelInput(
 		messages,
 		contextEntries,
 		positioned,
-		"",
-		0,
-		time.Time{},
-		time.Time{},
 	)
 }

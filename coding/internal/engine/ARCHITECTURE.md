@@ -104,8 +104,8 @@ One top-level `Prompt` or `Continue` follows this order:
    policy permits.
 7. A claimed follow-up closes the current Turn and starts another in the same
    Run. Steering and tool loops create Steps inside the current Turn.
-8. Persist terminal Step, Turn, and Run boundaries, terminal messages, and the
-   compatibility run metadata, then publish `RunCompleted`.
+8. Persist terminal Step, Turn, and Run boundaries and terminal messages, then
+   publish `RunCompleted`. Product history is projected from those events.
 
 ## Behavioral invariants
 
@@ -119,9 +119,8 @@ Refactors must preserve these contracts:
    are durable before the provider request begins.
 4. A checkpoint failure prevents provider I/O and is not retried as a model or
    transport failure.
-5. Every completed run appends its terminal messages and lifecycle boundaries
-   before its compatibility run metadata; stored entry formats and ordering are
-   compatibility-sensitive.
+5. Every completed run appends its terminal messages and lifecycle boundaries;
+   no derived history record is written back into the event log.
 6. Compaction retains complete product history while replacing only the active
    model context.
 7. Tool outcomes remain associated with their tool-call IDs across persistence,

@@ -8,16 +8,20 @@ import (
 	"github.com/ktsoator/or/coding/internal/transcript"
 )
 
-func (s *Session) queueRunLifecycleStart(runID, turnID string) {
+func (s *Session) queueRunLifecycleStart(runID, turnID string, startedAt time.Time) {
 	messageIndex := len(s.agent.Snapshot().Messages)
+	runStart := transcript.NewRunStart(runID)
+	turnStart := transcript.NewTurnStart(runID, turnID)
+	runStart.Timestamp = startedAt.UTC()
+	turnStart.Timestamp = startedAt.UTC()
 	s.queueLifecycle(
 		positionedJournalEntry{
 			messageIndex: messageIndex,
-			entry:        transcript.NewRunStart(runID),
+			entry:        runStart,
 		},
 		positionedJournalEntry{
 			messageIndex: messageIndex,
-			entry:        transcript.NewTurnStart(runID, turnID),
+			entry:        turnStart,
 		},
 	)
 }
@@ -55,19 +59,23 @@ func (s *Session) queueFollowUpTurn() {
 		runID, previousTurnID, "completed", "", previousStartedAt, startedAt,
 	)
 	s.recordTurnStarted(runID, nextTurnID, startedAt)
+	turnEnd := transcript.NewTurnEnd(
+		runID,
+		previousTurnID,
+		transcript.LifecycleCompleted,
+		"",
+	)
+	turnStart := transcript.NewTurnStart(runID, nextTurnID)
+	turnEnd.Timestamp = startedAt
+	turnStart.Timestamp = startedAt
 	s.queueLifecycle(
 		positionedJournalEntry{
 			messageIndex: messageIndex,
-			entry: transcript.NewTurnEnd(
-				runID,
-				previousTurnID,
-				transcript.LifecycleCompleted,
-				"",
-			),
+			entry:        turnEnd,
 		},
 		positionedJournalEntry{
 			messageIndex: messageIndex,
-			entry:        transcript.NewTurnStart(runID, nextTurnID),
+			entry:        turnStart,
 		},
 	)
 }
@@ -110,10 +118,6 @@ func (s *Session) persistPendingLifecycle(ctx context.Context) error {
 			s.agent.Snapshot().Messages,
 			nil,
 			nil,
-			"",
-			0,
-			time.Time{},
-			time.Time{},
 		)
 	}
 	err := s.journal.persistMessages(
@@ -121,10 +125,6 @@ func (s *Session) persistPendingLifecycle(ctx context.Context) error {
 		s.agent.Snapshot().Messages,
 		nil,
 		pending,
-		"",
-		0,
-		time.Time{},
-		time.Time{},
 	)
 	if err == nil {
 		s.clearPendingLifecycle(len(pending))

@@ -53,6 +53,10 @@ func newSessionJournal(
 			return nil, nil, nil, fmt.Errorf("coding: validate session lifecycle: %w", err)
 		}
 		repairs := append(toolRepairs, lifecycleRepairs...)
+		recovered := append(append([]transcript.Entry(nil), entries...), repairs...)
+		if _, err := transcript.ProjectSession(recovered); err != nil {
+			return nil, nil, nil, fmt.Errorf("coding: project session transcript: %w", err)
+		}
 		if len(repairs) > 0 {
 			if err := store.Append(ctx, repairs...); err != nil {
 				return nil, nil, nil, fmt.Errorf("coding: persist session recovery: %w", err)
@@ -144,11 +148,10 @@ func (s *Session) persistNew(ctx context.Context) error {
 	return s.persistPendingLifecycle(ctx)
 }
 
-func (s *Session) persistNewRun(
+func (s *Session) persistRunTerminal(
 	ctx context.Context,
 	runID string,
-	runEntryStart int,
-	startedAt, completedAt time.Time,
+	completedAt time.Time,
 	status transcript.LifecycleStatus,
 	reason string,
 ) error {
@@ -170,10 +173,6 @@ func (s *Session) persistNewRun(
 		all,
 		nil,
 		positioned,
-		runID,
-		runEntryStart,
-		startedAt,
-		completedAt,
 	)
 	if err == nil {
 		s.clearPendingLifecycle(len(pending))
@@ -186,14 +185,10 @@ func (j *sessionJournal) persistMessages(
 	all []agent.AgentMessage,
 	contextEntries []transcript.Entry,
 	positionedEntries []positionedJournalEntry,
-	runID string,
-	runEntryStart int,
-	startedAt, completedAt time.Time,
 	additionalEntries ...transcript.Entry,
 ) error {
 	j.mu.RLock()
 	persistedLen := j.persistedLen
-	existing := append([]transcript.Entry(nil), j.entries...)
 	j.mu.RUnlock()
 	if persistedLen > len(all) {
 		return fmt.Errorf(
@@ -210,9 +205,8 @@ func (j *sessionJournal) persistMessages(
 	entries := make(
 		[]transcript.Entry,
 		0,
-		len(contextEntries)+2*len(added)+len(positionedEntries)+len(additionalEntries)+1,
+		len(contextEntries)+2*len(added)+len(positionedEntries)+len(additionalEntries),
 	)
-	entries = append(entries, contextEntries...)
 	positionedIndex := 0
 	for messageIndex := persistedLen; messageIndex <= len(all); messageIndex++ {
 		for positionedIndex < len(positionedEntries) &&
@@ -221,6 +215,7 @@ func (j *sessionJournal) persistMessages(
 			positionedIndex++
 		}
 		if messageIndex == len(all) {
+			entries = append(entries, contextEntries...)
 			break
 		}
 		message := all[messageIndex]
@@ -251,11 +246,6 @@ func (j *sessionJournal) persistMessages(
 		)
 	}
 	entries = append(entries, additionalEntries...)
-	if !startedAt.IsZero() && !completedAt.IsZero() {
-		candidate := append(existing, entries...)
-		firstEntryID := firstMessageFrom(candidate, runEntryStart)
-		entries = append(entries, transcript.NewRunWithID(runID, firstEntryID, startedAt, completedAt))
-	}
 	if len(entries) == 0 {
 		return nil
 	}
@@ -287,18 +277,6 @@ func (j *sessionJournal) applyCompaction(
 	j.usageStart = projectedLen
 	j.persistedLen = projectedLen
 	j.mu.Unlock()
-}
-
-func firstMessageFrom(entries []transcript.Entry, start int) string {
-	if start < 0 || start >= len(entries) {
-		return ""
-	}
-	for _, entry := range entries[start:] {
-		if entry.Type == transcript.MessageEntry {
-			return entry.ID
-		}
-	}
-	return ""
 }
 
 // Messages returns every original message on the current transcript path. A

@@ -14,7 +14,7 @@ import (
 	"github.com/ktsoator/or/llm"
 )
 
-const CurrentVersion = 4
+const CurrentVersion = 5
 
 type EntryType string
 
@@ -30,9 +30,6 @@ const (
 	TurnEndEntry     EntryType = "turn/end"
 	StepStartEntry   EntryType = "step/start"
 	StepEndEntry     EntryType = "step/end"
-	// RunEntry is the compatibility projection used by product history while
-	// lifecycle consumers move to run/start and run/end.
-	RunEntry EntryType = "run"
 )
 
 type LifecycleStatus string
@@ -63,7 +60,6 @@ type Entry struct {
 	Context     *ContextAttachment
 	Compaction  *Compaction
 	Lifecycle   *Lifecycle
-	Run         *Run
 }
 
 // Lifecycle identifies one durable Run, Turn, or Step boundary. Entry.Type
@@ -109,15 +105,6 @@ type ContextAttachment struct {
 	Path         string `json:"path,omitempty"`
 	Revision     string `json:"revision"`
 	Rendered     string `json:"rendered"`
-}
-
-// Run records the wall-clock interval for one agent invocation. FirstEntryID
-// associates the timing with the messages appended by that run without adding
-// product-only metadata to the model messages themselves.
-type Run struct {
-	FirstEntryID string    `json:"firstEntryId,omitempty"`
-	StartedAt    time.Time `json:"startedAt"`
-	CompletedAt  time.Time `json:"completedAt"`
 }
 
 // Compaction records a summary boundary without deleting the entries it
@@ -227,25 +214,6 @@ func newLifecycleEntry(entryType EntryType, lifecycle Lifecycle) Entry {
 	}
 }
 
-func NewRun(firstEntryID string, startedAt, completedAt time.Time) Entry {
-	return NewRunWithID(NewID(), firstEntryID, startedAt, completedAt)
-}
-
-// NewRunWithID builds a run entry with a caller-supplied identity. Product
-// observability uses the same ID in the diagnostic log and durable transcript.
-func NewRunWithID(id, firstEntryID string, startedAt, completedAt time.Time) Entry {
-	return Entry{
-		ID:        id,
-		Timestamp: completedAt.UTC(),
-		Type:      RunEntry,
-		Run: &Run{
-			FirstEntryID: firstEntryID,
-			StartedAt:    startedAt.UTC(),
-			CompletedAt:  completedAt.UTC(),
-		},
-	}
-}
-
 func NewID() string {
 	var raw [12]byte
 	if _, err := rand.Read(raw[:]); err == nil {
@@ -263,14 +231,14 @@ func (e Entry) Validate() error {
 	}
 	switch e.Type {
 	case MessageEntry:
-		if e.Message == nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Lifecycle != nil || e.Run != nil {
+		if e.Message == nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Lifecycle != nil {
 			return fmt.Errorf("transcript: message entry %s has invalid payload", e.ID)
 		}
 		if _, ok := agent.ToLLM(e.Message); !ok {
 			return fmt.Errorf("transcript: cannot persist custom message %T", e.Message)
 		}
 	case ToolCallEntry:
-		if e.Message != nil || e.ToolCall == nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Lifecycle != nil || e.Run != nil {
+		if e.Message != nil || e.ToolCall == nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Lifecycle != nil {
 			return fmt.Errorf("transcript: tool call entry %s has invalid payload", e.ID)
 		}
 		if e.ToolCall.ToolCallID == "" || e.ToolCall.ToolName == "" ||
@@ -281,7 +249,7 @@ func (e Entry) Validate() error {
 			return fmt.Errorf("transcript: tool call entry %s has invalid arguments", e.ID)
 		}
 	case ToolOutcomeEntry:
-		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome == nil || e.Context != nil || e.Compaction != nil || e.Lifecycle != nil || e.Run != nil {
+		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome == nil || e.Context != nil || e.Compaction != nil || e.Lifecycle != nil {
 			return fmt.Errorf("transcript: tool outcome entry %s has invalid payload", e.ID)
 		}
 		if e.ToolOutcome.ToolCallID == "" || e.ToolOutcome.Status == "" {
@@ -291,7 +259,7 @@ func (e Entry) Validate() error {
 			return fmt.Errorf("transcript: tool outcome entry %s has invalid data", e.ID)
 		}
 	case ContextEntry:
-		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context == nil || e.Compaction != nil || e.Lifecycle != nil || e.Run != nil {
+		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context == nil || e.Compaction != nil || e.Lifecycle != nil {
 			return fmt.Errorf("transcript: context entry %s has invalid payload", e.ID)
 		}
 		if e.Context.AttachmentID == "" ||
@@ -303,7 +271,7 @@ func (e Entry) Validate() error {
 			return fmt.Errorf("transcript: context entry %s is incomplete", e.ID)
 		}
 	case CompactionEntry:
-		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction == nil || e.Lifecycle != nil || e.Run != nil {
+		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction == nil || e.Lifecycle != nil {
 			return fmt.Errorf("transcript: compaction entry %s has invalid payload", e.ID)
 		}
 		if e.Compaction.Summary == "" || e.Compaction.FirstKeptEntryID == "" {
@@ -312,21 +280,11 @@ func (e Entry) Validate() error {
 	case RunStartEntry, RunEndEntry,
 		TurnStartEntry, TurnEndEntry,
 		StepStartEntry, StepEndEntry:
-		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Lifecycle == nil || e.Run != nil {
+		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Lifecycle == nil {
 			return fmt.Errorf("transcript: lifecycle entry %s has invalid payload", e.ID)
 		}
 		if err := validateLifecyclePayload(e.Type, *e.Lifecycle); err != nil {
 			return fmt.Errorf("transcript: lifecycle entry %s: %w", e.ID, err)
-		}
-	case RunEntry:
-		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Lifecycle != nil || e.Run == nil {
-			return fmt.Errorf("transcript: run entry %s has invalid payload", e.ID)
-		}
-		if e.Run.StartedAt.IsZero() || e.Run.CompletedAt.IsZero() {
-			return fmt.Errorf("transcript: run entry %s is incomplete", e.ID)
-		}
-		if e.Run.CompletedAt.Before(e.Run.StartedAt) {
-			return fmt.Errorf("transcript: run entry %s completes before it starts", e.ID)
 		}
 	default:
 		return fmt.Errorf("transcript: entry %s has unknown type %q", e.ID, e.Type)
@@ -381,11 +339,10 @@ func (e Entry) MarshalJSON() ([]byte, error) {
 		Context     *ContextAttachment `json:"context,omitempty"`
 		Compaction  *Compaction        `json:"compaction,omitempty"`
 		Lifecycle   *Lifecycle         `json:"lifecycle,omitempty"`
-		Run         *Run               `json:"run,omitempty"`
 	}{
 		ID: e.ID, Timestamp: e.Timestamp, Type: e.Type,
 		ToolCall: e.ToolCall, ToolOutcome: e.ToolOutcome, Context: e.Context,
-		Compaction: e.Compaction, Lifecycle: e.Lifecycle, Run: e.Run,
+		Compaction: e.Compaction, Lifecycle: e.Lifecycle,
 	}
 	if e.Message != nil {
 		message, _ := agent.ToLLM(e.Message)
@@ -412,7 +369,6 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 		Context     *ContextAttachment `json:"context"`
 		Compaction  *Compaction        `json:"compaction"`
 		Lifecycle   *Lifecycle         `json:"lifecycle"`
-		Run         *Run               `json:"run"`
 	}{}
 	if err := json.Unmarshal(data, &wire); err != nil {
 		return err
@@ -420,7 +376,7 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 	decoded := Entry{
 		ID: wire.ID, Timestamp: wire.Timestamp,
 		Type: wire.Type, ToolCall: wire.ToolCall, ToolOutcome: wire.ToolOutcome, Context: wire.Context,
-		Compaction: wire.Compaction, Lifecycle: wire.Lifecycle, Run: wire.Run,
+		Compaction: wire.Compaction, Lifecycle: wire.Lifecycle,
 	}
 	if len(wire.Message) > 0 && string(wire.Message) != "null" {
 		message, err := llm.UnmarshalMessage(wire.Message)

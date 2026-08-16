@@ -70,12 +70,7 @@ func Fork(entries []Entry, messageID string, mode ForkMode, replacementText stri
 			return nil, fmt.Errorf("%w: after_assistant requires a completed assistant response", ErrInvalidForkBoundary)
 		}
 		forked = append([]Entry(nil), entries[:target+1]...)
-		// A completed run entry immediately following the response remains valid and
-		// preserves its timing. A later run entry may cover queued messages beyond
-		// this boundary and must not be copied.
-		if target+1 < len(entries) && entries[target+1].Type == RunEntry {
-			forked = append(forked, entries[target+1])
-		} else if tail := completedLifecycleTail(entries[target+1:]); len(tail) > 0 {
+		if tail := completedLifecycleTail(entries[target+1:]); len(tail) > 0 {
 			forked = append(forked, tail...)
 		}
 	}
@@ -92,25 +87,16 @@ func Fork(entries []Entry, messageID string, mode ForkMode, replacementText stri
 
 func completedLifecycleTail(entries []Entry) []Entry {
 	var tail []Entry
-	sawRunEnd := false
 	for _, entry := range entries {
 		switch entry.Type {
 		case StepEndEntry, TurnEndEntry:
-			if sawRunEnd {
-				return nil
-			}
 			tail = append(tail, entry)
 		case RunEndEntry:
-			if sawRunEnd || entry.Lifecycle.Status != LifecycleCompleted {
+			if entry.Lifecycle.Status != LifecycleCompleted {
 				return nil
 			}
-			sawRunEnd = true
 			tail = append(tail, entry)
-		case RunEntry:
-			if !sawRunEnd {
-				return nil
-			}
-			return append(tail, entry)
+			return tail
 		default:
 			return nil
 		}

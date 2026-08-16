@@ -139,9 +139,9 @@ func TestRunObservabilityUsesDurableRunIdentity(t *testing.T) {
 		t.Fatalf("run correlation = started %#v, completed %#v", started, completed)
 	}
 	entries := session.Entries()
-	runEntry := entries[len(entries)-1]
-	if runEntry.Type != transcript.RunEntry || runEntry.ID != started.RunID {
-		t.Fatalf("run entry = %#v, events = %#v", runEntry, events)
+	projection, err := transcript.ProjectSession(entries)
+	if err != nil || len(projection.Runs) != 1 || projection.Runs[0].ID != started.RunID {
+		t.Fatalf("run projection = %#v, %v; events = %#v", projection, err, events)
 	}
 	if completed.Duration < 0 || completed.ErrorCode != "" {
 		t.Fatalf("completed event = %#v", completed)
@@ -193,7 +193,7 @@ func TestRunObservabilityReportsFinalPersistenceFailure(t *testing.T) {
 func TestStepCorrelationQueuesNextStepBeforePriorStepEnds(t *testing.T) {
 	session := &Session{}
 	startedAt := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
-	session.setRunState(context.Background(), "run-1", "lifecycle-turn-1", startedAt, 0)
+	session.setRunState(context.Background(), "run-1", "lifecycle-turn-1", startedAt)
 	defer session.clearRunState()
 
 	session.beginStep("step-1", startedAt.Add(time.Millisecond))

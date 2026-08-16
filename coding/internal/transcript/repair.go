@@ -113,7 +113,7 @@ func RepairInterruptedToolCalls(entries []Entry) ([]Entry, error) {
 		case ContextEntry:
 			// Tools may durably attach product context while their result is still
 			// pending. The attachment stays inside the current tool step.
-		case CompactionEntry, RunEntry,
+		case CompactionEntry,
 			RunStartEntry, RunEndEntry,
 			TurnStartEntry, TurnEndEntry,
 			StepStartEntry, StepEndEntry:

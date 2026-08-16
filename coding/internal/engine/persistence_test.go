@@ -81,16 +81,15 @@ func TestSessionCheckpointsPromptBeforeModelRequest(t *testing.T) {
 			_ llm.StreamOptions,
 		) (<-chan llm.Event, error) {
 			entries, _, _ := store.snapshot()
-			entries = withoutLifecycle(entries)
-			if len(entries) != 2 {
-				checkpointErr = fmt.Errorf(
-					"entries before model request = %d, want base context and user",
-					len(entries),
-				)
-			} else if entries[0].Type != transcript.ContextEntry {
-				checkpointErr = fmt.Errorf("first durable entry = %q, want context", entries[0].Type)
-			} else if _, ok := llmEntry(entries[1]).(*llm.UserMessage); !ok {
-				checkpointErr = fmt.Errorf("first durable message = %T, want user", llmEntry(entries[1]))
+			projection, err := transcript.ProjectSession(entries)
+			if err != nil {
+				checkpointErr = err
+			} else if len(projection.Contexts) != 1 || len(projection.Messages) != 1 {
+				checkpointErr = fmt.Errorf("checkpoint projection = %#v", projection)
+			} else if projection.Contexts[0].StepID == "" {
+				checkpointErr = errors.New("base context has no owning step")
+			} else if _, ok := agent.ToLLM(projection.Messages[0].Message); !ok {
+				checkpointErr = errors.New("durable user message is not model-facing")
 			}
 			return assistantEvents(model, "answer"), nil
 		},
@@ -108,14 +107,11 @@ func TestSessionCheckpointsPromptBeforeModelRequest(t *testing.T) {
 
 	entries, batches, _ := store.snapshot()
 	entries = withoutLifecycle(entries)
-	if len(entries) != 4 {
-		t.Fatalf("durable entries = %d, want context, user, assistant, run", len(entries))
+	if len(entries) != 3 {
+		t.Fatalf("durable entries = %d, want user, context, assistant", len(entries))
 	}
-	if got := compatibilityBatchSizes(batches); !slices.Equal(got, []int{2, 2}) {
-		t.Fatalf("append batch sizes = %v, want [2 2]", got)
-	}
-	if entries[3].Type != transcript.RunEntry {
-		t.Fatalf("last entry type = %q, want run", entries[3].Type)
+	if got := payloadBatchSizes(batches); !slices.Equal(got, []int{2, 1}) {
+		t.Fatalf("append batch sizes = %v, want [2 1]", got)
 	}
 }
 
@@ -292,14 +288,14 @@ func TestSessionCheckpointsCompleteToolBatchBeforeNextModelRequest(t *testing.T)
 
 	entries, batches, _ := store.snapshot()
 	entries = withoutLifecycle(entries)
-	if len(entries) != 11 {
+	if len(entries) != 10 {
 		t.Fatalf(
-			"durable entries = %d, want context, user, assistant, two tool intents, two result/outcome pairs, final assistant, run",
+			"durable entries = %d, want user, context, assistant, two tool intents, two result/outcome pairs, final assistant",
 			len(entries),
 		)
 	}
-	if got := compatibilityBatchSizes(batches); !slices.Equal(got, []int{2, 2, 1, 4, 2}) {
-		t.Fatalf("append batch sizes = %v, want [2 2 1 4 2]", got)
+	if got := payloadBatchSizes(batches); !slices.Equal(got, []int{2, 2, 1, 4, 1}) {
+		t.Fatalf("append batch sizes = %v, want [2 2 1 4 1]", got)
 	}
 
 	restored, err := New(ctx, Options{
@@ -402,8 +398,8 @@ func TestSessionToolCheckpointFailureDoesNotExecuteToolOrContinueModel(t *testin
 	if appendCalls != 3 {
 		t.Fatalf("store append attempts = %d, want provider checkpoint, failed tool checkpoint, and final flush", appendCalls)
 	}
-	if got := compatibilityBatchSizes(batches); !slices.Equal(got, []int{2, 6}) {
-		t.Fatalf("successful append batch sizes = %v, want [2 6]", got)
+	if got := payloadBatchSizes(batches); !slices.Equal(got, []int{2, 5}) {
+		t.Fatalf("successful append batch sizes = %v, want [2 5]", got)
 	}
 	for _, entry := range entries {
 		if entry.Type == transcript.ToolCallEntry {
@@ -455,14 +451,14 @@ func TestSessionCheckpointsFollowUpBeforeNextModelRequest(t *testing.T) {
 						len(entries),
 					)
 				} else {
-					_, firstUser := llmEntry(entries[1]).(*llm.UserMessage)
+					_, firstUser := llmEntry(entries[0]).(*llm.UserMessage)
 					_, assistant := llmEntry(entries[2]).(*llm.AssistantMessage)
 					_, followUp := llmEntry(entries[3]).(*llm.UserMessage)
-					if entries[0].Type != transcript.ContextEntry || !firstUser || !assistant || !followUp {
+					if entries[1].Type != transcript.ContextEntry || !firstUser || !assistant || !followUp {
 						checkpointErr = fmt.Errorf(
 							"follow-up checkpoint types = %q, %T, %T, %T",
-							entries[0].Type,
-							llmEntry(entries[1]),
+							entries[1].Type,
+							llmEntry(entries[0]),
 							llmEntry(entries[2]),
 							llmEntry(entries[3]),
 						)
@@ -568,17 +564,14 @@ func TestSessionRetriesFinalFlushAfterTransientCheckpointFailure(t *testing.T) {
 	if appendCalls != 2 {
 		t.Fatalf("store append attempts = %d, want checkpoint and final flush", appendCalls)
 	}
-	if got := compatibilityBatchSizes(batches); !slices.Equal(got, []int{2}) {
-		t.Fatalf("successful append batch sizes = %v, want [2]", got)
+	if got := payloadBatchSizes(batches); !slices.Equal(got, []int{1}) {
+		t.Fatalf("successful append batch sizes = %v, want [1]", got)
 	}
-	if len(entries) != 2 {
-		t.Fatalf("durable entries = %d, want user and run metadata", len(entries))
+	if len(entries) != 1 {
+		t.Fatalf("durable entries = %d, want user", len(entries))
 	}
 	if _, ok := llmEntry(entries[0]).(*llm.UserMessage); !ok {
 		t.Fatalf("durable message = %T, want user", llmEntry(entries[0]))
-	}
-	if entries[1].Type != transcript.RunEntry {
-		t.Fatalf("last entry type = %q, want run", entries[1].Type)
 	}
 }
 
@@ -633,11 +626,11 @@ func TestSessionRetryDoesNotPersistFailedAssistantOrDuplicatePrompt(t *testing.T
 	}
 	assertLifecycleIDs(t, entries, 1, 1, 2)
 	entries = withoutLifecycle(entries)
-	if len(entries) != 4 {
-		t.Fatalf("durable entries = %d, want context, user, successful assistant, run", len(entries))
+	if len(entries) != 3 {
+		t.Fatalf("durable entries = %d, want user, context, successful assistant", len(entries))
 	}
-	if got := compatibilityBatchSizes(batches); !slices.Equal(got, []int{2, 2}) {
-		t.Fatalf("append batch sizes = %v, want [2 2]", got)
+	if got := payloadBatchSizes(batches); !slices.Equal(got, []int{2, 1}) {
+		t.Fatalf("append batch sizes = %v, want [2 1]", got)
 	}
 	assistant, ok := llmEntry(entries[2]).(*llm.AssistantMessage)
 	if !ok || assistant.StopReason != llm.StopReasonStop || assistant.Text() != "recovered" {
@@ -646,16 +639,29 @@ func TestSessionRetryDoesNotPersistFailedAssistantOrDuplicatePrompt(t *testing.T
 }
 
 func validateToolCheckpoint(entries []transcript.Entry) error {
+	projection, err := transcript.ProjectSession(entries)
+	if err != nil {
+		return err
+	}
+	if len(projection.Runs) != 1 || len(projection.ToolCalls) != 2 || len(projection.Contexts) != 1 {
+		return fmt.Errorf("tool checkpoint projection = %#v", projection)
+	}
+	for _, call := range projection.ToolCalls {
+		if call.RunID == "" || call.TurnID == "" || call.StepID == "" ||
+			call.DispatchEntryID == "" || call.ResultMessageEntryID == "" {
+			return fmt.Errorf("incomplete projected tool call = %#v", call)
+		}
+	}
 	entries = withoutLifecycle(entries)
-	// The base context is checkpointed once, ahead of the first user message.
+	// The base context is checkpointed once inside the first model step.
 	if len(entries) != 9 {
 		return fmt.Errorf("entries before second model request = %d, want 9", len(entries))
 	}
-	if entries[0].Type != transcript.ContextEntry {
-		return fmt.Errorf("checkpoint[0] = %q, want context", entries[0].Type)
+	if entries[1].Type != transcript.ContextEntry {
+		return fmt.Errorf("checkpoint[1] = %q, want context", entries[1].Type)
 	}
-	if _, ok := llmEntry(entries[1]).(*llm.UserMessage); !ok {
-		return fmt.Errorf("checkpoint[1] = %T, want user", llmEntry(entries[1]))
+	if _, ok := llmEntry(entries[0]).(*llm.UserMessage); !ok {
+		return fmt.Errorf("checkpoint[0] = %T, want user", llmEntry(entries[0]))
 	}
 	assistant, ok := llmEntry(entries[2]).(*llm.AssistantMessage)
 	if !ok || len(assistant.ToolCalls()) != 2 {
@@ -728,7 +734,7 @@ func withoutLifecycle(entries []transcript.Entry) []transcript.Entry {
 	return result
 }
 
-func compatibilityBatchSizes(batches [][]transcript.Entry) []int {
+func payloadBatchSizes(batches [][]transcript.Entry) []int {
 	sizes := make([]int, 0, len(batches))
 	for _, batch := range batches {
 		if size := len(withoutLifecycle(batch)); size > 0 {

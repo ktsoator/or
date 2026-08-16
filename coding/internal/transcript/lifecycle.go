@@ -2,30 +2,26 @@ package transcript
 
 import (
 	"fmt"
-	"time"
 )
 
 const LifecycleInterruptedReason = "process_interrupted"
 
 type lifecycleCursor struct {
-	runID      string
-	turnID     string
-	stepID     string
-	runStarted time.Time
-	runIndex   int
+	runID  string
+	turnID string
+	stepID string
 }
 
 // RepairInterruptedLifecycle validates explicit Run, Turn, and Step nesting.
 // When the committed log ends with open boundaries, it returns an interrupted
-// terminal tail without changing the supplied prefix. Logs without explicit
-// lifecycle entries remain valid while compatibility projections are removed.
+// terminal tail without changing the supplied prefix.
 func RepairInterruptedLifecycle(entries []Entry) ([]Entry, error) {
 	var cursor lifecycleCursor
 	sawLifecycle := false
 	seenRuns := make(map[string]bool)
 	seenTurns := make(map[string]bool)
 	seenSteps := make(map[string]bool)
-	for index, entry := range entries {
+	for _, entry := range entries {
 		if err := entry.Validate(); err != nil {
 			return nil, err
 		}
@@ -43,8 +39,6 @@ func RepairInterruptedLifecycle(entries []Entry) ([]Entry, error) {
 				return nil, lifecycleOrderError(entry, "starts while run %s is open", cursor.runID)
 			}
 			cursor.runID = lifecycle.RunID
-			cursor.runStarted = entry.Timestamp
-			cursor.runIndex = index
 			seenRuns[lifecycle.RunID] = true
 
 		case RunEndEntry:
@@ -129,12 +123,6 @@ func RepairInterruptedLifecycle(entries []Entry) ([]Entry, error) {
 		LifecycleInterruptedReason,
 	)
 	repairs = append(repairs, runEnd)
-	repairs = append(repairs, NewRunWithID(
-		cursor.runID,
-		firstLifecycleMessage(entries, cursor.runIndex),
-		cursor.runStarted,
-		runEnd.Timestamp,
-	))
 	return repairs, nil
 }
 
@@ -202,19 +190,4 @@ func lifecycleOrderError(entry Entry, format string, args ...any) error {
 		entry.Type,
 		fmt.Sprintf(format, args...),
 	)
-}
-
-func firstLifecycleMessage(entries []Entry, runIndex int) string {
-	if runIndex < 0 || runIndex >= len(entries) {
-		return ""
-	}
-	for _, entry := range entries[runIndex+1:] {
-		if entry.Type == MessageEntry {
-			return entry.ID
-		}
-		if entry.Type == RunEndEntry {
-			break
-		}
-	}
-	return ""
 }

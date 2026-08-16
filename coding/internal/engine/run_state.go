@@ -14,7 +14,6 @@ type sessionRunState struct {
 	lifecycleTurnID      string
 	lifecycleTurnStarted time.Time
 	startedAt            time.Time
-	entryStart           int
 	pendingSteps         []stepCorrelationState
 	pendingLifecycle     []positionedJournalEntry
 	toolCalls            map[string]toolCorrelationState
@@ -28,7 +27,6 @@ func (s *Session) setRunState(
 	ctx context.Context,
 	runID, lifecycleTurnID string,
 	startedAt time.Time,
-	entryStart int,
 ) {
 	s.runState.mu.Lock()
 	s.runState.ctx = ctx
@@ -36,7 +34,6 @@ func (s *Session) setRunState(
 	s.runState.lifecycleTurnID = lifecycleTurnID
 	s.runState.lifecycleTurnStarted = startedAt
 	s.runState.startedAt = startedAt
-	s.runState.entryStart = entryStart
 	s.runState.pendingSteps = nil
 	s.runState.pendingLifecycle = nil
 	s.runState.toolCalls = nil
@@ -54,7 +51,6 @@ func (s *Session) clearRunState() {
 	s.runState.lifecycleTurnID = ""
 	s.runState.lifecycleTurnStarted = time.Time{}
 	s.runState.startedAt = time.Time{}
-	s.runState.entryStart = 0
 	s.runState.pendingSteps = nil
 	s.runState.pendingLifecycle = nil
 	s.runState.toolCalls = nil
@@ -82,10 +78,10 @@ func (s *Session) runPersistenceError() error {
 	return s.runState.persistenceErr
 }
 
-func (s *Session) activeRunState() (context.Context, time.Time, int) {
+func (s *Session) activeRunState() (context.Context, string, time.Time) {
 	s.runState.mu.RLock()
 	defer s.runState.mu.RUnlock()
-	return s.runState.ctx, s.runState.startedAt, s.runState.entryStart
+	return s.runState.ctx, s.runState.runID, s.runState.startedAt
 }
 
 type requestCorrelation struct {

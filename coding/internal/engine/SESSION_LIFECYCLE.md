@@ -118,7 +118,7 @@ Or needs two event streams with different guarantees.
 ### Session events
 
 `SessionEvent` records product facts required to reconstruct the conversation.
-It is append-only, versioned, and part of the session's compatibility contract.
+It is append-only, versioned, and the session's durable format contract.
 It must not be rotated or dropped. A required append or checkpoint failure is a
 product failure and blocks the external operation protected by that checkpoint.
 
@@ -165,12 +165,12 @@ Raw assistant chunks, request snapshots, provider attempts, timings, and costs
 may remain diagnostic data. They become session events only if replay or product
 behavior is defined to require them.
 
-The version 4 transcript currently persists and validates `run/start`,
+The version 5 transcript persists and validates `run/start`,
 `run/end`, `turn/start`, `turn/end`, `step/start`, and `step/end`. Existing
 message, context, compaction, tool-call, and tool-outcome entries supply the
-other implemented durable facts. The legacy `run` entry remains temporarily as
-a product-history compatibility projection; lifecycle consumers must use the
-explicit boundaries.
+other implemented durable facts. Product history and run timing are projected
+from explicit lifecycle boundaries; no derived `run` entry exists. Versions 4
+and earlier are rejected explicitly and are not migrated on load or append.
 
 Every session event has at least:
 
@@ -332,15 +332,24 @@ Implemented:
 4. Explicit Run, Turn, and Step boundaries, with follow-up and steering
    semantics enforced by tests.
 5. Fork behavior preserves a valid completed lifecycle tail.
+6. The trace UI presents session-scoped Turn and Step groups instead of a flat
+   provider-request list.
+7. A deterministic, read-only `ProjectSession` fold reconstructs lifecycle,
+   message ownership, tool dispatch/result/outcome relationships, context
+   attachments, and compaction boundaries from a committed transcript prefix.
+8. Version 5 removes the legacy `run` history entry. Engine History and
+   RunCompleted message correlation consume the lifecycle projection instead.
+9. Context attachments are committed after their owning `step/start`, so their
+   Run, Turn, and Step ownership is deterministic.
 
 Remaining:
 
-1. Remove the legacy `run` history projection once all product consumers use
-   explicit lifecycle events.
-2. Finish treating context and history views as projections of the full version
-   4 event vocabulary rather than compatibility-shaped entries.
-3. Project Turn and Step as visible groups in the trace UI instead of presenting
-   only a flat provider-request list.
+1. Share one incremental lifecycle/tool reducer between validation, repair, and
+   projection so their invariants cannot drift.
+2. Switch model-context, recovery, and trace consumers from their current scans
+   to registered session projections.
+3. Persist request-header facts and a durable sequence so each provider input
+   can be reconstructed from a precise committed event boundary.
 
 Observability now emits real Turn and Step lifecycle events. Provider requests
 carry both parent IDs, and each physical provider dispatch has a stable

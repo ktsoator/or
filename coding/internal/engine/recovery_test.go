@@ -25,18 +25,18 @@ func TestNewRepairsInterruptedToolCallsBeforeProjection(t *testing.T) {
 	}
 
 	entries, batches, appendCalls := store.snapshot()
-	if appendCalls != 1 || len(batches) != 1 || len(batches[0]) != 4 {
+	if appendCalls != 1 || len(batches) != 1 || len(batches[0]) != 7 {
 		t.Fatalf(
-			"recovery appends = %d calls, batch sizes %v; want one four-entry batch",
+			"recovery appends = %d calls, batch sizes %v; want one seven-entry batch",
 			appendCalls,
 			batchSizes(batches),
 		)
 	}
-	if len(entries) != 8 {
-		t.Fatalf("durable entries = %d, want four original and four repair entries", len(entries))
+	if len(entries) != 14 {
+		t.Fatalf("durable entries = %d, want seven original and seven repair entries", len(entries))
 	}
-	assertRecoveredOutcome(t, entries[5], "call-read", transcript.ToolNotStarted)
-	assertRecoveredOutcome(t, entries[7], "call-write", transcript.ToolOutcomeUnknown)
+	assertRecoveredOutcome(t, entries[8], "call-read", transcript.ToolNotStarted)
+	assertRecoveredOutcome(t, entries[10], "call-write", transcript.ToolOutcomeUnknown)
 
 	messages := session.Snapshot().Messages
 	if len(messages) != 4 {
@@ -99,7 +99,7 @@ func TestNewFailsWhenInterruptedToolRepairCannotBePersisted(t *testing.T) {
 		t.Fatalf("New() = %#v, %v; want nil session and recovery store error", session, err)
 	}
 	entries, batches, appendCalls := store.snapshot()
-	if appendCalls != 1 || len(batches) != 0 || len(entries) != 4 {
+	if appendCalls != 1 || len(batches) != 0 || len(entries) != 7 {
 		t.Fatalf(
 			"failed recovery changed store: %d calls, %d batches, %d entries",
 			appendCalls,
@@ -110,16 +110,7 @@ func TestNewFailsWhenInterruptedToolRepairCannotBePersisted(t *testing.T) {
 }
 
 func TestNewRepairsToolsBeforeClosingInterruptedLifecycle(t *testing.T) {
-	base := interruptedToolEntries()
-	entries := []transcript.Entry{
-		base[0],
-		transcript.NewRunStart("run-1"),
-		transcript.NewTurnStart("run-1", "turn-1"),
-		base[1],
-		transcript.NewStepStart("run-1", "turn-1", "step-1"),
-		base[2],
-		base[3],
-	}
+	entries := interruptedToolEntries()
 	store := &checkpointStore{entries: entries}
 
 	if _, err := New(context.Background(), Options{
@@ -131,7 +122,7 @@ func TestNewRepairsToolsBeforeClosingInterruptedLifecycle(t *testing.T) {
 	}
 
 	got, batches, appendCalls := store.snapshot()
-	if appendCalls != 1 || len(batches) != 1 || len(got) != 15 {
+	if appendCalls != 1 || len(batches) != 1 || len(got) != 14 {
 		t.Fatalf("repaired store = %d calls, %d batches, %d entries", appendCalls, len(batches), len(got))
 	}
 	wantTail := []transcript.EntryType{
@@ -142,7 +133,6 @@ func TestNewRepairsToolsBeforeClosingInterruptedLifecycle(t *testing.T) {
 		transcript.StepEndEntry,
 		transcript.TurnEndEntry,
 		transcript.RunEndEntry,
-		transcript.RunEntry,
 	}
 	for index, want := range wantTail {
 		entry := got[len(entries)+index]
@@ -178,6 +168,10 @@ func interruptedToolEntries() []transcript.Entry {
 		},
 	}
 	return []transcript.Entry{
+		transcript.NewRunStart("run-1"),
+		transcript.NewTurnStart("run-1", "turn-1"),
+		transcript.NewMessage(agent.UserMessage("work")),
+		transcript.NewStepStart("run-1", "turn-1", "step-1"),
 		transcript.NewContext(transcript.ContextAttachment{
 			AttachmentID: "base-context",
 			Epoch:        1,
@@ -186,7 +180,6 @@ func interruptedToolEntries() []transcript.Entry {
 			Revision:     "revision",
 			Rendered:     "context",
 		}),
-		transcript.NewMessage(agent.UserMessage("work")),
 		transcript.NewMessage(agent.FromLLM(assistant)),
 		transcript.NewToolCall(transcript.ToolCall{
 			ToolCallID: "call-write",

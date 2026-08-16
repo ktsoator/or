@@ -48,7 +48,7 @@ func TestJSONLLoadRejectsLegacyMessagesWithoutRewriting(t *testing.T) {
 }
 
 func TestJSONLRejectsOlderVersions(t *testing.T) {
-	for _, version := range []int{2, 3} {
+	for _, version := range []int{2, 3, 4} {
 		t.Run(fmt.Sprintf("version_%d", version), func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "session.jsonl")
 			data := []byte(fmt.Sprintf("{\"type\":\"session\",\"version\":%d}\n", version))
@@ -65,21 +65,24 @@ func TestJSONLRejectsOlderVersions(t *testing.T) {
 	}
 }
 
-func TestJSONLRoundTripsRunTiming(t *testing.T) {
+func TestJSONLRoundTripsLifecycleTiming(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session.jsonl")
 	startedAt := time.Date(2026, time.July, 21, 12, 0, 0, 0, time.UTC)
-	message := NewMessage(agent.UserMessage("hello"))
-	run := NewRun(message.ID, startedAt, startedAt.Add(2*time.Second))
+	completedAt := startedAt.Add(2 * time.Second)
+	runStart := NewRunStart("run-1")
+	runEnd := NewRunEnd("run-1", LifecycleCompleted, "")
+	runStart.Timestamp = startedAt
+	runEnd.Timestamp = completedAt
 	store := NewJSONL(path)
-	if err := store.Append(context.Background(), message, run); err != nil {
+	if err := store.Append(context.Background(), runStart, runEnd); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(data, []byte(`"version":4`)) {
-		t.Fatalf("session header is not v4:\n%s", data)
+	if !bytes.Contains(data, []byte(`"version":5`)) {
+		t.Fatalf("session header is not v5:\n%s", data)
 	}
 	if bytes.Contains(data, []byte(`"parentId"`)) {
 		t.Fatalf("linear session contains parentId:\n%s", data)
@@ -89,11 +92,11 @@ func TestJSONLRoundTripsRunTiming(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 2 || entries[1].Type != RunEntry || entries[1].Run == nil {
+	if len(entries) != 2 || entries[0].Type != RunStartEntry || entries[1].Type != RunEndEntry {
 		t.Fatalf("entries = %#v", entries)
 	}
-	if entries[1].Run.FirstEntryID != message.ID || !entries[1].Run.StartedAt.Equal(startedAt) {
-		t.Fatalf("run timing = %#v", entries[1].Run)
+	if !entries[0].Timestamp.Equal(startedAt) || !entries[1].Timestamp.Equal(completedAt) {
+		t.Fatalf("run timing = %v..%v", entries[0].Timestamp, entries[1].Timestamp)
 	}
 }
 
