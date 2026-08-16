@@ -10,8 +10,8 @@ import (
 	"github.com/ktsoator/or/coding/internal/contextprojection"
 	"github.com/ktsoator/or/coding/internal/observability"
 	"github.com/ktsoator/or/coding/internal/permission"
-	"github.com/ktsoator/or/coding/internal/requestsnapshot"
 	"github.com/ktsoator/or/coding/internal/skills"
+	"github.com/ktsoator/or/coding/internal/snapshot"
 	"github.com/ktsoator/or/coding/internal/tools"
 )
 
@@ -73,7 +73,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		journal:          journal,
 		sessionID:        opts.SessionID,
 		recorder:         observability.OrDiscard(opts.Recorder),
-		requestSnapshots: requestsnapshot.OrDiscard(opts.RequestSnapshots),
+		requestSnapshots: snapshot.OrDiscard(opts.RequestSnapshots),
 		tools:            activeToolSet,
 		allTools:         toolSet,
 		toolByName:       toolsByName(toolSet),
@@ -139,6 +139,9 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		GetAPIKey:     opts.GetAPIKey,
 		BeforeToolCall: func(bc agent.BeforeToolCallCtx) (bool, string) {
 			s.beginObservedTool(bc.ToolCall.ID, bc.ToolCall.Name)
+			if s.runPersistenceError() != nil {
+				return true, toolCheckpointBlockedMessage
+			}
 			args, _ := bc.Args.(map[string]any)
 			var accesses []permission.Access
 			if t, ok := s.toolByName[bc.ToolCall.Name]; ok {
@@ -150,7 +153,14 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 				Args:       args,
 				Accesses:   accesses,
 			})
-			return !result.Allowed, result.Reason
+			if !result.Allowed {
+				return true, result.Reason
+			}
+			if err := s.checkpointToolCall(bc); err != nil {
+				s.recordRunPersistenceError(err)
+				return true, toolCheckpointBlockedMessage
+			}
+			return false, ""
 		},
 		AfterToolCall: func(ctx agent.AfterToolCallCtx) *agent.AfterToolCallResult {
 			if ctx.ToolCall.Name == skills.ToolName && !ctx.Result.Outcome.Failed() {
@@ -161,6 +171,9 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 				}
 			}
 			return nil
+		},
+		ShouldStopAfterTurn: func(agent.TurnCtx) bool {
+			return s.runPersistenceError() != nil
 		},
 		PrepareNextTurn: s.prepareNextTurn,
 	}

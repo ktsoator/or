@@ -85,7 +85,8 @@ func TestJSONLRecorderWritesProviderPerformanceSchema(t *testing.T) {
 	startedAt := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
 	recorder.Record(Event{
 		Name: ProviderCompleted, Timestamp: startedAt.Add(2500 * time.Millisecond),
-		SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", RequestID: "request-1",
+		SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", StepID: "step-1",
+		RequestID: "request-1", AttemptID: "attempt-2",
 		Status: "completed", StartedAt: startedAt, Duration: 2500 * time.Millisecond,
 		TimeToFirstOutput: 1250 * time.Millisecond,
 		Provider:          "provider-1", Model: "model-1", ResponseModel: "model-1-2026-08",
@@ -107,7 +108,8 @@ func TestJSONLRecorderWritesProviderPerformanceSchema(t *testing.T) {
 	record := records[0]
 	want := map[string]any{
 		"event": ProviderCompleted, "session_id": "session-1", "run_id": "run-1",
-		"turn_id": "turn-1", "provider_request_id": "request-1", "status": "completed",
+		"turn_id": "turn-1", "step_id": "step-1",
+		"provider_request_id": "request-1", "attempt_id": "attempt-2", "status": "completed",
 		"duration_ms": float64(2500), "time_to_first_output_ms": float64(1250),
 		"provider": "provider-1", "model": "model-1", "response_model": "model-1-2026-08",
 		"provider_response_id": "response-1", "stop_reason": "stop",
@@ -140,13 +142,13 @@ func TestJSONLRecorderWritesToolAndApprovalSchema(t *testing.T) {
 	for _, event := range []Event{
 		{
 			Name: ToolCompleted, Timestamp: startedAt.Add(1250 * time.Millisecond),
-			SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", RequestID: "request-1",
+			SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", StepID: "step-1", RequestID: "request-1",
 			ToolCallID: "call-1", ToolName: "shell", Status: "success",
 			StartedAt: startedAt, Duration: 1250 * time.Millisecond,
 		},
 		{
 			Name: ApprovalCompleted, Timestamp: startedAt.Add(750 * time.Millisecond),
-			SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", RequestID: "request-1",
+			SessionID: "session-1", RunID: "run-1", TurnID: "turn-1", StepID: "step-1", RequestID: "request-1",
 			ToolCallID: "call-1", ToolName: "shell", Status: "allowed",
 			StartedAt: startedAt, Duration: 750 * time.Millisecond,
 		},
@@ -163,7 +165,8 @@ func TestJSONLRecorderWritesToolAndApprovalSchema(t *testing.T) {
 	}
 	for index, record := range records {
 		if record["session_id"] != "session-1" || record["run_id"] != "run-1" ||
-			record["turn_id"] != "turn-1" || record["provider_request_id"] != "request-1" ||
+			record["turn_id"] != "turn-1" || record["step_id"] != "step-1" ||
+			record["provider_request_id"] != "request-1" ||
 			record["tool_call_id"] != "call-1" || record["tool_name"] != "shell" {
 			t.Fatalf("record %d correlation = %#v", index, record)
 		}

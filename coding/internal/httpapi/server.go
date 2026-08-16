@@ -9,7 +9,7 @@ import (
 	"github.com/ktsoator/or/coding/internal/conversation"
 	"github.com/ktsoator/or/coding/internal/mcp"
 	"github.com/ktsoator/or/coding/internal/provider"
-	"github.com/ktsoator/or/coding/internal/requestsnapshot"
+	"github.com/ktsoator/or/coding/internal/snapshot"
 	"github.com/ktsoator/or/coding/internal/usage"
 	"github.com/ktsoator/or/coding/internal/workspace"
 	"github.com/ktsoator/or/llm"
@@ -36,7 +36,7 @@ type Server struct {
 	mcpConfigPath        string
 	mcpConfigMu          sync.Mutex
 	observabilityLogPath string
-	requestSnapshots     requestsnapshot.Reader
+	requestSnapshots     snapshot.Reader
 }
 
 // Options contains the product services exposed through HTTP. Construction
@@ -53,7 +53,7 @@ type Options struct {
 	MCP                  *mcp.Manager
 	MCPConfigPath        string
 	ObservabilityLogPath string
-	RequestSnapshots     requestsnapshot.Reader
+	RequestSnapshots     snapshot.Reader
 }
 
 // NewServer builds the HTTP delivery layer from already-created services.

@@ -29,8 +29,8 @@ const (
 // or LLM message representations.
 type HistoryItem struct {
 	Type HistoryItemType
-	// RunID is the durable run-entry identity shared with local diagnostics.
-	// It is populated for HistoryRun when the run has been persisted.
+	// RunID is the durable lifecycle identity shared with local diagnostics.
+	// It is populated for HistoryRun once run/start has been persisted.
 	RunID string
 	// MessageID is the durable transcript entry ID for persisted user and
 	// assistant messages. Live messages remain empty until they are checkpointed.
@@ -64,109 +64,79 @@ type HistoryItem struct {
 	CompletedAt time.Time
 }
 
+// Messages returns every original message on the current transcript path. A
+// compacted session therefore still exposes its complete history.
+func (s *Session) Messages() []agent.AgentMessage {
+	messages, err := s.journal.messagesSnapshot(s.agent.Snapshot().Messages)
+	if err != nil {
+		// Journal construction and every append validate the registered view.
+		// Keep this snapshot-only API from returning a partial conversation if
+		// that invariant is ever broken.
+		return nil
+	}
+	return messages
+}
+
+// Entries returns a detached snapshot of the durable session log.
+func (s *Session) Entries() []transcript.Entry {
+	entries, _ := s.journal.entriesSnapshot()
+	return entries
+}
+
 // History returns a displayable snapshot of the conversation in transcript
 // order. The returned slice is detached from the agent's mutable state.
 func (s *Session) History() []HistoryItem {
-	_, activeStartedAt, activeEntryStart := s.activeRunState()
-	entries, persistedLen := s.snapshotTranscriptState()
-	outcomes := s.snapshotOutcomes()
+	_, activeRunID, activeStartedAt := s.activeRunState()
+	projection, persistedLen, err := s.journal.projectionSnapshot()
+	if err != nil {
+		// Loaded and engine-produced logs are validated before Session is exposed.
+		// Returning no partial projection avoids presenting corrupt ownership as fact.
+		return nil
+	}
+	outcomes := s.journal.outcomesSnapshot()
 
 	active := s.agent.Snapshot().Messages
 	var messages []agent.AgentMessage
 	if persistedLen < len(active) {
 		messages = active[persistedLen:]
 	}
-	if !activeStartedAt.IsZero() {
-		// persistNewRun writes the completed Run entry before RunCompleted is
-		// dispatched. A concurrent history request in that short window must not
-		// append a second, apparently still-open run.
-		if containsRunStartedAt(entries, activeStartedAt) {
-			items := projectEntryHistory(entries, outcomes)
-			if len(messages) > 0 {
-				items = append(items, projectHistory(messages, outcomes)...)
-			}
-			return items
-		}
-		firstEntryID := firstMessageFrom(entries, activeEntryStart)
-		if firstEntryID != "" {
-			entries = append(entries, transcript.Entry{
-				Type: transcript.RunEntry,
-				Run:  &transcript.Run{FirstEntryID: firstEntryID, StartedAt: activeStartedAt},
-			})
-			items := projectEntryHistory(entries, outcomes)
-			return append(items, projectHistory(messages, outcomes)...)
-		}
-		items := projectEntryHistory(entries, outcomes)
-		return append(items, projectRunHistory(messages, outcomes, activeStartedAt, time.Time{})...)
-	}
-
-	items := projectEntryHistory(entries, outcomes)
-	if len(messages) > 0 {
+	items, foundActive := projectSessionHistory(projection, outcomes, activeRunID, messages)
+	if activeRunID != "" && !foundActive {
+		items = append(items, projectRecordedRunHistory(
+			liveHistoryMessages(messages), outcomes, activeRunID, activeStartedAt, time.Time{},
+		)...)
+	} else if activeRunID == "" && len(messages) > 0 {
 		items = append(items, projectHistory(messages, outcomes)...)
 	}
 	return items
 }
 
-func containsRunStartedAt(entries []transcript.Entry, startedAt time.Time) bool {
-	for _, entry := range entries {
-		if entry.Type == transcript.RunEntry && entry.Run != nil && entry.Run.StartedAt.Equal(startedAt) {
-			return true
-		}
-	}
-	return false
-}
-
-func projectEntryHistory(entries []transcript.Entry, outcomes map[string]agent.ToolOutcome) []HistoryItem {
-	var items []HistoryItem
-	var pending []transcript.Entry
-	flushMessages := func(entries []transcript.Entry) {
-		items = append(items, projectHistoryMessages(entryHistoryMessages(entries), outcomes)...)
-	}
-
-	for _, entry := range entries {
-		switch entry.Type {
-		case transcript.MessageEntry:
-			pending = append(pending, entry)
-		case transcript.RunEntry:
-			first := -1
-			if entry.Run != nil && entry.Run.FirstEntryID != "" {
-				for index := range pending {
-					if pending[index].ID == entry.Run.FirstEntryID {
-						first = index
-						break
-					}
-				}
-			}
-			if first < 0 {
-				flushMessages(pending)
-				pending = nil
-				if entry.Run != nil {
-					items = append(items, HistoryItem{
-						Type: HistoryRun, RunID: entry.ID,
-						StartedAt: entry.Run.StartedAt, CompletedAt: entry.Run.CompletedAt,
-					})
-				}
-				continue
-			}
-			flushMessages(pending[:first])
-			items = append(items, projectRecordedRunHistory(
-				entryHistoryMessages(pending[first:]), outcomes, entry.ID,
-				entry.Run.StartedAt, entry.Run.CompletedAt,
-			)...)
-			pending = nil
-		}
-	}
-	flushMessages(pending)
-	return items
-}
-
-func projectRunHistory(
-	messages []agent.AgentMessage,
+func projectSessionHistory(
+	projection *transcript.SessionProjection,
 	outcomes map[string]agent.ToolOutcome,
-	startedAt time.Time,
-	completedAt time.Time,
-) []HistoryItem {
-	return projectRecordedRunHistory(liveHistoryMessages(messages), outcomes, "", startedAt, completedAt)
+	activeRunID string,
+	live []agent.AgentMessage,
+) ([]HistoryItem, bool) {
+	var items []HistoryItem
+	messagesByRun := make(map[string][]historyMessage, len(projection.Runs))
+	for _, message := range projection.Messages {
+		messagesByRun[message.RunID] = append(messagesByRun[message.RunID], historyMessage{
+			message: message.Message, messageID: message.EntryID, timestamp: message.Timestamp,
+		})
+	}
+
+	foundActive := false
+	for _, run := range projection.Runs {
+		messages := messagesByRun[run.ID]
+		if run.ID == activeRunID {
+			messages = append(messages, liveHistoryMessages(live)...)
+			foundActive = true
+		}
+		items = append(items, projectRecordedRunHistory(
+			messages, outcomes, run.ID, run.StartedAt, run.CompletedAt,
+		)...)
+	}
+	return items, foundActive
 }
 
 func projectRecordedRunHistory(
@@ -198,18 +168,6 @@ type historyMessage struct {
 	message   agent.AgentMessage
 	messageID string
 	timestamp time.Time
-}
-
-func entryHistoryMessages(entries []transcript.Entry) []historyMessage {
-	messages := make([]historyMessage, 0, len(entries))
-	for _, entry := range entries {
-		if entry.Type == transcript.MessageEntry {
-			messages = append(messages, historyMessage{
-				message: entry.Message, messageID: entry.ID, timestamp: entry.Timestamp,
-			})
-		}
-	}
-	return messages
 }
 
 func projectHistory(messages []agent.AgentMessage, outcomes map[string]agent.ToolOutcome) []HistoryItem {

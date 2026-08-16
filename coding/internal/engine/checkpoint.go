@@ -11,7 +11,7 @@ import (
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/contextprojection"
 	"github.com/ktsoator/or/coding/internal/observability"
-	"github.com/ktsoator/or/coding/internal/requestsnapshot"
+	"github.com/ktsoator/or/coding/internal/snapshot"
 	"github.com/ktsoator/or/coding/internal/transcript"
 	"github.com/ktsoator/or/llm"
 )
@@ -30,17 +30,33 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 		input llm.Context,
 		options llm.StreamOptions,
 	) (<-chan llm.Event, error) {
-		s.beginObservedTurn()
+		step := s.beginObservedStep()
 		requestID := observability.NewID("request")
 		correlation := s.attachRequest(requestID)
 		prepared := s.contextProjection.PrepareStep(input)
+		pendingLifecycle := s.pendingLifecycle()
+		stepStart := transcript.NewStepStart(
+			step.runID,
+			step.lifecycleTurnID,
+			step.stepID,
+		)
+		stepStart.Timestamp = step.startedAt
+		positioned := append(
+			append([]positionedJournalEntry(nil), pendingLifecycle...),
+			positionedJournalEntry{
+				messageIndex: len(input.Messages),
+				entry:        stepStart,
+			},
+		)
 		checkpointStarted := time.Now().UTC()
-		if err := s.persistModelInput(ctx, input.Messages, prepared.Pending); err != nil {
+		if err := s.persistModelInput(ctx, input.Messages, prepared.Pending, positioned); err != nil {
 			s.recorder.Record(observability.Event{
 				Name: observability.CheckpointFailed, Level: slog.LevelError,
 				SessionID: s.sessionID, RunID: correlation.runID,
 				TurnID: correlation.turnID, RequestID: correlation.requestID,
+				StepID: correlation.stepID,
 				Status: "failed", ErrorCode: "checkpoint_persist_failed",
+				Reason:    "provider_request",
 				StartedAt: checkpointStarted, Duration: time.Since(checkpointStarted),
 				MessageCount: len(input.Messages), AttachmentCount: len(prepared.Pending),
 			})
@@ -48,11 +64,14 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 			s.recordRunPersistenceError(checkpointErr)
 			return nil, checkpointErr
 		}
+		s.clearPendingLifecycle(len(pendingLifecycle))
+		s.markStepDurable(step.stepID)
 		s.recorder.Record(observability.Event{
 			Name:      observability.CheckpointCompleted,
 			SessionID: s.sessionID, RunID: correlation.runID,
 			TurnID: correlation.turnID, RequestID: correlation.requestID,
-			Status: "completed", StartedAt: checkpointStarted,
+			StepID: correlation.stepID,
+			Status: "completed", Reason: "provider_request", StartedAt: checkpointStarted,
 			Duration: time.Since(checkpointStarted), MessageCount: len(input.Messages),
 			AttachmentCount: len(prepared.Pending),
 		})
@@ -61,8 +80,9 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 		s.commitContextRefresh(prepared.Pending)
 		// Content snapshots are diagnostic and deliberately fail-open: a local
 		// write failure must never prevent a provider request from running.
-		_ = s.requestSnapshots.Save(requestsnapshot.NewSnapshot(
-			s.sessionID, correlation.runID, correlation.turnID, correlation.requestID,
+		_ = s.requestSnapshots.Save(snapshot.NewSnapshot(
+			s.sessionID, correlation.runID, correlation.turnID, correlation.stepID,
+			correlation.requestID,
 			model.Provider, model.ID, prepared.Input,
 			projectedSnapshotAttachments(prepared.Attachments),
 		))
@@ -72,10 +92,10 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 
 func projectedSnapshotAttachments(
 	attachments []contextprojection.ProjectedAttachment,
-) []requestsnapshot.Attachment {
-	result := make([]requestsnapshot.Attachment, 0, len(attachments))
+) []snapshot.Attachment {
+	result := make([]snapshot.Attachment, 0, len(attachments))
 	for _, attachment := range attachments {
-		result = append(result, requestsnapshot.Attachment{
+		result = append(result, snapshot.Attachment{
 			ID: attachment.ID, Kind: string(attachment.Kind),
 			Placement: string(attachment.Placement), Path: attachment.Path,
 			Revision: attachment.Revision, MessageIndex: attachment.MessageIndex,
@@ -96,6 +116,7 @@ func (s *Session) observeProviderStream(
 	s.recorder.Record(observability.Event{
 		Name: observability.ProviderStarted, SessionID: s.sessionID,
 		RunID: correlation.runID, TurnID: correlation.turnID,
+		StepID:    correlation.stepID,
 		RequestID: correlation.requestID, Status: "running",
 		StartedAt: startedAt, Provider: model.Provider, Model: model.ID,
 	})
@@ -180,6 +201,7 @@ func (s *Session) recordProviderTerminal(
 	record := observability.Event{
 		Name: observability.ProviderCompleted, SessionID: s.sessionID,
 		RunID: correlation.runID, TurnID: correlation.turnID,
+		StepID:    correlation.stepID,
 		RequestID: correlation.requestID, Status: "completed",
 		StartedAt: startedAt, Duration: time.Since(startedAt),
 		TimeToFirstOutput: elapsed(startedAt, firstOutputAt),
@@ -209,6 +231,7 @@ func (s *Session) recordProviderFailure(
 		Name: observability.ProviderFailed, Level: slog.LevelError,
 		SessionID: s.sessionID, RunID: correlation.runID,
 		TurnID: correlation.turnID, RequestID: correlation.requestID,
+		StepID: correlation.stepID,
 		Status: status, ErrorCode: errorCode, StartedAt: startedAt,
 		Duration: time.Since(startedAt), TimeToFirstOutput: timeToFirstOutput,
 		Provider: model.Provider, Model: model.ID,
@@ -230,6 +253,7 @@ type providerAttemptObserver struct {
 
 	mu        sync.Mutex
 	attempt   int
+	attemptID string
 	startedAt time.Time
 }
 
@@ -263,6 +287,7 @@ func (o *providerAttemptObserver) startAttempt() {
 	o.mu.Lock()
 	pending, hasPending := o.pendingEventLocked("no_response")
 	o.attempt++
+	o.attemptID = observability.NewID("attempt")
 	o.startedAt = time.Now().UTC()
 	event := o.event(observability.HTTPAttemptStarted, "running", "", o.attempt, 0)
 	event.StartedAt = o.startedAt
@@ -276,13 +301,14 @@ func (o *providerAttemptObserver) startAttempt() {
 func (o *providerAttemptObserver) finishResponse(status int) {
 	o.mu.Lock()
 	startedAt := o.startedAt
-	attempt := o.attempt
-	o.startedAt = time.Time{}
-	o.mu.Unlock()
 	if startedAt.IsZero() {
+		o.mu.Unlock()
 		return
 	}
-	event := o.event(observability.HTTPAttemptResponse, "completed", "", attempt, status)
+	event := o.event(observability.HTTPAttemptResponse, "completed", "", o.attempt, status)
+	o.startedAt = time.Time{}
+	o.attemptID = ""
+	o.mu.Unlock()
 	event.StartedAt = startedAt
 	event.Duration = time.Since(startedAt)
 	o.session.recorder.Record(event)
@@ -306,6 +332,7 @@ func (o *providerAttemptObserver) pendingEventLocked(errorCode string) (observab
 	event.StartedAt = o.startedAt
 	event.Duration = time.Since(o.startedAt)
 	o.startedAt = time.Time{}
+	o.attemptID = ""
 	return event, true
 }
 
@@ -316,9 +343,10 @@ func (o *providerAttemptObserver) event(
 	return observability.Event{
 		Name: name, SessionID: o.session.sessionID,
 		RunID: o.correlation.runID, TurnID: o.correlation.turnID,
+		StepID:    o.correlation.stepID,
 		RequestID: o.correlation.requestID, Status: status, ErrorCode: errorCode,
 		Provider: o.model.Provider, Model: o.model.ID,
-		Attempt: attempt, HTTPStatus: httpStatus,
+		AttemptID: o.attemptID, Attempt: attempt, HTTPStatus: httpStatus,
 	}
 }
 
@@ -330,6 +358,7 @@ func (s *Session) persistModelInput(
 	ctx context.Context,
 	input []llm.Message,
 	attachments []contextprojection.Attachment,
+	positioned []positionedJournalEntry,
 ) error {
 	messages := make([]agent.AgentMessage, len(input))
 	for index, message := range input {
@@ -351,9 +380,6 @@ func (s *Session) persistModelInput(
 		ctx,
 		messages,
 		contextEntries,
-		"",
-		0,
-		time.Time{},
-		time.Time{},
+		positioned,
 	)
 }

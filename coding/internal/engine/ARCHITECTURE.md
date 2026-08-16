@@ -16,6 +16,9 @@ app -> conversation -> engine -> agent -> llm
 `engine` owns the execution policy inside one session. The reusable `agent`
 package owns the provider-neutral model/tool loop and ephemeral runtime state.
 
+The precise run/turn/step semantics, durable session-event model, and
+side-effect checkpoint contract are documented in [SESSION_LIFECYCLE.md](SESSION_LIFECYCLE.md).
+
 ## Package boundaries
 
 ### `conversation`
@@ -39,9 +42,11 @@ Owns one coding session's execution policy:
 - refresh project context and Skills at top-level run boundaries;
 - project hidden product context into each provider request;
 - checkpoint resumable model-visible prefixes before provider I/O;
+- persist explicit run, turn, and step lifecycle boundaries;
 - persist terminal messages, tool outcomes, and run metadata;
 - apply retry, compaction, and context-overflow recovery policy;
-- expose product events, history, usage, and background-task state.
+- expose product events, history, usage, background-task state, and diagnostic
+  correlations across Run, Turn, Step, provider request, attempt, and tool call.
 
 It must not own HTTP/SSE wire formats, the global session registry, provider
 settings storage, or reusable SDK abstractions.
@@ -53,13 +58,39 @@ settings storage, or reusable SDK abstractions.
 - `tools` owns concrete Or tools and their access descriptions.
 - `permission` owns authorization policy for concrete tool effects.
 - `contextprojection` owns staged hidden context and request projection.
-- `transcript` owns durable entry types, projection, and storage contracts.
+- `transcript` owns durable entry types, write-side validation and reduction,
+  read-side projections, and storage contracts.
 - `compaction` owns summary generation and transcript compaction preparation.
 - `prompt` and `skills` own source material used to build model context.
 
 The Coding backend composes `agent` directly. It does not depend on `harness`:
 Or's transcript checkpoints, context protocol, permissions, and recovery rules
 are product contracts rather than generic SDK behavior.
+
+## Transcript write and read flow
+
+The append-only transcript is the source of truth. `sessionJournal` owns the
+commit boundary; transcript types own the deterministic state transitions.
+
+```text
+new entries
+    -> assign contiguous sequence numbers
+    -> SessionValidator.PrepareAppend
+       -> validate with a batch-local reducer
+       -> prepare detached ProjectionEvents
+    -> Store.Append
+    -> PreparedAppend.Commit
+       -> advance the canonical reducer
+       -> advance registered read projections
+    -> History / Messages read projection snapshots
+```
+
+The reducer is the write-side invariant model: it decides whether an event can
+be appended. The projection registry is the read-side driver: it advances only
+after persistence succeeds and serves detached snapshots at the same sequence
+watermark. `ProjectSession` remains an offline replay API for diagnostics and
+tests. `BuildContext` still performs the separate model-context projection and
+is a future migration candidate rather than part of product-history reads.
 
 ## Engine source ownership
 
@@ -69,15 +100,16 @@ assembly.go         construction and dependency wiring
 prompt.go           top-level prompt input and explicit Skill invocation
 run.go              Prompt/Continue run lifecycle and completion metadata
 run_state.go        concurrency-safe state for the active run
+lifecycle.go        durable Run, Turn, and Step boundary coordination
 checkpoint.go       pre-provider context projection and durable checkpoint
-journal.go          durable entries, outcomes, persistence, and snapshots
+journal.go          transcript recovery, append commit boundary, and snapshots
 context_refresh.go  project context and Skill refresh lifecycle
 context.go          context-usage measurement and estimation
 compact.go          explicit compaction
 auto_compact.go     proactive compaction and overflow recovery
 retry.go            transient provider retry policy
 event.go            product event contract and agent-event projection
-history.go          durable and live history projection
+history.go          durable/live Messages, Entries, and product history views
 attachment.go       attached-file message context
 background_tasks.go background-task query and control
 tool_outcome.go     durable tool-outcome encoding
@@ -89,13 +121,17 @@ One top-level `Prompt` or `Continue` follows this order:
 
 1. Acquire the session run lock and flush any previously unpersisted messages.
 2. Refresh Skills and project context staged since the previous request.
-3. Record run state and publish `RunStarted`.
+3. Record run state, queue durable Run and initial Turn boundaries, and publish
+   `RunStarted`.
 4. Apply proactive compaction when the measured context crosses its threshold.
 5. Enter `agent.Agent`; before every provider request, project hidden context
-   and persist the complete canonical request prefix.
+   and persist the complete canonical request prefix plus its Step boundary.
 6. Retry transient failures or compact and recover from context overflow when
    policy permits.
-7. Persist terminal messages and run metadata, then publish `RunCompleted`.
+7. A claimed follow-up closes the current Turn and starts another in the same
+   Run. Steering and tool loops create Steps inside the current Turn.
+8. Persist terminal Step, Turn, and Run boundaries and terminal messages, then
+   publish `RunCompleted`. Product history is projected from those events.
 
 ## Behavioral invariants
 
@@ -109,8 +145,8 @@ Refactors must preserve these contracts:
    are durable before the provider request begins.
 4. A checkpoint failure prevents provider I/O and is not retried as a model or
    transport failure.
-5. Every completed run appends its terminal messages before its run metadata;
-   stored entry formats and ordering are compatibility-sensitive.
+5. Every completed run appends its terminal messages and lifecycle boundaries;
+   no derived history record is written back into the event log.
 6. Compaction retains complete product history while replacing only the active
    model context.
 7. Tool outcomes remain associated with their tool-call IDs across persistence,
@@ -119,10 +155,42 @@ Refactors must preserve these contracts:
    `httpapi` and must not leak into the engine.
 9. Cancellation and provider errors retain their identity for conversation and
    transport adapters.
+10. An authorized tool invocation is durable before its body can execute; a
+    failed tool checkpoint stops the remaining run before another side effect or
+    provider request.
+11. Session restore validates and durably repairs interrupted tool-call tails
+    before model-context and product-history projection. A dispatched call with
+    no durable result has an unknown outcome and is never retried implicitly.
+12. Durable Run, Turn, and Step IDs are nested and never reused. Follow-up input
+    starts a Turn; steering, tool loops, and provider retries stay in the active
+    Turn and create Steps.
+13. Diagnostic events use the same Turn and Step identities as lifecycle
+    checkpoints. A Step whose checkpoint fails remains diagnostic-only.
+    Provider requests and physical HTTP attempts add stable request and attempt
+    IDs; an attempt number is presentation metadata, not identity.
+14. Session projection and interrupted-tail repair share one transcript reducer;
+    ordering and ownership rules must not be reimplemented by consumers.
+15. Transcript entries carry contiguous durable sequence numbers. A journal
+    append is prepared as a batch-local reducer delta, persisted, and only then
+    committed into the canonical reducer. Failed validation or persistence does
+    not advance the durable sequence or in-memory event state.
+16. Session restore replays the committed prefix once, then validates generated
+    tool and lifecycle repairs incrementally on the recovered validator.
+17. Registered read models advance synchronously only when a prepared append
+    commits. Every registry snapshot is detached and reports the same durable
+    `AsOfSeq`; Store failures leave both reducer and projection watermarks
+    unchanged.
+18. Product history, run-message correlation, and complete original-message
+    snapshots read the registered session projection. Full transcript folds are
+    reserved for restore, offline diagnostics, and model-context paths that
+    have not yet moved to their own projection.
 
 ## Refactoring rules
 
 - Move cohesive behavior between files before adding types or subpackages.
+- Keep transcript entries, their reducer, and projections in one package until
+  a proposed split has an independent contract and does not merely increase
+  the exported surface.
 - Keep the `Session` public surface stable unless a product contract change is
   intentional and coordinated with `conversation` and `httpapi`.
 - Treat transcript shape, event ordering, checkpoint timing, queue semantics,

@@ -17,9 +17,11 @@ const maxLine = 16 << 20 // 16 MiB
 // JSONL persists a session log: one header followed by typed append-only
 // entries.
 type JSONL struct {
-	mu    sync.Mutex
-	path  string
-	ready bool
+	mu       sync.Mutex
+	path     string
+	ready    bool
+	nextSeq  int64
+	entryIDs map[string]struct{}
 }
 
 func NewJSONL(path string) *JSONL { return &JSONL{path: path} }
@@ -34,10 +36,6 @@ func (s *JSONL) Append(_ context.Context, entries ...Entry) error {
 	if len(entries) == 0 {
 		return nil
 	}
-	encoded, err := encodeEntries(entries)
-	if err != nil {
-		return err
-	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -48,17 +46,29 @@ func (s *JSONL) Append(_ context.Context, entries ...Entry) error {
 	if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
 		return fmt.Errorf("store: stat %s: %w", s.path, statErr)
 	}
-	if errors.Is(statErr, os.ErrNotExist) || info.Size() == 0 {
+	empty := errors.Is(statErr, os.ErrNotExist) || info.Size() == 0
+	if empty {
+		s.ready = false
+		s.nextSeq = 0
+		s.entryIDs = nil
+	} else if !s.ready {
+		if _, err := s.loadLocked(); err != nil {
+			return err
+		}
+	}
+	if err := validateAppend(entries, s.nextSeq, s.entryIDs); err != nil {
+		return err
+	}
+	encoded, err := encodeEntries(entries)
+	if err != nil {
+		return err
+	}
+	if empty {
 		header, err := json.Marshal(NewHeader())
 		if err != nil {
 			return err
 		}
 		encoded = append(append(header, '\n'), encoded...)
-		s.ready = true
-	} else if !s.ready {
-		if _, err := s.loadLocked(); err != nil {
-			return err
-		}
 	}
 
 	file, err := os.OpenFile(s.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, privateFileMode)
@@ -80,6 +90,9 @@ func (s *JSONL) Append(_ context.Context, entries ...Entry) error {
 	if err := file.Close(); err != nil {
 		return fmt.Errorf("store: close %s: %w", s.path, err)
 	}
+	s.ready = true
+	s.nextSeq += int64(len(entries))
+	addEntryIDs(&s.entryIDs, entries)
 	return nil
 }
 
@@ -130,6 +143,8 @@ func (s *JSONL) Replace(_ context.Context, entries []Entry) error {
 	}
 	removeTemporary = false
 	s.ready = true
+	s.nextSeq = int64(len(entries))
+	s.entryIDs = collectEntryIDs(entries)
 	return nil
 }
 
@@ -139,6 +154,9 @@ func (s *JSONL) loadLocked() ([]Entry, error) {
 	}
 	data, err := os.ReadFile(s.path)
 	if errors.Is(err, os.ErrNotExist) {
+		s.ready = false
+		s.nextSeq = 0
+		s.entryIDs = nil
 		return nil, nil
 	}
 	if err != nil {
@@ -149,6 +167,9 @@ func (s *JSONL) loadLocked() ([]Entry, error) {
 		return nil, err
 	}
 	if len(lines) == 0 {
+		s.ready = false
+		s.nextSeq = 0
+		s.entryIDs = nil
 		return nil, nil
 	}
 
@@ -170,6 +191,8 @@ func (s *JSONL) loadLocked() ([]Entry, error) {
 		return nil, err
 	}
 	s.ready = true
+	s.nextSeq = int64(len(entries))
+	s.entryIDs = collectEntryIDs(entries)
 	return entries, nil
 }
 
@@ -228,11 +251,59 @@ func encodeSession(entries []Entry) ([]byte, error) {
 
 func validateEntries(entries []Entry) error {
 	seen := make(map[string]bool, len(entries))
-	for _, entry := range entries {
+	for index, entry := range entries {
+		if entry.Seq != int64(index) {
+			return fmt.Errorf(
+				"store: entry %s has sequence %d, want %d",
+				entry.ID,
+				entry.Seq,
+				index,
+			)
+		}
 		if seen[entry.ID] {
 			return fmt.Errorf("store: duplicate entry id %s", entry.ID)
 		}
 		seen[entry.ID] = true
 	}
 	return nil
+}
+
+func validateAppend(entries []Entry, firstSeq int64, existingIDs map[string]struct{}) error {
+	seen := make(map[string]bool, len(entries))
+	for index, entry := range entries {
+		want := firstSeq + int64(index)
+		if entry.Seq != want {
+			return fmt.Errorf(
+				"store: append entry %s has sequence %d, want %d",
+				entry.ID,
+				entry.Seq,
+				want,
+			)
+		}
+		if _, exists := existingIDs[entry.ID]; exists {
+			return fmt.Errorf("store: append repeats existing entry id %s", entry.ID)
+		}
+		if seen[entry.ID] {
+			return fmt.Errorf("store: append repeats entry id %s", entry.ID)
+		}
+		seen[entry.ID] = true
+	}
+	return nil
+}
+
+func collectEntryIDs(entries []Entry) map[string]struct{} {
+	ids := make(map[string]struct{}, len(entries))
+	for _, entry := range entries {
+		ids[entry.ID] = struct{}{}
+	}
+	return ids
+}
+
+func addEntryIDs(target *map[string]struct{}, entries []Entry) {
+	if *target == nil {
+		*target = make(map[string]struct{}, len(entries))
+	}
+	for _, entry := range entries {
+		(*target)[entry.ID] = struct{}{}
+	}
 }

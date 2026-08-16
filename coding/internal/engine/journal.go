@@ -18,13 +18,21 @@ import (
 type sessionJournal struct {
 	store transcript.Store
 
+	commitMu     sync.Mutex
 	mu           sync.RWMutex
 	entries      []transcript.Entry
 	persistedLen int
 	usageStart   int
+	validator    *transcript.SessionValidator
+	projections  *transcript.ProjectionRegistry
 
 	outcomeMu sync.Mutex
 	outcomes  map[string]agent.ToolOutcome // tool-call ID -> terminal outcome
+}
+
+type positionedJournalEntry struct {
+	messageIndex int
+	entry        transcript.Entry
 }
 
 func newSessionJournal(
@@ -38,6 +46,21 @@ func newSessionJournal(
 			return nil, nil, nil, err
 		}
 		entries = loaded
+	}
+	projections := transcript.NewProjectionRegistry()
+	sessionView := transcript.NewSessionProjectionUnit()
+	if err := projections.Register(sessionView); err != nil {
+		return nil, nil, nil, fmt.Errorf("coding: register session projection: %w", err)
+	}
+	validator, repairs, err := transcript.RecoverSessionWithProjections(entries, projections)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("coding: recover session transcript: %w", err)
+	}
+	if len(repairs) > 0 {
+		if err := store.Append(ctx, repairs...); err != nil {
+			return nil, nil, nil, fmt.Errorf("coding: persist session recovery: %w", err)
+		}
+		entries = append(entries, repairs...)
 	}
 	seed, err := transcript.BuildContext(entries)
 	if err != nil {
@@ -65,6 +88,8 @@ func newSessionJournal(
 		entries:      append([]transcript.Entry(nil), entries...),
 		persistedLen: len(seed),
 		usageStart:   usageStart,
+		validator:    validator,
+		projections:  projections,
 		outcomes:     outcomes,
 	}
 	return journal, seed, append([]transcript.Entry(nil), entries...), nil
@@ -84,9 +109,9 @@ func (j *sessionJournal) captureOutcomes(source *agent.Agent) {
 	})
 }
 
-// snapshotOutcomes returns a copy of the captured outcomes, safe to read while
+// outcomesSnapshot returns a copy of the captured outcomes, safe to read while
 // a run is appending more.
-func (j *sessionJournal) snapshotOutcomes() map[string]agent.ToolOutcome {
+func (j *sessionJournal) outcomesSnapshot() map[string]agent.ToolOutcome {
 	j.outcomeMu.Lock()
 	defer j.outcomeMu.Unlock()
 	out := make(map[string]agent.ToolOutcome, len(j.outcomes))
@@ -96,10 +121,37 @@ func (j *sessionJournal) snapshotOutcomes() map[string]agent.ToolOutcome {
 	return out
 }
 
-func (j *sessionJournal) snapshot() ([]transcript.Entry, int) {
+func (j *sessionJournal) entriesSnapshot() ([]transcript.Entry, int) {
 	j.mu.RLock()
 	defer j.mu.RUnlock()
 	return append([]transcript.Entry(nil), j.entries...), j.persistedLen
+}
+
+func (j *sessionJournal) projectionSnapshot() (*transcript.SessionProjection, int, error) {
+	j.mu.RLock()
+	defer j.mu.RUnlock()
+	snapshot, err := j.projections.Snapshot()
+	if err != nil {
+		return nil, 0, err
+	}
+	value, ok := snapshot.Values[transcript.SessionProjectionKey]
+	if !ok {
+		return nil, 0, fmt.Errorf("coding: session projection is not registered")
+	}
+	projection, ok := value.(*transcript.SessionProjection)
+	if !ok || projection == nil {
+		return nil, 0, fmt.Errorf("coding: session projection has type %T", value)
+	}
+	wantSeq := j.validator.NextSeq() - 1
+	if snapshot.AsOfSeq != wantSeq || projection.AsOfSeq != wantSeq {
+		return nil, 0, fmt.Errorf(
+			"coding: projection registry at sequence %d, session view at %d, validator at %d",
+			snapshot.AsOfSeq,
+			projection.AsOfSeq,
+			wantSeq,
+		)
+	}
+	return projection, j.persistedLen, nil
 }
 
 func (j *sessionJournal) usageStartIndex() int {
@@ -108,58 +160,73 @@ func (j *sessionJournal) usageStartIndex() int {
 	return j.usageStart
 }
 
-func (j *sessionJournal) messages(active []agent.AgentMessage) []agent.AgentMessage {
-	entries, persistedLen := j.snapshot()
-	messages := transcript.Messages(entries)
+func (j *sessionJournal) messagesSnapshot(
+	active []agent.AgentMessage,
+) ([]agent.AgentMessage, error) {
+	projection, persistedLen, err := j.projectionSnapshot()
+	if err != nil {
+		return nil, err
+	}
+	messages := make([]agent.AgentMessage, 0, len(projection.Messages)+len(active))
+	for _, message := range projection.Messages {
+		messages = append(messages, message.Message)
+	}
 	if persistedLen < len(active) {
 		messages = append(messages, active[persistedLen:]...)
 	}
-	return messages
+	return messages, nil
 }
 
 // persistNew appends the messages added since the last persist to the Store. It
 // runs only while runMu is held, so persistedLen is not racing a run.
 func (s *Session) persistNew(ctx context.Context) error {
-	return s.persistNewMessages(ctx, "", 0, time.Time{}, time.Time{})
+	return s.persistPendingLifecycle(ctx)
 }
 
-func (s *Session) persistNewRun(
+func (s *Session) persistRunTerminal(
 	ctx context.Context,
 	runID string,
-	runEntryStart int,
-	startedAt, completedAt time.Time,
+	completedAt time.Time,
+	status transcript.LifecycleStatus,
+	reason string,
 ) error {
-	return s.persistNewMessages(ctx, runID, runEntryStart, startedAt, completedAt)
-}
-
-func (s *Session) persistNewMessages(
-	ctx context.Context,
-	runID string,
-	runEntryStart int,
-	startedAt, completedAt time.Time,
-) error {
-	return s.journal.persistMessages(
-		ctx,
-		s.agent.Snapshot().Messages,
-		nil,
-		runID,
-		runEntryStart,
-		startedAt,
-		completedAt,
+	all := s.agent.Snapshot().Messages
+	pending := s.pendingLifecycle()
+	_, turnID := s.lifecycleIDs()
+	turnEnd := transcript.NewTurnEnd(runID, turnID, status, reason)
+	runEnd := transcript.NewRunEnd(runID, status, reason)
+	turnEnd.Timestamp = completedAt.UTC()
+	runEnd.Timestamp = completedAt.UTC()
+	terminal := positionedLifecycle(
+		len(all),
+		turnEnd,
+		runEnd,
 	)
+	positioned := append(append([]positionedJournalEntry(nil), pending...), terminal...)
+	err := s.journal.persistMessages(
+		ctx,
+		all,
+		nil,
+		positioned,
+	)
+	if err == nil {
+		s.clearPendingLifecycle(len(pending))
+	}
+	return err
 }
 
 func (j *sessionJournal) persistMessages(
 	ctx context.Context,
 	all []agent.AgentMessage,
 	contextEntries []transcript.Entry,
-	runID string,
-	runEntryStart int,
-	startedAt, completedAt time.Time,
+	positionedEntries []positionedJournalEntry,
+	additionalEntries ...transcript.Entry,
 ) error {
+	j.commitMu.Lock()
+	defer j.commitMu.Unlock()
+
 	j.mu.RLock()
 	persistedLen := j.persistedLen
-	existing := append([]transcript.Entry(nil), j.entries...)
 	j.mu.RUnlock()
 	if persistedLen > len(all) {
 		return fmt.Errorf(
@@ -172,10 +239,24 @@ func (j *sessionJournal) persistMessages(
 	if persistedLen < len(all) {
 		added = all[persistedLen:]
 	}
-	outcomes := j.snapshotOutcomes()
-	entries := make([]transcript.Entry, 0, len(contextEntries)+2*len(added)+1)
-	entries = append(entries, contextEntries...)
-	for _, message := range added {
+	outcomes := j.outcomesSnapshot()
+	entries := make(
+		[]transcript.Entry,
+		0,
+		len(contextEntries)+2*len(added)+len(positionedEntries)+len(additionalEntries),
+	)
+	positionedIndex := 0
+	for messageIndex := persistedLen; messageIndex <= len(all); messageIndex++ {
+		for positionedIndex < len(positionedEntries) &&
+			positionedEntries[positionedIndex].messageIndex == messageIndex {
+			entries = append(entries, positionedEntries[positionedIndex].entry)
+			positionedIndex++
+		}
+		if messageIndex == len(all) {
+			entries = append(entries, contextEntries...)
+			break
+		}
+		message := all[messageIndex]
 		entries = append(entries, transcript.NewMessage(message))
 		llmMessage, ok := agent.ToLLM(message)
 		if !ok {
@@ -193,76 +274,79 @@ func (j *sessionJournal) persistMessages(
 			encodeOutcome(result.ToolCallID, outcome),
 		))
 	}
-	if !startedAt.IsZero() && !completedAt.IsZero() {
-		candidate := append(existing, entries...)
-		firstEntryID := firstMessageFrom(candidate, runEntryStart)
-		entries = append(entries, transcript.NewRunWithID(runID, firstEntryID, startedAt, completedAt))
+	if positionedIndex != len(positionedEntries) {
+		position := positionedEntries[positionedIndex].messageIndex
+		return fmt.Errorf(
+			"coding: lifecycle entry position %d is outside durable message range %d..%d",
+			position,
+			persistedLen,
+			len(all),
+		)
 	}
+	entries = append(entries, additionalEntries...)
 	if len(entries) == 0 {
 		return nil
 	}
-	if j.store != nil {
-		if err := j.store.Append(ctx, entries...); err != nil {
-			return err
-		}
+	sequenced, prepared, err := j.persistEntriesLocked(ctx, "session", entries)
+	if err != nil {
+		return err
 	}
 	j.mu.Lock()
-	j.entries = append(j.entries, entries...)
+	prepared.Commit()
+	j.entries = append(j.entries, sequenced...)
 	j.persistedLen = len(all)
 	j.mu.Unlock()
 	return nil
 }
 
 func (j *sessionJournal) appendCompaction(ctx context.Context, entry transcript.Entry) error {
-	if j.store == nil {
-		return nil
+	j.commitMu.Lock()
+	defer j.commitMu.Unlock()
+
+	sequenced, prepared, err := j.persistEntriesLocked(
+		ctx,
+		"compaction",
+		[]transcript.Entry{entry},
+	)
+	if err != nil {
+		return err
 	}
-	return j.store.Append(ctx, entry)
+	j.mu.Lock()
+	prepared.Commit()
+	j.entries = append(j.entries, sequenced[0])
+	j.mu.Unlock()
+	return nil
+}
+
+// persistEntriesLocked prepares and durably writes one batch without changing
+// the journal. The caller holds commitMu and installs prepared only after this
+// function succeeds.
+func (j *sessionJournal) persistEntriesLocked(
+	ctx context.Context,
+	subject string,
+	entries []transcript.Entry,
+) ([]transcript.Entry, *transcript.PreparedAppend, error) {
+	sequenced, err := transcript.SequenceEntries(entries, j.validator.NextSeq())
+	if err != nil {
+		return nil, nil, fmt.Errorf("coding: sequence %s append: %w", subject, err)
+	}
+	prepared, err := j.validator.PrepareAppend(sequenced)
+	if err != nil {
+		return nil, nil, fmt.Errorf("coding: validate %s append: %w", subject, err)
+	}
+	if j.store != nil {
+		if err := j.store.Append(ctx, sequenced...); err != nil {
+			return nil, nil, err
+		}
+	}
+	return sequenced, prepared, nil
 }
 
 func (j *sessionJournal) applyCompaction(
-	entries []transcript.Entry,
 	projectedLen int,
 ) {
 	j.mu.Lock()
-	j.entries = append([]transcript.Entry(nil), entries...)
 	j.usageStart = projectedLen
 	j.persistedLen = projectedLen
 	j.mu.Unlock()
-}
-
-func firstMessageFrom(entries []transcript.Entry, start int) string {
-	if start < 0 || start >= len(entries) {
-		return ""
-	}
-	for _, entry := range entries[start:] {
-		if entry.Type == transcript.MessageEntry {
-			return entry.ID
-		}
-	}
-	return ""
-}
-
-// Messages returns every original message on the current transcript path. A
-// compacted session therefore still exposes its complete history.
-func (s *Session) Messages() []agent.AgentMessage {
-	return s.journal.messages(s.agent.Snapshot().Messages)
-}
-
-// Entries returns a detached snapshot of the durable session log.
-func (s *Session) Entries() []transcript.Entry {
-	return s.snapshotTranscript()
-}
-
-func (s *Session) snapshotTranscript() []transcript.Entry {
-	entries, _ := s.snapshotTranscriptState()
-	return entries
-}
-
-func (s *Session) snapshotTranscriptState() ([]transcript.Entry, int) {
-	return s.journal.snapshot()
-}
-
-func (s *Session) snapshotOutcomes() map[string]agent.ToolOutcome {
-	return s.journal.snapshotOutcomes()
 }

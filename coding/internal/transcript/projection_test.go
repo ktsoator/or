@@ -41,14 +41,6 @@ func TestBuildContextUsesLatestCompactionAndKeepsOriginalMessages(t *testing.T) 
 	if got := messageText(t, context[3]); got != "new user" {
 		t.Fatalf("new message = %q", got)
 	}
-
-	full := Messages(entries)
-	if len(full) != 5 {
-		t.Fatalf("full message length = %d, want 5", len(full))
-	}
-	if got := messageText(t, full[0]); got != "old user" {
-		t.Fatalf("oldest original message = %q", got)
-	}
 }
 
 func TestBuildContextOmitsProductContextEntries(t *testing.T) {
@@ -74,10 +66,6 @@ func TestBuildContextOmitsProductContextEntries(t *testing.T) {
 	}
 	if len(projected) != 1 || messageText(t, projected[0]) != "visible user" {
 		t.Fatalf("projected context = %#v", projected)
-	}
-	full := Messages(entries)
-	if len(full) != 1 || messageText(t, full[0]) != "visible user" {
-		t.Fatalf("full messages = %#v", full)
 	}
 }
 

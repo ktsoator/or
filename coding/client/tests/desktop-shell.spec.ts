@@ -618,7 +618,7 @@ async function openDesktopClient(
     if (path === '/api/diagnostics/trace') {
       status = options.diagnosticsStatus ?? status
       body = {
-        version: 1,
+        version: 2,
         generatedAt: '2026-07-22T00:00:05Z',
         sessionId: 'test-session',
         selectedTaskId: 'run-diagnostics',
@@ -642,6 +642,8 @@ async function openDesktopClient(
             {
               id: 'request-1',
               number: 1,
+              turnId: 'turn-diagnostics-1',
+              stepId: 'step-diagnostics-1',
               status: 'completed',
               lifecycle: 'complete',
               startedAt: '2026-07-22T00:00:00Z',
@@ -703,6 +705,8 @@ async function openDesktopClient(
             {
               id: 'request-2',
               number: 2,
+              turnId: 'turn-diagnostics-1',
+              stepId: 'step-diagnostics-2',
               status: 'completed',
               lifecycle: 'complete',
               startedAt: '2026-07-22T00:00:02.3Z',
@@ -771,6 +775,8 @@ async function openDesktopClient(
           requests: [{
             id: 'request-3',
             number: 3,
+            turnId: 'turn-diagnostics-2',
+            stepId: 'step-diagnostics-3',
             status: 'completed',
             lifecycle: 'complete',
             startedAt: '2026-07-22T00:01:00Z',
@@ -1084,22 +1090,47 @@ test('conversation diagnostics uses one session-scoped header entry', async ({ p
   await expect(page.getByRole('button', { name: 'View diagnostics for this run' })).toHaveCount(0)
 
   await page.getByRole('button', { name: 'Open profile menu' }).click()
-  await expect(page.getByRole('menuitem', { name: 'Run diagnostics' })).toHaveCount(0)
+  const profileMenu = page.getByRole('menu')
+  await expect(profileMenu).toBeVisible()
+  await expect(profileMenu.getByRole('menuitem', { name: 'Run diagnostics' })).toHaveCount(0)
   await page.keyboard.press('Escape')
+  await expect(profileMenu).toBeHidden()
 
   await diagnosticsButton.click()
   await expect(page.getByRole('heading', { name: 'Run diagnostics' })).toBeVisible()
   await expect(diagnosticsButton).toHaveAttribute('aria-pressed', 'true')
   await expect(diagnosticsButton).toHaveAccessibleName('Back to conversation')
-  const diagnosticsToolbar = page.getByTestId('diagnostics-toolbar')
-  await expect(diagnosticsToolbar.getByRole('tab', { name: 'Overview' })).toBeVisible()
-  await expect(diagnosticsToolbar.getByRole('tab', { name: 'Trajectory' })).toBeVisible()
-  await expect(page.getByRole('main').getByRole('tab', { name: 'Overview' })).toHaveCount(0)
-  await expect(page.getByRole('main').getByRole('tab', { name: 'Trajectory' })).toHaveCount(0)
+  await expect(page.getByTestId('diagnostics-toolbar')).toHaveCount(0)
+  await expect(page.getByRole('tab', { name: 'Overview' })).toHaveCount(0)
+  await expect(page.getByRole('tab', { name: 'Trajectory' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Refresh diagnostics' })).toBeVisible()
   await expect(page.locator('textarea:visible')).toBeEnabled()
   await expect(page.getByText('Create a short release note')).toBeVisible()
   await expect(page.getByText('Check the release status')).toBeVisible()
   await expect(page.getByRole('combobox', { name: 'Select run' })).toHaveCount(0)
+  const firstTurn = page.locator('[data-trajectory-turn-id="turn-diagnostics-1"]')
+  const secondTurn = page.locator('[data-trajectory-turn-id="turn-diagnostics-2"]')
+  const firstStep = page.locator('[data-trajectory-step-id="step-diagnostics-1"]')
+  const secondStep = page.locator('[data-trajectory-step-id="step-diagnostics-2"]')
+  await expect(firstTurn).toContainText('Turn 1')
+  await expect(firstTurn).toContainText('2 steps')
+  await expect(secondTurn).toContainText('Turn 2')
+  await expect(secondTurn).toContainText('1 step')
+  await expect(page.getByTestId('trajectory-run-header')).toHaveCount(0)
+  await expect(firstStep).toContainText('Step 1')
+  await expect(firstStep).toContainText('Request #1')
+  await expect(firstStep).toContainText('test-model')
+  await expect(firstStep).toContainText('TTFT 900 ms')
+  await expect(firstStep).toContainText('Token usage 250')
+  await expect(firstStep).toContainText('Total 2.00 s')
+  await expect(firstStep).toContainText('Completed')
+  await expect(secondStep).toContainText('Step 2')
+  await expect(secondStep).toContainText('Request #2')
+  await expect(secondStep).toContainText('TTFT 1.20 s')
+  await expect(secondStep).toContainText('Token usage 170')
+  const thirdStep = page.locator('[data-trajectory-step-id="step-diagnostics-3"]')
+  await expect(thirdStep).toContainText('Token usage 120')
+  await expect(thirdStep).not.toContainText('TTFT')
   const firstRequestBar = page.getByRole('button', { name: 'Assistant · Request #1', exact: true })
   const secondRequestBar = page.getByRole('button', { name: 'Assistant · Request #2', exact: true })
   await expect(firstRequestBar).toBeVisible()
@@ -1161,16 +1192,18 @@ test('conversation diagnostics uses one session-scoped header entry', async ({ p
   await expect(responseToolCalls.getByText('bash', { exact: true })).toBeVisible()
   await expect(responseToolCalls).toContainText('{"command":"git status"}')
   await expect(responseToolCalls).toContainText('Success · 100 ms')
-  await expect(page.getByText(/Turn \d/)).toHaveCount(0)
   await expect.poll(() => {
     const request = requests.find((candidate) => candidate.path === '/api/diagnostics/trace')
     return request ? new URL(request.url).searchParams.get('sessionId') : undefined
   }).toBe('test-session')
   await firstRequestBar.click()
   const responseInspector = page.getByRole('complementary', { name: 'Assistant · Request #1' })
+  await expect(responseInspector.getByText('Turn 1 · Step 1 · Request #1', { exact: true })).toBeVisible()
   await expect(responseInspector.getByRole('tab', { name: 'System prompt' })).toHaveCount(0)
   await expect(responseInspector.getByRole('tab', { name: 'Tools 1' })).toHaveCount(0)
   await expect(responseInspector.getByText('Source', { exact: true })).toBeVisible()
+  await expect(responseInspector.getByText('Run ID', { exact: true })).toBeVisible()
+  await expect(responseInspector.getByText('run-diagnostics', { exact: true })).toBeVisible()
   await expect(responseInspector.getByText('Status', { exact: true })).toBeVisible()
   await expect(responseInspector.getByText('250 tok', { exact: true })).toBeVisible()
   await expect(responseInspector.getByText('250 tok', { exact: true })).toHaveCSS('font-weight', '400')
@@ -1197,6 +1230,32 @@ test('conversation diagnostics uses one session-scoped header entry', async ({ p
   await page.setViewportSize({ width: 700, height: 820 })
   await expect(executionTimeline).toBeVisible()
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})
+
+test('conversation diagnostics hierarchy fits a narrow viewport', async ({ page }) => {
+  await openDesktopClient(page, { existingSession: true })
+  await page.getByTestId('conversation-diagnostics-button').click()
+  await page.setViewportSize({ width: 390, height: 844 })
+
+  const inspector = page.getByRole('complementary', { name: 'Assistant · Request #2' })
+  await inspector.getByRole('button', { name: 'Close' }).click()
+  const ledger = page.getByTestId('diagnostics-ledger-scroll')
+  const firstStep = page.locator('[data-trajectory-step-id="step-diagnostics-1"]')
+  await firstStep.scrollIntoViewIfNeeded()
+  await expect(firstStep.getByText('Step 1', { exact: true })).toBeVisible()
+  await expect(firstStep.getByText('Request #1', { exact: true })).toBeVisible()
+  await expect(firstStep.getByText('test-model', { exact: true })).toBeHidden()
+  await expect(firstStep.getByText('TTFT 900 ms', { exact: true })).toBeVisible()
+  await expect(firstStep.getByText('Token usage 250', { exact: true })).toBeHidden()
+  await expect(firstStep.getByText('Total 2.00 s', { exact: true })).toBeVisible()
+  await expect(firstStep.getByText('Completed', { exact: true })).toBeVisible()
+
+  const ledgerBox = await ledger.boundingBox()
+  const stepBox = await firstStep.boundingBox()
+  expect(ledgerBox).not.toBeNull()
+  expect(stepBox).not.toBeNull()
+  expect(stepBox!.x).toBeGreaterThanOrEqual(ledgerBox!.x)
+  expect(stepBox!.x + stepBox!.width).toBeLessThanOrEqual(ledgerBox!.x + ledgerBox!.width + 1)
 })
 
 test('conversation diagnostics treats a missing new-session trace as empty', async ({ page }) => {
@@ -1270,69 +1329,6 @@ test('conversation diagnostics inspector divider supports pointer and keyboard r
 
   await page.setViewportSize({ width: 700, height: 820 })
   await expect(handle).toBeHidden()
-})
-
-test('conversation diagnostics overview surfaces useful signals and opens requests', async ({ page }) => {
-  await openDesktopClient(page, { existingSession: true })
-
-  await page.getByTestId('conversation-diagnostics-button').click()
-  await page.getByTestId('diagnostics-toolbar').getByRole('tab', { name: 'Overview' }).click()
-
-  const summary = page.locator('section[aria-label="Conversation performance"]')
-  await expect(summary).toBeVisible()
-  await expect(summary.locator('[data-overview-metric="duration"]')).toContainText('7.00 s')
-  await expect(summary.locator('[data-overview-metric="requests"]')).toContainText('3')
-  await expect(summary.locator('[data-overview-metric="first-token"]')).toContainText('1.05 s')
-  await expect(summary.locator('[data-overview-metric="tokens"]')).toContainText('540')
-  await expect(summary.locator('[data-overview-metric="tokens"]')).toContainText('120 cache read')
-  await expect(summary.locator('[data-overview-metric="cost"]')).toContainText('Not reported')
-  await expect(summary.locator('[data-overview-metric="tools"]')).toContainText('2')
-
-  const breakdown = page.getByTestId('diagnostics-duration-breakdown')
-  await expect(breakdown).toContainText('Model requests')
-  await expect(breakdown).toContainText('6.70 s')
-  await expect(breakdown).toContainText('Tool execution')
-  await expect(breakdown).toContainText('300 ms')
-  await expect(page.getByText('Longest request', { exact: true })).toBeVisible()
-  await expect(page.getByText('Slowest first token', { exact: true })).toBeVisible()
-  await expect(page.getByText('Reliability', { exact: true })).toBeVisible()
-  await expect(page.getByTestId('diagnostics-key-signals')).toContainText('40% of model time')
-  await expect(page.getByTestId('diagnostics-key-signals')).toContainText('1.1× median')
-  await expect(page.getByTestId('diagnostics-key-signals')).toContainText('46% of total usage')
-
-  await page.setViewportSize({ width: 2000, height: 1000 })
-  const mainBox = await page.getByRole('main').boundingBox()
-  const summaryBox = await summary.boundingBox()
-  const summaryGridBox = await page.getByTestId('diagnostics-overview-summary-grid').boundingBox()
-  const keySignalsBox = await page.getByTestId('diagnostics-key-signals').boundingBox()
-  const overviewScrollBox = await page.getByTestId('diagnostics-overview-scroll').boundingBox()
-  expect(mainBox).not.toBeNull()
-  expect(summaryBox).not.toBeNull()
-  expect(summaryGridBox).not.toBeNull()
-  expect(keySignalsBox).not.toBeNull()
-  expect(overviewScrollBox).not.toBeNull()
-  const overviewRightSpacing = await page.getByTestId('diagnostics-overview-scroll').evaluate((scrollArea) => {
-    const summaryGrid = scrollArea.querySelector<HTMLElement>('[data-testid="diagnostics-overview-summary-grid"]')
-    const scrollBounds = scrollArea.getBoundingClientRect()
-    const summaryBounds = summaryGrid?.getBoundingClientRect()
-    return {
-      actual: summaryBounds ? scrollBounds.right - summaryBounds.right : 0,
-      expected: Number.parseFloat(window.getComputedStyle(scrollArea).paddingRight) +
-        (scrollArea.offsetWidth - scrollArea.clientWidth),
-    }
-  })
-  expect(overviewRightSpacing.actual).toBeCloseTo(overviewRightSpacing.expected, 0)
-  expect(keySignalsBox?.x ?? 0).toBeGreaterThan((summaryBox?.x ?? 0) + (summaryBox?.width ?? 0))
-  expect((mainBox?.x ?? 0) + (mainBox?.width ?? 0) - ((overviewScrollBox?.x ?? 0) + (overviewScrollBox?.width ?? 0)))
-    .toBeLessThanOrEqual(1)
-  await expect(page.getByTestId('diagnostics-request-table')).toHaveCount(0)
-
-  await page.setViewportSize({ width: 700, height: 820 })
-  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
-
-  await page.getByRole('button', { name: /Slowest first token: Request #2/ }).click()
-  await expect(page.getByTestId('diagnostics-toolbar').getByRole('tab', { name: 'Trajectory' })).toHaveAttribute('aria-selected', 'true')
-  await expect(page.getByRole('complementary', { name: 'Assistant · Request #2' })).toBeVisible()
 })
 
 test('conversation diagnostics loads earlier tasks without moving the visible record', async ({ page }) => {
@@ -1569,7 +1565,6 @@ test('conversation diagnostics preserves state independently for each session', 
   })
 
   const chats = page.getByRole('navigation', { name: 'Chats' })
-  const toolbar = page.getByTestId('diagnostics-toolbar')
   await page.getByTestId('conversation-diagnostics-button').click()
 
   const primarySearch = page.getByPlaceholder('Search trajectory')
@@ -1597,17 +1592,8 @@ test('conversation diagnostics preserves state independently for each session', 
     name: 'Assistant · Request #4',
   })
   await secondaryInspector.getByRole('button', { name: 'Close' }).click()
-  await toolbar.getByRole('tab', { name: 'Overview' }).click()
-  await expect(toolbar.getByRole('tab', { name: 'Overview' })).toHaveAttribute(
-    'aria-selected',
-    'true',
-  )
 
   await chats.getByRole('button', { name: 'New session', exact: true }).click()
-  await expect(toolbar.getByRole('tab', { name: 'Trajectory' })).toHaveAttribute(
-    'aria-selected',
-    'true',
-  )
   await expect(page.getByPlaceholder('Search trajectory')).toHaveValue('Primary')
   await expect(primaryResponse).toHaveAttribute('aria-expanded', 'true')
   await expect(primaryInspector).toBeVisible()
@@ -1618,11 +1604,6 @@ test('conversation diagnostics preserves state independently for each session', 
   await expect.poll(() => ledger.evaluate((element) => element.scrollTop)).toBe(primaryScrollTop)
 
   await chats.getByRole('button', { name: 'Secondary task', exact: true }).click()
-  await expect(toolbar.getByRole('tab', { name: 'Overview' })).toHaveAttribute(
-    'aria-selected',
-    'true',
-  )
-  await toolbar.getByRole('tab', { name: 'Trajectory' }).click()
   await expect(page.getByPlaceholder('Search trajectory')).toHaveValue('Secondary')
   await expect(
     page.getByRole('complementary', { name: 'Assistant · Request #4' }),

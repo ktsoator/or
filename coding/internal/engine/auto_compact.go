@@ -26,6 +26,9 @@ func (s *Session) shouldAutoCompact(usedTokens int64) bool {
 // installs the compacted projection into both the long-lived Agent and the
 // current loop, so a long single run can reclaim context without restarting.
 func (s *Session) prepareNextTurn(turn agent.TurnCtx) *agent.TurnUpdate {
+	if s.runPersistenceError() != nil {
+		return nil
+	}
 	if len(turn.ToolResults) == 0 && !s.agent.HasQueuedMessages() {
 		return nil
 	}
@@ -69,7 +72,7 @@ func (s *Session) recoverContextOverflow(ctx context.Context, original error) (b
 		return false, overflowErr
 	}
 
-	s.dropTrailingOverflowTurn()
+	s.dropTrailingOverflowStep()
 	compacted, err := s.autoCompact(ctx)
 	if err != nil {
 		return true, errors.Join(overflowErr, fmt.Errorf("automatic context compaction: %w", err))
@@ -89,16 +92,17 @@ func (s *Session) trailingContextOverflow() bool {
 	return assistant != nil && llm.IsContextOverflow(*assistant, s.contextWindow)
 }
 
-func (s *Session) dropTrailingOverflowTurn() {
+func (s *Session) dropTrailingOverflowStep() {
 	messages := s.agent.Snapshot().Messages
 	if len(messages) == 0 {
 		return
 	}
 	assistant := asAssistant(messages[len(messages)-1])
 	if assistant != nil && llm.IsContextOverflow(*assistant, s.contextWindow) {
-		s.recordTurnDiscarded("context_overflow")
+		s.recordStepDiscarded("context_overflow")
 		s.dispatchEvent(Event{Type: TurnDiscarded})
 		s.agent.SetMessages(messages[:len(messages)-1])
+		s.rewindPendingLifecycle(len(messages) - 1)
 	}
 }
 

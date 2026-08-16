@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -108,24 +109,25 @@ func TestSessionProjectsBaseContextOutsideStableSystemPrompt(t *testing.T) {
 	}
 
 	entries, batches, _ := store.snapshot()
-	if len(entries) != 5 {
-		t.Fatalf("durable entries = %d, want two contexts, user, assistant, run", len(entries))
+	entries = withoutLifecycle(entries)
+	if len(entries) != 4 {
+		t.Fatalf("durable entries = %d, want user, two contexts, assistant", len(entries))
 	}
-	if entries[0].Type != transcript.ContextEntry || entries[0].Context == nil {
-		t.Fatalf("first durable entry = %#v, want hidden context", entries[0])
+	if entries[1].Type != transcript.ContextEntry || entries[1].Context == nil {
+		t.Fatalf("first durable context = %#v", entries[1])
 	}
-	if entries[0].Context.Epoch != 1 ||
-		entries[0].Context.Kind != "base" ||
-		entries[0].Context.Placement != "prefix" {
-		t.Fatalf("context metadata = %#v", entries[0].Context)
+	if entries[1].Context.Epoch != 1 ||
+		entries[1].Context.Kind != "base" ||
+		entries[1].Context.Placement != "prefix" {
+		t.Fatalf("context metadata = %#v", entries[1].Context)
 	}
-	if entries[1].Type != transcript.ContextEntry ||
-		entries[1].Context == nil ||
-		entries[1].Context.Kind != "skill_listing" {
-		t.Fatalf("second durable entry = %#v, want skill listing", entries[1])
+	if entries[2].Type != transcript.ContextEntry ||
+		entries[2].Context == nil ||
+		entries[2].Context.Kind != "skill_listing" {
+		t.Fatalf("second durable context = %#v, want skill listing", entries[2])
 	}
-	if len(batches) != 2 || len(batches[0]) != 3 || len(batches[1]) != 2 {
-		t.Fatalf("append batch sizes = %v, want [3 2]", batchSizes(batches))
+	if got := payloadBatchSizes(batches); !slices.Equal(got, []int{3, 1}) {
+		t.Fatalf("append batch sizes = %v, want [3 1]", got)
 	}
 	history := session.History()
 	for _, item := range history {
@@ -351,6 +353,7 @@ func TestBaseContextIsCheckpointedOnceAcrossAppRetry(t *testing.T) {
 	}
 
 	entries, batches, _ := store.snapshot()
+	entries = withoutLifecycle(entries)
 	var contextCount int
 	for _, entry := range entries {
 		if entry.Type == transcript.ContextEntry {
@@ -360,11 +363,11 @@ func TestBaseContextIsCheckpointedOnceAcrossAppRetry(t *testing.T) {
 	if contextCount != 1 {
 		t.Fatalf("durable context entries = %d, want 1", contextCount)
 	}
-	if len(entries) != 4 {
-		t.Fatalf("durable entries = %d, want context, user, assistant, run", len(entries))
+	if len(entries) != 3 {
+		t.Fatalf("durable entries = %d, want user, context, assistant", len(entries))
 	}
-	if len(batches) != 2 || len(batches[0]) != 2 || len(batches[1]) != 2 {
-		t.Fatalf("append batch sizes = %v, want [2 2]", batchSizes(batches))
+	if got := payloadBatchSizes(batches); !slices.Equal(got, []int{2, 1}) {
+		t.Fatalf("append batch sizes = %v, want [2 1]", got)
 	}
 }
 

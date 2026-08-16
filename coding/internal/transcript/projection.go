@@ -58,12 +58,6 @@ func BuildContext(entries []Entry) ([]agent.AgentMessage, error) {
 	return result, nil
 }
 
-// Messages returns every original model message in the log. It omits
-// compaction metadata and never exposes the synthetic summary message.
-func Messages(entries []Entry) []agent.AgentMessage {
-	return messageEntries(entries)
-}
-
 func messageEntries(entries []Entry) []agent.AgentMessage {
 	messages := make([]agent.AgentMessage, 0, len(entries))
 	for _, entry := range entries {

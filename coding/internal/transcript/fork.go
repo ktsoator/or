@@ -70,11 +70,8 @@ func Fork(entries []Entry, messageID string, mode ForkMode, replacementText stri
 			return nil, fmt.Errorf("%w: after_assistant requires a completed assistant response", ErrInvalidForkBoundary)
 		}
 		forked = append([]Entry(nil), entries[:target+1]...)
-		// A completed run entry immediately following the response remains valid and
-		// preserves its timing. A later run entry may cover queued messages beyond
-		// this boundary and must not be copied.
-		if target+1 < len(entries) && entries[target+1].Type == RunEntry {
-			forked = append(forked, entries[target+1])
+		if tail := completedLifecycleTail(entries[target+1:]); len(tail) > 0 {
+			forked = append(forked, tail...)
 		}
 	}
 
@@ -85,7 +82,30 @@ func Fork(entries []Entry, messageID string, mode ForkMode, replacementText stri
 	if hasUnresolvedToolCalls(context) {
 		return nil, fmt.Errorf("%w: fork boundary leaves an unresolved tool call", ErrInvalidForkBoundary)
 	}
-	return forked, nil
+	sequenced, err := SequenceEntries(forked, 0)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidForkBoundary, err)
+	}
+	return sequenced, nil
+}
+
+func completedLifecycleTail(entries []Entry) []Entry {
+	var tail []Entry
+	for _, entry := range entries {
+		switch entry.Type {
+		case StepEndEntry, TurnEndEntry:
+			tail = append(tail, entry)
+		case RunEndEntry:
+			if entry.Lifecycle.Status != LifecycleCompleted {
+				return nil
+			}
+			tail = append(tail, entry)
+			return tail
+		default:
+			return nil
+		}
+	}
+	return nil
 }
 
 func validateBeforeUserBoundary(entries []Entry) error {

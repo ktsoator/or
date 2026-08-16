@@ -14,6 +14,9 @@ const (
 	TurnStart AgentEventType = "turn_start"
 	// TurnEnd marks the end of a turn, after its tool calls are executed.
 	TurnEnd AgentEventType = "turn_end"
+	// FollowUpStart marks a queued follow-up becoming the next unit of user
+	// intent in the same run. Steering messages do not emit this event.
+	FollowUpStart AgentEventType = "follow_up_start"
 	// MessageStart marks a user, assistant, or tool-result message entering the
 	// transcript.
 	MessageStart AgentEventType = "message_start"

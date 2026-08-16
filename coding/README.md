@@ -14,27 +14,35 @@ coding/
 ├── cmd/coding-desktop/     Authenticated desktop sidecar
 └── internal/
     ├── app/                Product runtime composition root
-    ├── engine/             One stateful coding-agent session
-    ├── conversation/       Product conversation lifecycle and queueing
+    ├── desktopserver/      Authenticated API and renderer host
     ├── httpapi/            HTTP and SSE delivery
-    ├── transcript/         Transcript model and persistence
+    ├── conversation/       Product conversation lifecycle and queueing
+    ├── engine/             One stateful coding-agent session
+    ├── transcript/         Session events, validation, recovery, and projections
+    ├── contextprojection/  Hidden product-context staging and projection
     ├── compaction/         Context compaction
-    ├── permission/         Tool-call approval policy
     ├── prompt/             Or system prompt
     ├── skills/             Skill discovery and loading
     ├── tools/              Or tools and local execution
-    ├── provider/           Provider settings
+    ├── permission/         Tool-call authorization and approval policy
+    ├── mcp/                Product-level MCP configuration and connections
+    ├── provider/           Provider settings and connection testing
     ├── workspace/          Workspace registry and scratch directories
-    └── usage/              Usage ledger
+    ├── usage/              Token and cost ledger
+    ├── observability/      Privacy-safe lifecycle and performance events
+    ├── snapshot/           Private model request and response snapshots
+    └── trace/              UI-facing diagnostic read model
 ```
 
 ## Dependency direction
 
 ```text
-client -> HTTP/SSE -> httpapi -> conversation -> engine -> agent -> llm
-                         ^             |
-                         |             +-> coding product packages
-                         +--- app creates and connects all services
+client -> desktopserver -> httpapi -> conversation -> engine -> agent -> llm
+                              ^             |
+                              |             +-> transcript, contextprojection
+                              |             +-> compaction, prompt, skills
+                              |             +-> tools, permission
+                              +--- app creates and connects all services
 ```
 
 Electron supervises `cmd/coding-desktop`, which hosts the runtime assembled by
@@ -43,6 +51,21 @@ import it. The `coding` product packages must not depend on `harness`.
 
 Repository contributors can read the Coding Agent backend ownership and run
 invariants in [`internal/engine/ARCHITECTURE.md`](internal/engine/ARCHITECTURE.md).
+
+## Session and diagnostic data
+
+The append-only `transcript` is the durable source of truth for session
+recovery and product history. Diagnostic storage is deliberately separate:
+
+```text
+observability events + private request snapshots -> trace -> HTTP API / UI
+```
+
+`observability` records privacy-safe timings, lifecycle IDs, retries, token
+usage, and cost. `snapshot` stores inspectable provider-neutral request and
+response content and is loaded only on explicit request. `trace` persists
+nothing; it combines both sources into the task, request, attempt, checkpoint,
+and tool views consumed by the diagnostics UI.
 
 ## Agent Skills
 

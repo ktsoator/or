@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,35 +47,146 @@ func TestJSONLLoadRejectsLegacyMessagesWithoutRewriting(t *testing.T) {
 	}
 }
 
-func TestJSONLRejectsVersion2(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "session.jsonl")
-	data := []byte("{\"type\":\"session\",\"version\":2}\n")
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		t.Fatal(err)
-	}
+func TestJSONLRejectsOlderVersions(t *testing.T) {
+	for _, version := range []int{2, 3, 4, 5} {
+		t.Run(fmt.Sprintf("version_%d", version), func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "session.jsonl")
+			data := []byte(fmt.Sprintf("{\"type\":\"session\",\"version\":%d}\n", version))
+			if err := os.WriteFile(path, data, 0o644); err != nil {
+				t.Fatal(err)
+			}
 
-	store := NewJSONL(path)
-	if _, err := store.Load(context.Background()); err == nil ||
-		!strings.Contains(err.Error(), "unsupported session version 2") {
-		t.Fatalf("Load() error = %v, want unsupported version 2", err)
+			store := NewJSONL(path)
+			if _, err := store.Load(context.Background()); err == nil ||
+				!strings.Contains(err.Error(), fmt.Sprintf("unsupported session version %d", version)) {
+				t.Fatalf("Load() error = %v, want unsupported version %d", err, version)
+			}
+		})
 	}
 }
 
-func TestJSONLRoundTripsRunTiming(t *testing.T) {
+func TestJSONLLoadRejectsMissingOrDiscontinuousSequence(t *testing.T) {
+	entry := sequencedForTest(NewMessage(agent.UserMessage("hello")))[0]
+	encoded, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	header, err := json.Marshal(NewHeader())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name string
+		line []byte
+		want string
+	}{
+		{
+			name: "missing",
+			line: bytes.Replace(encoded, []byte(`"seq":0,`), nil, 1),
+			want: "sequence is missing",
+		},
+		{
+			name: "discontinuous",
+			line: bytes.Replace(encoded, []byte(`"seq":0`), []byte(`"seq":1`), 1),
+			want: "sequence 1, want 0",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "session.jsonl")
+			data := append(append(append([]byte(nil), header...), '\n'), test.line...)
+			data = append(data, '\n')
+			if err := os.WriteFile(path, data, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := NewJSONL(path).Load(context.Background()); err == nil ||
+				!strings.Contains(err.Error(), test.want) {
+				t.Fatalf("Load() error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestJSONLAppendRejectsSequenceGapWithoutChangingLog(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	store := NewJSONL(path)
+	first := sequencedForTest(NewMessage(agent.UserMessage("first")))
+	if err := store.Append(context.Background(), first...); err != nil {
+		t.Fatal(err)
+	}
+	gap := sequencedForTest(NewMessage(agent.UserMessage("gap")))
+	gap[0].Seq = 2
+	if err := store.Append(context.Background(), gap...); err == nil ||
+		!strings.Contains(err.Error(), "sequence 2, want 1") {
+		t.Fatalf("Append() error = %v, want sequence mismatch", err)
+	}
+	loaded, err := store.Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 1 || loaded[0].Seq != 0 {
+		t.Fatalf("entries after rejected append = %#v", loaded)
+	}
+}
+
+func TestJSONLAppendRejectsEntryIDFromEarlierBatch(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	first := sequencedForTest(NewMessage(agent.UserMessage("first")))[0]
+	store := NewJSONL(path)
+	if err := store.Append(context.Background(), first); err != nil {
+		t.Fatal(err)
+	}
+
+	duplicate := NewMessage(agent.UserMessage("duplicate"))
+	duplicate.ID = first.ID
+	duplicate.Seq = 1
+	tests := []struct {
+		name  string
+		store *JSONL
+	}{
+		{name: "loaded instance", store: store},
+		{name: "reopened instance", store: NewJSONL(path)},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if err := test.store.Append(context.Background(), duplicate); err == nil ||
+				!strings.Contains(err.Error(), "repeats existing entry id") {
+				t.Fatalf("Append() error = %v, want existing entry id rejection", err)
+			}
+		})
+	}
+
+	loaded, err := NewJSONL(path).Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 1 || loaded[0].ID != first.ID {
+		t.Fatalf("entries after rejected appends = %#v", loaded)
+	}
+}
+
+func TestJSONLRoundTripsLifecycleTiming(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session.jsonl")
 	startedAt := time.Date(2026, time.July, 21, 12, 0, 0, 0, time.UTC)
-	message := NewMessage(agent.UserMessage("hello"))
-	run := NewRun(message.ID, startedAt, startedAt.Add(2*time.Second))
+	completedAt := startedAt.Add(2 * time.Second)
+	runStart := NewRunStart("run-1")
+	runEnd := NewRunEnd("run-1", LifecycleCompleted, "")
+	runStart.Timestamp = startedAt
+	runEnd.Timestamp = completedAt
 	store := NewJSONL(path)
-	if err := store.Append(context.Background(), message, run); err != nil {
+	if err := store.Append(context.Background(), sequencedForTest(runStart, runEnd)...); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(data, []byte(`"version":3`)) {
-		t.Fatalf("session header is not v3:\n%s", data)
+	if !bytes.Contains(data, []byte(`"version":6`)) {
+		t.Fatalf("session header is not v6:\n%s", data)
+	}
+	if !bytes.Contains(data, []byte(`"seq":0`)) || !bytes.Contains(data, []byte(`"seq":1`)) {
+		t.Fatalf("session entries have no durable sequence:\n%s", data)
 	}
 	if bytes.Contains(data, []byte(`"parentId"`)) {
 		t.Fatalf("linear session contains parentId:\n%s", data)
@@ -84,11 +196,89 @@ func TestJSONLRoundTripsRunTiming(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 2 || entries[1].Type != RunEntry || entries[1].Run == nil {
+	if len(entries) != 2 || entries[0].Type != RunStartEntry || entries[1].Type != RunEndEntry {
 		t.Fatalf("entries = %#v", entries)
 	}
-	if entries[1].Run.FirstEntryID != message.ID || !entries[1].Run.StartedAt.Equal(startedAt) {
-		t.Fatalf("run timing = %#v", entries[1].Run)
+	if !entries[0].Timestamp.Equal(startedAt) || !entries[1].Timestamp.Equal(completedAt) {
+		t.Fatalf("run timing = %v..%v", entries[0].Timestamp, entries[1].Timestamp)
+	}
+}
+
+func TestJSONLRoundTripsLifecycleBoundary(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	entry := NewStepEnd(
+		"run-1",
+		"turn-1",
+		"step-1",
+		LifecycleFailed,
+		"provider_request_failed",
+	)
+	store := NewJSONL(path)
+	if err := store.Append(context.Background(), sequencedForTest(entry)...); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := store.Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Type != StepEndEntry || entries[0].Lifecycle == nil {
+		t.Fatalf("entries = %#v", entries)
+	}
+	got := entries[0].Lifecycle
+	if got.RunID != "run-1" || got.TurnID != "turn-1" || got.StepID != "step-1" ||
+		got.Status != LifecycleFailed || got.Reason != "provider_request_failed" {
+		t.Fatalf("lifecycle = %#v", got)
+	}
+}
+
+func TestJSONLRoundTripsToolCall(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	entry := NewToolCall(ToolCall{
+		ToolCallID: "call-17",
+		ToolName:   "write_file",
+		Arguments:  json.RawMessage(`{"path":"notes.txt","text":"hello"}`),
+	})
+	store := NewJSONL(path)
+	if err := store.Append(context.Background(), sequencedForTest(entry)...); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := store.Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Type != ToolCallEntry || entries[0].ToolCall == nil {
+		t.Fatalf("entries = %#v", entries)
+	}
+	got := entries[0].ToolCall
+	if got.ToolCallID != "call-17" || got.ToolName != "write_file" ||
+		!bytes.Equal(got.Arguments, entry.ToolCall.Arguments) {
+		t.Fatalf("tool call = %#v", got)
+	}
+}
+
+func TestToolCallEntryValidatesRequiredFieldsAndArguments(t *testing.T) {
+	tests := []struct {
+		name string
+		call ToolCall
+	}{
+		{name: "tool call id", call: ToolCall{ToolName: "read", Arguments: json.RawMessage(`{}`)}},
+		{name: "tool name", call: ToolCall{ToolCallID: "call-1", Arguments: json.RawMessage(`{}`)}},
+		{name: "arguments", call: ToolCall{ToolCallID: "call-1", ToolName: "read"}},
+		{
+			name: "invalid arguments",
+			call: ToolCall{
+				ToolCallID: "call-1", ToolName: "read", Arguments: json.RawMessage(`{"unterminated"`),
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if err := NewToolCall(test.call).Validate(); err == nil {
+				t.Fatal("Validate() succeeded for an invalid tool call")
+			}
+		})
 	}
 }
 
@@ -97,11 +287,14 @@ func TestJSONLReplaceAtomicallyRewritesCompleteLog(t *testing.T) {
 	store := NewJSONL(path)
 	first := NewMessage(agent.UserMessage("first"))
 	discarded := NewMessage(agent.UserMessage("discarded"))
-	if err := store.Append(context.Background(), first, discarded); err != nil {
+	initial := sequencedForTest(first, discarded)
+	first, discarded = initial[0], initial[1]
+	if err := store.Append(context.Background(), initial...); err != nil {
 		t.Fatal(err)
 	}
 	replacement := NewMessage(agent.UserMessage("replacement"))
-	if err := store.Replace(context.Background(), []Entry{first, replacement}); err != nil {
+	rewritten := sequencedForTest(first, replacement)
+	if err := store.Replace(context.Background(), rewritten); err != nil {
 		t.Fatal(err)
 	}
 
@@ -134,7 +327,7 @@ func TestJSONLRoundTripsToolOutcome(t *testing.T) {
 		Data:       json.RawMessage(`{"command":"go test ./..."}`),
 	})
 	store := NewJSONL(path)
-	if err := store.Append(context.Background(), entry); err != nil {
+	if err := store.Append(context.Background(), sequencedForTest(entry)...); err != nil {
 		t.Fatal(err)
 	}
 
@@ -183,7 +376,7 @@ func TestJSONLUsesPrivatePermissionsAndSecuresExistingStorage(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "sessions")
 	path := filepath.Join(dir, "session.jsonl")
 	store := NewJSONL(path)
-	if err := store.Append(context.Background(), NewMessage(agent.UserMessage("secret"))); err != nil {
+	if err := store.Append(context.Background(), sequencedForTest(NewMessage(agent.UserMessage("secret")))...); err != nil {
 		t.Fatal(err)
 	}
 	assertPrivateStoragePermissions(t, dir, path)
@@ -229,7 +422,7 @@ func TestJSONLRoundTripsContextAttachment(t *testing.T) {
 		Rendered:     `<or-context kind="session">rules</or-context>`,
 	})
 	store := NewJSONL(path)
-	if err := store.Append(context.Background(), entry); err != nil {
+	if err := store.Append(context.Background(), sequencedForTest(entry)...); err != nil {
 		t.Fatal(err)
 	}
 

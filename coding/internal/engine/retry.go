@@ -32,17 +32,18 @@ var transientSignals = []string{
 	"connection", "reset", "eof", "broken pipe",
 }
 
-// withRetry re-runs a failed turn while its error looks transient. It drops the
-// failed assistant turn so the transcript ends on a user or tool-result message,
-// waits a growing backoff, then resumes with Continue. It gives up after
-// maxRetries attempts or on the first non-transient error.
+// withRetry starts another Step in the active Turn while the preceding Step's
+// error looks transient. It drops the failed assistant message so model context
+// ends on a user or tool-result message, waits a growing backoff, then resumes
+// with Continue. It gives up after maxRetries attempts or on the first
+// non-transient error.
 func (s *Session) withRetry(ctx context.Context, err error) error {
 	for attempt := 1; err != nil && attempt <= s.maxRetries; attempt++ {
 		last := lastAssistant(s.agent.Snapshot().Messages)
 		if last == nil || !s.isRetryable(*last) {
 			break
 		}
-		s.dropTrailingErrorTurn("retry")
+		s.dropTrailingErrorStep("retry")
 		if !sleepCtx(ctx, backoff(attempt)) {
 			break // cancelled during backoff
 		}
@@ -51,7 +52,7 @@ func (s *Session) withRetry(ctx context.Context, err error) error {
 	return err
 }
 
-// isRetryable reports whether a failed assistant turn should be retried.
+// isRetryable reports whether a failed assistant Step should be retried.
 func (s *Session) isRetryable(msg llm.AssistantMessage) bool {
 	if msg.StopReason != llm.StopReasonError {
 		return false // a clean stop or a user abort is not retryable
@@ -68,18 +69,19 @@ func (s *Session) isRetryable(msg llm.AssistantMessage) bool {
 	return false
 }
 
-// dropTrailingErrorTurn removes a trailing failed assistant message so Continue
+// dropTrailingErrorStep removes a trailing failed assistant message so Continue
 // can resume from the preceding user or tool-result message.
-func (s *Session) dropTrailingErrorTurn(reason string) {
+func (s *Session) dropTrailingErrorStep(reason string) {
 	msgs := s.agent.Snapshot().Messages
 	n := len(msgs)
 	if n == 0 {
 		return
 	}
 	if a := asAssistant(msgs[n-1]); a != nil && a.StopReason == llm.StopReasonError {
-		s.recordTurnDiscarded(reason)
+		s.recordStepDiscarded(reason)
 		s.dispatchEvent(Event{Type: TurnDiscarded})
 		s.agent.SetMessages(msgs[:n-1])
+		s.rewindPendingLifecycle(n - 1)
 	}
 }
 

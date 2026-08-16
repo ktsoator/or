@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -161,20 +162,30 @@ func TestSessionCompactStoreFailureDoesNotInstallProjection(t *testing.T) {
 }
 
 func seededTurns(count int) []transcript.Entry {
-	entries := make([]transcript.Entry, 0, count*2)
+	entries := make([]transcript.Entry, 0, count*8)
 	for index := 0; index < count; index++ {
-		messages := []agent.AgentMessage{
-			agent.UserMessage("request " + strings.Repeat("u", 120)),
-			agent.FromLLM(&llm.AssistantMessage{
+		runID := fmt.Sprintf("run-%d", index)
+		turnID := fmt.Sprintf("turn-%d", index)
+		stepID := fmt.Sprintf("step-%d", index)
+		entries = append(entries,
+			transcript.NewRunStart(runID),
+			transcript.NewTurnStart(runID, turnID),
+			transcript.NewMessage(agent.UserMessage("request "+strings.Repeat("u", 120))),
+			transcript.NewStepStart(runID, turnID, stepID),
+			transcript.NewMessage(agent.FromLLM(&llm.AssistantMessage{
 				Content:    []llm.AssistantContent{&llm.TextContent{Text: "answer " + strings.Repeat("a", 120)}},
 				StopReason: llm.StopReasonStop,
-			}),
-		}
-		for _, message := range messages {
-			entries = append(entries, transcript.NewMessage(message))
-		}
+			})),
+			transcript.NewStepEnd(runID, turnID, stepID, transcript.LifecycleCompleted, ""),
+			transcript.NewTurnEnd(runID, turnID, transcript.LifecycleCompleted, ""),
+			transcript.NewRunEnd(runID, transcript.LifecycleCompleted, ""),
+		)
 	}
-	return entries
+	sequenced, err := transcript.SequenceEntries(entries, 0)
+	if err != nil {
+		panic(err)
+	}
+	return sequenced
 }
 
 func fixedResponse(text string) agent.StreamFn {

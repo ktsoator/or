@@ -39,15 +39,17 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 	s.setSkillToolAvailable(s.currentSkillRegistry().Len() > 0)
 	s.prepareContextRefresh()
 	runID := observability.NewID("run")
+	turnID := observability.NewID("turn")
 	startedAt := time.Now().UTC()
-	runEntryStart := len(s.snapshotTranscript())
-	s.setRunState(ctx, runID, startedAt, runEntryStart)
+	s.setRunState(ctx, runID, turnID, startedAt)
 	defer s.clearRunState()
+	s.queueRunLifecycleStart(runID, turnID, startedAt)
 	s.dispatchEvent(Event{Type: RunStarted, RunID: runID, StartedAt: startedAt})
 	s.recorder.Record(observability.Event{
 		Name: observability.RunStarted, SessionID: s.sessionID, RunID: runID,
 		StartedAt: startedAt, Status: "running",
 	})
+	s.recordTurnStarted(runID, turnID, startedAt)
 
 	if s.shouldAutoCompact(s.ContextUsage().UsedTokens) {
 		_, _ = s.autoCompact(ctx)
@@ -84,11 +86,36 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 		// reusable agent. This error belongs to the persistence layer, not the
 		// conversation, so remove it before the final flush and never feed it into
 		// model retry or context-overflow recovery.
-		s.dropTrailingErrorTurn("persistence_failure")
+		s.dropTrailingErrorStep("persistence_failure")
 		runErr = checkpointErr
 	}
 	completedAt := time.Now().UTC()
-	persistErr := s.persistNewRun(ctx, runID, runEntryStart, startedAt, completedAt)
+	lifecycleStatus := transcript.LifecycleCompleted
+	lifecycleReason := ""
+	if runErr != nil {
+		status, reason := runFailure(runErr, checkpointErr, nil)
+		lifecycleStatus, lifecycleReason = lifecycleTerminal(status, reason)
+	}
+	s.closeOpenSteps(lifecycleStatus, lifecycleReason)
+	persistErr := s.persistRunTerminal(
+		ctx,
+		runID,
+		completedAt,
+		lifecycleStatus,
+		lifecycleReason,
+	)
+	// The durable terminal entries above describe execution and are part of the
+	// batch that may fail. Diagnostics run after that attempt, so they can expose
+	// persistence_failed without claiming that failure was durably committed.
+	turnStatus := "completed"
+	turnErrorCode := ""
+	if finalErr := errors.Join(runErr, persistErr); finalErr != nil {
+		turnStatus, turnErrorCode = runFailure(finalErr, checkpointErr, persistErr)
+	}
+	activeRunID, activeTurnID, turnStartedAt := s.activeLifecycleTurn()
+	s.recordTurnTerminal(
+		activeRunID, activeTurnID, turnStatus, turnErrorCode, turnStartedAt, completedAt,
+	)
 	userMessageIDs, assistantMessageID := s.persistedRunMessageIDs(runID)
 	s.dispatchEvent(Event{
 		Type:               RunCompleted,
@@ -105,35 +132,15 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 }
 
 func (s *Session) persistedRunMessageIDs(runID string) ([]string, string) {
-	entries := s.Entries()
-	runIndex := -1
-	firstEntryID := ""
-	for index := len(entries) - 1; index >= 0; index-- {
-		entry := entries[index]
-		if entry.ID == runID && entry.Type == transcript.RunEntry && entry.Run != nil {
-			runIndex = index
-			firstEntryID = entry.Run.FirstEntryID
-			break
-		}
-	}
-	if runIndex < 0 || firstEntryID == "" {
-		return nil, ""
-	}
-	firstIndex := -1
-	for index := 0; index < runIndex; index++ {
-		if entries[index].ID == firstEntryID {
-			firstIndex = index
-			break
-		}
-	}
-	if firstIndex < 0 {
+	projection, _, err := s.journal.projectionSnapshot()
+	if err != nil {
 		return nil, ""
 	}
 
 	var userMessageIDs []string
 	assistantMessageID := ""
-	for _, entry := range entries[firstIndex:runIndex] {
-		if entry.Type != transcript.MessageEntry {
+	for _, entry := range projection.Messages {
+		if entry.RunID != runID {
 			continue
 		}
 		message, ok := agent.ToLLM(entry.Message)
@@ -142,10 +149,10 @@ func (s *Session) persistedRunMessageIDs(runID string) ([]string, string) {
 		}
 		switch typed := message.(type) {
 		case *llm.UserMessage:
-			userMessageIDs = append(userMessageIDs, entry.ID)
+			userMessageIDs = append(userMessageIDs, entry.EntryID)
 		case *llm.AssistantMessage:
 			if typed != nil && (typed.StopReason == llm.StopReasonStop || typed.StopReason == llm.StopReasonLength) {
-				assistantMessageID = entry.ID
+				assistantMessageID = entry.EntryID
 			}
 		}
 	}

@@ -12,7 +12,7 @@ import (
 	"github.com/ktsoator/or/coding/internal/mcp"
 	"github.com/ktsoator/or/coding/internal/observability"
 	"github.com/ktsoator/or/coding/internal/provider"
-	"github.com/ktsoator/or/coding/internal/requestsnapshot"
+	"github.com/ktsoator/or/coding/internal/snapshot"
 	"github.com/ktsoator/or/coding/internal/usage"
 	"github.com/ktsoator/or/coding/internal/workspace"
 	"github.com/ktsoator/or/llm"
@@ -74,14 +74,14 @@ func New(ctx context.Context, dataDir string) (*Runtime, error) {
 		eventRecorder = discard
 		eventCleaner = discard
 	}
-	requestSnapshots, snapshotErr := requestsnapshot.NewFileStore(
+	requestSnapshots, snapshotErr := snapshot.NewFileStore(
 		filepath.Join(dataDir, "diagnostics", "requests"),
-		requestsnapshot.Options{},
+		snapshot.Options{},
 	)
-	var snapshotWriter requestsnapshot.Writer = requestSnapshots
+	var snapshotWriter snapshot.Writer = requestSnapshots
 	if snapshotErr != nil {
 		// Request inspection is also best-effort and cannot block the runtime.
-		snapshotWriter = requestsnapshot.DiscardWriter{}
+		snapshotWriter = snapshot.DiscardWriter{}
 	}
 
 	manager, err := conversation.NewManager(ctx, conversation.Options{
@@ -131,7 +131,7 @@ func New(ctx context.Context, dataDir string) (*Runtime, error) {
 
 type diagnosticSessionCleaner struct {
 	observability observability.SessionCleaner
-	requests      requestsnapshot.SessionCleaner
+	requests      snapshot.SessionCleaner
 }
 
 func (cleaner diagnosticSessionCleaner) DeleteSession(sessionID string) error {
@@ -141,9 +141,9 @@ func (cleaner diagnosticSessionCleaner) DeleteSession(sessionID string) error {
 	)
 }
 
-func snapshotCleaner(store *requestsnapshot.FileStore) requestsnapshot.SessionCleaner {
+func snapshotCleaner(store *snapshot.FileStore) snapshot.SessionCleaner {
 	if store == nil {
-		return requestsnapshot.DiscardWriter{}
+		return snapshot.DiscardWriter{}
 	}
 	return store
 }

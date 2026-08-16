@@ -57,7 +57,7 @@ func (s *Session) compactLocked(
 	if err := s.persistNew(ctx); err != nil {
 		return CompactionResult{}, err
 	}
-	entries := s.snapshotTranscript()
+	entries := s.Entries()
 	keepRecent := defaultKeepRecentTokens
 	if state.Model.ContextWindow > 0 && state.Model.ContextWindow/4 < keepRecent {
 		keepRecent = state.Model.ContextWindow / 4
@@ -121,7 +121,7 @@ func (s *Session) compactLocked(
 	}
 	// Persistence is the commit point. Nothing observable changes before it.
 	s.agent.SetMessages(projected)
-	s.journal.applyCompaction(candidate, len(projected))
+	s.journal.applyCompaction(len(projected))
 	s.dispatchEvent(Event{
 		Type: CompactionCompleted, Usage: response.Usage,
 		Provider: response.Provider, Model: response.Model,
