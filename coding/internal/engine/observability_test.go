@@ -151,26 +151,26 @@ func TestRunObservabilityUsesDurableRunIdentity(t *testing.T) {
 func TestTurnCorrelationQueuesNextTurnBeforePriorTurnEnds(t *testing.T) {
 	session := &Session{}
 	startedAt := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
-	session.setRunState(context.Background(), "run-1", startedAt, 0)
+	session.setRunState(context.Background(), "run-1", "lifecycle-turn-1", startedAt, 0)
 	defer session.clearRunState()
 
-	session.beginTurn("turn-1", startedAt.Add(time.Millisecond))
+	session.beginStep("turn-1", startedAt.Add(time.Millisecond))
 	firstRequest := session.attachRequest("request-1")
-	session.beginTurn("turn-2", startedAt.Add(2*time.Millisecond))
+	session.beginStep("turn-2", startedAt.Add(2*time.Millisecond))
 	secondRequest := session.attachRequest("request-2")
-	firstTurn, firstStartedAt := session.finishTurn()
-	secondTurn, secondStartedAt := session.finishTurn()
+	firstTurn := session.finishStep()
+	secondTurn := session.finishStep()
 
 	if firstRequest.turnID != "turn-1" || secondRequest.turnID != "turn-2" {
 		t.Fatalf("request correlations = first %#v, second %#v", firstRequest, secondRequest)
 	}
-	if firstTurn.turnID != "turn-1" || firstTurn.requestID != "request-1" ||
-		!firstStartedAt.Equal(startedAt.Add(time.Millisecond)) {
-		t.Fatalf("first turn = %#v at %v", firstTurn, firstStartedAt)
+	if firstTurn.stepID != "turn-1" || firstTurn.requestID != "request-1" ||
+		!firstTurn.startedAt.Equal(startedAt.Add(time.Millisecond)) {
+		t.Fatalf("first turn = %#v at %v", firstTurn, firstTurn.startedAt)
 	}
-	if secondTurn.turnID != "turn-2" || secondTurn.requestID != "request-2" ||
-		!secondStartedAt.Equal(startedAt.Add(2*time.Millisecond)) {
-		t.Fatalf("second turn = %#v at %v", secondTurn, secondStartedAt)
+	if secondTurn.stepID != "turn-2" || secondTurn.requestID != "request-2" ||
+		!secondTurn.startedAt.Equal(startedAt.Add(2*time.Millisecond)) {
+		t.Fatalf("second turn = %#v at %v", secondTurn, secondTurn.startedAt)
 	}
 }
 

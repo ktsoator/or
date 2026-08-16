@@ -163,6 +163,7 @@ func (e *engine) run(prompts []AgentMessage, base Context) {
 			followUp = e.cfg.GetFollowUpMessages()
 		}
 		if len(followUp) > 0 {
+			e.emit(AgentEvent{Type: FollowUpStart})
 			pending = followUp
 			continue
 		}

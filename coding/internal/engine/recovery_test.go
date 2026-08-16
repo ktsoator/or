@@ -109,6 +109,66 @@ func TestNewFailsWhenInterruptedToolRepairCannotBePersisted(t *testing.T) {
 	}
 }
 
+func TestNewRepairsToolsBeforeClosingInterruptedLifecycle(t *testing.T) {
+	base := interruptedToolEntries()
+	entries := []transcript.Entry{
+		base[0],
+		transcript.NewRunStart("run-1"),
+		transcript.NewTurnStart("run-1", "turn-1"),
+		base[1],
+		transcript.NewStepStart("run-1", "turn-1", "step-1"),
+		base[2],
+		base[3],
+	}
+	store := &checkpointStore{entries: entries}
+
+	if _, err := New(context.Background(), Options{
+		Model: llm.Model{Provider: "test", ID: "model"},
+		Tools: []tools.Tool{},
+		Store: store,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, batches, appendCalls := store.snapshot()
+	if appendCalls != 1 || len(batches) != 1 || len(got) != 15 {
+		t.Fatalf("repaired store = %d calls, %d batches, %d entries", appendCalls, len(batches), len(got))
+	}
+	wantTail := []transcript.EntryType{
+		transcript.MessageEntry,
+		transcript.ToolOutcomeEntry,
+		transcript.MessageEntry,
+		transcript.ToolOutcomeEntry,
+		transcript.StepEndEntry,
+		transcript.TurnEndEntry,
+		transcript.RunEndEntry,
+		transcript.RunEntry,
+	}
+	for index, want := range wantTail {
+		entry := got[len(entries)+index]
+		if entry.Type != want {
+			t.Fatalf("repair tail[%d] = %q, want %q", index, entry.Type, want)
+		}
+	}
+	for _, index := range []int{11, 12, 13} {
+		if got[index].Lifecycle.Status != transcript.LifecycleInterrupted ||
+			got[index].Lifecycle.Reason != transcript.LifecycleInterruptedReason {
+			t.Fatalf("repaired lifecycle entry = %#v", got[index])
+		}
+	}
+	if _, err := New(context.Background(), Options{
+		Model: llm.Model{Provider: "test", ID: "model"},
+		Tools: []tools.Tool{},
+		Store: store,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, _, appendCalls = store.snapshot()
+	if appendCalls != 1 {
+		t.Fatalf("second load append calls = %d, want 1", appendCalls)
+	}
+}
+
 func interruptedToolEntries() []transcript.Entry {
 	assistant := &llm.AssistantMessage{
 		StopReason: llm.StopReasonToolUse,

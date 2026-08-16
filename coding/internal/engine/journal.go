@@ -27,6 +27,11 @@ type sessionJournal struct {
 	outcomes  map[string]agent.ToolOutcome // tool-call ID -> terminal outcome
 }
 
+type positionedJournalEntry struct {
+	messageIndex int
+	entry        transcript.Entry
+}
+
 func newSessionJournal(
 	ctx context.Context,
 	store transcript.Store,
@@ -38,10 +43,16 @@ func newSessionJournal(
 			return nil, nil, nil, err
 		}
 		entries = loaded
-		repairs, err := transcript.RepairInterruptedToolCalls(entries)
+		toolRepairs, err := transcript.RepairInterruptedToolCalls(entries)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("coding: validate session transcript: %w", err)
 		}
+		candidate := append(append([]transcript.Entry(nil), entries...), toolRepairs...)
+		lifecycleRepairs, err := transcript.RepairInterruptedLifecycle(candidate)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("coding: validate session lifecycle: %w", err)
+		}
+		repairs := append(toolRepairs, lifecycleRepairs...)
 		if len(repairs) > 0 {
 			if err := store.Append(ctx, repairs...); err != nil {
 				return nil, nil, nil, fmt.Errorf("coding: persist session recovery: %w", err)
@@ -130,7 +141,7 @@ func (j *sessionJournal) messages(active []agent.AgentMessage) []agent.AgentMess
 // persistNew appends the messages added since the last persist to the Store. It
 // runs only while runMu is held, so persistedLen is not racing a run.
 func (s *Session) persistNew(ctx context.Context) error {
-	return s.persistNewMessages(ctx, "", 0, time.Time{}, time.Time{})
+	return s.persistPendingLifecycle(ctx)
 }
 
 func (s *Session) persistNewRun(
@@ -138,31 +149,43 @@ func (s *Session) persistNewRun(
 	runID string,
 	runEntryStart int,
 	startedAt, completedAt time.Time,
+	status transcript.LifecycleStatus,
+	reason string,
 ) error {
-	return s.persistNewMessages(ctx, runID, runEntryStart, startedAt, completedAt)
-}
-
-func (s *Session) persistNewMessages(
-	ctx context.Context,
-	runID string,
-	runEntryStart int,
-	startedAt, completedAt time.Time,
-) error {
-	return s.journal.persistMessages(
+	all := s.agent.Snapshot().Messages
+	pending := s.pendingLifecycle()
+	_, turnID := s.lifecycleIDs()
+	turnEnd := transcript.NewTurnEnd(runID, turnID, status, reason)
+	runEnd := transcript.NewRunEnd(runID, status, reason)
+	turnEnd.Timestamp = completedAt.UTC()
+	runEnd.Timestamp = completedAt.UTC()
+	terminal := positionedLifecycle(
+		len(all),
+		turnEnd,
+		runEnd,
+	)
+	positioned := append(append([]positionedJournalEntry(nil), pending...), terminal...)
+	err := s.journal.persistMessages(
 		ctx,
-		s.agent.Snapshot().Messages,
+		all,
 		nil,
+		positioned,
 		runID,
 		runEntryStart,
 		startedAt,
 		completedAt,
 	)
+	if err == nil {
+		s.clearPendingLifecycle(len(pending))
+	}
+	return err
 }
 
 func (j *sessionJournal) persistMessages(
 	ctx context.Context,
 	all []agent.AgentMessage,
 	contextEntries []transcript.Entry,
+	positionedEntries []positionedJournalEntry,
 	runID string,
 	runEntryStart int,
 	startedAt, completedAt time.Time,
@@ -187,10 +210,20 @@ func (j *sessionJournal) persistMessages(
 	entries := make(
 		[]transcript.Entry,
 		0,
-		len(contextEntries)+2*len(added)+len(additionalEntries)+1,
+		len(contextEntries)+2*len(added)+len(positionedEntries)+len(additionalEntries)+1,
 	)
 	entries = append(entries, contextEntries...)
-	for _, message := range added {
+	positionedIndex := 0
+	for messageIndex := persistedLen; messageIndex <= len(all); messageIndex++ {
+		for positionedIndex < len(positionedEntries) &&
+			positionedEntries[positionedIndex].messageIndex == messageIndex {
+			entries = append(entries, positionedEntries[positionedIndex].entry)
+			positionedIndex++
+		}
+		if messageIndex == len(all) {
+			break
+		}
+		message := all[messageIndex]
 		entries = append(entries, transcript.NewMessage(message))
 		llmMessage, ok := agent.ToLLM(message)
 		if !ok {
@@ -207,6 +240,15 @@ func (j *sessionJournal) persistMessages(
 		entries = append(entries, transcript.NewToolOutcome(
 			encodeOutcome(result.ToolCallID, outcome),
 		))
+	}
+	if positionedIndex != len(positionedEntries) {
+		position := positionedEntries[positionedIndex].messageIndex
+		return fmt.Errorf(
+			"coding: lifecycle entry position %d is outside durable message range %d..%d",
+			position,
+			persistedLen,
+			len(all),
+		)
 	}
 	entries = append(entries, additionalEntries...)
 	if !startedAt.IsZero() && !completedAt.IsZero() {

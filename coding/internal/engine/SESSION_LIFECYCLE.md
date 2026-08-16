@@ -1,7 +1,8 @@
 # Session lifecycle, event log, and durability checkpoints
 
-Status: proposed design. This document describes the target contract; the
-current implementation does not yet emit or persist every event listed here.
+Status: lifecycle and side-effect checkpoint foundation implemented. The
+broader event vocabulary and diagnostic schema described here remain an
+incremental target.
 
 ## Purpose
 
@@ -88,24 +89,28 @@ same immutable input + transport retry  => same request, new attempt
 changed input, model, tools, or config  => new request
 ```
 
-## Mapping from the current runtime
+## Mapping from the agent runtime
 
-The current `agent.RunLoop` vocabulary predates this distinction. Its
+The `agent.RunLoop` vocabulary predates this distinction. Its
 `TurnStart` and `TurnEnd` events surround one model request and its tool batch,
-so they are semantically closest to the target `Step`, not the target `Turn`.
+so engine adapts them to durable `Step` boundaries, not durable `Turn`
+boundaries.
 
 | Current concept | Target concept | Migration note |
 | --- | --- | --- |
-| `agent.AgentStart` / `AgentEnd` | `Run` | Preserve behavior and add stable identity. |
-| `agent.TurnStart` / `TurnEnd` | `Step` | Do not silently reinterpret old persisted or public events. |
-| Initial prompt | First `Turn` | Add an explicit durable boundary. |
-| Follow-up queue item | New `Turn` | It may remain inside the active `Run`. |
-| Steering queue item | Current `Turn`, next `Step` | It must not increment the turn identity. |
-| Product provider retry | `Attempt` | Reuse the provider request identity when input is unchanged. |
-| Overflow recovery with rebuilt context | New `ProviderRequest` | Keep it in the same step unless new user intent is claimed. |
+| `agent.AgentStart` / `AgentEnd` | `Run` | Engine persists a stable Run identity. |
+| `agent.TurnStart` / `TurnEnd` | `Step` | Engine adapts these legacy public events internally. |
+| Initial prompt | First `Turn` | Engine persists an explicit boundary. |
+| Follow-up queue item | New `Turn` | It remains inside the active `Run`. |
+| Steering queue item | Current `Turn`, next `Step` | It does not increment the Turn identity. |
+| Provider SDK transport retry | New `Attempt` | Reuse the immutable provider request identity. |
+| Product app-level retry | New `Step` and `ProviderRequest` | Keep the active Turn identity. |
+| Overflow recovery with rebuilt context | New `Step` and `ProviderRequest` | Keep the active Turn identity. |
 
-Compatibility adapters may continue exposing the old names while the durable
-event model and new trace projection use the precise lifecycle.
+Compatibility adapters continue exposing old names while durable storage uses
+the precise lifecycle. In particular, the legacy observability `TurnID` field
+currently carries the durable Step ID until diagnostics adds an explicit
+`StepID`.
 
 ## Durable events and diagnostic events
 
@@ -136,7 +141,7 @@ required to resume a session or decide whether a side effect may be retried.
 The trace UI may join both streams by stable IDs, but the streams remain
 different sources with different reliability requirements.
 
-## Proposed session event vocabulary
+## Session event vocabulary
 
 Names below describe the target wire semantics. Schema work may add fields, but
 must preserve their meanings.
@@ -160,6 +165,13 @@ must preserve their meanings.
 Raw assistant chunks, request snapshots, provider attempts, timings, and costs
 may remain diagnostic data. They become session events only if replay or product
 behavior is defined to require them.
+
+The version 4 transcript currently persists and validates `run/start`,
+`run/end`, `turn/start`, `turn/end`, `step/start`, and `step/end`. Existing
+message, context, compaction, tool-call, and tool-outcome entries supply the
+other implemented durable facts. The legacy `run` entry remains temporarily as
+a product-history compatibility projection; lifecycle consumers must use the
+explicit boundaries.
 
 Every session event has at least:
 
@@ -307,23 +319,29 @@ The session validator and tests must enforce these rules:
 10. Observability data is never required to validate, repair, or project a
     session.
 
-## Migration plan
+## Implementation status
 
-Adopt the design incrementally so existing sessions and public events keep
-working.
+Implemented:
 
-1. Add versioned lifecycle and `tool/call` entry types to `transcript`. The new
-   format starts at version 4; earlier development logs are not migrated.
-2. Persist authorized tool intent before execution and fail closed when its
-   checkpoint fails.
-3. Add interrupted-tail validation and synthesize `TOOL_NOT_STARTED` or
-   `TOOL_OUTCOME_UNKNOWN` results.
-4. Emit explicit run, turn, and step boundaries while adapting the current
-   `agent.TurnStart`/`TurnEnd` events as legacy step signals.
-5. Make `BuildContext`, history, and fork behavior projections of version 4
-   session events.
-6. Align observability and the trace view model with the new IDs and lifecycle;
-   keep provider attempts and timing details in diagnostics.
+1. Version 4 lifecycle and `tool/call` transcript entry types; earlier
+   development logs are not migrated.
+2. Authorized tool intent is durable before execution, and a failed checkpoint
+   prevents the tool body from running.
+3. Interrupted-tail validation and `TOOL_NOT_STARTED` /
+   `TOOL_OUTCOME_UNKNOWN` repair, followed by interrupted Step, Turn, and Run
+   closure.
+4. Explicit Run, Turn, and Step boundaries, with follow-up and steering
+   semantics enforced by tests.
+5. Fork behavior preserves a valid completed lifecycle tail.
+
+Remaining:
+
+1. Remove the legacy `run` history projection once all product consumers use
+   explicit lifecycle events.
+2. Finish treating context and history views as projections of the full version
+   4 event vocabulary rather than compatibility-shaped entries.
+3. Add explicit Step identity to observability, align request and attempt
+   semantics, and project the new lifecycle into the trace UI.
 
 Each phase should be independently releasable. A storage-version change must
 be rejected explicitly rather than partially decoded as the current format.

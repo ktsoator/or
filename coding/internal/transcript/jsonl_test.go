@@ -97,6 +97,34 @@ func TestJSONLRoundTripsRunTiming(t *testing.T) {
 	}
 }
 
+func TestJSONLRoundTripsLifecycleBoundary(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	entry := NewStepEnd(
+		"run-1",
+		"turn-1",
+		"step-1",
+		LifecycleFailed,
+		"provider_request_failed",
+	)
+	store := NewJSONL(path)
+	if err := store.Append(context.Background(), entry); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := store.Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Type != StepEndEntry || entries[0].Lifecycle == nil {
+		t.Fatalf("entries = %#v", entries)
+	}
+	got := entries[0].Lifecycle
+	if got.RunID != "run-1" || got.TurnID != "turn-1" || got.StepID != "step-1" ||
+		got.Status != LifecycleFailed || got.Reason != "provider_request_failed" {
+		t.Fatalf("lifecycle = %#v", got)
+	}
+}
+
 func TestJSONLRoundTripsToolCall(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session.jsonl")
 	entry := NewToolCall(ToolCall{

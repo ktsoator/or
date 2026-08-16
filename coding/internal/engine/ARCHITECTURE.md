@@ -16,7 +16,7 @@ app -> conversation -> engine -> agent -> llm
 `engine` owns the execution policy inside one session. The reusable `agent`
 package owns the provider-neutral model/tool loop and ephemeral runtime state.
 
-The proposed precise run/turn/step semantics, durable session-event model, and
+The precise run/turn/step semantics, durable session-event model, and
 side-effect checkpoint contract are documented in [SESSION_LIFECYCLE.md](SESSION_LIFECYCLE.md).
 
 ## Package boundaries
@@ -42,6 +42,7 @@ Owns one coding session's execution policy:
 - refresh project context and Skills at top-level run boundaries;
 - project hidden product context into each provider request;
 - checkpoint resumable model-visible prefixes before provider I/O;
+- persist explicit run, turn, and step lifecycle boundaries;
 - persist terminal messages, tool outcomes, and run metadata;
 - apply retry, compaction, and context-overflow recovery policy;
 - expose product events, history, usage, and background-task state.
@@ -72,6 +73,7 @@ assembly.go         construction and dependency wiring
 prompt.go           top-level prompt input and explicit Skill invocation
 run.go              Prompt/Continue run lifecycle and completion metadata
 run_state.go        concurrency-safe state for the active run
+lifecycle.go        durable Run, Turn, and Step boundary coordination
 checkpoint.go       pre-provider context projection and durable checkpoint
 journal.go          durable entries, outcomes, persistence, and snapshots
 context_refresh.go  project context and Skill refresh lifecycle
@@ -92,13 +94,17 @@ One top-level `Prompt` or `Continue` follows this order:
 
 1. Acquire the session run lock and flush any previously unpersisted messages.
 2. Refresh Skills and project context staged since the previous request.
-3. Record run state and publish `RunStarted`.
+3. Record run state, queue durable Run and initial Turn boundaries, and publish
+   `RunStarted`.
 4. Apply proactive compaction when the measured context crosses its threshold.
 5. Enter `agent.Agent`; before every provider request, project hidden context
-   and persist the complete canonical request prefix.
+   and persist the complete canonical request prefix plus its Step boundary.
 6. Retry transient failures or compact and recover from context overflow when
    policy permits.
-7. Persist terminal messages and run metadata, then publish `RunCompleted`.
+7. A claimed follow-up closes the current Turn and starts another in the same
+   Run. Steering and tool loops create Steps inside the current Turn.
+8. Persist terminal Step, Turn, and Run boundaries, terminal messages, and the
+   compatibility run metadata, then publish `RunCompleted`.
 
 ## Behavioral invariants
 
@@ -112,8 +118,9 @@ Refactors must preserve these contracts:
    are durable before the provider request begins.
 4. A checkpoint failure prevents provider I/O and is not retried as a model or
    transport failure.
-5. Every completed run appends its terminal messages before its run metadata;
-   stored entry formats and ordering are compatibility-sensitive.
+5. Every completed run appends its terminal messages and lifecycle boundaries
+   before its compatibility run metadata; stored entry formats and ordering are
+   compatibility-sensitive.
 6. Compaction retains complete product history while replacing only the active
    model context.
 7. Tool outcomes remain associated with their tool-call IDs across persistence,
@@ -128,6 +135,9 @@ Refactors must preserve these contracts:
 11. Session restore validates and durably repairs interrupted tool-call tails
     before model-context and product-history projection. A dispatched call with
     no durable result has an unknown outcome and is never retried implicitly.
+12. Durable Run, Turn, and Step IDs are nested and never reused. Follow-up input
+    starts a Turn; steering, tool loops, and provider retries stay in the active
+    Turn and create Steps.
 
 ## Refactoring rules
 

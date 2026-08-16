@@ -37,6 +37,7 @@ func TestSessionPersistsAndReplaysRunTiming(t *testing.T) {
 	}
 
 	entries := session.Entries()
+	entries = withoutLifecycle(entries)
 	if len(entries) != 4 || entries[3].Type != transcript.RunEntry || entries[3].Run == nil {
 		t.Fatalf("entries = %#v, want context, user, assistant, run", entries)
 	}
@@ -130,7 +131,7 @@ func TestHistoryDoesNotDuplicateRunAfterCompletedEntryIsPersisted(t *testing.T) 
 	}
 	// Recreate the interval after persistNewRun and before the deferred active
 	// run state is cleared.
-	session.setRunState(ctx, completedRunEntry.ID, completedRun.StartedAt, 0)
+	session.setRunState(ctx, completedRunEntry.ID, "turn-test", completedRun.StartedAt, 0)
 	defer session.clearRunState()
 
 	history := session.History()

@@ -137,6 +137,35 @@ func TestForkAfterAssistantKeepsOnlyAnImmediateCompletedRun(t *testing.T) {
 	}
 }
 
+func TestForkAfterAssistantKeepsCompletedLifecycleTail(t *testing.T) {
+	user := NewMessage(agent.UserMessage("question"))
+	answer := NewMessage(agent.FromLLM(assistant("answer")))
+	startedAt := time.Now().Add(-time.Second)
+	entries := []Entry{
+		NewRunStart("run-1"),
+		NewTurnStart("run-1", "turn-1"),
+		user,
+		NewStepStart("run-1", "turn-1", "step-1"),
+		answer,
+		NewStepEnd("run-1", "turn-1", "step-1", LifecycleCompleted, ""),
+		NewTurnEnd("run-1", "turn-1", LifecycleCompleted, ""),
+		NewRunEnd("run-1", LifecycleCompleted, ""),
+		NewRunWithID("run-1", user.ID, startedAt, time.Now()),
+		NewMessage(agent.UserMessage("later")),
+	}
+
+	forked, err := Fork(entries, answer.ID, ForkAfterAssistant, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(forked) != 9 || forked[len(forked)-1].Type != RunEntry {
+		t.Fatalf("forked lifecycle = %#v", forked)
+	}
+	if repairs, err := RepairInterruptedLifecycle(forked); err != nil || len(repairs) != 0 {
+		t.Fatalf("completed fork repairs = %#v, %v", repairs, err)
+	}
+}
+
 func TestForkRejectsInvalidBoundaries(t *testing.T) {
 	user := NewMessage(agent.UserMessage("question"))
 	toolUse := NewMessage(agent.FromLLM(&llm.AssistantMessage{

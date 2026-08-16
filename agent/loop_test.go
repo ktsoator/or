@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"testing"
 
 	"github.com/ktsoator/or/llm"
@@ -374,6 +375,12 @@ func TestRunLoopFollowUpContinuesRun(t *testing.T) {
 
 	if rec.calls != 2 {
 		t.Fatalf("stream calls = %d, want 2", rec.calls)
+	}
+	types := eventTypes(events)
+	followUpIndex := slices.Index(types, FollowUpStart)
+	if followUpIndex < 1 || followUpIndex+1 >= len(types) ||
+		types[followUpIndex-1] != TurnEnd || types[followUpIndex+1] != TurnStart {
+		t.Fatalf("follow-up boundary sequence = %v", types)
 	}
 	messages := agentEndMessages(t, events)
 	if len(messages) != 4 {

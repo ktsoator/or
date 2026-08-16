@@ -75,6 +75,8 @@ func Fork(entries []Entry, messageID string, mode ForkMode, replacementText stri
 		// this boundary and must not be copied.
 		if target+1 < len(entries) && entries[target+1].Type == RunEntry {
 			forked = append(forked, entries[target+1])
+		} else if tail := completedLifecycleTail(entries[target+1:]); len(tail) > 0 {
+			forked = append(forked, tail...)
 		}
 	}
 
@@ -86,6 +88,34 @@ func Fork(entries []Entry, messageID string, mode ForkMode, replacementText stri
 		return nil, fmt.Errorf("%w: fork boundary leaves an unresolved tool call", ErrInvalidForkBoundary)
 	}
 	return forked, nil
+}
+
+func completedLifecycleTail(entries []Entry) []Entry {
+	var tail []Entry
+	sawRunEnd := false
+	for _, entry := range entries {
+		switch entry.Type {
+		case StepEndEntry, TurnEndEntry:
+			if sawRunEnd {
+				return nil
+			}
+			tail = append(tail, entry)
+		case RunEndEntry:
+			if sawRunEnd || entry.Lifecycle.Status != LifecycleCompleted {
+				return nil
+			}
+			sawRunEnd = true
+			tail = append(tail, entry)
+		case RunEntry:
+			if !sawRunEnd {
+				return nil
+			}
+			return append(tail, entry)
+		default:
+			return nil
+		}
+	}
+	return nil
 }
 
 func validateBeforeUserBoundary(entries []Entry) error {

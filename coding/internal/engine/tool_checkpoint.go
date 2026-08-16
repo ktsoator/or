@@ -36,6 +36,7 @@ func (s *Session) checkpointToolCall(call agent.BeforeToolCallCtx) error {
 		call.RunContext,
 		s.agent.Snapshot().Messages,
 		nil,
+		nil,
 		"",
 		0,
 		time.Time{},

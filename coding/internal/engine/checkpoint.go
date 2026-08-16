@@ -30,12 +30,24 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 		input llm.Context,
 		options llm.StreamOptions,
 	) (<-chan llm.Event, error) {
-		s.beginObservedTurn()
+		step := s.beginObservedStep()
 		requestID := observability.NewID("request")
 		correlation := s.attachRequest(requestID)
 		prepared := s.contextProjection.PrepareStep(input)
+		pendingLifecycle := s.pendingLifecycle()
+		positioned := append(
+			append([]positionedJournalEntry(nil), pendingLifecycle...),
+			positionedJournalEntry{
+				messageIndex: len(input.Messages),
+				entry: transcript.NewStepStart(
+					step.runID,
+					step.lifecycleTurnID,
+					step.stepID,
+				),
+			},
+		)
 		checkpointStarted := time.Now().UTC()
-		if err := s.persistModelInput(ctx, input.Messages, prepared.Pending); err != nil {
+		if err := s.persistModelInput(ctx, input.Messages, prepared.Pending, positioned); err != nil {
 			s.recorder.Record(observability.Event{
 				Name: observability.CheckpointFailed, Level: slog.LevelError,
 				SessionID: s.sessionID, RunID: correlation.runID,
@@ -49,6 +61,8 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 			s.recordRunPersistenceError(checkpointErr)
 			return nil, checkpointErr
 		}
+		s.clearPendingLifecycle(len(pendingLifecycle))
+		s.markStepDurable(step.stepID)
 		s.recorder.Record(observability.Event{
 			Name:      observability.CheckpointCompleted,
 			SessionID: s.sessionID, RunID: correlation.runID,
@@ -331,6 +345,7 @@ func (s *Session) persistModelInput(
 	ctx context.Context,
 	input []llm.Message,
 	attachments []contextprojection.Attachment,
+	positioned []positionedJournalEntry,
 ) error {
 	messages := make([]agent.AgentMessage, len(input))
 	for index, message := range input {
@@ -352,6 +367,7 @@ func (s *Session) persistModelInput(
 		ctx,
 		messages,
 		contextEntries,
+		positioned,
 		"",
 		0,
 		time.Time{},

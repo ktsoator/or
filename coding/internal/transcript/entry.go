@@ -24,7 +24,24 @@ const (
 	ToolOutcomeEntry EntryType = "tool_outcome"
 	ContextEntry     EntryType = "context"
 	CompactionEntry  EntryType = "compaction"
-	RunEntry         EntryType = "run"
+	RunStartEntry    EntryType = "run/start"
+	RunEndEntry      EntryType = "run/end"
+	TurnStartEntry   EntryType = "turn/start"
+	TurnEndEntry     EntryType = "turn/end"
+	StepStartEntry   EntryType = "step/start"
+	StepEndEntry     EntryType = "step/end"
+	// RunEntry is the compatibility projection used by product history while
+	// lifecycle consumers move to run/start and run/end.
+	RunEntry EntryType = "run"
+)
+
+type LifecycleStatus string
+
+const (
+	LifecycleCompleted   LifecycleStatus = "completed"
+	LifecycleFailed      LifecycleStatus = "failed"
+	LifecycleCancelled   LifecycleStatus = "cancelled"
+	LifecycleInterrupted LifecycleStatus = "interrupted"
 )
 
 // Header is the first line of a session log.
@@ -45,7 +62,18 @@ type Entry struct {
 	ToolOutcome *ToolOutcome
 	Context     *ContextAttachment
 	Compaction  *Compaction
+	Lifecycle   *Lifecycle
 	Run         *Run
+}
+
+// Lifecycle identifies one durable Run, Turn, or Step boundary. Entry.Type
+// supplies the boundary kind; parent IDs make ownership explicit and stable.
+type Lifecycle struct {
+	RunID  string          `json:"runId"`
+	TurnID string          `json:"turnId,omitempty"`
+	StepID string          `json:"stepId,omitempty"`
+	Status LifecycleStatus `json:"status,omitempty"`
+	Reason string          `json:"reason,omitempty"`
 }
 
 // ToolCall is a durable dispatch intent. Its presence means validation and
@@ -155,6 +183,50 @@ func NewCompaction(compact Compaction) Entry {
 	}
 }
 
+func NewRunStart(runID string) Entry {
+	return newLifecycleEntry(RunStartEntry, Lifecycle{RunID: runID})
+}
+
+func NewRunEnd(runID string, status LifecycleStatus, reason string) Entry {
+	return newLifecycleEntry(RunEndEntry, Lifecycle{
+		RunID: runID, Status: status, Reason: reason,
+	})
+}
+
+func NewTurnStart(runID, turnID string) Entry {
+	return newLifecycleEntry(TurnStartEntry, Lifecycle{RunID: runID, TurnID: turnID})
+}
+
+func NewTurnEnd(runID, turnID string, status LifecycleStatus, reason string) Entry {
+	return newLifecycleEntry(TurnEndEntry, Lifecycle{
+		RunID: runID, TurnID: turnID, Status: status, Reason: reason,
+	})
+}
+
+func NewStepStart(runID, turnID, stepID string) Entry {
+	return newLifecycleEntry(StepStartEntry, Lifecycle{
+		RunID: runID, TurnID: turnID, StepID: stepID,
+	})
+}
+
+func NewStepEnd(
+	runID, turnID, stepID string,
+	status LifecycleStatus,
+	reason string,
+) Entry {
+	return newLifecycleEntry(StepEndEntry, Lifecycle{
+		RunID: runID, TurnID: turnID, StepID: stepID,
+		Status: status, Reason: reason,
+	})
+}
+
+func newLifecycleEntry(entryType EntryType, lifecycle Lifecycle) Entry {
+	return Entry{
+		ID: NewID(), Timestamp: time.Now().UTC(), Type: entryType,
+		Lifecycle: &lifecycle,
+	}
+}
+
 func NewRun(firstEntryID string, startedAt, completedAt time.Time) Entry {
 	return NewRunWithID(NewID(), firstEntryID, startedAt, completedAt)
 }
@@ -191,14 +263,14 @@ func (e Entry) Validate() error {
 	}
 	switch e.Type {
 	case MessageEntry:
-		if e.Message == nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Run != nil {
+		if e.Message == nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Lifecycle != nil || e.Run != nil {
 			return fmt.Errorf("transcript: message entry %s has invalid payload", e.ID)
 		}
 		if _, ok := agent.ToLLM(e.Message); !ok {
 			return fmt.Errorf("transcript: cannot persist custom message %T", e.Message)
 		}
 	case ToolCallEntry:
-		if e.Message != nil || e.ToolCall == nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Run != nil {
+		if e.Message != nil || e.ToolCall == nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Lifecycle != nil || e.Run != nil {
 			return fmt.Errorf("transcript: tool call entry %s has invalid payload", e.ID)
 		}
 		if e.ToolCall.ToolCallID == "" || e.ToolCall.ToolName == "" ||
@@ -209,7 +281,7 @@ func (e Entry) Validate() error {
 			return fmt.Errorf("transcript: tool call entry %s has invalid arguments", e.ID)
 		}
 	case ToolOutcomeEntry:
-		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome == nil || e.Context != nil || e.Compaction != nil || e.Run != nil {
+		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome == nil || e.Context != nil || e.Compaction != nil || e.Lifecycle != nil || e.Run != nil {
 			return fmt.Errorf("transcript: tool outcome entry %s has invalid payload", e.ID)
 		}
 		if e.ToolOutcome.ToolCallID == "" || e.ToolOutcome.Status == "" {
@@ -219,7 +291,7 @@ func (e Entry) Validate() error {
 			return fmt.Errorf("transcript: tool outcome entry %s has invalid data", e.ID)
 		}
 	case ContextEntry:
-		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context == nil || e.Compaction != nil || e.Run != nil {
+		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context == nil || e.Compaction != nil || e.Lifecycle != nil || e.Run != nil {
 			return fmt.Errorf("transcript: context entry %s has invalid payload", e.ID)
 		}
 		if e.Context.AttachmentID == "" ||
@@ -231,14 +303,23 @@ func (e Entry) Validate() error {
 			return fmt.Errorf("transcript: context entry %s is incomplete", e.ID)
 		}
 	case CompactionEntry:
-		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction == nil || e.Run != nil {
+		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction == nil || e.Lifecycle != nil || e.Run != nil {
 			return fmt.Errorf("transcript: compaction entry %s has invalid payload", e.ID)
 		}
 		if e.Compaction.Summary == "" || e.Compaction.FirstKeptEntryID == "" {
 			return fmt.Errorf("transcript: compaction entry %s is incomplete", e.ID)
 		}
+	case RunStartEntry, RunEndEntry,
+		TurnStartEntry, TurnEndEntry,
+		StepStartEntry, StepEndEntry:
+		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Lifecycle == nil || e.Run != nil {
+			return fmt.Errorf("transcript: lifecycle entry %s has invalid payload", e.ID)
+		}
+		if err := validateLifecyclePayload(e.Type, *e.Lifecycle); err != nil {
+			return fmt.Errorf("transcript: lifecycle entry %s: %w", e.ID, err)
+		}
 	case RunEntry:
-		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Run == nil {
+		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Lifecycle != nil || e.Run == nil {
 			return fmt.Errorf("transcript: run entry %s has invalid payload", e.ID)
 		}
 		if e.Run.StartedAt.IsZero() || e.Run.CompletedAt.IsZero() {
@@ -251,6 +332,39 @@ func (e Entry) Validate() error {
 		return fmt.Errorf("transcript: entry %s has unknown type %q", e.ID, e.Type)
 	}
 	return nil
+}
+
+func validateLifecyclePayload(entryType EntryType, lifecycle Lifecycle) error {
+	if lifecycle.RunID == "" {
+		return errors.New("run id is empty")
+	}
+	switch entryType {
+	case RunStartEntry, RunEndEntry:
+		if lifecycle.TurnID != "" || lifecycle.StepID != "" {
+			return errors.New("run boundary has child ids")
+		}
+	case TurnStartEntry, TurnEndEntry:
+		if lifecycle.TurnID == "" || lifecycle.StepID != "" {
+			return errors.New("turn boundary has invalid child ids")
+		}
+	case StepStartEntry, StepEndEntry:
+		if lifecycle.TurnID == "" || lifecycle.StepID == "" {
+			return errors.New("step boundary has incomplete ids")
+		}
+	}
+	isEnd := entryType == RunEndEntry || entryType == TurnEndEntry || entryType == StepEndEntry
+	if !isEnd {
+		if lifecycle.Status != "" || lifecycle.Reason != "" {
+			return errors.New("start boundary has terminal fields")
+		}
+		return nil
+	}
+	switch lifecycle.Status {
+	case LifecycleCompleted, LifecycleFailed, LifecycleCancelled, LifecycleInterrupted:
+		return nil
+	default:
+		return fmt.Errorf("invalid terminal status %q", lifecycle.Status)
+	}
 }
 
 func (e Entry) MarshalJSON() ([]byte, error) {
@@ -266,11 +380,12 @@ func (e Entry) MarshalJSON() ([]byte, error) {
 		ToolOutcome *ToolOutcome       `json:"toolOutcome,omitempty"`
 		Context     *ContextAttachment `json:"context,omitempty"`
 		Compaction  *Compaction        `json:"compaction,omitempty"`
+		Lifecycle   *Lifecycle         `json:"lifecycle,omitempty"`
 		Run         *Run               `json:"run,omitempty"`
 	}{
 		ID: e.ID, Timestamp: e.Timestamp, Type: e.Type,
 		ToolCall: e.ToolCall, ToolOutcome: e.ToolOutcome, Context: e.Context,
-		Compaction: e.Compaction, Run: e.Run,
+		Compaction: e.Compaction, Lifecycle: e.Lifecycle, Run: e.Run,
 	}
 	if e.Message != nil {
 		message, _ := agent.ToLLM(e.Message)
@@ -296,6 +411,7 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 		ToolOutcome *ToolOutcome       `json:"toolOutcome"`
 		Context     *ContextAttachment `json:"context"`
 		Compaction  *Compaction        `json:"compaction"`
+		Lifecycle   *Lifecycle         `json:"lifecycle"`
 		Run         *Run               `json:"run"`
 	}{}
 	if err := json.Unmarshal(data, &wire); err != nil {
@@ -304,7 +420,7 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 	decoded := Entry{
 		ID: wire.ID, Timestamp: wire.Timestamp,
 		Type: wire.Type, ToolCall: wire.ToolCall, ToolOutcome: wire.ToolOutcome, Context: wire.Context,
-		Compaction: wire.Compaction, Run: wire.Run,
+		Compaction: wire.Compaction, Lifecycle: wire.Lifecycle, Run: wire.Run,
 	}
 	if len(wire.Message) > 0 && string(wire.Message) != "null" {
 		message, err := llm.UnmarshalMessage(wire.Message)

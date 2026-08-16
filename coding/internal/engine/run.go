@@ -39,10 +39,12 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 	s.setSkillToolAvailable(s.currentSkillRegistry().Len() > 0)
 	s.prepareContextRefresh()
 	runID := observability.NewID("run")
+	turnID := observability.NewID("turn")
 	startedAt := time.Now().UTC()
 	runEntryStart := len(s.snapshotTranscript())
-	s.setRunState(ctx, runID, startedAt, runEntryStart)
+	s.setRunState(ctx, runID, turnID, startedAt, runEntryStart)
 	defer s.clearRunState()
+	s.queueRunLifecycleStart(runID, turnID)
 	s.dispatchEvent(Event{Type: RunStarted, RunID: runID, StartedAt: startedAt})
 	s.recorder.Record(observability.Event{
 		Name: observability.RunStarted, SessionID: s.sessionID, RunID: runID,
@@ -84,11 +86,26 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 		// reusable agent. This error belongs to the persistence layer, not the
 		// conversation, so remove it before the final flush and never feed it into
 		// model retry or context-overflow recovery.
-		s.dropTrailingErrorTurn("persistence_failure")
+		s.dropTrailingErrorStep("persistence_failure")
 		runErr = checkpointErr
 	}
 	completedAt := time.Now().UTC()
-	persistErr := s.persistNewRun(ctx, runID, runEntryStart, startedAt, completedAt)
+	lifecycleStatus := transcript.LifecycleCompleted
+	lifecycleReason := ""
+	if runErr != nil {
+		status, reason := runFailure(runErr, checkpointErr, nil)
+		lifecycleStatus, lifecycleReason = lifecycleTerminal(status, reason)
+	}
+	s.closeOpenSteps(lifecycleStatus, lifecycleReason)
+	persistErr := s.persistNewRun(
+		ctx,
+		runID,
+		runEntryStart,
+		startedAt,
+		completedAt,
+		lifecycleStatus,
+		lifecycleReason,
+	)
 	userMessageIDs, assistantMessageID := s.persistedRunMessageIDs(runID)
 	s.dispatchEvent(Event{
 		Type:               RunCompleted,

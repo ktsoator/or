@@ -14,19 +14,26 @@ import (
 
 func (s *Session) observeAgentEvent(event agent.AgentEvent) {
 	switch event.Type {
+	case agent.FollowUpStart:
+		s.queueFollowUpTurn()
 	case agent.ToolStart:
 		s.beginObservedTool(event.ToolCallID, event.ToolName)
 	case agent.ToolEnd:
 		s.finishObservedTool(event)
 	case agent.TurnEnd:
 		completedAt := time.Now().UTC()
-		correlation, startedAt := s.finishTurn()
-		status, errorCode := s.turnStatus(event)
+		step := s.finishStep()
+		correlation := requestCorrelation{
+			runID: step.runID, turnID: step.stepID, requestID: step.requestID,
+		}
+		status, errorCode := s.stepStatus(event)
+		lifecycleStatus, lifecycleReason := lifecycleTerminal(status, errorCode)
+		s.queueStepEnd(step, lifecycleStatus, lifecycleReason)
 		s.recorder.Record(observability.Event{
 			Name: observability.TurnCompleted, SessionID: s.sessionID,
 			RunID: correlation.runID, TurnID: correlation.turnID,
 			RequestID: correlation.requestID, Status: status, ErrorCode: errorCode,
-			StartedAt: startedAt, Duration: elapsed(startedAt, completedAt),
+			StartedAt: step.startedAt, Duration: elapsed(step.startedAt, completedAt),
 		})
 	}
 }
@@ -186,17 +193,19 @@ func (a *observedApprover) Decide(
 	return response, err
 }
 
-func (s *Session) beginObservedTurn() {
+func (s *Session) beginObservedStep() stepCorrelationState {
 	startedAt := time.Now().UTC()
-	turnID := observability.NewID("turn")
-	runID := s.beginTurn(turnID, startedAt)
+	stepID := observability.NewID("step")
+	step := s.beginStep(stepID, startedAt)
 	s.recorder.Record(observability.Event{
 		Name: observability.TurnStarted, SessionID: s.sessionID,
-		RunID: runID, TurnID: turnID, Status: "running", StartedAt: startedAt,
+		// TurnID remains the compatibility field for the assistant-cycle Step.
+		RunID: step.runID, TurnID: stepID, Status: "running", StartedAt: startedAt,
 	})
+	return step
 }
 
-func (s *Session) turnStatus(event agent.AgentEvent) (status, errorCode string) {
+func (s *Session) stepStatus(event agent.AgentEvent) (status, errorCode string) {
 	if s.runPersistenceError() != nil {
 		return "failed", "checkpoint_failed"
 	}
@@ -214,7 +223,9 @@ func (s *Session) turnStatus(event agent.AgentEvent) (status, errorCode string) 
 	}
 }
 
-func (s *Session) recordTurnDiscarded(reason string) {
+// recordStepDiscarded emits the legacy TurnDiscarded diagnostic event for a
+// discarded assistant-cycle Step.
+func (s *Session) recordStepDiscarded(reason string) {
 	correlation := s.lastTurnCorrelation()
 	if correlation.turnID == "" {
 		return
