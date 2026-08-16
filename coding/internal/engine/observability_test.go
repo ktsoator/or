@@ -14,7 +14,7 @@ import (
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/observability"
 	"github.com/ktsoator/or/coding/internal/permission"
-	"github.com/ktsoator/or/coding/internal/requestsnapshot"
+	"github.com/ktsoator/or/coding/internal/snapshot"
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/transcript"
 	"github.com/ktsoator/or/llm"
@@ -27,12 +27,12 @@ type memoryRecorder struct {
 
 type memorySnapshotWriter struct {
 	mu        sync.Mutex
-	snapshots []requestsnapshot.Snapshot
+	snapshots []snapshot.Snapshot
 }
 
-func (writer *memorySnapshotWriter) Save(snapshot requestsnapshot.Snapshot) error {
+func (writer *memorySnapshotWriter) Save(record snapshot.Snapshot) error {
 	writer.mu.Lock()
-	writer.snapshots = append(writer.snapshots, snapshot)
+	writer.snapshots = append(writer.snapshots, record)
 	writer.mu.Unlock()
 	return nil
 }
@@ -44,20 +44,20 @@ func (writer *memorySnapshotWriter) SaveOutput(requestID string, message *llm.As
 		if writer.snapshots[index].ProviderRequestID != requestID {
 			continue
 		}
-		output := requestsnapshot.Output{
+		output := snapshot.Output{
 			CapturedAt:   time.Now().UTC(),
-			Message:      requestsnapshot.Message{Role: "assistant", ProviderRequestID: requestID},
+			Message:      snapshot.Message{Role: "assistant", ProviderRequestID: requestID},
 			StopReason:   string(message.StopReason),
 			ErrorMessage: message.ErrorMessage,
 		}
 		for _, content := range message.Content {
 			switch typed := content.(type) {
 			case *llm.TextContent:
-				output.Message.Content = append(output.Message.Content, requestsnapshot.Content{Type: "text", Text: typed.Text})
+				output.Message.Content = append(output.Message.Content, snapshot.Content{Type: "text", Text: typed.Text})
 			case *llm.ThinkingContent:
-				output.Message.Content = append(output.Message.Content, requestsnapshot.Content{Type: "thinking", Thinking: typed.Thinking})
+				output.Message.Content = append(output.Message.Content, snapshot.Content{Type: "thinking", Thinking: typed.Thinking})
 			case *llm.ToolCall:
-				output.Message.Content = append(output.Message.Content, requestsnapshot.Content{Type: "toolCall", ToolCallID: typed.ID, ToolName: typed.Name, Arguments: typed.Arguments})
+				output.Message.Content = append(output.Message.Content, snapshot.Content{Type: "toolCall", ToolCallID: typed.ID, ToolName: typed.Name, Arguments: typed.Arguments})
 			}
 		}
 		writer.snapshots[index].Output = &output
@@ -66,19 +66,19 @@ func (writer *memorySnapshotWriter) SaveOutput(requestID string, message *llm.As
 	return nil
 }
 
-func (writer *memorySnapshotWriter) snapshot() requestsnapshot.Snapshot {
+func (writer *memorySnapshotWriter) snapshot() snapshot.Snapshot {
 	writer.mu.Lock()
 	defer writer.mu.Unlock()
 	if len(writer.snapshots) == 0 {
-		return requestsnapshot.Snapshot{}
+		return snapshot.Snapshot{}
 	}
 	return writer.snapshots[len(writer.snapshots)-1]
 }
 
-func (writer *memorySnapshotWriter) allSnapshots() []requestsnapshot.Snapshot {
+func (writer *memorySnapshotWriter) allSnapshots() []snapshot.Snapshot {
 	writer.mu.Lock()
 	defer writer.mu.Unlock()
-	return append([]requestsnapshot.Snapshot(nil), writer.snapshots...)
+	return append([]snapshot.Snapshot(nil), writer.snapshots...)
 }
 
 func (r *memoryRecorder) Record(event observability.Event) {
@@ -750,7 +750,7 @@ func TestObservabilityUsesDistinctStepCorrelationForToolLoop(t *testing.T) {
 		captured[0].Output.Message.ProviderRequestID != providers[0].RequestID {
 		t.Fatalf("first request output provenance = %#v, want %q", captured[0].Output, providers[0].RequestID)
 	}
-	var historicalAssistant *requestsnapshot.Message
+	var historicalAssistant *snapshot.Message
 	for index := range captured[1].Input.Messages {
 		message := &captured[1].Input.Messages[index]
 		if message.Role == "assistant" {

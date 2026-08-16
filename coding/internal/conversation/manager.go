@@ -14,7 +14,7 @@ import (
 	"github.com/ktsoator/or/coding/internal/mcp"
 	"github.com/ktsoator/or/coding/internal/observability"
 	"github.com/ktsoator/or/coding/internal/permission"
-	"github.com/ktsoator/or/coding/internal/requestsnapshot"
+	"github.com/ktsoator/or/coding/internal/snapshot"
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/transcript"
 	"github.com/ktsoator/or/coding/internal/usage"
@@ -40,7 +40,7 @@ type Manager struct {
 	streamFn         agent.StreamFn
 	mcp              *mcp.Manager
 	recorder         observability.Recorder
-	requestSnapshots requestsnapshot.Writer
+	requestSnapshots snapshot.Writer
 	sessionData      SessionDataCleaner
 
 	mu        sync.RWMutex
@@ -59,7 +59,7 @@ type Options struct {
 	NewTransport     NewTransport
 	MCP              *mcp.Manager
 	Recorder         observability.Recorder
-	RequestSnapshots requestsnapshot.Writer
+	RequestSnapshots snapshot.Writer
 	SessionData      SessionDataCleaner
 	// StreamFn overrides model streaming for every managed session. Production
 	// leaves it nil; tests and embedded adapters can supply a deterministic model.
@@ -84,7 +84,7 @@ func NewManager(ctx context.Context, opts Options) (*Manager, error) {
 		streamFn:         opts.StreamFn,
 		mcp:              opts.MCP,
 		recorder:         observability.OrDiscard(opts.Recorder),
-		requestSnapshots: requestsnapshot.OrDiscard(opts.RequestSnapshots),
+		requestSnapshots: snapshot.OrDiscard(opts.RequestSnapshots),
 		sessionData:      orDiscardSessionDataCleaner(opts.SessionData),
 		sessions:         make(map[string]*sessionRuntime),
 		usage:            opts.Usage,

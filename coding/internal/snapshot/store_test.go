@@ -1,4 +1,4 @@
-package requestsnapshot
+package snapshot
 
 import (
 	"encoding/json"

@@ -11,7 +11,7 @@ import (
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/contextprojection"
 	"github.com/ktsoator/or/coding/internal/observability"
-	"github.com/ktsoator/or/coding/internal/requestsnapshot"
+	"github.com/ktsoator/or/coding/internal/snapshot"
 	"github.com/ktsoator/or/coding/internal/transcript"
 	"github.com/ktsoator/or/llm"
 )
@@ -80,7 +80,7 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 		s.commitContextRefresh(prepared.Pending)
 		// Content snapshots are diagnostic and deliberately fail-open: a local
 		// write failure must never prevent a provider request from running.
-		_ = s.requestSnapshots.Save(requestsnapshot.NewSnapshot(
+		_ = s.requestSnapshots.Save(snapshot.NewSnapshot(
 			s.sessionID, correlation.runID, correlation.turnID, correlation.stepID,
 			correlation.requestID,
 			model.Provider, model.ID, prepared.Input,
@@ -92,10 +92,10 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 
 func projectedSnapshotAttachments(
 	attachments []contextprojection.ProjectedAttachment,
-) []requestsnapshot.Attachment {
-	result := make([]requestsnapshot.Attachment, 0, len(attachments))
+) []snapshot.Attachment {
+	result := make([]snapshot.Attachment, 0, len(attachments))
 	for _, attachment := range attachments {
-		result = append(result, requestsnapshot.Attachment{
+		result = append(result, snapshot.Attachment{
 			ID: attachment.ID, Kind: string(attachment.Kind),
 			Placement: string(attachment.Placement), Path: attachment.Path,
 			Revision: attachment.Revision, MessageIndex: attachment.MessageIndex,

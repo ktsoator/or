@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/ktsoator/or/coding/internal/observability"
-	"github.com/ktsoator/or/coding/internal/requestsnapshot"
+	"github.com/ktsoator/or/coding/internal/snapshot"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -58,15 +58,15 @@ func TestDiagnosticRunsEndpointRejectsInvalidLimit(t *testing.T) {
 }
 
 func TestDiagnosticRequestReturnsCorrelatedSnapshot(t *testing.T) {
-	store, err := requestsnapshot.NewFileStore(t.TempDir(), requestsnapshot.Options{})
+	store, err := snapshot.NewFileStore(t.TempDir(), snapshot.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	snapshot := requestsnapshot.NewSnapshot(
+	record := snapshot.NewSnapshot(
 		"session-1", "run-1", "turn-1", "step-1", "request-1", "test", "model",
 		llm.Context{SystemPrompt: "system", Messages: []llm.Message{llm.UserText("question")}}, nil,
 	)
-	if err := store.Save(snapshot); err != nil {
+	if err := store.Save(record); err != nil {
 		t.Fatal(err)
 	}
 	server := NewServer(Options{RequestSnapshots: store})
@@ -80,7 +80,7 @@ func TestDiagnosticRequestReturnsCorrelatedSnapshot(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
-	var got requestsnapshot.Snapshot
+	var got snapshot.Snapshot
 	if err := json.Unmarshal(response.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
@@ -91,11 +91,11 @@ func TestDiagnosticRequestReturnsCorrelatedSnapshot(t *testing.T) {
 }
 
 func TestDiagnosticRequestRejectsMismatchedRun(t *testing.T) {
-	store, err := requestsnapshot.NewFileStore(t.TempDir(), requestsnapshot.Options{})
+	store, err := snapshot.NewFileStore(t.TempDir(), snapshot.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Save(requestsnapshot.NewSnapshot(
+	if err := store.Save(snapshot.NewSnapshot(
 		"session-1", "run-1", "turn-1", "step-1", "request-1", "test", "model", llm.Context{}, nil,
 	)); err != nil {
 		t.Fatal(err)
@@ -149,16 +149,16 @@ func TestDiagnosticTraceReturnsSessionScopedBundle(t *testing.T) {
 	if err := recorder.Close(); err != nil {
 		t.Fatal(err)
 	}
-	store, err := requestsnapshot.NewFileStore(t.TempDir(), requestsnapshot.Options{})
+	store, err := snapshot.NewFileStore(t.TempDir(), snapshot.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Save(requestsnapshot.Snapshot{
-		Version: requestsnapshot.CurrentVersion, CapturedAt: startedAt,
+	if err := store.Save(snapshot.Snapshot{
+		Version: snapshot.CurrentVersion, CapturedAt: startedAt,
 		SessionID: "session-1", RunID: "run-1", TurnID: "turn-1",
 		ProviderRequestID: "request-1", Provider: "test", Model: "model",
-		Input: requestsnapshot.Input{Messages: []requestsnapshot.Message{{
-			Role: "user", Content: []requestsnapshot.Content{{Type: "text", Text: "Inspect this task"}},
+		Input: snapshot.Input{Messages: []snapshot.Message{{
+			Role: "user", Content: []snapshot.Content{{Type: "text", Text: "Inspect this task"}},
 		}}},
 	}); err != nil {
 		t.Fatal(err)
@@ -376,6 +376,6 @@ func leftPadTwo(value int) string {
 	return strconv.Itoa(value)
 }
 
-func httpapiOptions(path string, snapshots requestsnapshot.Reader) Options {
+func httpapiOptions(path string, snapshots snapshot.Reader) Options {
 	return Options{ObservabilityLogPath: path, RequestSnapshots: snapshots}
 }

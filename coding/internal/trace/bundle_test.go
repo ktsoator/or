@@ -1,4 +1,4 @@
-package tracebundle
+package trace
 
 import (
 	"errors"
@@ -6,33 +6,33 @@ import (
 	"time"
 
 	"github.com/ktsoator/or/coding/internal/observability"
-	"github.com/ktsoator/or/coding/internal/requestsnapshot"
+	"github.com/ktsoator/or/coding/internal/snapshot"
 )
 
 func TestBuildAssemblesTaskRequestsAndToolResults(t *testing.T) {
-	store, err := requestsnapshot.NewFileStore(t.TempDir(), requestsnapshot.Options{})
+	store, err := snapshot.NewFileStore(t.TempDir(), snapshot.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	base := time.Date(2026, 8, 14, 12, 0, 0, 0, time.UTC)
-	if err := store.Save(requestsnapshot.Snapshot{
-		Version: requestsnapshot.CurrentVersion, CapturedAt: base,
+	if err := store.Save(snapshot.Snapshot{
+		Version: snapshot.CurrentVersion, CapturedAt: base,
 		SessionID: "session-1", RunID: "run-1", TurnID: "turn-parent", StepID: "step-1",
 		ProviderRequestID: "request-1", Provider: "openai", Model: "gpt-5",
-		Input: requestsnapshot.Input{
+		Input: snapshot.Input{
 			SystemPrompt: "You are a coding agent.",
-			Messages: []requestsnapshot.Message{
-				{Role: "user", Content: []requestsnapshot.Content{{Type: "text", Text: "Create a file"}}},
-				{Role: "user", Content: []requestsnapshot.Content{{Type: "text", Text: "runtime context"}}},
+			Messages: []snapshot.Message{
+				{Role: "user", Content: []snapshot.Content{{Type: "text", Text: "Create a file"}}},
+				{Role: "user", Content: []snapshot.Content{{Type: "text", Text: "runtime context"}}},
 			},
-			Tools: []requestsnapshot.Tool{{Name: "write", Description: "Write a file"}},
+			Tools: []snapshot.Tool{{Name: "write", Description: "Write a file"}},
 		},
-		Attachments: []requestsnapshot.Attachment{{ID: "context", Kind: "context_update", MessageIndex: 1}},
-		Output: &requestsnapshot.Output{
+		Attachments: []snapshot.Attachment{{ID: "context", Kind: "context_update", MessageIndex: 1}},
+		Output: &snapshot.Output{
 			CapturedAt: base.Add(2 * time.Second), StopReason: "tool_use",
-			Message: requestsnapshot.Message{
+			Message: snapshot.Message{
 				Role: "assistant", ProviderRequestID: "request-1",
-				Content: []requestsnapshot.Content{
+				Content: []snapshot.Content{
 					{Type: "thinking", Thinking: "Use the write tool"},
 					{Type: "text", Text: "I will create it."},
 					{Type: "toolCall", ToolCallID: "call-1", ToolName: "write", Arguments: map[string]any{"path": "note.txt"}},
@@ -42,26 +42,26 @@ func TestBuildAssemblesTaskRequestsAndToolResults(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Save(requestsnapshot.Snapshot{
-		Version: requestsnapshot.CurrentVersion, CapturedAt: base.Add(2300 * time.Millisecond),
+	if err := store.Save(snapshot.Snapshot{
+		Version: snapshot.CurrentVersion, CapturedAt: base.Add(2300 * time.Millisecond),
 		SessionID: "session-1", RunID: "run-1", TurnID: "turn-parent", StepID: "step-2",
 		ProviderRequestID: "request-2", Provider: "openai", Model: "gpt-5",
-		Input: requestsnapshot.Input{Messages: []requestsnapshot.Message{
-			{Role: "user", Content: []requestsnapshot.Content{{Type: "text", Text: "Create a file"}}},
+		Input: snapshot.Input{Messages: []snapshot.Message{
+			{Role: "user", Content: []snapshot.Content{{Type: "text", Text: "Create a file"}}},
 			{
 				Role: "assistant", ProviderRequestID: "request-1",
-				Content: []requestsnapshot.Content{{Type: "toolCall", ToolCallID: "call-1", ToolName: "write"}},
+				Content: []snapshot.Content{{Type: "toolCall", ToolCallID: "call-1", ToolName: "write"}},
 			},
 			{
 				Role: "toolResult", ToolCallID: "call-1", ToolName: "write",
-				Content: []requestsnapshot.Content{{Type: "text", Text: "created note.txt"}},
+				Content: []snapshot.Content{{Type: "text", Text: "created note.txt"}},
 			},
 		}},
-		Output: &requestsnapshot.Output{
+		Output: &snapshot.Output{
 			CapturedAt: base.Add(3 * time.Second), StopReason: "stop",
-			Message: requestsnapshot.Message{
+			Message: snapshot.Message{
 				Role: "assistant", ProviderRequestID: "request-2",
-				Content: []requestsnapshot.Content{{Type: "text", Text: "Done"}},
+				Content: []snapshot.Content{{Type: "text", Text: "Done"}},
 			},
 		},
 	}); err != nil {
@@ -149,21 +149,21 @@ func TestBuildKeepsRequestWhenSnapshotIsMissing(t *testing.T) {
 }
 
 func TestBuildCompletesSnapshotToolWhenRequestIsCancelled(t *testing.T) {
-	store, err := requestsnapshot.NewFileStore(t.TempDir(), requestsnapshot.Options{})
+	store, err := snapshot.NewFileStore(t.TempDir(), snapshot.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	base := time.Date(2026, 8, 14, 12, 0, 0, 0, time.UTC)
-	if err := store.Save(requestsnapshot.Snapshot{
-		Version: requestsnapshot.CurrentVersion, CapturedAt: base,
+	if err := store.Save(snapshot.Snapshot{
+		Version: snapshot.CurrentVersion, CapturedAt: base,
 		SessionID: "session-1", RunID: "run-1", TurnID: "turn-parent", StepID: "step-1",
 		ProviderRequestID: "request-1", Provider: "openai", Model: "gpt-5",
-		Input: requestsnapshot.Input{Messages: []requestsnapshot.Message{{
-			Role: "user", Content: []requestsnapshot.Content{{Type: "text", Text: "Create a file"}},
+		Input: snapshot.Input{Messages: []snapshot.Message{{
+			Role: "user", Content: []snapshot.Content{{Type: "text", Text: "Create a file"}},
 		}}},
-		Output: &requestsnapshot.Output{
+		Output: &snapshot.Output{
 			CapturedAt: base.Add(2 * time.Second), StopReason: "aborted", ErrorMessage: "context canceled",
-			Message: requestsnapshot.Message{Role: "assistant", Content: []requestsnapshot.Content{
+			Message: snapshot.Message{Role: "assistant", Content: []snapshot.Content{
 				{Type: "thinking", Thinking: "Inspect the existing implementation."},
 				{Type: "toolCall", ToolCallID: "call-1", ToolName: "write", Arguments: map[string]any{"path": "note.txt"}},
 			}},

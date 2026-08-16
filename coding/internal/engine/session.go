@@ -12,8 +12,8 @@ import (
 	"github.com/ktsoator/or/coding/internal/contextprojection"
 	"github.com/ktsoator/or/coding/internal/observability"
 	"github.com/ktsoator/or/coding/internal/permission"
-	"github.com/ktsoator/or/coding/internal/requestsnapshot"
 	"github.com/ktsoator/or/coding/internal/skills"
+	"github.com/ktsoator/or/coding/internal/snapshot"
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/transcript"
 	"github.com/ktsoator/or/llm"
@@ -34,7 +34,7 @@ type Options struct {
 	Recorder observability.Recorder
 	// RequestSnapshots stores inspectable provider-neutral model inputs apart
 	// from the privacy-safe performance log. Nil disables content capture.
-	RequestSnapshots requestsnapshot.Writer
+	RequestSnapshots snapshot.Writer
 	// Model is the model used for turns. Required.
 	Model llm.Model
 	// ThinkingLevel sets the reasoning effort for each turn.
@@ -99,7 +99,7 @@ type Session struct {
 	journal          *sessionJournal
 	sessionID        string
 	recorder         observability.Recorder
-	requestSnapshots requestsnapshot.Writer
+	requestSnapshots snapshot.Writer
 	tools            []tools.Tool
 	allTools         []tools.Tool
 	toolByName       map[string]tools.Tool

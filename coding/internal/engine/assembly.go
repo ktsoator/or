@@ -10,8 +10,8 @@ import (
 	"github.com/ktsoator/or/coding/internal/contextprojection"
 	"github.com/ktsoator/or/coding/internal/observability"
 	"github.com/ktsoator/or/coding/internal/permission"
-	"github.com/ktsoator/or/coding/internal/requestsnapshot"
 	"github.com/ktsoator/or/coding/internal/skills"
+	"github.com/ktsoator/or/coding/internal/snapshot"
 	"github.com/ktsoator/or/coding/internal/tools"
 )
 
@@ -73,7 +73,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		journal:          journal,
 		sessionID:        opts.SessionID,
 		recorder:         observability.OrDiscard(opts.Recorder),
-		requestSnapshots: requestsnapshot.OrDiscard(opts.RequestSnapshots),
+		requestSnapshots: snapshot.OrDiscard(opts.RequestSnapshots),
 		tools:            activeToolSet,
 		allTools:         toolSet,
 		toolByName:       toolsByName(toolSet),

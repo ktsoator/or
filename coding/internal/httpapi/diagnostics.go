@@ -12,8 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/ktsoator/or/coding/internal/observability"
-	"github.com/ktsoator/or/coding/internal/requestsnapshot"
-	"github.com/ktsoator/or/coding/internal/tracebundle"
+	"github.com/ktsoator/or/coding/internal/snapshot"
+	"github.com/ktsoator/or/coding/internal/trace"
 )
 
 const (
@@ -54,12 +54,12 @@ func (s *Server) handleDiagnosticRequest(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "request snapshot unavailable"})
 		return
 	}
-	snapshot, err := s.requestSnapshots.Load(c.Param("providerRequestID"))
-	if errors.Is(err, requestsnapshot.ErrNotFound) {
+	record, err := s.requestSnapshots.Load(c.Param("providerRequestID"))
+	if errors.Is(err, snapshot.ErrNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "request snapshot unavailable"})
 		return
 	}
-	if errors.Is(err, requestsnapshot.ErrInvalidID) {
+	if errors.Is(err, snapshot.ErrInvalidID) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid provider request ID"})
 		return
 	}
@@ -67,16 +67,16 @@ func (s *Server) handleDiagnosticRequest(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not read request snapshot"})
 		return
 	}
-	if expected := strings.TrimSpace(c.Query("sessionId")); expected != "" && snapshot.SessionID != expected {
+	if expected := strings.TrimSpace(c.Query("sessionId")); expected != "" && record.SessionID != expected {
 		c.JSON(http.StatusNotFound, gin.H{"error": "request snapshot unavailable"})
 		return
 	}
-	if expected := strings.TrimSpace(c.Query("runId")); expected != "" && snapshot.RunID != expected {
+	if expected := strings.TrimSpace(c.Query("runId")); expected != "" && record.RunID != expected {
 		c.JSON(http.StatusNotFound, gin.H{"error": "request snapshot unavailable"})
 		return
 	}
 	c.Header("Cache-Control", "no-store")
-	c.JSON(http.StatusOK, snapshot)
+	c.JSON(http.StatusOK, record)
 }
 
 func (s *Server) handleDiagnosticTrace(c *gin.Context) {
@@ -130,7 +130,7 @@ func (s *Server) handleDiagnosticTrace(c *gin.Context) {
 	if hasMore {
 		report.Runs = report.Runs[:limit]
 	}
-	page := tracebundle.PageInfo{HasMore: hasMore}
+	page := trace.PageInfo{HasMore: hasMore}
 	if hasMore {
 		cursor, err := encodeDiagnosticTraceCursor(report.Runs[len(report.Runs)-1])
 		if err != nil {
@@ -141,16 +141,16 @@ func (s *Server) handleDiagnosticTrace(c *gin.Context) {
 	}
 	if len(report.Runs) == 0 && before != nil {
 		c.Header("Cache-Control", "no-store")
-		c.JSON(http.StatusOK, tracebundle.Bundle{
-			Version: tracebundle.CurrentVersion, GeneratedAt: report.GeneratedAt,
-			SessionID: sessionID, Tasks: []tracebundle.Task{}, Page: page,
+		c.JSON(http.StatusOK, trace.Bundle{
+			Version: trace.CurrentVersion, GeneratedAt: report.GeneratedAt,
+			SessionID: sessionID, Tasks: []trace.Task{}, Page: page,
 		})
 		return
 	}
-	bundle, err := tracebundle.Build(
+	bundle, err := trace.Build(
 		report, sessionID, runID, s.requestSnapshots,
 	)
-	if errors.Is(err, tracebundle.ErrTaskNotFound) {
+	if errors.Is(err, trace.ErrTaskNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "diagnostic task unavailable"})
 		return
 	}

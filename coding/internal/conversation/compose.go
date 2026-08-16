@@ -7,8 +7,8 @@ import (
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/observability"
 	"github.com/ktsoator/or/coding/internal/permission"
-	"github.com/ktsoator/or/coding/internal/requestsnapshot"
 	"github.com/ktsoator/or/coding/internal/skills"
+	"github.com/ktsoator/or/coding/internal/snapshot"
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/transcript"
 	"github.com/ktsoator/or/llm"
@@ -24,7 +24,7 @@ type engineSessionConfig struct {
 	AdditionalTools  []tools.Tool
 	StreamFn         agent.StreamFn
 	Recorder         observability.Recorder
-	RequestSnapshots requestsnapshot.Writer
+	RequestSnapshots snapshot.Writer
 }
 
 // This is the one place an engine.Session is assembled. Every conversation the
