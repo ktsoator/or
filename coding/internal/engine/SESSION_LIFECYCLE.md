@@ -350,15 +350,19 @@ Implemented:
     prepare a batch-local reducer delta, append the sequenced entries to the
     Store, and commit that delta only after persistence succeeds. Failed Store
     appends leave the canonical reducer and its next sequence unchanged.
+12. A session-owned projection registry eagerly drives the lifecycle, message,
+    tool, context, and compaction read model at the same commit boundary. Its
+    snapshots carry the shared `AsOfSeq`; History and RunCompleted message
+    correlation consume this incremental view instead of replaying the log.
 
 Remaining:
 
-1. Drive read models incrementally as entries commit instead of replaying the
-   complete prefix for each query.
-2. Switch model-context and trace consumers from their current scans
+1. Switch model-context and trace consumers from their current scans
    to registered session projections.
-3. Persist request-header facts so each provider input can be reconstructed
+2. Persist request-header facts so each provider input can be reconstructed
    from a precise committed event boundary.
+3. Add versioned persisted projection checkpoints only after the live
+   incremental semantics and invalidation rules are stable.
 
 Observability now emits real Turn and Step lifecycle events. Provider requests
 carry both parent IDs, and each physical provider dispatch has a stable

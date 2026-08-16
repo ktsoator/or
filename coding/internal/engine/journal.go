@@ -24,6 +24,7 @@ type sessionJournal struct {
 	persistedLen int
 	usageStart   int
 	validator    *transcript.SessionValidator
+	projections  *transcript.ProjectionRegistry
 
 	outcomeMu sync.Mutex
 	outcomes  map[string]agent.ToolOutcome // tool-call ID -> terminal outcome
@@ -46,7 +47,12 @@ func newSessionJournal(
 		}
 		entries = loaded
 	}
-	validator, repairs, err := transcript.RecoverSession(entries)
+	projections := transcript.NewProjectionRegistry()
+	sessionView := transcript.NewSessionProjectionUnit()
+	if err := projections.Register(sessionView); err != nil {
+		return nil, nil, nil, fmt.Errorf("coding: register session projection: %w", err)
+	}
+	validator, repairs, err := transcript.RecoverSessionWithProjections(entries, projections)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("coding: recover session transcript: %w", err)
 	}
@@ -83,6 +89,7 @@ func newSessionJournal(
 		persistedLen: len(seed),
 		usageStart:   usageStart,
 		validator:    validator,
+		projections:  projections,
 		outcomes:     outcomes,
 	}
 	return journal, seed, append([]transcript.Entry(nil), entries...), nil
@@ -118,6 +125,33 @@ func (j *sessionJournal) snapshot() ([]transcript.Entry, int) {
 	j.mu.RLock()
 	defer j.mu.RUnlock()
 	return append([]transcript.Entry(nil), j.entries...), j.persistedLen
+}
+
+func (j *sessionJournal) projectionSnapshot() (*transcript.SessionProjection, int, error) {
+	j.mu.RLock()
+	defer j.mu.RUnlock()
+	snapshot, err := j.projections.Snapshot()
+	if err != nil {
+		return nil, 0, err
+	}
+	value, ok := snapshot.Values[transcript.SessionProjectionKey]
+	if !ok {
+		return nil, 0, fmt.Errorf("coding: session projection is not registered")
+	}
+	projection, ok := value.(*transcript.SessionProjection)
+	if !ok || projection == nil {
+		return nil, 0, fmt.Errorf("coding: session projection has type %T", value)
+	}
+	wantSeq := j.validator.NextSeq() - 1
+	if snapshot.AsOfSeq != wantSeq || projection.AsOfSeq != wantSeq {
+		return nil, 0, fmt.Errorf(
+			"coding: projection registry at sequence %d, session view at %d, validator at %d",
+			snapshot.AsOfSeq,
+			projection.AsOfSeq,
+			wantSeq,
+		)
+	}
+	return projection, j.persistedLen, nil
 }
 
 func (j *sessionJournal) usageStartIndex() int {
@@ -327,6 +361,10 @@ func (s *Session) snapshotTranscript() []transcript.Entry {
 
 func (s *Session) snapshotTranscriptState() ([]transcript.Entry, int) {
 	return s.journal.snapshot()
+}
+
+func (s *Session) snapshotSessionProjection() (*transcript.SessionProjection, int, error) {
+	return s.journal.projectionSnapshot()
 }
 
 func (s *Session) snapshotOutcomes() map[string]agent.ToolOutcome {

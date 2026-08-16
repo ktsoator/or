@@ -617,6 +617,57 @@ func TestSessionJournalRejectsInvalidBatchBeforeStoreAppend(t *testing.T) {
 	}
 }
 
+func TestSessionJournalAdvancesProjectionOnlyAfterStoreSuccess(t *testing.T) {
+	ctx := context.Background()
+	storeErr := errors.New("projection checkpoint unavailable")
+	store := &checkpointStore{}
+	journal, _, _, err := newSessionJournal(ctx, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	messages := []agent.AgentMessage{agent.UserMessage("question")}
+	positioned := positionedLifecycle(
+		0,
+		transcript.NewRunStart("run-1"),
+		transcript.NewTurnStart("run-1", "turn-1"),
+	)
+
+	store.failNext(storeErr)
+	if err := journal.persistMessages(ctx, messages, nil, positioned); !errors.Is(err, storeErr) {
+		t.Fatalf("persistMessages() error = %v, want Store failure", err)
+	}
+	projection, persistedLen, err := journal.projectionSnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if projection.AsOfSeq != -1 || projection.AppliedEntries != 0 ||
+		journal.validator.NextSeq() != 0 || persistedLen != 0 {
+		t.Fatalf(
+			"state after Store failure = projection %#v validator %d persisted %d",
+			projection,
+			journal.validator.NextSeq(),
+			persistedLen,
+		)
+	}
+
+	if err := journal.persistMessages(ctx, messages, nil, positioned); err != nil {
+		t.Fatalf("retry persistMessages(): %v", err)
+	}
+	projection, persistedLen, err = journal.projectionSnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if projection.AsOfSeq != 2 || projection.AppliedEntries != 3 ||
+		journal.validator.NextSeq() != 3 || persistedLen != 1 || len(projection.Messages) != 1 {
+		t.Fatalf(
+			"state after retry = projection %#v validator %d persisted %d",
+			projection,
+			journal.validator.NextSeq(),
+			persistedLen,
+		)
+	}
+}
+
 func TestSessionRetryDoesNotPersistFailedAssistantOrDuplicatePrompt(t *testing.T) {
 	ctx := context.Background()
 	store := &checkpointStore{}

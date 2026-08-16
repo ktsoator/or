@@ -150,6 +150,10 @@ Refactors must preserve these contracts:
     not advance the durable sequence or in-memory event state.
 16. Session restore replays the committed prefix once, then validates generated
     tool and lifecycle repairs incrementally on the recovered validator.
+17. Registered read models advance synchronously only when a prepared append
+    commits. Every registry snapshot is detached and reports the same durable
+    `AsOfSeq`; Store failures leave both reducer and projection watermarks
+    unchanged.
 
 ## Refactoring rules
 

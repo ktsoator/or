@@ -18,7 +18,16 @@ const (
 // its interrupted tail, and returns a validator advanced through those repairs.
 // The prefix is replayed once and is never mutated.
 func RecoverSession(entries []Entry) (*SessionValidator, []Entry, error) {
-	validator, err := ValidateSession(entries)
+	return RecoverSessionWithProjections(entries, nil)
+}
+
+// RecoverSessionWithProjections performs the recovery replay while eagerly
+// driving registered read models over the same committed prefix and repairs.
+func RecoverSessionWithProjections(
+	entries []Entry,
+	projections *ProjectionRegistry,
+) (*SessionValidator, []Entry, error) {
+	validator, err := validateSession(entries, projections)
 	if err != nil {
 		return nil, nil, err
 	}

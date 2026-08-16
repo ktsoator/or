@@ -9,8 +9,9 @@ import (
 // PrepareAppend validates against a batch-local delta that callers commit only
 // after the same entries are durable.
 type SessionValidator struct {
-	reducer *sessionReducer
-	applied int64
+	reducer     *sessionReducer
+	projections *ProjectionRegistry
+	applied     int64
 }
 
 // PreparedAppend is a validated batch-local reducer delta. Commit installs it
@@ -21,16 +22,33 @@ type PreparedAppend struct {
 	firstSeq  int64
 	count     int64
 	committed bool
+	events    []ProjectionEvent
 }
 
 // ValidateSession replays a complete committed event prefix.
 func ValidateSession(entries []Entry) (*SessionValidator, error) {
+	return validateSession(entries, nil)
+}
+
+func validateSession(
+	entries []Entry,
+	projections *ProjectionRegistry,
+) (*SessionValidator, error) {
 	validator := &SessionValidator{
-		reducer: newSessionReducer(len(entries)),
+		reducer:     newSessionReducer(len(entries)),
+		projections: projections,
 	}
 	for index, entry := range entries {
-		if _, err := validator.reducer.Apply(index, entry); err != nil {
+		transition, err := validator.reducer.Apply(index, entry)
+		if err != nil {
 			return nil, err
+		}
+		if projections != nil {
+			event, err := newProjectionEvent(index, entry, transition)
+			if err != nil {
+				return nil, err
+			}
+			projections.apply([]ProjectionEvent{event})
 		}
 		validator.applied++
 	}
@@ -48,9 +66,21 @@ func (v *SessionValidator) PrepareAppend(entries []Entry) (*PreparedAppend, erro
 
 	stage := newStagedSessionReducer(v.reducer, len(entries))
 	applied := v.applied
+	var events []ProjectionEvent
+	if v.projections != nil {
+		events = make([]ProjectionEvent, 0, len(entries))
+	}
 	for _, entry := range entries {
-		if _, err := stage.Apply(int(applied), entry); err != nil {
+		transition, err := stage.Apply(int(applied), entry)
+		if err != nil {
 			return nil, err
+		}
+		if events != nil {
+			event, err := newProjectionEvent(int(applied), entry, transition)
+			if err != nil {
+				return nil, err
+			}
+			events = append(events, event)
 		}
 		applied++
 	}
@@ -59,6 +89,7 @@ func (v *SessionValidator) PrepareAppend(entries []Entry) (*PreparedAppend, erro
 		stage:     stage,
 		firstSeq:  v.applied,
 		count:     int64(len(entries)),
+		events:    events,
 	}, nil
 }
 
@@ -72,6 +103,7 @@ func (p *PreparedAppend) Commit() {
 		panic("transcript: prepared append is stale")
 	}
 	p.validator.reducer.commitStage(p.stage)
+	p.validator.projections.apply(p.events)
 	p.validator.applied += p.count
 	p.committed = true
 }

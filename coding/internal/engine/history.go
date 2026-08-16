@@ -68,7 +68,12 @@ type HistoryItem struct {
 // order. The returned slice is detached from the agent's mutable state.
 func (s *Session) History() []HistoryItem {
 	_, activeRunID, activeStartedAt := s.activeRunState()
-	entries, persistedLen := s.snapshotTranscriptState()
+	projection, persistedLen, err := s.snapshotSessionProjection()
+	if err != nil {
+		// Loaded and engine-produced logs are validated before Session is exposed.
+		// Returning no partial projection avoids presenting corrupt ownership as fact.
+		return nil
+	}
 	outcomes := s.snapshotOutcomes()
 
 	active := s.agent.Snapshot().Messages
@@ -76,13 +81,6 @@ func (s *Session) History() []HistoryItem {
 	if persistedLen < len(active) {
 		messages = active[persistedLen:]
 	}
-	projection, err := transcript.ProjectSession(entries)
-	if err != nil {
-		// Loaded and engine-produced logs are validated before Session is exposed.
-		// Returning no partial projection avoids presenting corrupt ownership as fact.
-		return nil
-	}
-
 	items, foundActive := projectSessionHistory(projection, outcomes, activeRunID, messages)
 	if activeRunID != "" && !foundActive {
 		items = append(items, projectRecordedRunHistory(

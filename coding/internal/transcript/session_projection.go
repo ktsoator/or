@@ -9,8 +9,10 @@ import (
 	"github.com/ktsoator/or/llm"
 )
 
-// SessionProjection is a disposable, deterministic view of one committed
-// transcript prefix. AsOfSeq identifies the last event included in the view.
+const SessionProjectionKey = "session"
+
+// SessionProjection is a deterministic snapshot of one committed transcript
+// prefix. AsOfSeq identifies the last event included in the view.
 type SessionProjection struct {
 	AppliedEntries int
 	AsOfSeq        int64
@@ -138,40 +140,57 @@ type sessionProjector struct {
 	toolIndexes map[string]int
 }
 
-// ProjectSession folds entries once, in committed order, into a detached
-// session view. The canonical reducer validates ordering and references while
-// this projector builds the disposable read model.
-func ProjectSession(entries []Entry) (*SessionProjection, error) {
-	reducer := newSessionReducer(len(entries))
-	projector := sessionProjector{
-		runIndex: -1, turnIndex: -1, stepIndex: -1,
-		toolIndexes: make(map[string]int),
-	}
-	for index, entry := range entries {
-		transition, err := reducer.Apply(index, entry)
-		if err != nil {
-			return nil, err
-		}
-		if err := projector.apply(index, entry, transition); err != nil {
-			return nil, err
-		}
-	}
-	projector.projection.AppliedEntries = len(entries)
-	projector.projection.AsOfSeq = -1
-	if len(entries) > 0 {
-		projector.projection.AsOfSeq = entries[len(entries)-1].Seq
-	}
-	projector.projection.Open = ProjectedLifecycle{
-		RunID: reducer.scope.RunID, TurnID: reducer.scope.TurnID, StepID: reducer.scope.StepID,
-	}
-	return &projector.projection, nil
+// SessionProjectionUnit is the registered, incrementally maintained session
+// read model.
+type SessionProjectionUnit struct {
+	projector sessionProjector
 }
 
-func (p *sessionProjector) apply(
-	index int,
-	entry Entry,
-	transition sessionTransition,
-) error {
+func NewSessionProjectionUnit() *SessionProjectionUnit {
+	return &SessionProjectionUnit{projector: sessionProjector{
+		projection:  SessionProjection{AsOfSeq: -1},
+		runIndex:    -1,
+		turnIndex:   -1,
+		stepIndex:   -1,
+		toolIndexes: make(map[string]int),
+	}}
+}
+
+func (*SessionProjectionUnit) ProjectionKey() string { return SessionProjectionKey }
+
+func (u *SessionProjectionUnit) ApplyProjection(event ProjectionEvent) {
+	u.projector.apply(event)
+}
+
+func (u *SessionProjectionUnit) SnapshotProjection() (any, error) {
+	return u.Snapshot()
+}
+
+func (u *SessionProjectionUnit) Snapshot() (*SessionProjection, error) {
+	if u == nil {
+		return nil, fmt.Errorf("transcript: session projection unit is nil")
+	}
+	return cloneSessionProjection(u.projector.projection)
+}
+
+// ProjectSession folds entries once, in committed order, through the same
+// registered projection used by live sessions. It remains the deterministic
+// replay entry point for offline diagnostics and tests.
+func ProjectSession(entries []Entry) (*SessionProjection, error) {
+	registry := NewProjectionRegistry()
+	unit := NewSessionProjectionUnit()
+	if err := registry.Register(unit); err != nil {
+		return nil, err
+	}
+	if _, err := validateSession(entries, registry); err != nil {
+		return nil, err
+	}
+	return unit.Snapshot()
+}
+
+func (p *sessionProjector) apply(event ProjectionEvent) {
+	index := event.EntryIndex
+	entry := event.Entry
 	switch entry.Type {
 	case RunStartEntry:
 		p.startRun(index, entry)
@@ -186,7 +205,7 @@ func (p *sessionProjector) apply(
 	case StepEndEntry:
 		p.endStep(index, entry)
 	case MessageEntry:
-		return p.applyMessage(index, entry, transition)
+		p.applyMessage(event)
 	case ToolCallEntry:
 		p.applyToolDispatch(index, entry)
 	case ToolOutcomeEntry:
@@ -195,8 +214,8 @@ func (p *sessionProjector) apply(
 		attachment := *entry.Context
 		p.projection.Contexts = append(p.projection.Contexts, ProjectedContext{
 			EntryID: entry.ID, EntryIndex: index,
-			RunID: transition.Scope.RunID, TurnID: transition.Scope.TurnID,
-			StepID: transition.Scope.StepID, Attachment: attachment,
+			RunID: event.Scope.RunID, TurnID: event.Scope.TurnID,
+			StepID: event.Scope.StepID, Attachment: attachment,
 		})
 	case CompactionEntry:
 		compaction := *entry.Compaction
@@ -204,11 +223,13 @@ func (p *sessionProjector) apply(
 		compaction.ModifiedFiles = append([]string(nil), compaction.ModifiedFiles...)
 		p.projection.Compactions = append(p.projection.Compactions, ProjectedCompaction{
 			EntryID: entry.ID, EntryIndex: index,
-			RunID: transition.Scope.RunID, TurnID: transition.Scope.TurnID,
-			StepID: transition.Scope.StepID, Compaction: compaction,
+			RunID: event.Scope.RunID, TurnID: event.Scope.TurnID,
+			StepID: event.Scope.StepID, Compaction: compaction,
 		})
 	}
-	return nil
+	p.projection.AppliedEntries = index + 1
+	p.projection.AsOfSeq = entry.Seq
+	p.projection.Open = event.Scope
 }
 
 func (p *sessionProjector) startRun(index int, entry Entry) {
@@ -273,39 +294,30 @@ func (p *sessionProjector) endStep(index int, entry Entry) {
 	p.stepIndex = -1
 }
 
-func (p *sessionProjector) applyMessage(
-	index int,
-	entry Entry,
-	transition sessionTransition,
-) error {
-	detached, err := cloneProjectedMessage(transition.Message)
-	if err != nil {
-		return fmt.Errorf("transcript: clone message entry %s: %w", entry.ID, err)
-	}
+func (p *sessionProjector) applyMessage(event ProjectionEvent) {
+	index := event.EntryIndex
+	entry := event.Entry
 	p.projection.Messages = append(p.projection.Messages, ProjectedMessage{
 		EntryID: entry.ID, EntryIndex: index, Timestamp: entry.Timestamp,
-		RunID: transition.Scope.RunID, TurnID: transition.Scope.TurnID,
-		StepID: transition.Scope.StepID, Message: detached,
+		RunID: event.Scope.RunID, TurnID: event.Scope.TurnID,
+		StepID: event.Scope.StepID, Message: event.message,
 	})
 
-	for _, request := range transition.ToolRequests {
+	for _, request := range event.toolRequests {
 		p.addToolRequest(request)
 	}
-	if transition.Tool != nil {
-		if _, ok := transition.Message.(*llm.ToolResultMessage); ok {
-			tool := &p.projection.ToolCalls[p.toolIndexes[transition.Tool.Request.ID]]
-			tool.ResultMessageEntryID = entry.ID
-			tool.ResultEntryIndex = index
-		}
+	if event.toolResultID != "" {
+		tool := &p.projection.ToolCalls[p.toolIndexes[event.toolResultID]]
+		tool.ResultMessageEntryID = entry.ID
+		tool.ResultEntryIndex = index
 	}
-	return nil
 }
 
-func (p *sessionProjector) addToolRequest(request *reducedToolState) {
+func (p *sessionProjector) addToolRequest(request projectedToolRequest) {
 	tool := ProjectedToolCall{
-		ToolCallID:                 request.Request.ID,
-		ToolName:                   request.Request.Name,
-		Arguments:                  append(json.RawMessage(nil), request.Request.Arguments...),
+		ToolCallID:                 request.ID,
+		ToolName:                   request.Name,
+		Arguments:                  append(json.RawMessage(nil), request.Arguments...),
 		RunID:                      request.Scope.RunID,
 		TurnID:                     request.Scope.TurnID,
 		StepID:                     request.Scope.StepID,
@@ -314,7 +326,7 @@ func (p *sessionProjector) addToolRequest(request *reducedToolState) {
 		DispatchEntryIndex:         -1, ResultEntryIndex: -1, OutcomeEntryIndex: -1,
 	}
 	p.projection.ToolCalls = append(p.projection.ToolCalls, tool)
-	p.toolIndexes[request.Request.ID] = len(p.projection.ToolCalls) - 1
+	p.toolIndexes[request.ID] = len(p.projection.ToolCalls) - 1
 }
 
 func (p *sessionProjector) applyToolDispatch(index int, entry Entry) {
@@ -325,8 +337,7 @@ func (p *sessionProjector) applyToolDispatch(index int, entry Entry) {
 
 func (p *sessionProjector) applyToolOutcome(index int, entry Entry) {
 	tool := &p.projection.ToolCalls[p.toolIndexes[entry.ToolOutcome.ToolCallID]]
-	outcome := *entry.ToolOutcome
-	outcome.Data = append(json.RawMessage(nil), outcome.Data...)
+	outcome := cloneToolOutcome(*entry.ToolOutcome)
 	tool.OutcomeEntryID = entry.ID
 	tool.OutcomeEntryIndex = index
 	tool.Outcome = &outcome
@@ -350,4 +361,56 @@ func cloneProjectedMessage(message llm.Message) (agent.AgentMessage, error) {
 		return nil, err
 	}
 	return agent.FromLLM(decoded), nil
+}
+
+func cloneSessionProjection(source SessionProjection) (*SessionProjection, error) {
+	clone := source
+	clone.Runs = make([]ProjectedRun, len(source.Runs))
+	for runIndex, run := range source.Runs {
+		clone.Runs[runIndex] = run
+		clone.Runs[runIndex].Turns = make([]ProjectedTurn, len(run.Turns))
+		for turnIndex, turn := range run.Turns {
+			clone.Runs[runIndex].Turns[turnIndex] = turn
+			clone.Runs[runIndex].Turns[turnIndex].Steps = append(
+				[]ProjectedStep(nil),
+				turn.Steps...,
+			)
+		}
+	}
+	clone.Messages = make([]ProjectedMessage, len(source.Messages))
+	for index, message := range source.Messages {
+		clone.Messages[index] = message
+		llmMessage, ok := agent.ToLLM(message.Message)
+		if !ok {
+			return nil, fmt.Errorf("transcript: projected message entry %s is not model-facing", message.EntryID)
+		}
+		detached, err := cloneProjectedMessage(llmMessage)
+		if err != nil {
+			return nil, fmt.Errorf("transcript: clone projected message entry %s: %w", message.EntryID, err)
+		}
+		clone.Messages[index].Message = detached
+	}
+	clone.ToolCalls = make([]ProjectedToolCall, len(source.ToolCalls))
+	for index, tool := range source.ToolCalls {
+		clone.ToolCalls[index] = tool
+		clone.ToolCalls[index].Arguments = append(json.RawMessage(nil), tool.Arguments...)
+		if tool.Outcome != nil {
+			outcome := cloneToolOutcome(*tool.Outcome)
+			clone.ToolCalls[index].Outcome = &outcome
+		}
+	}
+	clone.Contexts = append([]ProjectedContext(nil), source.Contexts...)
+	clone.Compactions = make([]ProjectedCompaction, len(source.Compactions))
+	for index, compaction := range source.Compactions {
+		clone.Compactions[index] = compaction
+		clone.Compactions[index].Compaction.ReadFiles = append(
+			[]string(nil),
+			compaction.Compaction.ReadFiles...,
+		)
+		clone.Compactions[index].Compaction.ModifiedFiles = append(
+			[]string(nil),
+			compaction.Compaction.ModifiedFiles...,
+		)
+	}
+	return &clone, nil
 }
