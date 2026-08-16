@@ -58,13 +58,39 @@ settings storage, or reusable SDK abstractions.
 - `tools` owns concrete Or tools and their access descriptions.
 - `permission` owns authorization policy for concrete tool effects.
 - `contextprojection` owns staged hidden context and request projection.
-- `transcript` owns durable entry types, projection, and storage contracts.
+- `transcript` owns durable entry types, write-side validation and reduction,
+  read-side projections, and storage contracts.
 - `compaction` owns summary generation and transcript compaction preparation.
 - `prompt` and `skills` own source material used to build model context.
 
 The Coding backend composes `agent` directly. It does not depend on `harness`:
 Or's transcript checkpoints, context protocol, permissions, and recovery rules
 are product contracts rather than generic SDK behavior.
+
+## Transcript write and read flow
+
+The append-only transcript is the source of truth. `sessionJournal` owns the
+commit boundary; transcript types own the deterministic state transitions.
+
+```text
+new entries
+    -> assign contiguous sequence numbers
+    -> SessionValidator.PrepareAppend
+       -> validate with a batch-local reducer
+       -> prepare detached ProjectionEvents
+    -> Store.Append
+    -> PreparedAppend.Commit
+       -> advance the canonical reducer
+       -> advance registered read projections
+    -> History / Messages read projection snapshots
+```
+
+The reducer is the write-side invariant model: it decides whether an event can
+be appended. The projection registry is the read-side driver: it advances only
+after persistence succeeds and serves detached snapshots at the same sequence
+watermark. `ProjectSession` remains an offline replay API for diagnostics and
+tests. `BuildContext` still performs the separate model-context projection and
+is a future migration candidate rather than part of product-history reads.
 
 ## Engine source ownership
 
@@ -76,14 +102,14 @@ run.go              Prompt/Continue run lifecycle and completion metadata
 run_state.go        concurrency-safe state for the active run
 lifecycle.go        durable Run, Turn, and Step boundary coordination
 checkpoint.go       pre-provider context projection and durable checkpoint
-journal.go          durable entries, outcomes, persistence, and snapshots
+journal.go          transcript recovery, append commit boundary, and snapshots
 context_refresh.go  project context and Skill refresh lifecycle
 context.go          context-usage measurement and estimation
 compact.go          explicit compaction
 auto_compact.go     proactive compaction and overflow recovery
 retry.go            transient provider retry policy
 event.go            product event contract and agent-event projection
-history.go          durable and live history projection
+history.go          durable/live Messages, Entries, and product history views
 attachment.go       attached-file message context
 background_tasks.go background-task query and control
 tool_outcome.go     durable tool-outcome encoding
@@ -154,10 +180,17 @@ Refactors must preserve these contracts:
     commits. Every registry snapshot is detached and reports the same durable
     `AsOfSeq`; Store failures leave both reducer and projection watermarks
     unchanged.
+18. Product history, run-message correlation, and complete original-message
+    snapshots read the registered session projection. Full transcript folds are
+    reserved for restore, offline diagnostics, and model-context paths that
+    have not yet moved to their own projection.
 
 ## Refactoring rules
 
 - Move cohesive behavior between files before adding types or subpackages.
+- Keep transcript entries, their reducer, and projections in one package until
+  a proposed split has an independent contract and does not merely increase
+  the exported surface.
 - Keep the `Session` public surface stable unless a product contract change is
   intentional and coordinated with `conversation` and `httpapi`.
 - Treat transcript shape, event ordering, checkpoint timing, queue semantics,

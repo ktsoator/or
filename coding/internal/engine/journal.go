@@ -109,9 +109,9 @@ func (j *sessionJournal) captureOutcomes(source *agent.Agent) {
 	})
 }
 
-// snapshotOutcomes returns a copy of the captured outcomes, safe to read while
+// outcomesSnapshot returns a copy of the captured outcomes, safe to read while
 // a run is appending more.
-func (j *sessionJournal) snapshotOutcomes() map[string]agent.ToolOutcome {
+func (j *sessionJournal) outcomesSnapshot() map[string]agent.ToolOutcome {
 	j.outcomeMu.Lock()
 	defer j.outcomeMu.Unlock()
 	out := make(map[string]agent.ToolOutcome, len(j.outcomes))
@@ -121,7 +121,7 @@ func (j *sessionJournal) snapshotOutcomes() map[string]agent.ToolOutcome {
 	return out
 }
 
-func (j *sessionJournal) snapshot() ([]transcript.Entry, int) {
+func (j *sessionJournal) entriesSnapshot() ([]transcript.Entry, int) {
 	j.mu.RLock()
 	defer j.mu.RUnlock()
 	return append([]transcript.Entry(nil), j.entries...), j.persistedLen
@@ -160,13 +160,21 @@ func (j *sessionJournal) usageStartIndex() int {
 	return j.usageStart
 }
 
-func (j *sessionJournal) messages(active []agent.AgentMessage) []agent.AgentMessage {
-	entries, persistedLen := j.snapshot()
-	messages := transcript.Messages(entries)
+func (j *sessionJournal) messagesSnapshot(
+	active []agent.AgentMessage,
+) ([]agent.AgentMessage, error) {
+	projection, persistedLen, err := j.projectionSnapshot()
+	if err != nil {
+		return nil, err
+	}
+	messages := make([]agent.AgentMessage, 0, len(projection.Messages)+len(active))
+	for _, message := range projection.Messages {
+		messages = append(messages, message.Message)
+	}
 	if persistedLen < len(active) {
 		messages = append(messages, active[persistedLen:]...)
 	}
-	return messages
+	return messages, nil
 }
 
 // persistNew appends the messages added since the last persist to the Store. It
@@ -231,7 +239,7 @@ func (j *sessionJournal) persistMessages(
 	if persistedLen < len(all) {
 		added = all[persistedLen:]
 	}
-	outcomes := j.snapshotOutcomes()
+	outcomes := j.outcomesSnapshot()
 	entries := make(
 		[]transcript.Entry,
 		0,
@@ -341,32 +349,4 @@ func (j *sessionJournal) applyCompaction(
 	j.usageStart = projectedLen
 	j.persistedLen = projectedLen
 	j.mu.Unlock()
-}
-
-// Messages returns every original message on the current transcript path. A
-// compacted session therefore still exposes its complete history.
-func (s *Session) Messages() []agent.AgentMessage {
-	return s.journal.messages(s.agent.Snapshot().Messages)
-}
-
-// Entries returns a detached snapshot of the durable session log.
-func (s *Session) Entries() []transcript.Entry {
-	return s.snapshotTranscript()
-}
-
-func (s *Session) snapshotTranscript() []transcript.Entry {
-	entries, _ := s.snapshotTranscriptState()
-	return entries
-}
-
-func (s *Session) snapshotTranscriptState() ([]transcript.Entry, int) {
-	return s.journal.snapshot()
-}
-
-func (s *Session) snapshotSessionProjection() (*transcript.SessionProjection, int, error) {
-	return s.journal.projectionSnapshot()
-}
-
-func (s *Session) snapshotOutcomes() map[string]agent.ToolOutcome {
-	return s.journal.snapshotOutcomes()
 }

@@ -64,17 +64,36 @@ type HistoryItem struct {
 	CompletedAt time.Time
 }
 
+// Messages returns every original message on the current transcript path. A
+// compacted session therefore still exposes its complete history.
+func (s *Session) Messages() []agent.AgentMessage {
+	messages, err := s.journal.messagesSnapshot(s.agent.Snapshot().Messages)
+	if err != nil {
+		// Journal construction and every append validate the registered view.
+		// Keep this snapshot-only API from returning a partial conversation if
+		// that invariant is ever broken.
+		return nil
+	}
+	return messages
+}
+
+// Entries returns a detached snapshot of the durable session log.
+func (s *Session) Entries() []transcript.Entry {
+	entries, _ := s.journal.entriesSnapshot()
+	return entries
+}
+
 // History returns a displayable snapshot of the conversation in transcript
 // order. The returned slice is detached from the agent's mutable state.
 func (s *Session) History() []HistoryItem {
 	_, activeRunID, activeStartedAt := s.activeRunState()
-	projection, persistedLen, err := s.snapshotSessionProjection()
+	projection, persistedLen, err := s.journal.projectionSnapshot()
 	if err != nil {
 		// Loaded and engine-produced logs are validated before Session is exposed.
 		// Returning no partial projection avoids presenting corrupt ownership as fact.
 		return nil
 	}
-	outcomes := s.snapshotOutcomes()
+	outcomes := s.journal.outcomesSnapshot()
 
 	active := s.agent.Snapshot().Messages
 	var messages []agent.AgentMessage

@@ -57,7 +57,7 @@ func (s *Session) compactLocked(
 	if err := s.persistNew(ctx); err != nil {
 		return CompactionResult{}, err
 	}
-	entries := s.snapshotTranscript()
+	entries := s.Entries()
 	keepRecent := defaultKeepRecentTokens
 	if state.Model.ContextWindow > 0 && state.Model.ContextWindow/4 < keepRecent {
 		keepRecent = state.Model.ContextWindow / 4

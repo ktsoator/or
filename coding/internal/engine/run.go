@@ -132,7 +132,7 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 }
 
 func (s *Session) persistedRunMessageIDs(runID string) ([]string, string) {
-	projection, _, err := s.snapshotSessionProjection()
+	projection, _, err := s.journal.projectionSnapshot()
 	if err != nil {
 		return nil, ""
 	}

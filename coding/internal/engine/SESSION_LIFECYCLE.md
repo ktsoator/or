@@ -353,7 +353,8 @@ Implemented:
 12. A session-owned projection registry eagerly drives the lifecycle, message,
     tool, context, and compaction read model at the same commit boundary. Its
     snapshots carry the shared `AsOfSeq`; History and RunCompleted message
-    correlation consume this incremental view instead of replaying the log.
+    correlation, along with Session's complete original-message view, consume
+    this incremental projection instead of replaying or scanning the log.
 
 Remaining:
 
