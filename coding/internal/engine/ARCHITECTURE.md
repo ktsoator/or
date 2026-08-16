@@ -16,6 +16,9 @@ app -> conversation -> engine -> agent -> llm
 `engine` owns the execution policy inside one session. The reusable `agent`
 package owns the provider-neutral model/tool loop and ephemeral runtime state.
 
+The proposed precise run/turn/step semantics, durable session-event model, and
+side-effect checkpoint contract are documented in [SESSION_LIFECYCLE.md](SESSION_LIFECYCLE.md).
+
 ## Package boundaries
 
 ### `conversation`
@@ -119,6 +122,9 @@ Refactors must preserve these contracts:
    `httpapi` and must not leak into the engine.
 9. Cancellation and provider errors retain their identity for conversation and
    transport adapters.
+10. An authorized tool invocation is durable before its body can execute; a
+    failed tool checkpoint stops the remaining run before another side effect or
+    provider request.
 
 ## Refactoring rules
 

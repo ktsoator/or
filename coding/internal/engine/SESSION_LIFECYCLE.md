@@ -1,0 +1,350 @@
+# Session lifecycle, event log, and durability checkpoints
+
+Status: proposed design. This document describes the target contract; the
+current implementation does not yet emit or persist every event listed here.
+
+## Purpose
+
+The coding agent already has a model/tool loop, streaming, queues, transcript
+persistence, provider checkpoints, and diagnostic tracing. The next evolution
+is to give those pieces one explicit lifecycle and one durable source of truth.
+
+This design has three goals:
+
+1. Make run, turn, step, request, and retry boundaries unambiguous.
+2. Make the session event log sufficient for context projection, replay, and
+   crash recovery.
+3. Prevent a provider request or tool side effect from starting before the
+   facts required to recover it are durable.
+
+The design borrows the useful lifecycle and checkpoint ideas from DeepSeek
+Harness without adopting its plugin system or rewriting Or's runtime at once.
+
+## Lifecycle vocabulary
+
+```text
+Session
++-- Run
+    +-- Turn
+        +-- Step
+            +-- ProviderRequest
+                +-- Attempt
+```
+
+### Session
+
+A `Session` is the durable conversation container. It survives process restarts
+and owns the append-only event sequence from which model context, product
+history, recovery state, and replay views are projected.
+
+### Run
+
+A `Run` is one active `Prompt` or `Continue` invocation, from admission until
+the agent becomes idle, completes, fails, or is cancelled. A run is the unit of
+concurrency control and top-level product status.
+
+A run can contain more than one turn when follow-up input is claimed before the
+agent becomes idle. Input submitted after the previous run is idle starts a new
+run.
+
+### Turn
+
+A `Turn` is one claimed unit of user or follow-up intent. It begins when the
+runtime accepts that input and can contain one or more steps.
+
+- The initial prompt starts the first turn of a run.
+- A claimed follow-up ends the preceding turn and starts another turn in the
+  same run.
+- Steering does not start a turn. It joins the active turn and becomes visible
+  to the next step.
+
+### Step
+
+A `Step` is one logical assistant cycle: construct model input, obtain one
+terminal assistant message, and execute the tool calls requested by that
+message. A step ends only after every requested tool call has a terminal result
+or the step is closed with a terminal failure.
+
+Tool results or steering may require another step in the same turn. A terminal
+assistant message with no more work ends the turn.
+
+### ProviderRequest
+
+A `ProviderRequest` is one immutable, model-visible input assembled for a step.
+Normally a step has one provider request. A recovery policy that changes the
+input, model, or effective request configuration creates another provider
+request in the same step.
+
+The provider request ID identifies the logical request, not an individual HTTP
+exchange.
+
+### Attempt
+
+An `Attempt` is one physical dispatch of a provider request. A transient
+transport retry keeps the provider request ID and creates a new attempt ID.
+
+```text
+same immutable input + transport retry  => same request, new attempt
+changed input, model, tools, or config  => new request
+```
+
+## Mapping from the current runtime
+
+The current `agent.RunLoop` vocabulary predates this distinction. Its
+`TurnStart` and `TurnEnd` events surround one model request and its tool batch,
+so they are semantically closest to the target `Step`, not the target `Turn`.
+
+| Current concept | Target concept | Migration note |
+| --- | --- | --- |
+| `agent.AgentStart` / `AgentEnd` | `Run` | Preserve behavior and add stable identity. |
+| `agent.TurnStart` / `TurnEnd` | `Step` | Do not silently reinterpret old persisted or public events. |
+| Initial prompt | First `Turn` | Add an explicit durable boundary. |
+| Follow-up queue item | New `Turn` | It may remain inside the active `Run`. |
+| Steering queue item | Current `Turn`, next `Step` | It must not increment the turn identity. |
+| Product provider retry | `Attempt` | Reuse the provider request identity when input is unchanged. |
+| Overflow recovery with rebuilt context | New `ProviderRequest` | Keep it in the same step unless new user intent is claimed. |
+
+Compatibility adapters may continue exposing the old names while the durable
+event model and new trace projection use the precise lifecycle.
+
+## Durable events and diagnostic events
+
+Or needs two event streams with different guarantees.
+
+### Session events
+
+`SessionEvent` records product facts required to reconstruct the conversation.
+It is append-only, versioned, and part of the session's compatibility contract.
+It must not be rotated or dropped. A required append or checkpoint failure is a
+product failure and blocks the external operation protected by that checkpoint.
+
+Session events support:
+
+- model-context projection;
+- conversation and tool-result history;
+- restart and crash repair;
+- fork and replay;
+- durable UI state derived from the conversation.
+
+### Observability events
+
+`ObservabilityEvent` records diagnostics such as first-token latency, attempt
+duration, token usage, estimated cost, approval wait time, and checkpoint
+duration. It may be sampled, rotated, or written fail-open. It must never be
+required to resume a session or decide whether a side effect may be retried.
+
+The trace UI may join both streams by stable IDs, but the streams remain
+different sources with different reliability requirements.
+
+## Proposed session event vocabulary
+
+Names below describe the target wire semantics. Schema work may add fields, but
+must preserve their meanings.
+
+| Event | Durable fact |
+| --- | --- |
+| `run/start` | A run was admitted with a stable run ID. |
+| `run/end` | The run reached a terminal status. |
+| `turn/start` | One unit of initial or follow-up intent was claimed. |
+| `turn/end` | The turn completed, failed, was cancelled, or was interrupted. |
+| `step/start` | An assistant cycle began inside a turn. |
+| `step/end` | Its assistant and tool work reached a terminal boundary. |
+| `user/message` | Model-visible user, follow-up, steering, or injected input. |
+| `request/header` | Effective model, provider, system prompt, options, and tool schemas when initially established or changed. |
+| `context/attachment` | Product-generated model context and its placement. |
+| `assistant/message` | The complete terminal assistant message and reported usage. |
+| `tool/call` | A validated and authorized tool invocation is about to be dispatched. |
+| `tool/result` | The terminal model-facing and product-facing result for one assistant-requested invocation. |
+| `compaction` | A summary boundary and the source range it replaces in active model context. |
+
+Raw assistant chunks, request snapshots, provider attempts, timings, and costs
+may remain diagnostic data. They become session events only if replay or product
+behavior is defined to require them.
+
+Every session event has at least:
+
+```text
+session_id
+sequence
+event_id
+timestamp
+type
+payload
+```
+
+Lifecycle events additionally carry their owning `run_id`, `turn_id`, and
+`step_id` as applicable. IDs are stable facts; ordinal numbers are presentation
+metadata and must not be used as identities.
+
+## Context projection
+
+The model input is a deterministic projection of a committed session-event
+prefix, not a second independently authoritative transcript.
+
+Conceptually:
+
+```text
+BuildContext(committed events, active compaction, request header)
+    -> immutable provider input
+```
+
+For every provider request, Or must be able to identify:
+
+- the committed event-sequence boundary used as input;
+- the effective request header;
+- the active compaction boundary;
+- the stable request and step identities.
+
+A full diagnostic request snapshot is useful for inspection, but it validates
+the projection rather than replacing the session event log as the source of
+truth.
+
+## Semantic checkpoints
+
+A checkpoint is a durability barrier tied to the meaning of an external
+operation. It is not merely a periodic flush.
+
+### 1. Before provider dispatch
+
+Before the first attempt of a provider request, persist and flush the complete
+event prefix from which its input was projected, including newly claimed input,
+request-header changes, context attachments, compaction state, and the step
+boundary.
+
+```text
+append request facts
+-> flush
+-> dispatch provider attempt
+```
+
+If the flush fails, the provider adapter must not be called.
+
+### 2. Before a tool side effect
+
+After validation, permission, and approval succeed, append `tool/call` and make
+it durable before invoking the tool body.
+
+```text
+validate and authorize
+-> append tool/call
+-> flush
+-> recheck cancellation
+-> invoke tool body
+-> append tool/result
+```
+
+The event means "dispatch may have occurred", not merely "the model requested
+this tool". The assistant message already records the model's request. This
+distinction is what makes recovery safe.
+
+A validation failure, policy denial, or rejected approval produces a terminal
+`tool/result` without a `tool/call`, because no body became eligible for
+dispatch. That result links directly to the request in `assistant/message`.
+
+For a parallel batch, each tool body is protected by its own durable intent.
+The implementation may coalesce storage work, but it must preserve the barrier
+for every call and commit terminal results in model order.
+
+If the flush fails, the tool body must not execute.
+
+### 3. Before the next step or clean idle
+
+Before another provider request, flush the preceding assistant message, tool
+results, and completed step boundary. The pre-provider checkpoint naturally
+provides this barrier.
+
+When a run becomes cleanly idle, flush its terminal turn and run events so a
+successful return never leaves an apparently interrupted durable tail.
+
+## Crash repair
+
+On load, validate the event sequence and repair only an interrupted tail. Never
+rewrite or discard the committed prefix.
+
+For each assistant-requested tool call without a durable result:
+
+```text
+assistant requested call, no tool/call
+    => TOOL_NOT_STARTED
+
+tool/call exists, no tool/result
+    => TOOL_OUTCOME_UNKNOWN
+```
+
+`TOOL_NOT_STARTED` means the dispatch barrier was never committed, so the tool
+body did not start under this protocol. The repaired model-facing result may
+state that the call can be requested again if still needed.
+
+`TOOL_OUTCOME_UNKNOWN` means dispatch may have occurred. Recovery must append a
+synthetic error result and must not automatically retry the operation. The
+model or user must first use tool semantics and external state to decide whether
+a retry is safe. Read-only or explicitly idempotent tools may later opt into a
+more permissive policy, but that policy is not inferred from the tool name.
+
+After synthesizing missing tool results in model order, repair closes any open
+step, turn, and run with an `interrupted` reason. The repaired tail is appended
+durably and becomes ordinary input to context projection.
+
+## Event invariants
+
+The session validator and tests must enforce these rules:
+
+1. Sequence numbers are contiguous and events are immutable after append.
+2. A session has at most one open run, a run at most one open turn, and a turn
+   at most one open step.
+3. Parent lifecycle IDs exist and match the currently open boundaries.
+4. Every step has at most one terminal assistant message.
+5. Every assistant-requested tool call has exactly one terminal tool result in
+   model order, including synthetic cancellation and recovery results.
+6. Every `tool/call` refers to a request in that step's assistant message. Every
+   `tool/result` refers to the assistant request and, when a `tool/call` exists,
+   cites that dispatch-intent event. Preflight and authorization failures have
+   a result without a `tool/call`.
+7. A step cannot end with unresolved tool calls; a turn cannot end with an open
+   step; a run cannot end with an open turn.
+8. A failed provider checkpoint performs no provider dispatch.
+9. A failed tool checkpoint performs no tool-body dispatch.
+10. Observability data is never required to validate, repair, or project a
+    session.
+
+## Migration plan
+
+Adopt the design incrementally so existing sessions and public events keep
+working.
+
+1. Add versioned lifecycle and `tool/call` entry types to `transcript`. The new
+   format starts at version 4; earlier development logs are not migrated.
+2. Persist authorized tool intent before execution and fail closed when its
+   checkpoint fails.
+3. Add interrupted-tail validation and synthesize `TOOL_NOT_STARTED` or
+   `TOOL_OUTCOME_UNKNOWN` results.
+4. Emit explicit run, turn, and step boundaries while adapting the current
+   `agent.TurnStart`/`TurnEnd` events as legacy step signals.
+5. Make `BuildContext`, history, and fork behavior projections of version 4
+   session events.
+6. Align observability and the trace view model with the new IDs and lifecycle;
+   keep provider attempts and timing details in diagnostics.
+
+Each phase should be independently releasable. A storage-version change must
+be rejected explicitly rather than partially decoded as the current format.
+
+## Acceptance tests
+
+The migration is complete when tests demonstrate that:
+
+- a provider is not called when its checkpoint fails;
+- a tool body is not called when its intent checkpoint fails;
+- a call without `tool/call` repairs to `TOOL_NOT_STARTED`;
+- a `tool/call` without `tool/result` repairs to `TOOL_OUTCOME_UNKNOWN`;
+- parallel tool calls retain model order and accurate started/result state;
+- every provider input can be reconstructed from its committed event prefix;
+- every tool request has exactly one terminal result after normal execution,
+  cancellation, panic, or crash repair;
+- trace projection no longer guesses lifecycle boundaries from event names.
+
+## Non-goals
+
+This design does not require Or to adopt DeepSeek Harness's dependency injection
+or plugin architecture, persist the rotating observability log as conversation
+history, store every streamed token durably, or replace the entire agent loop in
+one change.
