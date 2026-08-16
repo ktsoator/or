@@ -34,7 +34,6 @@ import {
   mergeDiagnosticTracePage,
   mergeDiagnosticTraceRun,
   mergeLatestDiagnosticTrace,
-  type DiagnosticEvent,
   type RequestSnapshotAttachment,
   type RequestSnapshotContent,
   type RequestSnapshotMessage,
@@ -45,7 +44,6 @@ import {
 } from './catalog'
 import { liveTraceRefreshKey, mergeLiveTraceBundle } from './liveTrace'
 
-type TraceView = 'overview' | 'trajectory'
 type InspectorMode = 'summary' | 'content' | 'input' | 'raw' | 'tools'
 
 const TRAJECTORY_VIRTUALIZATION_THRESHOLD = 100
@@ -62,7 +60,6 @@ const INSPECTOR_KEYBOARD_STEP = 16
 const trajectoryMarkdownParser = new Marked()
 
 export type DiagnosticsSessionState = {
-  view?: TraceView
   selectedItemID?: string
   inspectorOpen?: boolean
   inspectorMode?: InspectorMode
@@ -120,7 +117,6 @@ export function DiagnosticsPage({
   const [loadingEarlier, setLoadingEarlier] = useState(false)
   const [earlierError, setEarlierError] = useState(false)
   const [error, setError] = useState(false)
-  const [view, setView] = useState<TraceView>(initialState?.view ?? 'trajectory')
   const latestRequestRef = useRef<TraceRequestSlot>({ revision: 0 })
   const runRequestRef = useRef<TraceRequestSlot>({ revision: 0 })
   const earlierRequestRef = useRef<TraceRequestSlot>({ revision: 0 })
@@ -250,29 +246,9 @@ export function DiagnosticsPage({
     () => mergeLiveTraceBundle(bundle, sessionID, liveItems, running),
     [bundle, liveItems, running, sessionID],
   )
-  const changeView = (nextView: TraceView) => {
-    setView(nextView)
-    onStateChange?.({ view: nextView })
-  }
-
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-canvas">
-      {embedded ? (
-        <header
-          className="flex h-10 shrink-0 items-stretch justify-between border-b border-edge/80 bg-canvas px-4"
-          data-testid="diagnostics-toolbar"
-        >
-          <div className="flex items-stretch gap-1" role="tablist">
-            {displayBundle && displayBundle.tasks.length > 0 && (
-              <>
-                <DetailTab active={view === 'overview'} label={t('diagnostics.overview')} onClick={() => changeView('overview')} />
-                <DetailTab active={view === 'trajectory'} label={t('diagnostics.trajectory')} onClick={() => changeView('trajectory')} />
-              </>
-            )}
-          </div>
-          <RefreshButton loading={loading} onRefresh={() => void loadLatest()} />
-        </header>
-      ) : (
+      {!embedded && (
         <header
           className={cn(
             'skills-header window-titlebar z-20 flex h-[45px] shrink-0 items-center justify-between gap-3 border-b border-edge/80 bg-canvas px-4 max-md:h-12',
@@ -295,12 +271,6 @@ export function DiagnosticsPage({
               <ArrowLeft className="size-4" aria-hidden="true" />
               <span>{t('diagnostics.back')}</span>
             </button>
-            {displayBundle && displayBundle.tasks.length > 0 && (
-              <div className="ml-2 flex self-stretch items-stretch gap-1" role="tablist">
-                <DetailTab active={view === 'overview'} label={t('diagnostics.overview')} onClick={() => changeView('overview')} />
-                <DetailTab active={view === 'trajectory'} label={t('diagnostics.trajectory')} onClick={() => changeView('trajectory')} />
-              </div>
-            )}
           </div>
           <RefreshButton loading={loading} onRefresh={() => void loadLatest()} />
         </header>
@@ -327,10 +297,11 @@ export function DiagnosticsPage({
         ) : displayBundle && displayBundle.tasks.length > 0 ? (
           <ConversationTrace
             bundle={displayBundle}
-            view={view}
-            onViewChange={changeView}
             initialState={initialState}
             onStateChange={onStateChange}
+            inlineRefresh={embedded}
+            refreshing={loading}
+            onRefresh={() => void loadLatest()}
             hasEarlier={Boolean(displayBundle.page.hasMore && displayBundle.page.beforeCursor)}
             loadingEarlier={loadingEarlier}
             earlierError={earlierError}
@@ -343,6 +314,11 @@ export function DiagnosticsPage({
             <p className="mt-1 max-w-[25rem] text-[0.8125rem] leading-5 text-ink-muted">
               {t('diagnostics.emptyDescription')}
             </p>
+            {embedded && (
+              <div className="mt-2">
+                <RefreshButton loading={loading} onRefresh={() => void loadLatest()} />
+              </div>
+            )}
           </div>
         )}
       </main>
@@ -447,20 +423,22 @@ type TrajectoryHierarchyIndex = {
 
 function ConversationTrace({
   bundle,
-  view,
-  onViewChange,
   initialState,
   onStateChange,
+  inlineRefresh,
+  refreshing,
+  onRefresh,
   hasEarlier,
   loadingEarlier,
   earlierError,
   onLoadEarlier,
 }: {
   bundle: TraceBundle
-  view: TraceView
-  onViewChange: (view: TraceView) => void
   initialState?: DiagnosticsSessionState
   onStateChange?: (patch: DiagnosticsStatePatch) => void
+  inlineRefresh: boolean
+  refreshing: boolean
+  onRefresh: () => void
   hasEarlier: boolean
   loadingEarlier: boolean
   earlierError: boolean
@@ -492,7 +470,6 @@ function ConversationTrace({
   const selectedItem = items.find((item) => item.id === selectedItemID) ?? initialItem
 
   useLayoutEffect(() => {
-    if (view !== 'trajectory') return
     const layout = splitLayoutRef.current
     if (!layout) return
     const updateWidth = () => setSplitLayoutWidth(layout.getBoundingClientRect().width)
@@ -500,7 +477,7 @@ function ConversationTrace({
     const observer = new ResizeObserver(updateWidth)
     observer.observe(layout)
     return () => observer.disconnect()
-  }, [view])
+  }, [])
 
   const currentLayoutWidth = useCallback(
     () => splitLayoutRef.current?.getBoundingClientRect().width ?? splitLayoutWidth,
@@ -579,27 +556,9 @@ function ConversationTrace({
       setScrollTarget({ itemID: item.id, revision: scrollRevisionRef.current })
     }
   }
-  const selectRequest = (requestID: string) => {
-    const item = items.find((candidate) => candidate.kind === 'assistant' && candidate.request?.id === requestID)
-      ?? items.find((candidate) => candidate.request?.id === requestID)
-    if (item) selectItem(item, true)
-  }
-
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden px-7 pb-3 max-lg:px-5 max-md:px-3" aria-label={t('diagnostics.runDetail')}>
-      {view === 'overview' ? (
-        <ConversationOverview
-          bundle={bundle}
-          hasEarlier={hasEarlier}
-          loadingEarlier={loadingEarlier}
-          earlierError={earlierError}
-          onLoadEarlier={onLoadEarlier}
-          onOpenRequest={(requestID) => {
-            selectRequest(requestID)
-            onViewChange('trajectory')
-          }}
-        />
-      ) : items.length === 0 ? (
+      {items.length === 0 ? (
         <TraceEmpty title={t('diagnostics.noProviderRequests')} description={t('diagnostics.noProviderRequestsDescription')} />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -640,6 +599,8 @@ function ConversationTrace({
               loadingEarlier={loadingEarlier}
               earlierError={earlierError}
               onLoadEarlier={onLoadEarlier}
+              refreshing={inlineRefresh ? refreshing : undefined}
+              onRefresh={inlineRefresh ? onRefresh : undefined}
             />
             {inspectorOpen && selectedItem && (
               <div className="relative min-h-0 min-w-0">
@@ -712,24 +673,6 @@ function clampDiagnosticsInspectorWidth(width: number, layoutWidth: number): num
 
 function selectedTask(bundle: TraceBundle): TraceBundleTask | undefined {
   return bundle.tasks.find((task) => task.id === bundle.selectedTaskId) ?? bundle.tasks.at(-1)
-}
-
-function DetailTab({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      className={cn(
-        'window-titlebar-control relative self-stretch cursor-pointer px-2.5 text-[0.8125rem] font-medium outline-none transition-colors',
-        active ? 'text-ink' : 'text-ink-muted hover:text-ink-soft',
-      )}
-      onClick={onClick}
-    >
-      {label}
-      {active && <span className="absolute inset-x-0 bottom-0 h-0.5 bg-info" aria-hidden="true" />}
-    </button>
-  )
 }
 
 function TrajectoryTimeline({
@@ -936,6 +879,8 @@ function TrajectoryLedger({
   loadingEarlier,
   earlierError,
   onLoadEarlier,
+  refreshing,
+  onRefresh,
 }: {
   items: TrajectoryItem[]
   selectedItemID: string
@@ -955,6 +900,8 @@ function TrajectoryLedger({
   loadingEarlier: boolean
   earlierError: boolean
   onLoadEarlier: () => Promise<boolean>
+  refreshing?: boolean
+  onRefresh?: () => void
 }) {
   const { t } = useI18n()
   const [query, setQuery] = useState(initialQuery)
@@ -1104,21 +1051,24 @@ function TrajectoryLedger({
 
   return (
     <section className="flex min-h-0 flex-col overflow-hidden" aria-label={t('diagnostics.trajectoryRecords')}>
-      <div className="flex h-10 shrink-0 items-center justify-between gap-4 border-b border-edge-soft px-3">
+      <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-edge-soft px-3">
         <span className="text-[0.6875rem] text-ink-faint">{t('diagnostics.traceItemCount', { count: filtered.length })}</span>
-        <label className="relative block w-60 max-w-[45%]">
-          <Search className="pointer-events-none absolute left-2.5 top-2 size-3.5 text-ink-faint" aria-hidden="true" />
-          <input
-            type="search"
-            value={query}
-            placeholder={t('diagnostics.searchInput')}
-            className="h-7 w-full rounded-[6px] border-0 bg-canvas-sunken pl-8 pr-2 text-[0.75rem] text-ink outline-none placeholder:text-ink-faint focus-visible:ring-1 focus-visible:ring-info"
-            onChange={(event) => {
-              setQuery(event.target.value)
-              onQueryChange?.(event.target.value)
-            }}
-          />
-        </label>
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-1">
+          <label className="relative block w-60 max-w-[70%]">
+            <Search className="pointer-events-none absolute left-2.5 top-2 size-3.5 text-ink-faint" aria-hidden="true" />
+            <input
+              type="search"
+              value={query}
+              placeholder={t('diagnostics.searchInput')}
+              className="h-7 w-full rounded-[6px] border-0 bg-canvas-sunken pl-8 pr-2 text-[0.75rem] text-ink outline-none placeholder:text-ink-faint focus-visible:ring-1 focus-visible:ring-info"
+              onChange={(event) => {
+                setQuery(event.target.value)
+                onQueryChange?.(event.target.value)
+              }}
+            />
+          </label>
+          {onRefresh && <RefreshButton loading={Boolean(refreshing)} onRefresh={onRefresh} />}
+        </div>
       </div>
       {hasEarlier && (
         <LoadEarlierControl loading={loadingEarlier} error={earlierError} onLoad={loadEarlier} />
@@ -1336,13 +1286,25 @@ function StepHeader({
       <span className="font-mono text-[0.71875rem] font-medium text-ink-soft">
         {t('diagnostics.stepLabel', { count: hierarchy.stepNumber })}
       </span>
-      <span className="flex min-w-0 items-center gap-3 text-[0.75rem]">
+      <span className="flex min-w-0 items-center gap-2 text-[0.75rem]">
         <span className="shrink-0 text-ink-soft">
           {t('diagnostics.requestNumber', { count: request.number })}
         </span>
         {model && <span className="min-w-0 truncate text-ink-muted max-sm:hidden">{model}</span>}
         <span className="flex-1" aria-hidden="true" />
-        <span className="shrink-0 font-mono text-ink-muted">{formatDuration(request.durationMs)}</span>
+        {request.timeToFirstOutputMs !== undefined && (
+          <span className="shrink-0 tabular-nums text-ink-muted">
+            {t('diagnostics.firstTokenInline', { duration: formatDuration(request.timeToFirstOutputMs) })}
+          </span>
+        )}
+        {request.totalTokens !== undefined && (
+          <span className="shrink-0 tabular-nums text-ink-muted max-sm:hidden">
+            {t('diagnostics.requestTokenUsage', { count: formatCompactNumber(request.totalTokens) })}
+          </span>
+        )}
+        <span className="shrink-0 tabular-nums text-ink-muted">
+          {t('diagnostics.totalDurationInline', { duration: formatDuration(request.durationMs) })}
+        </span>
         <span className={cn('shrink-0 text-ink-muted', needsAttention && 'text-danger')}>
           {requestStatusLabel(request, t)}
         </span>
@@ -1848,301 +1810,6 @@ function RawValue({ value }: { value: unknown }) {
   )
 }
 
-function ConversationOverview({
-  bundle,
-  onOpenRequest,
-  hasEarlier,
-  loadingEarlier,
-  earlierError,
-  onLoadEarlier,
-}: {
-  bundle: TraceBundle
-  onOpenRequest: (requestID: string) => void
-  hasEarlier: boolean
-  loadingEarlier: boolean
-  earlierError: boolean
-  onLoadEarlier: () => Promise<boolean>
-}) {
-  const { t } = useI18n()
-  const tasks = bundle.tasks
-  const requests = tasks.flatMap((task) => task.requests)
-  const modelDuration = requests.reduce((total, request) => total + (request.durationMs ?? 0), 0)
-  const toolExecutionDuration = tasks.reduce((total, task) => total + taskToolExecutionDuration(task), 0)
-  const approvalDuration = tasks.reduce((total, task) => total + taskApprovalDuration(task), 0)
-  const checkpointDuration = tasks.reduce((total, task) => total + taskCheckpointDuration(task), 0)
-  const classifiedDuration = modelDuration + toolExecutionDuration + approvalDuration + checkpointDuration
-  const reportedDuration = tasks.reduce((total, task) => total + (task.durationMs ?? 0), 0)
-  const totalDuration = reportedDuration || classifiedDuration
-  const otherDuration = Math.max(0, totalDuration - classifiedDuration)
-  const breakdownTotal = Math.max(1, totalDuration, classifiedDuration)
-  const durationBreakdown = [
-    { label: t('diagnostics.modelTime'), value: modelDuration, tone: 'bg-info' },
-    { label: t('diagnostics.toolExecutionTime'), value: toolExecutionDuration, tone: 'bg-warning' },
-    { label: t('diagnostics.approvalWait'), value: approvalDuration, tone: 'bg-warning/55' },
-    { label: t('diagnostics.checkpoint'), value: checkpointDuration, tone: 'bg-success' },
-    { label: t('diagnostics.otherTime'), value: otherDuration, tone: 'bg-ink-ghost' },
-  ].filter((item) => item.value > 0)
-  const inputTokens = overviewMetricTotal(tasks, requests, 'inputTokens')
-  const outputTokens = overviewMetricTotal(tasks, requests, 'outputTokens')
-  const cacheReadTokens = overviewMetricTotal(tasks, requests, 'cacheReadTokens')
-  const cacheWriteTokens = overviewMetricTotal(tasks, requests, 'cacheWriteTokens')
-  const totalTokens = overviewMetricTotal(tasks, requests, 'totalTokens')
-  const totalCost = overviewMetricTotal(tasks, requests, 'costTotalUsd')
-  const toolCount = requests.reduce((total, request) => total + request.tools.length, 0)
-  const firstTokenValues = requests
-    .map((request) => request.timeToFirstOutputMs)
-    .filter((value): value is number => value !== undefined && Number.isFinite(value) && value >= 0)
-  const medianFirstToken = median(firstTokenValues)
-  const slowestRequest = maxRequestBy(requests, (request) => request.durationMs)
-  const slowestFirstToken = maxRequestBy(requests, (request) => request.timeToFirstOutputMs)
-  const highestTokenRequest = maxRequestBy(requests, (request) => request.totalTokens)
-  const retries = tasks.reduce((total, task) => total + task.retries, 0)
-  const recoveries = tasks.reduce((total, task) => total + task.contextRecoveries, 0)
-  const problemRequests = requests.filter(requestNeedsAttention)
-  const overviewMetrics = [
-    {
-      id: 'duration',
-      label: t('diagnostics.totalDuration'),
-      value: formatDuration(totalDuration),
-      detail: t('diagnostics.taskCount', { count: tasks.length }),
-    },
-    {
-      id: 'requests',
-      label: t('diagnostics.modelRequests'),
-      value: formatCompactNumber(requests.length),
-      detail: problemRequests.length > 0
-        ? t('diagnostics.requestIssues', { count: problemRequests.length })
-        : t('diagnostics.allRequestsCompleted'),
-      danger: problemRequests.length > 0,
-    },
-    {
-      id: 'first-token',
-      label: t('diagnostics.medianFirstToken'),
-      value: formatDuration(medianFirstToken),
-      detail: slowestFirstToken
-        ? t('diagnostics.slowestInline', { duration: formatDuration(slowestFirstToken.timeToFirstOutputMs) })
-        : t('diagnostics.notReported'),
-    },
-    {
-      id: 'tokens',
-      label: t('diagnostics.tokens'),
-      value: formatCompactNumber(totalTokens),
-      detail: formatTokenBreakdown({
-        inputTokens,
-        outputTokens,
-        cacheReadTokens,
-        cacheWriteTokens,
-        totalTokens,
-      }, t),
-    },
-    {
-      id: 'cost',
-      label: t('diagnostics.cost'),
-      value: formatUSD(totalCost),
-      detail: totalCost === undefined ? t('diagnostics.notReported') : t('diagnostics.providerReported'),
-    },
-    {
-      id: 'tools',
-      label: t('diagnostics.toolCalls'),
-      value: formatCompactNumber(toolCount),
-      detail: approvalDuration > 0
-        ? t('diagnostics.approvalTotal', { duration: formatDuration(approvalDuration) })
-        : t('diagnostics.noApprovalWait'),
-    },
-  ]
-  return (
-    <div
-      className="code-scroll-area -mr-7 min-h-0 flex-1 overflow-y-auto py-5 pr-7 max-lg:-mr-5 max-lg:pr-5 max-md:-mr-3 max-md:pr-3"
-      data-testid="diagnostics-overview-scroll"
-    >
-      {hasEarlier && (
-        <div className="mb-5 w-full">
-          <LoadEarlierControl
-            loading={loadingEarlier}
-            error={earlierError}
-            onLoad={() => { void onLoadEarlier() }}
-          />
-        </div>
-      )}
-      <div
-        className="grid w-full grid-cols-[minmax(0,1.65fr)_minmax(20rem,0.65fr)] border-b border-edge-soft pb-5 max-2xl:grid-cols-1"
-        data-testid="diagnostics-overview-summary-grid"
-      >
-        <div className="min-w-0 pr-6 max-2xl:pr-0">
-          <section className="w-full" aria-label={t('diagnostics.performanceSummary')}>
-            <h3 className="text-[0.875rem] font-medium text-ink">{t('diagnostics.performanceSummary')}</h3>
-            <dl className="mt-3 grid grid-cols-3 gap-px border-y border-edge bg-edge-soft max-sm:grid-cols-2">
-              {overviewMetrics.map((metric) => (
-                <div
-                  key={metric.id}
-                  data-overview-metric={metric.id}
-                  className="min-w-0 bg-canvas px-3 py-2.5"
-                >
-                  <dt className="truncate text-[0.6875rem] font-normal text-ink-muted">{metric.label}</dt>
-                  <dd className={cn(
-                    'm-0 mt-0.5 truncate text-[1.0625rem] leading-6 font-medium tabular-nums text-ink',
-                    metric.danger && 'text-danger',
-                  )}>
-                    {metric.value}
-                  </dd>
-                  <dd className={cn(
-                    'block truncate text-[0.6875rem] tabular-nums text-ink-faint',
-                    metric.danger && 'text-danger',
-                  )}>
-                    {metric.detail}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </section>
-
-          <section className="mt-5 w-full" data-testid="diagnostics-duration-breakdown">
-            <div className="flex items-end justify-between gap-4">
-              <h3 className="text-[0.8125rem] font-medium text-ink-soft">{t('diagnostics.durationBreakdown')}</h3>
-              <span className="text-[0.6875rem] tabular-nums text-ink-faint">{formatDuration(totalDuration)}</span>
-            </div>
-            <div
-              className="mt-2.5 flex h-2 overflow-hidden rounded-[2px] bg-canvas-sunken"
-              aria-label={t('diagnostics.durationBreakdown')}
-            >
-              {durationBreakdown.map((item) => (
-                <span
-                  key={item.label}
-                  className={cn('h-full min-w-px', item.tone)}
-                  style={{ width: `${(item.value / breakdownTotal) * 100}%` }}
-                  title={`${item.label}: ${formatDuration(item.value)}`}
-                />
-              ))}
-            </div>
-            <dl className="mt-2.5 grid grid-cols-3 gap-x-5 gap-y-2 max-sm:grid-cols-2">
-              {durationBreakdown.map((item) => (
-                <div key={item.label} className="min-w-0">
-                  <dt className="flex items-center gap-1.5 truncate text-[0.6875rem] text-ink-muted">
-                    <span className={cn('size-1.5 shrink-0 rounded-[1px]', item.tone)} aria-hidden="true" />
-                    {item.label}
-                  </dt>
-                  <dd className="m-0 mt-0.5 flex items-baseline gap-1.5 tabular-nums">
-                    <span className="text-[0.75rem] text-ink-soft">{formatDuration(item.value)}</span>
-                    <span className="text-[0.65625rem] text-ink-faint">{formatPercentage(item.value, breakdownTotal)}</span>
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </section>
-        </div>
-
-        <section
-          className="min-w-0 border-l border-edge-soft pl-6 max-2xl:mt-5 max-2xl:border-t max-2xl:border-l-0 max-2xl:pt-5 max-2xl:pl-0"
-          data-testid="diagnostics-key-signals"
-        >
-          <h3 className="text-[0.8125rem] font-medium text-ink-soft">{t('diagnostics.keySignals')}</h3>
-          <div className="mt-3 border-y border-edge">
-            <OverviewSignal
-              label={t('diagnostics.longestRequest')}
-              request={slowestRequest}
-              value={formatDuration(slowestRequest?.durationMs)}
-              detail={slowestRequest?.durationMs === undefined
-                ? undefined
-                : t('diagnostics.modelTimeShare', {
-                    percentage: formatPercentage(slowestRequest.durationMs, modelDuration),
-                  })}
-              onOpenRequest={onOpenRequest}
-            />
-            <OverviewSignal
-              label={t('diagnostics.slowestFirstToken')}
-              request={slowestFirstToken}
-              value={formatDuration(slowestFirstToken?.timeToFirstOutputMs)}
-              detail={slowestFirstToken?.timeToFirstOutputMs === undefined || !medianFirstToken
-                ? undefined
-                : t('diagnostics.medianMultiple', {
-                    multiple: formatRatio(slowestFirstToken.timeToFirstOutputMs, medianFirstToken),
-                  })}
-              onOpenRequest={onOpenRequest}
-            />
-            <OverviewSignal
-              label={t('diagnostics.highestTokenRequest')}
-              request={highestTokenRequest}
-              value={t('diagnostics.tokenValue', { count: formatCompactNumber(highestTokenRequest?.totalTokens) })}
-              detail={highestTokenRequest?.totalTokens === undefined || totalTokens === undefined
-                ? undefined
-                : t('diagnostics.totalTokenShare', {
-                    percentage: formatPercentage(highestTokenRequest.totalTokens, totalTokens),
-                  })}
-              onOpenRequest={onOpenRequest}
-            />
-            <div className="min-w-0 px-3 py-2.5">
-              <span className="block text-[0.6875rem] text-ink-muted">{t('diagnostics.reliability')}</span>
-              <span className={cn(
-                'mt-0.5 block truncate text-[0.8125rem] font-medium text-ink-soft',
-                problemRequests.length > 0 && 'text-danger',
-                problemRequests.length === 0 && (retries > 0 || recoveries > 0) && 'text-warning',
-              )}>
-                {problemRequests.length > 0
-                  ? t('diagnostics.requestIssues', { count: problemRequests.length })
-                  : t('diagnostics.noFailedRequests')}
-              </span>
-              <span className="mt-0.5 block truncate text-[0.6875rem] text-ink-faint">
-                {t('diagnostics.retryRecoverySummary', { retries, recoveries })}
-              </span>
-            </div>
-          </div>
-        </section>
-      </div>
-
-      <RawEvents events={tasks.flatMap((task) => task.rawEvents)} omitted={tasks.reduce((total, task) => total + (task.omittedEvents ?? 0), 0)} />
-    </div>
-  )
-}
-
-function OverviewSignal({
-  label,
-  request,
-  value,
-  detail,
-  onOpenRequest,
-}: {
-  label: string
-  request?: TraceBundleRequest
-  value: string
-  detail?: string
-  onOpenRequest: (requestID: string) => void
-}) {
-  const { t } = useI18n()
-  if (!request) {
-    return (
-      <div className="min-w-0 border-b border-edge-soft px-3 py-2.5">
-        <span className="block text-[0.6875rem] text-ink-muted">{label}</span>
-        <span className="mt-0.5 block text-[0.8125rem] text-ink-faint">—</span>
-      </div>
-    )
-  }
-  return (
-    <button
-      type="button"
-      className="group grid w-full min-w-0 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-edge-soft px-3 py-2.5 text-left outline-none hover:bg-surface-hover focus-visible:bg-surface-hover"
-      aria-label={`${label}: ${t('diagnostics.requestNumber', { count: request.number })}, ${value}${detail ? `, ${detail}` : ''}`}
-      onClick={() => onOpenRequest(request.id)}
-    >
-      <span className="min-w-0">
-        <span className="block text-[0.6875rem] text-ink-muted">{label}</span>
-        <span className="mt-0.5 block truncate text-[0.8125rem] font-medium text-ink-soft">
-          {t('diagnostics.requestNumber', { count: request.number })}
-        </span>
-        <span className="mt-0.5 block truncate font-mono text-[0.6875rem] text-ink-faint">
-          {request.model || request.provider || '—'}
-        </span>
-      </span>
-      <span className="flex items-center gap-1.5">
-        <span className="min-w-0 text-right tabular-nums">
-          <span className="block text-[0.75rem] text-ink-muted">{value}</span>
-          {detail && <span className="mt-0.5 block text-[0.65625rem] text-ink-faint">{detail}</span>}
-        </span>
-        <ChevronRight className="size-3.5 shrink-0 text-ink-ghost transition-transform group-hover:translate-x-0.5 group-hover:text-ink-muted" aria-hidden="true" />
-      </span>
-    </button>
-  )
-}
-
 function LoadEarlierControl({
   loading,
   error,
@@ -2165,21 +1832,6 @@ function LoadEarlierControl({
         {t(error ? 'diagnostics.retryEarlier' : 'diagnostics.loadEarlier')}
       </button>
     </div>
-  )
-}
-
-function RawEvents({ events, omitted }: { events: DiagnosticEvent[]; omitted?: number }) {
-  const { t } = useI18n()
-  return (
-    <details className="group mt-7 w-full border-t border-edge-soft pt-5">
-      <summary className="flex cursor-pointer list-none items-center gap-2 text-[0.8125rem] font-medium text-ink-muted outline-none hover:text-ink focus-visible:text-ink">
-        <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" aria-hidden="true" />
-        {t('diagnostics.rawEvents')}
-        <span className="text-[0.75rem] text-ink-faint">{t('diagnostics.eventCount', { count: events.length })}</span>
-      </summary>
-      {Boolean(omitted) && <p className="mt-2 text-[0.75rem] text-warning">{t('diagnostics.omittedEvents', { count: omitted ?? 0 })}</p>}
-      <RawValue value={events} />
-    </details>
   )
 }
 
@@ -2533,111 +2185,6 @@ function statusText(value?: string): string {
   return value ? value.replaceAll('_', ' ') : '—'
 }
 
-type OverviewMetricKey =
-  | 'inputTokens'
-  | 'outputTokens'
-  | 'cacheReadTokens'
-  | 'cacheWriteTokens'
-  | 'totalTokens'
-  | 'costTotalUsd'
-
-function overviewMetricTotal(
-  tasks: TraceBundleTask[],
-  requests: TraceBundleRequest[],
-  key: OverviewMetricKey,
-): number | undefined {
-  const taskValues = tasks
-    .map((task) => task[key])
-    .filter((value): value is number => value !== undefined && Number.isFinite(value))
-  if (taskValues.length > 0) return taskValues.reduce((total, value) => total + value, 0)
-  const requestValues = requests
-    .map((request) => request[key])
-    .filter((value): value is number => value !== undefined && Number.isFinite(value))
-  return requestValues.length > 0
-    ? requestValues.reduce((total, value) => total + value, 0)
-    : undefined
-}
-
-function taskApprovalDuration(task: TraceBundleTask): number {
-  if ((task.approvalDurationMs ?? 0) > 0) return task.approvalDurationMs ?? 0
-  return task.requests.flatMap((request) => request.tools)
-    .reduce((total, tool) => total + (tool.approvalDurationMs ?? 0), 0)
-}
-
-function taskCheckpointDuration(task: TraceBundleTask): number {
-  if ((task.checkpointDurationMs ?? 0) > 0) return task.checkpointDurationMs ?? 0
-  return task.requests.reduce((total, request) => total + (request.checkpointDurationMs ?? 0), 0)
-}
-
-function taskToolExecutionDuration(task: TraceBundleTask): number {
-  const tools = task.requests.flatMap((request) => request.tools)
-  const measuredTools = tools.filter((tool) =>
-    tool.executionDurationMs !== undefined || tool.durationMs !== undefined)
-  if (measuredTools.length > 0) {
-    return measuredTools.reduce((total, tool) => total + (
-      tool.executionDurationMs ?? Math.max(0, (tool.durationMs ?? 0) - (tool.approvalDurationMs ?? 0))
-    ), 0)
-  }
-  return Math.max(0, (task.toolDurationMs ?? 0) - taskApprovalDuration(task))
-}
-
-function median(values: number[]): number | undefined {
-  if (values.length === 0) return undefined
-  const sorted = [...values].sort((left, right) => left - right)
-  const midpoint = Math.floor(sorted.length / 2)
-  return sorted.length % 2 === 0
-    ? ((sorted[midpoint - 1] ?? 0) + (sorted[midpoint] ?? 0)) / 2
-    : sorted[midpoint]
-}
-
-function formatTokenBreakdown(
-  values: {
-    inputTokens?: number
-    outputTokens?: number
-    cacheReadTokens?: number
-    cacheWriteTokens?: number
-    totalTokens?: number
-  },
-  t: Translate,
-): string {
-  const { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, totalTokens } = values
-  if (
-    inputTokens === undefined &&
-    outputTokens === undefined &&
-    cacheReadTokens === undefined &&
-    cacheWriteTokens === undefined
-  ) return t('diagnostics.notReported')
-
-  const detailKey = (cacheWriteTokens ?? 0) > 0
-    ? 'diagnostics.tokenSplitWithCacheWrite'
-    : (cacheReadTokens ?? 0) > 0
-      ? 'diagnostics.tokenSplitWithCache'
-      : 'diagnostics.tokenSplit'
-  const detail = t(detailKey, {
-    input: formatCompactNumber(inputTokens),
-    output: formatCompactNumber(outputTokens),
-    cacheRead: formatCompactNumber(cacheReadTokens),
-    cacheWrite: formatCompactNumber(cacheWriteTokens),
-  })
-  const accountedTokens = (inputTokens ?? 0) + (outputTokens ?? 0) +
-    (cacheReadTokens ?? 0) + (cacheWriteTokens ?? 0)
-  return totalTokens !== undefined && accountedTokens < totalTokens
-    ? t('diagnostics.tokenBreakdownPartial', { detail })
-    : detail
-}
-
-function maxRequestBy(
-  requests: TraceBundleRequest[],
-  valueFor: (request: TraceBundleRequest) => number | undefined,
-): TraceBundleRequest | undefined {
-  return requests.reduce<TraceBundleRequest | undefined>((current, request) => {
-    const value = valueFor(request)
-    if (value === undefined || !Number.isFinite(value)) return current
-    const currentValue = current ? valueFor(current) : undefined
-    return currentValue === undefined || value > currentValue ? request : current
-  }, undefined)
-}
-
 function requestNeedsAttention(request: TraceBundleRequest): boolean {
   const status = request.status?.toLocaleLowerCase()
   return Boolean(
@@ -2692,30 +2239,6 @@ function formatDuration(value?: number): string {
 function formatCompactNumber(value?: number): string {
   if (value === undefined || !Number.isFinite(value)) return '—'
   return new Intl.NumberFormat(undefined, { notation: value >= 10_000 ? 'compact' : 'standard', maximumFractionDigits: 1 }).format(value)
-}
-
-function formatPercentage(value: number, total: number): string {
-  if (!Number.isFinite(value) || !Number.isFinite(total) || total <= 0) return '—'
-  return new Intl.NumberFormat(undefined, {
-    style: 'percent',
-    maximumFractionDigits: value / total < 0.01 ? 1 : 0,
-  }).format(value / total)
-}
-
-function formatRatio(value: number, baseline: number): string {
-  if (!Number.isFinite(value) || !Number.isFinite(baseline) || baseline <= 0) return '—'
-  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value / baseline)
-}
-
-function formatUSD(value?: number): string {
-  if (value === undefined || !Number.isFinite(value) || value < 0) return '—'
-  const fractionDigits = value > 0 && value < 0.01 ? 4 : 2
-  return new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: fractionDigits,
-    maximumFractionDigits: fractionDigits,
-  }).format(value)
 }
 
 function formatTimestamp(value: string): string {
