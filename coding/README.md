@@ -119,10 +119,11 @@ page without hiding a separate native child view. A renderer-side registry owns
 navigation revisions, history state, failure reporting, and bounded read-only
 inspection.
 
-Public HTTP(S), localhost, and workspace preview pages currently share the
-desktop session. Dedicated webview partitions, workspace request isolation,
-permission policy, and attach-time validation remain required before treating
-untrusted workspace content as isolated.
+Public HTTP(S) pages use the persistent `persist:or-browser` session. Workspace
+files use the in-memory `or-preview` session and a separate preview-only
+loopback origin that exposes no product API. Electron validates every guest at
+attach time, denies guest permissions and downloads, and converts popup or
+cross-origin preview navigation into application-owned browser tabs.
 
 Run the desktop app in development:
 

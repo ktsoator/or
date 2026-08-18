@@ -10,6 +10,7 @@ declare module 'react' {
     interface IntrinsicElements {
       webview: DetailedHTMLProps<HTMLAttributes<BrowserWebviewElement>, BrowserWebviewElement> & {
         allowpopups?: boolean
+        partition?: string
         ref?: Ref<BrowserWebviewElement>
         src?: string
       }

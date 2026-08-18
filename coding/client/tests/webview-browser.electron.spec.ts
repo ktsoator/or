@@ -1,5 +1,7 @@
 import { createRequire } from 'node:module'
 import { mkdtemp, rm } from 'node:fs/promises'
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { _electron as electron, expect, test } from '@playwright/test'
@@ -28,8 +30,18 @@ test('webview fills its host and renderer menus stay above it', async () => {
     ],
     cwd: desktopDirectory,
   })
+  const webServer = createServer((request, response) => {
+    response.setHeader('Content-Type', 'text/html; charset=utf-8')
+    response.end(`<!doctype html><title>Test page</title><main>${request.url}</main>`)
+  })
 
   try {
+    await new Promise<void>((resolve, reject) => {
+      webServer.once('error', reject)
+      webServer.listen(0, '127.0.0.1', resolve)
+    })
+    const webAddress = webServer.address() as AddressInfo
+    const webURL = `http://127.0.0.1:${webAddress.port}/`
     const page = await electronApp.firstWindow()
     await page.waitForLoadState('domcontentloaded')
 
@@ -42,7 +54,7 @@ test('webview fills its host and renderer menus stay above it', async () => {
     await page.getByRole('menuitem').first().click()
 
     const address = page.getByTestId('browser-address')
-    await address.fill(page.url())
+    await address.fill(webURL)
     await address.press('Enter')
 
     const surface = page.getByTestId('browser-surface')
@@ -50,6 +62,7 @@ test('webview fills its host and renderer menus stay above it', async () => {
     const webview = surface.locator('webview')
     await expect(webview).toBeVisible()
     await expect(webview).toHaveAttribute('allowpopups', 'true')
+    await expect(webview).toHaveAttribute('partition', 'persist:or-browser')
 
     const sizes = await webview.evaluate(async (element) => {
       const guest = element as ElectronWebviewElement
@@ -97,12 +110,12 @@ test('webview fills its host and renderer menus stay above it', async () => {
 
     await page.getByRole('menuitem').first().click()
     await expect(page.getByTestId('browser-tab')).toHaveCount(tabsBefore + 1)
-    await address.fill(page.url())
+    await address.fill(webURL)
     await address.press('Enter')
     await expect(surface).toHaveAttribute('data-status', 'ready')
 
-    const popupURL = new URL(page.url())
-    popupURL.hash = 'webview-window-open-handled'
+    const popupURL = new URL('/popup', webURL)
+    popupURL.searchParams.set('webview-window-open', 'handled')
     await webview.evaluate(async (element, url) => {
       const guest = element as ElectronWebviewElement
       await guest.executeJavaScript(
@@ -110,7 +123,8 @@ test('webview fills its host and renderer menus stay above it', async () => {
         true,
       )
     }, popupURL.href)
-    await expect.poll(() => webview.evaluate((element) =>
+    await expect(page.getByTestId('browser-tab')).toHaveCount(tabsBefore + 2)
+    await expect.poll(() => surface.locator('webview').evaluate((element) =>
       (element as ElectronWebviewElement).getURL(),
     )).toBe(popupURL.href)
     await expect(surface).toHaveAttribute('data-status', 'ready')
@@ -134,6 +148,7 @@ test('webview fills its host and renderer menus stay above it', async () => {
     await expect(address).toHaveValue(pendingLoadURL.href)
   } finally {
     await electronApp.close()
+    await new Promise<void>((resolve) => webServer.close(() => resolve()))
     await rm(userDataDirectory, { recursive: true, force: true })
   }
 })

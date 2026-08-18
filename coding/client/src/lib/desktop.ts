@@ -1,9 +1,16 @@
 export type CodingDesktop = {
   platform: string
   browserMode: 'webview'
+  previewOrigin: string
   chooseDirectory: (initialPath: string, title: string) => Promise<string>
   revealPath: (target: string) => Promise<void>
   openExternalURL: (url: string) => Promise<void> | void
+  onBrowserOpenTab: (listener: (request: BrowserOpenTabRequest) => void) => () => void
+}
+
+export type BrowserOpenTabRequest = {
+  openerWebContentsID: number
+  url: string
 }
 
 declare global {
@@ -29,6 +36,12 @@ export function openExternalURL(url: string): void {
     return
   }
   window.open(url, '_blank', 'noopener,noreferrer')
+}
+
+export function onBrowserOpenTab(
+  listener: (request: BrowserOpenTabRequest) => void,
+): () => void {
+  return window.codingDesktop?.onBrowserOpenTab?.(listener) ?? (() => undefined)
 }
 
 // Returns undefined when the browser has no native desktop bridge. An empty

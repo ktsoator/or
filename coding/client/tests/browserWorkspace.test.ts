@@ -44,6 +44,24 @@ describe('browser workspace reducer', () => {
     expect(state.nextUserTabSequence).toBe(2)
   })
 
+  test('opens and selects a user web tab for a guest popup', () => {
+    let state = createBrowserWorkspaceState({
+      initialTab: createBrowserTab({ id: 'tab-1' }),
+    })
+    state = browserWorkspaceReducer(state, {
+      t: 'open_user_tab',
+      target: webTarget('https://example.com/popup'),
+    })
+
+    expect(state.tabs.map((tab) => tab.id)).toEqual(['tab-1', 'tab-2'])
+    expect(state.activeItemID).toBe('tab-2')
+    expect(state.tabs[1]?.desired).toMatchObject({
+      requestedURL: 'https://example.com/popup',
+      kind: 'web',
+      source: 'address',
+    })
+  })
+
   test('closes and selects the neighboring tab atomically', () => {
     let state = createBrowserWorkspaceState({
       initialTab: createBrowserTab({ id: 'tab-1' }),

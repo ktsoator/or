@@ -25,7 +25,8 @@ import {
   goForwardBrowser,
   hasBrowserRuntime,
 } from './runtime'
-import { openExternalURL } from '@/lib/desktop'
+import { onBrowserOpenTab, openExternalURL } from '@/lib/desktop'
+import { browserRuntimeTabIDForWebContentsID } from './webviewBrowser'
 import type {
   BrowserCommandState,
   BrowserControlCapability,
@@ -112,6 +113,26 @@ export function useBrowserWorkspace({
   useEffect(() => {
     dispatch({ t: 'sync_conversation', conversationTabID })
   }, [conversationTabID, dispatch, workspaceID])
+
+  useEffect(() => onBrowserOpenTab((request) => {
+    const openerRuntimeTabID = browserRuntimeTabIDForWebContentsID(
+      request.openerWebContentsID,
+    )
+    if (!openerRuntimeTabID) return
+    const opener = initialStateRef.current.tabs.find(
+      (tab) => browserRuntimeTabID(workspaceID, tab.id) === openerRuntimeTabID,
+    )
+    const target = normalizeBrowserAddress(request.url)
+    if (!opener || !target) return
+    dispatch({
+      t: 'open_user_tab',
+      target: {
+        requestedURL: target,
+        addressDraft: target,
+        kind: 'web',
+      },
+    })
+  }), [dispatch, workspaceID])
 
   useEffect(() => {
     if (!taskRequest || taskRequest.sessionID !== workspaceID) return

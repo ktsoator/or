@@ -14,15 +14,26 @@ import {
   shell,
   type WebContents,
 } from 'electron'
+import {
+  browserPartition,
+  guestKindForPartition,
+  popupNavigationAction,
+  previewNavigationAction,
+  previewPartition,
+  type GuestKind,
+  type GuestNavigationAction,
+} from './guestPolicy.js'
 import { resolveDesktopEnvironment } from './shellEnvironment.js'
 
 const isDevelopment = process.argv.includes('--dev')
 const sidecarReadyTimeoutMs = 15_000
 const rendererReadyTimeoutMs = 30_000
+const allowedGuestPartitions = new Set([previewPartition, browserPartition])
 
 type ReadyMessage = {
   type: 'ready'
   url: string
+  previewURL: string
   cookieName: string
 }
 
@@ -31,6 +42,7 @@ let sidecar: ChildProcessWithoutNullStreams | null = null
 let rendererDevServer: ChildProcessWithoutNullStreams | null = null
 let quitting = false
 let rendererURL = ''
+let workspacePreviewURL = ''
 
 if (!app.requestSingleInstanceLock()) {
   app.quit()
@@ -40,7 +52,9 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0 && rendererURL) createWindow(rendererURL)
+  if (BrowserWindow.getAllWindows().length === 0 && rendererURL && workspacePreviewURL) {
+    createWindow(rendererURL, workspacePreviewURL)
+  }
 })
 
 app.on('window-all-closed', () => {
@@ -60,6 +74,8 @@ async function start(): Promise<void> {
   applyDevelopmentDockIcon()
   registerIPC()
   const desktop = await startSidecar()
+  configureGuestSession(previewPartition)
+  configureGuestSession(browserPartition)
   await session.defaultSession.cookies.set({
     url: desktop.url,
     name: desktop.cookieName,
@@ -71,10 +87,11 @@ async function start(): Promise<void> {
   })
 
   rendererURL = desktop.url
+  workspacePreviewURL = desktop.previewURL
   if (isDevelopment) {
     rendererURL = await startRendererDevServer(desktop.url)
   }
-  createWindow(rendererURL)
+  createWindow(rendererURL, workspacePreviewURL)
 }
 
 /**
@@ -93,7 +110,7 @@ function applyDevelopmentDockIcon(): void {
   }
 }
 
-function createWindow(url: string): void {
+function createWindow(url: string, previewURL: string): void {
   const window = new BrowserWindow({
     title: 'Or',
     width: 1280,
@@ -115,6 +132,7 @@ function createWindow(url: string): void {
       sandbox: true,
       devTools: isDevelopment,
       webviewTag: true,
+      additionalArguments: [`--or-preview-origin=${previewURL}`],
     },
   })
   mainWindow = window
@@ -123,8 +141,31 @@ function createWindow(url: string): void {
   window.on('closed', () => {
     if (mainWindow === window) mainWindow = null
   })
+  window.webContents.on('will-attach-webview', (event, webPreferences, params) => {
+    const partition = params.partition
+    if (!allowedGuestPartitions.has(partition) || params.src !== 'about:blank') {
+      event.preventDefault()
+      return
+    }
+    delete webPreferences.preload
+    delete params.preload
+    webPreferences.partition = partition
+    webPreferences.sandbox = true
+    webPreferences.contextIsolation = true
+    webPreferences.nodeIntegration = false
+    webPreferences.nodeIntegrationInSubFrames = false
+    webPreferences.nodeIntegrationInWorker = false
+    webPreferences.webSecurity = true
+    webPreferences.allowRunningInsecureContent = false
+    webPreferences.experimentalFeatures = false
+    webPreferences.devTools = isDevelopment
+  })
   window.webContents.on('did-attach-webview', (_event, guest) => {
-    configureGuestWindowHandling(guest)
+    const partition = guest.session === session.fromPartition(previewPartition)
+      ? previewPartition
+      : browserPartition
+    const kind = guestKindForPartition(partition)!
+    configureGuestWindowHandling(window, guest, kind, previewURL)
   })
   window.webContents.setWindowOpenHandler(({ url: target }) => {
     void openExternalURL(target)
@@ -169,22 +210,60 @@ function registerIPC(): void {
   })
 }
 
-function configureGuestWindowHandling(guest: WebContents): void {
+function configureGuestSession(partition: string): void {
+  const guestSession = session.fromPartition(partition)
+  guestSession.setPermissionCheckHandler(() => false)
+  guestSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
+    callback(false)
+  })
+  guestSession.on('will-download', (event) => event.preventDefault())
+}
+
+function configureGuestWindowHandling(
+  window: BrowserWindow,
+  guest: WebContents,
+  kind: GuestKind,
+  previewURL: string,
+): void {
   guest.setWindowOpenHandler(({ url }) => {
-    const target = safeURL(url)
-    if (target && (target.protocol === 'http:' || target.protocol === 'https:')) {
-      setImmediate(() => {
-        if (guest.isDestroyed()) return
-        void guest.loadURL(target.href).catch((error: unknown) => {
-          console.error(`[browser] failed to open ${target.href}`, error)
-        })
-      })
-      return { action: 'deny' }
-    }
-    if (target && (target.protocol === 'mailto:' || target.protocol === 'tel:')) {
-      void openExternalURL(target.href)
-    }
+    applyGuestNavigationAction(window, guest, url, popupNavigationAction(url))
     return { action: 'deny' }
+  })
+
+  if (kind !== 'preview') return
+  const previewOrigin = new URL(previewURL).origin
+  const handleNavigation = (event: { preventDefault: () => void }, url: string) => {
+    const action = previewNavigationAction(url, previewOrigin)
+    if (action === 'allow') return
+    event.preventDefault()
+    applyGuestNavigationAction(window, guest, url, action)
+  }
+  guest.on('will-navigate', handleNavigation)
+  guest.on('will-redirect', handleNavigation)
+}
+
+function applyGuestNavigationAction(
+  window: BrowserWindow,
+  guest: WebContents,
+  url: string,
+  action: GuestNavigationAction,
+): void {
+  if (action === 'open-tab') {
+    sendBrowserOpenTab(window, guest, new URL(url).href)
+  } else if (action === 'open-external') {
+    void openExternalURL(new URL(url).href)
+  }
+}
+
+function sendBrowserOpenTab(
+  window: BrowserWindow,
+  guest: WebContents,
+  url: string,
+): void {
+  if (window.isDestroyed() || guest.isDestroyed()) return
+  window.webContents.send('desktop:browser-open-tab', {
+    openerWebContentsID: guest.id,
+    url,
   })
 }
 
@@ -203,14 +282,6 @@ async function openExternalURL(target: string): Promise<void> {
     throw new Error(`unsupported external URL protocol: ${url.protocol}`)
   }
   await shell.openExternal(url.href)
-}
-
-function safeURL(value: string): URL | undefined {
-  try {
-    return new URL(value)
-  } catch {
-    return undefined
-  }
 }
 
 async function startSidecar(): Promise<ReadyMessage & { token: string }> {
@@ -256,7 +327,7 @@ function waitForReadyMessage(child: ChildProcessWithoutNullStreams): Promise<Rea
     lines.once('line', (line) => {
       try {
         const value = JSON.parse(line) as Partial<ReadyMessage>
-        if (value.type !== 'ready' || !value.url || !value.cookieName) {
+        if (value.type !== 'ready' || !value.url || !value.previewURL || !value.cookieName) {
           throw new Error('invalid sidecar ready message')
         }
         finish(undefined, value as ReadyMessage)

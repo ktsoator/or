@@ -177,6 +177,17 @@ export function registerWebviewBrowser(
   }
 }
 
+export function browserRuntimeTabIDForWebContentsID(
+  webContentsID: number,
+): BrowserRuntimeTabID | undefined {
+  for (const [tabID, entry] of entries) {
+    if (safeCall(() => entry.element.getWebContentsId(), -1) === webContentsID) {
+      return tabID
+    }
+  }
+  return undefined
+}
+
 export const webviewBrowserBridge: BrowserRuntimeBridge = {
   async navigate(input) {
     const entry = requiredEntry(input.tabID)

@@ -32,6 +32,7 @@ const (
 type readyMessage struct {
 	Type       string `json:"type"`
 	URL        string `json:"url"`
+	PreviewURL string `json:"previewURL"`
 	CookieName string `json:"cookieName"`
 }
 
@@ -77,40 +78,56 @@ func run(args []string) error {
 	}
 	defer productRuntime.Close()
 
-	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	appListener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		return err
 	}
-	defer listener.Close()
+	defer appListener.Close()
+	previewListener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		return err
+	}
+	defer previewListener.Close()
 
 	handler := desktopserver.New(productRuntime.Handler(), os.DirFS(assetDir), token)
-	server := &http.Server{Handler: handler}
-	shutdownDone := make(chan struct{})
-	defer close(shutdownDone)
-	go func() {
-		select {
-		case <-ctx.Done():
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			_ = server.Shutdown(shutdownCtx)
-		case <-shutdownDone:
-		}
-	}()
+	appServer := &http.Server{Handler: handler}
+	previewServer := &http.Server{Handler: productRuntime.PreviewHandler()}
+	serverErrors := make(chan error, 2)
+	go func() { serverErrors <- appServer.Serve(appListener) }()
+	go func() { serverErrors <- previewServer.Serve(previewListener) }()
 
 	ready := readyMessage{
 		Type:       "ready",
-		URL:        "http://" + listener.Addr().String(),
+		URL:        "http://" + appListener.Addr().String(),
+		PreviewURL: "http://" + previewListener.Addr().String(),
 		CookieName: desktopserver.CookieName,
 	}
 	if err := json.NewEncoder(os.Stdout).Encode(ready); err != nil {
 		return fmt.Errorf("write ready message: %w", err)
 	}
 
-	err = server.Serve(listener)
-	if errors.Is(err, http.ErrServerClosed) && ctx.Err() != nil {
-		return nil
+	stopped := 0
+	var serveErr error
+	select {
+	case <-ctx.Done():
+	case serveErr = <-serverErrors:
+		stopped = 1
 	}
-	return err
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+	_ = appServer.Shutdown(shutdownCtx)
+	_ = previewServer.Shutdown(shutdownCtx)
+	for stopped < 2 {
+		err := <-serverErrors
+		stopped++
+		if serveErr == nil && !errors.Is(err, http.ErrServerClosed) {
+			serveErr = err
+		}
+	}
+	if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+		return serveErr
+	}
+	return nil
 }
 
 func resolveDataDir(value string) (string, error) {

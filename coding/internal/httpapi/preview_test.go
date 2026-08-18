@@ -114,7 +114,7 @@ func TestServeWorkspacePreviewRejectsNonReadMethod(t *testing.T) {
 	}
 }
 
-func TestWorkspacePreviewRouteScopesGrantToItsSession(t *testing.T) {
+func TestWorkspacePreviewHandlerScopesGrantToItsSession(t *testing.T) {
 	workspace := t.TempDir()
 	entry := writePreviewFile(t, workspace, "web/index.html", "safe")
 	transports := NewSessionTransports()
@@ -122,22 +122,33 @@ func TestWorkspacePreviewRouteScopesGrantToItsSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := &Server{transports: transports}
+	handler := transports.PreviewHandler()
 
 	for _, test := range []struct {
 		path string
 		want int
 	}{
-		{path: "/api/sessions/session-1/previews/" + preview.GrantID + "/index.html", want: http.StatusOK},
-		{path: "/api/sessions/session-2/previews/" + preview.GrantID + "/index.html", want: http.StatusNotFound},
-		{path: "/api/sessions/session-1/previews/not-a-grant/index.html", want: http.StatusNotFound},
+		{path: "/sessions/session-1/previews/" + preview.GrantID + "/index.html", want: http.StatusOK},
+		{path: "/sessions/session-2/previews/" + preview.GrantID + "/index.html", want: http.StatusNotFound},
+		{path: "/sessions/session-1/previews/not-a-grant/index.html", want: http.StatusNotFound},
 	} {
 		request := httptest.NewRequest(http.MethodGet, test.path, nil)
 		response := httptest.NewRecorder()
-		server.Handler().ServeHTTP(response, request)
+		handler.ServeHTTP(response, request)
 		if response.Code != test.want {
 			t.Fatalf("%s response = %d, want %d", test.path, response.Code, test.want)
 		}
+	}
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/sessions/session-1/previews/"+preview.GrantID+"/index.html",
+		nil,
+	)
+	response := httptest.NewRecorder()
+	(&Server{transports: transports}).Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("authenticated API preview response = %d, want %d", response.Code, http.StatusNotFound)
 	}
 }
 

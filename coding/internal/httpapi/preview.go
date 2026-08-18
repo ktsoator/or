@@ -18,8 +18,6 @@ type previewCheckRequest struct {
 
 func (s *Server) mountPreview(r gin.IRouter) {
 	r.POST("/preview/check", s.handlePreviewCheck)
-	r.GET("/sessions/:sessionID/previews/:grantID/*path", s.handleWorkspacePreview)
-	r.HEAD("/sessions/:sessionID/previews/:grantID/*path", s.handleWorkspacePreview)
 }
 
 func (s *Server) handlePreviewCheck(c *gin.Context) {
@@ -37,15 +35,26 @@ func (s *Server) handlePreviewCheck(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"url": normalized})
 }
 
-func (s *Server) handleWorkspacePreview(c *gin.Context) {
-	grant, ok := s.transports.previews.resolve(c.Param("sessionID"), c.Param("grantID"))
+// PreviewHandler serves grant-scoped workspace files on the unauthenticated,
+// preview-only loopback origin. It intentionally exposes no product API.
+func (s *SessionTransports) PreviewHandler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /sessions/{sessionID}/previews/{grantID}/{path...}", s.handleWorkspacePreview)
+	return mux
+}
+
+func (s *SessionTransports) handleWorkspacePreview(
+	response http.ResponseWriter,
+	request *http.Request,
+) {
+	grant, ok := s.previews.resolve(request.PathValue("sessionID"), request.PathValue("grantID"))
 	if !ok {
-		http.NotFound(c.Writer, c.Request)
+		http.NotFound(response, request)
 		return
 	}
-	path := strings.TrimPrefix(c.Param("path"), "/")
-	if err := serveWorkspacePreview(c.Writer, c.Request, grant, path); err != nil {
-		http.NotFound(c.Writer, c.Request)
+	path := strings.TrimPrefix(request.PathValue("path"), "/")
+	if err := serveWorkspacePreview(response, request, grant, path); err != nil {
+		http.NotFound(response, request)
 	}
 }
 
