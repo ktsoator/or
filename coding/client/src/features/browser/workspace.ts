@@ -29,7 +29,8 @@ export type BrowserWorkspaceState = {
   tabs: BrowserTab[]
   activeItemID: string
   selectedBrowserTabID?: string
-  conversationTabID?: string
+  conversationTabIDs: string[]
+  activeConversationTabID?: string
   taskTabID?: string
   selectedTaskID?: string
   agentSelectedTabIDs: Record<string, string>
@@ -41,7 +42,11 @@ export type BrowserWorkspaceState = {
 
 export type BrowserWorkspaceAction =
   | { t: 'select_item'; itemID: string }
-  | { t: 'sync_conversation'; conversationTabID?: string }
+  | {
+      t: 'sync_conversations'
+      conversationTabIDs: string[]
+      activeConversationTabID?: string
+    }
   | { t: 'open_tasks'; taskTabID: string; taskID?: string }
   | { t: 'select_task'; taskID: string }
   | { t: 'close_tasks' }
@@ -80,12 +85,14 @@ export type BrowserWorkspaceAction =
 export function createBrowserWorkspaceState({
   initialTab,
   activeItemID,
-  conversationTabID,
+  conversationTabIDs = [],
+  activeConversationTabID,
   handledPreviewKey,
 }: {
   initialTab?: BrowserTab
   activeItemID?: string
-  conversationTabID?: string
+  conversationTabIDs?: string[]
+  activeConversationTabID?: string
   handledPreviewKey?: string
 } = {}): BrowserWorkspaceState {
   const initiallyControlled = initialTab?.desired?.source === 'agent'
@@ -94,7 +101,8 @@ export function createBrowserWorkspaceState({
     tabs: initialTab ? [initialTab] : [],
     activeItemID: activeItemID ?? initialTab?.id ?? '',
     selectedBrowserTabID: initialTab?.id,
-    conversationTabID,
+    conversationTabIDs,
+    activeConversationTabID,
     agentSelectedTabIDs:
       initialSessionID && initialTab
         ? { [initialSessionID]: initialTab.id }
@@ -121,35 +129,62 @@ export function browserWorkspaceReducer(
   action: BrowserWorkspaceAction,
 ): BrowserWorkspaceState {
   switch (action.t) {
-    case 'select_item':
+    case 'select_item': {
+      const conversationSelected = state.conversationTabIDs.includes(action.itemID)
       return action.itemID === state.activeItemID
         ? state
         : {
             ...state,
             activeItemID: action.itemID,
+            activeConversationTabID: conversationSelected
+              ? action.itemID
+              : state.activeConversationTabID,
             selectedBrowserTabID: state.tabs.some(
               (tab) => tab.id === action.itemID,
             )
               ? action.itemID
               : state.selectedBrowserTabID,
           }
+    }
 
-    case 'sync_conversation': {
-      const previous = state.conversationTabID
-      if (previous === action.conversationTabID) return state
-      if (action.conversationTabID) {
-        return {
-          ...state,
-          conversationTabID: action.conversationTabID,
-          activeItemID: action.conversationTabID,
-        }
+    case 'sync_conversations': {
+      const sameTabs =
+        state.conversationTabIDs.length === action.conversationTabIDs.length &&
+        state.conversationTabIDs.every(
+          (tabID, index) => tabID === action.conversationTabIDs[index],
+        )
+      const requestedActive = action.activeConversationTabID &&
+        action.conversationTabIDs.includes(action.activeConversationTabID)
+          ? action.activeConversationTabID
+          : undefined
+      if (
+        sameTabs &&
+        (!requestedActive || requestedActive === state.activeConversationTabID)
+      ) return state
+
+      let activeConversationTabID = requestedActive ?? state.activeConversationTabID
+      if (
+        activeConversationTabID &&
+        !action.conversationTabIDs.includes(activeConversationTabID)
+      ) {
+        const previousIndex = state.conversationTabIDs.indexOf(activeConversationTabID)
+        activeConversationTabID = action.conversationTabIDs[
+          Math.min(Math.max(previousIndex, 0), action.conversationTabIDs.length - 1)
+        ]
       }
+      activeConversationTabID ??= action.conversationTabIDs.at(-1)
+
+      const activeConversationRemoved =
+        state.conversationTabIDs.includes(state.activeItemID) &&
+        !action.conversationTabIDs.includes(state.activeItemID)
       return {
         ...state,
-        conversationTabID: undefined,
-        activeItemID:
-          previous && state.activeItemID === previous
-            ? state.taskTabID ?? state.tabs[0]?.id ?? ''
+        conversationTabIDs: action.conversationTabIDs,
+        activeConversationTabID,
+        activeItemID: requestedActive
+          ? requestedActive
+          : activeConversationRemoved
+            ? activeConversationTabID ?? state.taskTabID ?? state.tabs[0]?.id ?? ''
             : state.activeItemID,
       }
     }
@@ -175,7 +210,7 @@ export function browserWorkspaceReducer(
         selectedTaskID: undefined,
         activeItemID:
           state.activeItemID === state.taskTabID
-            ? state.conversationTabID ?? state.tabs.at(-1)?.id ?? ''
+            ? state.activeConversationTabID ?? state.tabs.at(-1)?.id ?? ''
             : state.activeItemID,
       }
     }
@@ -235,7 +270,7 @@ export function browserWorkspaceReducer(
         ),
         activeItemID:
           state.activeItemID === action.tabID
-            ? next?.id ?? state.conversationTabID ?? state.taskTabID ?? ''
+            ? next?.id ?? state.activeConversationTabID ?? state.taskTabID ?? ''
             : state.activeItemID,
         selectedBrowserTabID:
           state.selectedBrowserTabID === action.tabID

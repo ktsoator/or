@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { CircleAlert, PanelTopDashed, X } from 'lucide-react'
+import { PanelTopDashed } from 'lucide-react'
 import type {
   BrowserCommandState,
   BrowserInspectionCommandState,
@@ -9,7 +9,6 @@ import type {
   PreviewState,
   WorkspaceSummary,
 } from '@/types'
-import type { SessionThread } from '@/features/session'
 import {
   useBrowserInspectionRequests,
   useBrowserTabsRequests,
@@ -20,6 +19,7 @@ import {
 import { cn } from '@/lib/utils'
 import { WorkbenchView, WorkbenchHeaderActions } from './WorkbenchView'
 import type { WorkbenchTaskSource } from './BackgroundTasksView'
+import type { WorkbenchConversation } from './conversations'
 import { useI18n } from '@/i18n'
 
 type WorkbenchMode = 'launcher' | 'views'
@@ -37,16 +37,16 @@ export function WorkbenchPanel({
   browserCommands,
   sessionID,
   activatePreview,
-  conversation,
+  conversations,
+  activeConversationID,
   taskRequest,
   taskSources,
   models,
   workspaces,
   maximized,
   creatingConversation,
-  creationError,
   onCreateConversation,
-  onDismissCreationError,
+  onSelectConversation,
   onCloseConversation,
   onBrowserResult,
   browserInspectionSources,
@@ -61,17 +61,17 @@ export function WorkbenchPanel({
   browserCommands: BrowserCommandState[]
   sessionID?: string
   activatePreview: boolean
-  conversation?: SessionThread
+  conversations: WorkbenchConversation[]
+  activeConversationID?: string
   taskRequest?: WorkbenchTaskRequest
   taskSources: WorkbenchTaskSource[]
   models: ModelOption[]
   workspaces: WorkspaceSummary[]
   maximized: boolean
   creatingConversation: boolean
-  creationError: string
   onCreateConversation: () => void
-  onDismissCreationError: () => void
-  onCloseConversation: () => void
+  onSelectConversation: (conversationID: string) => void
+  onCloseConversation: (conversationID: string) => void
   onBrowserResult: (sessionID: string, commandID: string, result: BrowserResult) => void
   browserInspectionSources: BrowserInspectionSource[]
   onBrowserTabsHandled: (sessionID: string, commandID: string) => void
@@ -81,17 +81,23 @@ export function WorkbenchPanel({
   toggleControl?: ReactNode
 }) {
   const { t } = useI18n()
-  const workspaceSessionID = sessionID ?? conversation?.session.id
-  const workspaceConversation =
-    conversation?.session.id === workspaceSessionID ? conversation : undefined
+  const activeConversation = conversations.find(
+    (conversation) => conversation.id === activeConversationID,
+  )
+  const workspaceSessionID = sessionID ??
+    (activeConversation?.kind === 'session'
+      ? activeConversation.thread.session.id
+      : activeConversation?.id)
   const [mode, setMode] = useState<WorkbenchMode>(
-    preview || workspaceConversation || taskRequest ? 'views' : 'launcher',
+    preview || conversations.length > 0 || taskRequest ? 'views' : 'launcher',
   )
   const browserWorkspace = useBrowserWorkspace({
     activatePreview,
     browserCommands,
-    conversationID: workspaceConversation?.session.id,
+    activeConversationID,
+    conversationIDs: conversations.map((conversation) => conversation.id),
     onBrowserResult,
+    onSelectConversation,
     preview,
     sessionID: workspaceSessionID,
     taskRequest,
@@ -101,8 +107,8 @@ export function WorkbenchPanel({
   )
 
   useEffect(() => {
-    if (preview || workspaceConversation || taskRequest) setMode('views')
-  }, [preview, taskRequest, workspaceConversation])
+    if (preview || conversations.length > 0 || taskRequest) setMode('views')
+  }, [conversations.length, preview, taskRequest])
 
   return (
     <section
@@ -131,15 +137,19 @@ export function WorkbenchPanel({
       {mode === 'views' ? (
         <WorkbenchView
           workspace={browserWorkspace}
-          conversation={workspaceConversation}
+          conversations={conversations}
           taskSource={taskSource}
           creatingConversation={creatingConversation}
           models={models}
           workspaces={workspaces}
           onCloseTab={() => setMode('launcher')}
-          onCloseConversation={() => {
-            onCloseConversation()
-            if (browserWorkspace.tabs.length === 0 && !browserWorkspace.taskTabID) {
+          onCloseConversation={(conversationID) => {
+            onCloseConversation(conversationID)
+            if (
+              conversations.length === 1 &&
+              browserWorkspace.tabs.length === 0 &&
+              !browserWorkspace.taskTabID
+            ) {
               setMode('launcher')
             }
           }}
@@ -167,26 +177,6 @@ export function WorkbenchPanel({
             : undefined}
           toggleControl={toggleControl}
         />
-      )}
-      {creationError && (
-        <div
-          className="absolute inset-x-3 top-[49px] z-[80] flex min-h-9 items-center gap-2 rounded-lg border border-danger-edge/80 bg-canvas px-2.5 py-2 text-xs leading-4 text-danger shadow-[0_10px_28px_-18px_rgba(127,29,29,0.45)]"
-          role="alert"
-        >
-          <CircleAlert className="size-3.5 shrink-0" aria-hidden="true" />
-          <span className="min-w-0 flex-1 truncate" title={creationError}>
-            {creationError}
-          </span>
-          <button
-            className="grid size-5 shrink-0 cursor-pointer place-items-center rounded text-danger-soft outline-none hover:bg-danger-surface hover:text-danger focus-visible:bg-danger-surface focus-visible:text-danger"
-            type="button"
-            title={t('workbench.dismissError')}
-            aria-label={t('workbench.dismissError')}
-            onClick={onDismissCreationError}
-          >
-            <X className="size-3.5" aria-hidden="true" />
-          </button>
-        </div>
       )}
     </section>
   )

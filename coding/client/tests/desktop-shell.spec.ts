@@ -2639,7 +2639,7 @@ test('background tasks open in one persistent workbench tab with responsive logs
   ).toBeGreaterThan(0)
 })
 
-test('Add view creates a chat directly in the right panel', async ({ page }) => {
+test('Add view keeps multiple chats local until their first send', async ({ page }) => {
   const requests = await openDesktopClient(page, {
     existingSession: true,
     historyEvents: [
@@ -2667,43 +2667,105 @@ test('Add view creates a chat directly in the right panel', async ({ page }) => 
   const chatItem = page.getByRole('menuitem', { name: 'Chat' })
   await expect(chatItem).toBeEnabled()
   await chatItem.click()
+  const firstInput = workbench
+    .locator('[data-testid="workbench-conversation"]:visible')
+    .getByPlaceholder('Ask anything')
+  await firstInput.fill('First draft stays local')
 
-  await expect.poll(() =>
-    requests.find(
+  await workbench.getByRole('button', { name: 'Add view' }).click()
+  await page.getByRole('menuitem', { name: 'Chat' }).click()
+  const tabs = workbench.getByTestId('conversation-tab')
+  await expect(tabs).toHaveCount(2)
+  await expect(tabs.nth(1).getByRole('tab')).toHaveAttribute('aria-selected', 'true')
+  const secondInput = workbench
+    .locator('[data-testid="workbench-conversation"]:visible')
+    .getByPlaceholder('Ask anything')
+  await secondInput.fill('Second draft stays local')
+
+  await tabs.nth(0).getByRole('tab').click()
+  const activeInput = workbench
+    .locator('[data-testid="workbench-conversation"]:visible')
+    .getByPlaceholder('Ask anything')
+  await expect(activeInput).toHaveValue('First draft stays local')
+  expect(
+    requests.filter(
       (request) => request.path === '/api/sessions' && request.method === 'POST',
-    )?.body,
-  ).toEqual({
+    ),
+  ).toHaveLength(0)
+  await expect(mainConversation.getByText('Main answer remains visible')).toBeVisible()
+
+  await activeInput.press('Enter')
+  await expect.poll(() =>
+    requests.filter(
+      (request) => request.path === '/api/sessions' && request.method === 'POST',
+    ).map((request) => request.body),
+  ).toEqual([{
     scope: 'chat',
     provider: 'openai',
     model: 'test-model',
     thinkingLevel: 'medium',
     permissionMode: 'ask',
-  })
-  await expect(workbench.getByRole('tab', { name: 'New session' })).toHaveAttribute(
-    'aria-selected',
-    'true',
-  )
-  await expect(mainConversation.getByText('Main answer remains visible')).toBeVisible()
-
-  const sideConversation = workbench.getByTestId('workbench-conversation')
-  const input = sideConversation.getByPlaceholder('Ask anything')
-  await expect(input).toBeEnabled()
-  await input.fill('Start on the right')
-  await input.press('Enter')
-  await expect(sideConversation.getByText('Start on the right')).toBeVisible()
-  await expect(mainConversation.getByText('Start on the right')).toHaveCount(0)
+  }])
   await expect.poll(() =>
     requests.find(
       (request) => request.path === '/api/sessions/workbench-session/prompt',
     )?.body,
-  ).toEqual({ text: 'Start on the right', images: [] })
+  ).toEqual({ text: 'First draft stays local', images: [] })
+  await expect(tabs).toHaveCount(2)
+  await expect(mainConversation.getByText('First draft stays local')).toHaveCount(0)
 
-  await workbench.getByRole('button', { name: 'Close conversation view' }).click()
+  await workbench.getByRole('tab', { name: 'New session', exact: true }).click()
+  await expect(
+    workbench
+      .locator('[data-testid="workbench-conversation"]:visible')
+      .getByPlaceholder('Ask anything'),
+  ).toHaveValue('Second draft stays local')
+  expect(
+    requests.filter(
+      (request) => request.path === '/api/sessions' && request.method === 'POST',
+    ),
+  ).toHaveLength(1)
+
+  await workbench
+    .locator('[data-testid="conversation-tab"][data-active="true"]')
+    .getByRole('button', { name: 'Close conversation view' })
+    .click()
   expect(
     requests.filter(
       (request) =>
         request.method === 'DELETE' && request.path === '/api/sessions/workbench-session',
     ),
+  ).toHaveLength(0)
+})
+
+test('a failed right-panel first send keeps the local draft', async ({ page }) => {
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    failCreate: true,
+  })
+
+  await page.getByTestId('workbench-panel-toggle').click()
+  const workbench = page.getByTestId('workbench-panel')
+  await workbench.getByRole('button', { name: 'Add view' }).click()
+  await page.getByRole('menuitem', { name: 'Chat' }).click()
+
+  const conversation = workbench.locator(
+    '[data-testid="workbench-conversation"]:visible',
+  )
+  const input = conversation.getByPlaceholder('Ask anything')
+  await input.fill('Keep the right-side draft')
+  await input.press('Enter')
+
+  await expect(input).toHaveValue('Keep the right-side draft')
+  await expect(conversation.getByRole('alert')).toHaveText('invalid session settings')
+  await expect(workbench.getByTestId('conversation-tab')).toHaveCount(1)
+  expect(
+    requests.filter(
+      (request) => request.path === '/api/sessions' && request.method === 'POST',
+    ),
+  ).toHaveLength(1)
+  expect(
+    requests.filter((request) => request.path.endsWith('/prompt')),
   ).toHaveLength(0)
 })
 

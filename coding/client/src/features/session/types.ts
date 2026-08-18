@@ -68,6 +68,12 @@ type ThreadActions = {
   compactContext: () => Promise<CompactionResult>
 }
 
+export type SessionDraftSubmission = {
+  text: string
+  images: MessageImage[]
+  files: PromptFile[]
+}
+
 export type SessionThread = ThreadView &
   ThreadActions & {
     session: SessionSummary
@@ -87,7 +93,12 @@ export type Session = ThreadView &
     registerWorkspace: (path: string) => Promise<WorkspaceSummary>
     removeWorkspace: (path: string) => Promise<void>
     startDraft: (workspacePath?: string, projectScoped?: boolean) => void
-    createChatSession: () => Promise<SessionSummary>
+    createChatDraft: () => SessionDraft
+    createChatSession: (
+      draft: SessionDraft,
+      submission: SessionDraftSubmission,
+    ) => Promise<SessionSummary>
+    draftReady: boolean
     updateDraftWorkspace: (workspacePath?: string, projectScoped?: boolean) => void
     deleteSession: (id: string) => Promise<void>
     renameSession: (id: string, customTitle: string) => Promise<SessionSummary>
@@ -101,5 +112,5 @@ export type Session = ThreadView &
     queueBrowserResult: (sessionID: string, id: string, result: BrowserResult) => void
     handleBrowserTabs: (sessionID: string, id: string) => void
     handleBrowserInspection: (sessionID: string, id: string) => void
-    secondaryThread?: SessionThread
+    secondaryThreads: SessionThread[]
   }

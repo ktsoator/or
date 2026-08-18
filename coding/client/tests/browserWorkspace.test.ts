@@ -74,20 +74,31 @@ describe('browser workspace reducer', () => {
     expect(state.activeItemID).toBe('tab-3')
   })
 
-  test('selects a new conversation and restores the first browser tab when it closes', () => {
+  test('keeps multiple conversations and restores the first browser tab when they close', () => {
     let state = createBrowserWorkspaceState({
       initialTab: createBrowserTab({ id: 'tab-1' }),
     })
     state = browserWorkspaceReducer(state, {
-      t: 'sync_conversation',
-      conversationTabID: 'conversation:session-1',
+      t: 'sync_conversations',
+      conversationTabIDs: ['conversation:session-1', 'conversation:session-2'],
+      activeConversationTabID: 'conversation:session-2',
     })
-    expect(state.activeItemID).toBe('conversation:session-1')
+    expect(state.conversationTabIDs).toEqual([
+      'conversation:session-1',
+      'conversation:session-2',
+    ])
+    expect(state.activeItemID).toBe('conversation:session-2')
     expect(selectedBrowserTab(state)?.id).toBe('tab-1')
 
     state = browserWorkspaceReducer(state, {
-      t: 'sync_conversation',
-      conversationTabID: undefined,
+      t: 'sync_conversations',
+      conversationTabIDs: ['conversation:session-1'],
+    })
+    expect(state.activeItemID).toBe('conversation:session-1')
+
+    state = browserWorkspaceReducer(state, {
+      t: 'sync_conversations',
+      conversationTabIDs: [],
     })
     expect(state.activeItemID).toBe('tab-1')
   })
@@ -95,7 +106,8 @@ describe('browser workspace reducer', () => {
   test('opens one task view, switches tasks, and closes without stopping task state', () => {
     let state = createBrowserWorkspaceState({
       initialTab: createBrowserTab({ id: 'tab-1' }),
-      conversationTabID: 'conversation:session-1',
+      conversationTabIDs: ['conversation:session-1'],
+      activeConversationTabID: 'conversation:session-1',
       activeItemID: 'conversation:session-1',
     })
     state = browserWorkspaceReducer(state, {

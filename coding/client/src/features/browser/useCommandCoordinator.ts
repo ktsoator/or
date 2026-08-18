@@ -154,7 +154,7 @@ export function useBrowserCommandCoordinator({
     void closeBrowser(browserRuntimeTabID(workspaceID, tabID))
     dispatch({ t: 'close_tab', tabID })
     return visibleBrowserTabs(current, sessionID).length === 1 &&
-      !current.conversationTabID &&
+      current.conversationTabIDs.length === 0 &&
       !current.taskTabID
   }, [dispatch, reportCancelled, sessionID, workspaceID])
 

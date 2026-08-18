@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
 import {
   agentBrowserTabID,
   browserTabNavigationURL,
@@ -53,28 +53,43 @@ const workbenchBrowserWorkspaceID = 'workbench'
 export function useBrowserWorkspace({
   activatePreview,
   browserCommands,
-  conversationID,
+  activeConversationID,
+  conversationIDs,
   onBrowserResult,
+  onSelectConversation,
   preview,
   sessionID,
   taskRequest,
 }: {
   activatePreview: boolean
   browserCommands: BrowserCommandState[]
-  conversationID?: string
+  activeConversationID?: string
+  conversationIDs: string[]
   onBrowserResult: (sessionID: string, commandID: string, result: BrowserResult) => void
+  onSelectConversation: (conversationID: string) => void
   preview?: PreviewState
   sessionID?: string
   taskRequest?: WorkbenchTaskRequest
 }) {
-  const conversationTabID = conversationWorkbenchTabID(conversationID)
-  const workspaceID = sessionID ?? conversationID ?? 'unknown'
+  const conversationIDsKey = conversationIDs.join('\0')
+  const conversationTabIDs = useMemo(
+    () => conversationIDsKey
+      ? conversationIDsKey.split('\0').flatMap((conversationID) => {
+          const tabID = conversationWorkbenchTabID(conversationID)
+          return tabID ? [tabID] : []
+        })
+      : [],
+    [conversationIDsKey],
+  )
+  const activeConversationTabID = conversationWorkbenchTabID(activeConversationID)
+  const workspaceID = sessionID ?? activeConversationID ?? 'unknown'
   const runtimeWorkspaceID = workbenchBrowserWorkspaceID
   const fallbackWorkspace = createInitialBrowserWorkspace({
     activatePreview,
     browserCommands,
-    conversationID,
-    conversationTabID,
+    activeConversationID,
+    activeConversationTabID,
+    conversationTabIDs,
     preview,
     sessionID,
   })
@@ -94,8 +109,12 @@ export function useBrowserWorkspace({
   }, [])
 
   useEffect(() => {
-    dispatch({ t: 'sync_conversation', conversationTabID })
-  }, [conversationTabID, dispatch, workspaceID])
+    dispatch({
+      t: 'sync_conversations',
+      conversationTabIDs,
+      activeConversationTabID,
+    })
+  }, [activeConversationTabID, conversationTabIDs, dispatch, workspaceID])
 
   useEffect(() => onBrowserOpenTab((request) => {
     const openerRuntimeTabID = browserRuntimeTabIDForWebContentsID(
@@ -139,7 +158,7 @@ export function useBrowserWorkspace({
   })
   const tabs = visibleBrowserTabs(state, sessionID)
   const activeTab = selectedBrowserTab(state, sessionID)
-  const conversationActive = state.activeItemID === state.conversationTabID
+  const conversationActive = state.conversationTabIDs.includes(state.activeItemID)
   const tasksActive = state.activeItemID === state.taskTabID
   const activeDesired = activeTab?.desired
   const activeObserved = activeTab?.observed
@@ -213,7 +232,11 @@ export function useBrowserWorkspace({
     tabs,
     workspaceID,
     runtimeWorkspaceID,
-    conversationTabID: state.conversationTabID,
+    conversationTabIDs: state.conversationTabIDs,
+    activeConversationID: conversationIDs.find(
+      (conversationID) =>
+        conversationWorkbenchTabID(conversationID) === state.activeConversationTabID,
+    ),
     conversationActive,
     taskTabID: state.taskTabID,
     selectedTaskID: state.selectedTaskID,
@@ -226,7 +249,13 @@ export function useBrowserWorkspace({
     attachControl,
     releaseControl,
     browserRuntime: hasBrowserRuntime(),
-    selectItem: (itemID: string) => dispatch({ t: 'select_item', itemID }),
+    selectItem: (itemID: string) => {
+      const conversationID = conversationIDs.find(
+        (candidate) => conversationWorkbenchTabID(candidate) === itemID,
+      )
+      if (conversationID) onSelectConversation(conversationID)
+      dispatch({ t: 'select_item', itemID })
+    },
     openTasks: (taskID?: string) => dispatch({
       t: 'open_tasks',
       taskTabID: backgroundTasksWorkbenchTabID(workspaceID)!,
@@ -235,7 +264,7 @@ export function useBrowserWorkspace({
     selectTask: (taskID: string) => dispatch({ t: 'select_task', taskID }),
     closeTasks: () => {
       dispatch({ t: 'close_tasks' })
-      return tabs.length === 0 && !state.conversationTabID
+      return tabs.length === 0 && state.conversationTabIDs.length === 0
     },
     newTab: () => dispatch({ t: 'create_user_tab', sessionID }),
     closeTab: coordinator.closeTab,
@@ -265,15 +294,17 @@ export type BrowserWorkspaceController = ReturnType<typeof useBrowserWorkspace>
 function createInitialBrowserWorkspace({
   activatePreview,
   browserCommands,
-  conversationID,
-  conversationTabID,
+  activeConversationID,
+  activeConversationTabID,
+  conversationTabIDs,
   preview,
   sessionID,
 }: {
   activatePreview: boolean
   browserCommands: BrowserCommandState[]
-  conversationID?: string
-  conversationTabID?: string
+  activeConversationID?: string
+  activeConversationTabID?: string
+  conversationTabIDs: string[]
   preview?: PreviewState
   sessionID?: string
 }): BrowserWorkspaceState {
@@ -287,12 +318,13 @@ function createInitialBrowserWorkspace({
     : undefined
   return createBrowserWorkspaceState({
     initialTab,
-    conversationTabID,
+    conversationTabIDs,
+    activeConversationTabID,
     activeItemID:
       activatePreview && initialTab
         ? initialTab.id
-        : conversationID
-          ? conversationTabID
+        : activeConversationID
+          ? activeConversationTabID
           : initialTab?.id,
     handledPreviewKey: browserPreviewKey(preview, sessionID),
   })
