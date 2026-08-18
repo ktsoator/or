@@ -61,9 +61,10 @@ app -> features -> shared
   theme. It is loaded dynamically only when rendered content contains a code
   block, tool read preview, or diff.
 
-The generic `lib/desktop.ts` module only exposes platform, directory picker,
-and external-link capabilities. Electron webview registration and browser
-runtime state belong to `features/browser`.
+The generic `lib/desktop.ts` module exposes platform, directory picker,
+external-link, preview-origin, and validated guest new-tab capabilities.
+Electron webview registration, tab matching, and browser runtime state belong
+to `features/browser`.
 
 The remaining root modules are intentionally transitional. Move them by
 capability in behavior-preserving batches; do not mix directory migration with

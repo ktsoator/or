@@ -20,13 +20,14 @@ import (
 
 // Runtime owns the product services exposed by the desktop sidecar.
 type Runtime struct {
-	handler       http.Handler
-	conversations *conversation.Manager
-	mcp           *mcp.Manager
-	ledger        *usage.Store
-	recorder      observability.Recorder
-	cancel        context.CancelFunc
-	closeOnce     sync.Once
+	handler        http.Handler
+	previewHandler http.Handler
+	conversations  *conversation.Manager
+	mcp            *mcp.Manager
+	ledger         *usage.Store
+	recorder       observability.Recorder
+	cancel         context.CancelFunc
+	closeOnce      sync.Once
 }
 
 // New assembles the product runtime served by the authenticated Electron
@@ -118,12 +119,13 @@ func New(ctx context.Context, dataDir string) (*Runtime, error) {
 		RequestSnapshots:     requestSnapshots,
 	})
 	runtime := &Runtime{
-		handler:       server.Handler(),
-		conversations: manager,
-		mcp:           mcp,
-		ledger:        ledger,
-		recorder:      eventRecorder,
-		cancel:        cancel,
+		handler:        server.Handler(),
+		previewHandler: transports.PreviewHandler(),
+		conversations:  manager,
+		mcp:            mcp,
+		ledger:         ledger,
+		recorder:       eventRecorder,
+		cancel:         cancel,
 	}
 	eventRecorder.Record(observability.Event{Name: observability.ApplicationStarted})
 	return runtime, nil
@@ -150,6 +152,10 @@ func snapshotCleaner(store *snapshot.FileStore) snapshot.SessionCleaner {
 
 // Handler returns the complete desktop /api HTTP surface.
 func (r *Runtime) Handler() http.Handler { return r.handler }
+
+// PreviewHandler returns the grant-scoped, read-only workspace preview surface.
+// The desktop host serves it on an origin that has no product authentication.
+func (r *Runtime) PreviewHandler() http.Handler { return r.previewHandler }
 
 // Close cancels in-flight work and releases session-owned background processes.
 func (r *Runtime) Close() {

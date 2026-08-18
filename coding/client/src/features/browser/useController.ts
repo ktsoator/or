@@ -108,7 +108,7 @@ export function useBrowserController({
       issuedRevisionRef.current = undefined
       release()
     }
-  }, [browserAvailable, runtimeTabID, webviewRef])
+  }, [browserAvailable, kind, runtimeTabID, webviewRef])
 
   useEffect(() => {
     if (!url) {

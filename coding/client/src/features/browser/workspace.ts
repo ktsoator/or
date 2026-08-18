@@ -8,6 +8,7 @@ import {
   agentBrowserCommandTabID,
   agentBrowserTabID,
   browserTabsReducer,
+  createBrowserTab,
   type BrowserNavigationTarget,
   type BrowserTab,
   type BrowserTabsAction,
@@ -48,6 +49,7 @@ export type BrowserWorkspaceAction =
   | { t: 'select_task'; taskID: string }
   | { t: 'close_tasks' }
   | { t: 'create_user_tab' }
+  | { t: 'open_user_tab'; target: BrowserNavigationTarget }
   | { t: 'close_tab'; tabID: string }
   | { t: 'tab_action'; action: BrowserTabsAction }
   | {
@@ -201,6 +203,24 @@ export function browserWorkspaceReducer(
       return {
         ...state,
         tabs: browserTabsReducer(state.tabs, { t: 'create_tab', tabID }),
+        activeItemID: tabID,
+        nextUserTabSequence,
+      }
+    }
+
+    case 'open_user_tab': {
+      const nextUserTabSequence = state.nextUserTabSequence + 1
+      const tabID = `tab-${nextUserTabSequence}`
+      return {
+        ...state,
+        tabs: [
+          ...state.tabs,
+          createBrowserTab({
+            id: tabID,
+            target: action.target,
+            source: 'address',
+          }),
+        ],
         activeItemID: tabID,
         nextUserTabSequence,
       }

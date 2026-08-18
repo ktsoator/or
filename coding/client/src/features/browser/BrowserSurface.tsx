@@ -10,6 +10,8 @@ import type { BrowserRuntimeTabID } from './runtimeID'
 // React omits unknown boolean attributes, while Electron treats this as a
 // presence attribute that must exist before the webview guest is attached.
 const allowPopupsAttribute = 'true' as unknown as boolean
+const previewPartition = 'or-preview'
+const webPartition = 'persist:or-browser'
 
 export function BrowserSurface({
   active,
@@ -47,6 +49,7 @@ export function BrowserSurface({
     webviewRef,
   })
   const status = observed.status === 'navigating' ? 'loading' : observed.status
+  const partition = workspaceFile ? previewPartition : webPartition
 
   return (
     <div
@@ -59,9 +62,11 @@ export function BrowserSurface({
     >
       {browserRuntime && (
         <webview
+          key={partition}
           ref={webviewRef}
           allowpopups={allowPopupsAttribute}
           className="absolute inset-0 flex h-full w-full"
+          partition={partition}
           src="about:blank"
         />
       )}

@@ -3390,6 +3390,7 @@ test('AI preview tool opens Browser in the workbench beside Chat', async ({ page
   await expect.poll(async () =>
     (await browserRuntimeView(page, 'preview:test-session'))?.visible,
   ).toBe(true)
+  await expect(page.locator('webview')).toHaveAttribute('partition', 'persist:or-browser')
   await expect(page.getByRole('main')).toBeVisible()
   await expect.poll(async () => {
     const chatBox = await page.getByRole('main').boundingBox()
@@ -4629,6 +4630,7 @@ test('AI preview opens workspace HTML directly without starting or probing a ser
   await expect.poll(async () =>
     (await browserRuntimeView(page, 'preview:test-session'))?.visible,
   ).toBe(true)
+  await expect(page.locator('webview')).toHaveAttribute('partition', 'or-preview')
   await expect(page.getByRole('textbox', { name: 'Address' })).toHaveValue(
     '/tmp/test-session/web/index.html',
   )

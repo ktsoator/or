@@ -30,8 +30,10 @@ bun run build
 
 The right-side Browser has no web iframe fallback. In Electron it renders public
 sites, localhost apps, and workspace HTML with `<webview>` elements managed by a
-renderer-side registry. Browser-only Playwright tests use a test bridge; they do
-not provide a separately deployable product mode.
+renderer-side registry. Public pages share a persistent browser partition;
+workspace HTML uses an in-memory partition and a preview-only sidecar origin.
+Browser-only Playwright tests use a test bridge; they do not provide a separately
+deployable product mode.
 
 Run the desktop-shell UI regression tests with a locally installed Chrome:
 

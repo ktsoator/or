@@ -33,15 +33,19 @@ export function workspacePreviewURL(
   sessionID: string,
   grantID: string,
   previewPath: string,
+  previewOrigin = desktopPreviewOrigin(),
 ): string {
   const encodedPath = previewPath
     .split('/')
     .filter(Boolean)
     .map((segment) => encodeURIComponent(segment))
     .join('/')
-  return apiURL(
-    `/sessions/${encodeURIComponent(sessionID)}/previews/${encodeURIComponent(grantID)}/${encodedPath}`,
-  )
+  const route = `/sessions/${encodeURIComponent(sessionID)}/previews/${encodeURIComponent(grantID)}/${encodedPath}`
+  return previewOrigin ? new URL(route, previewOrigin).href : apiURL(route)
+}
+
+function desktopPreviewOrigin(): string {
+  return typeof window === 'undefined' ? '' : window.codingDesktop?.previewOrigin ?? ''
 }
 
 export function workspaceFileURL(path: string): string | undefined {
