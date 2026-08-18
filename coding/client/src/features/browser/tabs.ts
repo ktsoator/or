@@ -2,6 +2,8 @@ type BrowserTargetKind = 'web' | 'workspace-preview'
 
 type BrowserNavigationSource = 'agent' | 'address' | 'reload'
 
+export type BrowserTabScope = 'workbench' | 'session'
+
 export type BrowserNavigationTarget = {
   requestedURL: string
   addressDraft: string
@@ -27,10 +29,11 @@ export type ObservedNavigation = {
 }
 
 export type BrowserTab = {
-  // Stable session-local identity exposed to the UI and Agent tools. Runtime
-  // registry keys add the workspace namespace separately.
+  // Stable Workbench identity exposed to the UI and Agent tools. Session-owned
+  // tabs carry their owner separately so user tabs can outlive view changes.
   id: string
   sessionID?: string
+  scope: BrowserTabScope
   addressDraft: string
   desired?: DesiredNavigation
   observed: ObservedNavigation
@@ -108,12 +111,14 @@ const emptyObservedNavigation = (): ObservedNavigation => ({
 export function createBrowserTab({
   id,
   sessionID,
+  scope,
   target,
   source = 'address',
   initialRevision = 0,
 }: {
   id: string
   sessionID?: string
+  scope?: BrowserTabScope
   target?: BrowserNavigationTarget
   source?: BrowserNavigationSource
   initialRevision?: number
@@ -121,6 +126,7 @@ export function createBrowserTab({
   return {
     id,
     sessionID,
+    scope: scope ?? (source === 'agent' ? 'session' : 'workbench'),
     addressDraft: target?.addressDraft ?? '',
     desired: target
       ? {
@@ -163,6 +169,7 @@ function submitNavigation(
 ): BrowserTab {
   return {
     ...tab,
+    scope: source === 'address' ? 'workbench' : tab.scope,
     addressDraft: target.addressDraft,
     desired: {
       ...target,
@@ -188,7 +195,11 @@ export function browserTabsReducer(
       if (tabs.some((tab) => tab.id === action.tabID)) return tabs
       return [
         ...tabs,
-        createBrowserTab({ id: action.tabID, sessionID: action.sessionID }),
+        createBrowserTab({
+          id: action.tabID,
+          sessionID: action.sessionID,
+          scope: 'workbench',
+        }),
       ]
     case 'agent_navigate': {
       const existing = tabs.find((tab) => tab.id === action.tabID)

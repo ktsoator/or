@@ -21,6 +21,7 @@ const reportRetryMs = 1_000
 
 export function useBrowserInspectionRequests({
   workspace,
+  runtimeWorkspaceID,
   sessionID,
   browserCommands,
   browserInspections,
@@ -29,6 +30,7 @@ export function useBrowserInspectionRequests({
   onHandled,
 }: {
   workspace?: BrowserWorkspaceState
+  runtimeWorkspaceID: string
   sessionID?: string
   browserCommands: BrowserCommandState[]
   browserInspections: BrowserInspectionCommandState[]
@@ -96,7 +98,7 @@ export function useBrowserInspectionRequests({
       .then(async (tabID) => {
         attachControl(sessionID, leaseID, tabID, ['read'])
         try {
-          return await inspectBrowser(browserRuntimeTabID(sessionID, tabID))
+          return await inspectBrowser(browserRuntimeTabID(runtimeWorkspaceID, tabID))
         } finally {
           releaseControl(sessionID, leaseID)
         }
@@ -132,6 +134,7 @@ export function useBrowserInspectionRequests({
     browserInspections,
     releaseControl,
     report,
+    runtimeWorkspaceID,
     sessionID,
     workspace,
   ])

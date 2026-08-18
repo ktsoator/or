@@ -6,10 +6,10 @@ import {
   type BrowserTabsAction,
 } from './tabs'
 import {
-  browserWorkspaceRegistryReducer,
-  createBrowserWorkspaceRegistryState,
+  browserWorkspaceReducer,
   createBrowserWorkspaceState,
   selectedBrowserTab,
+  visibleBrowserTabs,
   type BrowserWorkspaceAction,
   type BrowserWorkspaceState,
 } from './workspace'
@@ -48,6 +48,8 @@ export type WorkbenchTaskRequest = {
   revision: number
 }
 
+const workbenchBrowserWorkspaceID = 'workbench'
+
 export function useBrowserWorkspace({
   activatePreview,
   browserCommands,
@@ -67,6 +69,7 @@ export function useBrowserWorkspace({
 }) {
   const conversationTabID = conversationWorkbenchTabID(conversationID)
   const workspaceID = sessionID ?? conversationID ?? 'unknown'
+  const runtimeWorkspaceID = workbenchBrowserWorkspaceID
   const fallbackWorkspace = createInitialBrowserWorkspace({
     activatePreview,
     browserCommands,
@@ -75,40 +78,20 @@ export function useBrowserWorkspace({
     preview,
     sessionID,
   })
-  const [registry, dispatchRegistry] = useReducer(
-    browserWorkspaceRegistryReducer,
+  const [state, dispatch] = useReducer(
+    browserWorkspaceReducer,
     undefined,
-    () => createBrowserWorkspaceRegistryState(workspaceID, fallbackWorkspace),
+    () => fallbackWorkspace,
   )
-  const state = registry.workspaces[workspaceID] ?? fallbackWorkspace
-  const registryRef = useRef(registry)
-  registryRef.current = registry
-  const initialStateRef = useRef(state)
-  initialStateRef.current = state
-  const dispatch = useCallback((action: BrowserWorkspaceAction) => {
-    dispatchRegistry({
-      t: 'workspace_action',
-      workspaceID,
-      initialState: initialStateRef.current,
-      action,
-    })
-  }, [workspaceID])
+  const stateRef = useRef(state)
+  stateRef.current = state
 
   const dispatchWorkspace = useCallback((
-    targetWorkspaceID: string,
+    _targetSessionID: string,
     action: BrowserWorkspaceAction,
   ) => {
-    const initialState = targetWorkspaceID === workspaceID
-      ? initialStateRef.current
-      : registryRef.current.workspaces[targetWorkspaceID] ??
-        createBrowserWorkspaceState()
-    dispatchRegistry({
-      t: 'workspace_action',
-      workspaceID: targetWorkspaceID,
-      initialState,
-      action,
-    })
-  }, [workspaceID])
+    dispatch(action)
+  }, [])
 
   useEffect(() => {
     dispatch({ t: 'sync_conversation', conversationTabID })
@@ -119,20 +102,21 @@ export function useBrowserWorkspace({
       request.openerWebContentsID,
     )
     if (!openerRuntimeTabID) return
-    const opener = initialStateRef.current.tabs.find(
-      (tab) => browserRuntimeTabID(workspaceID, tab.id) === openerRuntimeTabID,
+    const opener = stateRef.current.tabs.find(
+      (tab) => browserRuntimeTabID(runtimeWorkspaceID, tab.id) === openerRuntimeTabID,
     )
     const target = normalizeBrowserAddress(request.url)
     if (!opener || !target) return
     dispatch({
       t: 'open_user_tab',
+      sessionID: opener.sessionID ?? sessionID,
       target: {
         requestedURL: target,
         addressDraft: target,
         kind: 'web',
       },
     })
-  }), [dispatch, workspaceID])
+  }), [dispatch, runtimeWorkspaceID, sessionID])
 
   useEffect(() => {
     if (!taskRequest || taskRequest.sessionID !== workspaceID) return
@@ -151,9 +135,10 @@ export function useBrowserWorkspace({
     preview,
     sessionID,
     state,
-    workspaceID,
+    workspaceID: runtimeWorkspaceID,
   })
-  const activeTab = selectedBrowserTab(state)
+  const tabs = visibleBrowserTabs(state, sessionID)
+  const activeTab = selectedBrowserTab(state, sessionID)
   const conversationActive = state.activeItemID === state.conversationTabID
   const tasksActive = state.activeItemID === state.taskTabID
   const activeDesired = activeTab?.desired
@@ -164,12 +149,7 @@ export function useBrowserWorkspace({
       ? workspaceFileURL(activeDesired.workspacePath)
       : activeNavigationURL
     : ''
-  const workspaceForSession = useCallback((targetSessionID?: string) => {
-    const targetWorkspaceID = targetSessionID ?? 'unknown'
-    return targetWorkspaceID === workspaceID
-      ? state
-      : registry.workspaces[targetWorkspaceID]
-  }, [registry.workspaces, state, workspaceID])
+  const workspaceForSession = useCallback((_targetSessionID?: string) => state, [state])
 
   const dispatchTabAction = useCallback((action: BrowserTabsAction) => {
     dispatch({ t: 'tab_action', action })
@@ -184,6 +164,7 @@ export function useBrowserWorkspace({
     dispatchWorkspace(targetSessionID, {
       t: 'attach_control',
       leaseID,
+      sessionID: targetSessionID,
       tabID,
       capabilities,
     })
@@ -229,8 +210,9 @@ export function useBrowserWorkspace({
   }, [activeExternalURL])
 
   return {
-    tabs: state.tabs,
+    tabs,
     workspaceID,
+    runtimeWorkspaceID,
     conversationTabID: state.conversationTabID,
     conversationActive,
     taskTabID: state.taskTabID,
@@ -253,9 +235,9 @@ export function useBrowserWorkspace({
     selectTask: (taskID: string) => dispatch({ t: 'select_task', taskID }),
     closeTasks: () => {
       dispatch({ t: 'close_tasks' })
-      return state.tabs.length === 0 && !state.conversationTabID
+      return tabs.length === 0 && !state.conversationTabID
     },
-    newTab: () => dispatch({ t: 'create_user_tab' }),
+    newTab: () => dispatch({ t: 'create_user_tab', sessionID }),
     closeTab: coordinator.closeTab,
     reload,
     navigateActiveAddress,
@@ -267,12 +249,12 @@ export function useBrowserWorkspace({
     goBack: () => {
       if (!activeTab) return
       dispatch({ t: 'release_tab_control', tabID: activeTab.id })
-      void goBackBrowser(browserRuntimeTabID(workspaceID, activeTab.id))
+      void goBackBrowser(browserRuntimeTabID(runtimeWorkspaceID, activeTab.id))
     },
     goForward: () => {
       if (!activeTab) return
       dispatch({ t: 'release_tab_control', tabID: activeTab.id })
-      void goForwardBrowser(browserRuntimeTabID(workspaceID, activeTab.id))
+      void goForwardBrowser(browserRuntimeTabID(runtimeWorkspaceID, activeTab.id))
     },
     openExternal,
   }

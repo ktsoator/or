@@ -79,7 +79,7 @@ export function WorkbenchView({
     taskSource?.tasks.filter((task) => task.status === 'running').length ?? 0
   const {
     tabs,
-    workspaceID,
+    runtimeWorkspaceID,
     conversationTabID,
     conversationActive,
     taskTabID,
@@ -102,6 +102,7 @@ export function WorkbenchView({
     goForward,
     openExternal,
   } = workspace
+  const browserItemActive = !conversationActive && !tasksActive
 
   const navigate = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -131,10 +132,10 @@ export function WorkbenchView({
               desired?.workspacePath?.split('/').at(-1) ||
               addressTitle(tab.observed.committedURL || desired?.requestedURL || '') ||
               t('preview.newTab')
-            const active = !conversationActive && tab.id === activeTab?.id
+            const active = browserItemActive && tab.id === activeTab?.id
             return (
               <div
-                key={`${workspaceID}:${tab.id}`}
+                key={`${runtimeWorkspaceID}:${tab.id}`}
                 className={cn(
                   'group flex h-8 min-w-[7rem] max-w-[11rem] shrink-0 items-center rounded-md border transition-colors',
                   active
@@ -305,7 +306,7 @@ export function WorkbenchView({
         <div
           className={cn(
             'min-h-0 flex-1 flex-col',
-            conversationActive ? 'hidden' : 'flex',
+            browserItemActive ? 'flex' : 'hidden',
           )}
         >
           <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-edge bg-canvas px-2.5">
@@ -379,7 +380,7 @@ export function WorkbenchView({
               const active = tab.id === activeTab.id
               return (
                 <div
-                  key={`${workspaceID}:${tab.id}`}
+                  key={`${runtimeWorkspaceID}:${tab.id}`}
                   className={cn(
                     'absolute inset-0 flex',
                     active ? 'visible' : 'invisible pointer-events-none',
@@ -388,7 +389,7 @@ export function WorkbenchView({
                 >
                   <BrowserSurface
                     active={active}
-                    runtimeTabID={browserRuntimeTabID(workspaceID, tab.id)}
+                    runtimeTabID={browserRuntimeTabID(runtimeWorkspaceID, tab.id)}
                     tabID={tab.id}
                     navigation={desired?.revision ?? 0}
                     observed={tab.observed}

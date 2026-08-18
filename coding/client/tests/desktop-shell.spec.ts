@@ -2865,7 +2865,7 @@ test('a restored right-side preview stays available without taking focus from Ch
   })
 })
 
-test('browser workspaces show only the selected session tabs and restore them on return', async ({
+test('Agent preview tabs stay scoped to their selected session', async ({
   page,
 }) => {
   const requests = await openDesktopClient(page, {
@@ -2988,7 +2988,7 @@ test('browser workspaces show only the selected session tabs and restore them on
   )
 })
 
-test('browser workspace restores a page navigation instead of the original URL', async ({
+test('opening a conversation in the workbench preserves user browser tabs', async ({
   page,
 }) => {
   await openDesktopClient(page, {
@@ -3012,16 +3012,38 @@ test('browser workspace restores a page navigation instead of the original URL',
   await guestNavigatesItself(page, 'tab-1', videoURL, 'Bilibili video')
   await expect(address).toHaveValue(videoURL)
 
-  const chats = page.getByRole('navigation', { name: 'Chats' })
-  await chats.getByRole('button', { name: 'Secondary task', exact: true }).click()
-  await expect.poll(async () => browserRuntimeView(page, 'tab-1')).toBeUndefined()
+  await workbench.getByRole('button', { name: 'Add view' }).click()
+  await page.getByRole('menuitem', { name: 'Browser' }).click()
+  await address.fill('https://github.com')
+  await address.press('Enter')
+  await expect.poll(async () => (await browserRuntimeView(page, 'tab-2'))?.url).toBe(
+    'https://github.com/',
+  )
 
-  await chats.getByRole('button', { name: 'New session', exact: true }).click()
-  await expect.poll(async () => (await browserRuntimeView(page, 'tab-1'))?.url).toBe(
-    videoURL,
+  await page.getByRole('button', { name: 'Actions for Secondary task' }).click()
+  await page.getByRole('menuitem', { name: 'Open in right panel' }).click()
+
+  await expect(workbench.getByTestId('browser-tab')).toHaveCount(2)
+  await expect(workbench.getByRole('tab', { name: 'Secondary task' })).toHaveAttribute(
+    'aria-selected',
+    'true',
   )
   expect(await browserRuntimeView(page, 'tab-1')).toMatchObject({
-    loadCalls: [videoURL],
+    url: videoURL,
+    visible: false,
+    loadCalls: ['https://www.bilibili.com/'],
+  })
+  expect(await browserRuntimeView(page, 'tab-2')).toMatchObject({
+    url: 'https://github.com/',
+    visible: false,
+    loadCalls: ['https://github.com/'],
+  })
+
+  await workbench.getByRole('tab', { name: 'Bilibili video' }).click()
+  expect(await browserRuntimeView(page, 'tab-1')).toMatchObject({
+    url: videoURL,
+    visible: true,
+    loadCalls: ['https://www.bilibili.com/'],
   })
 })
 
@@ -4125,7 +4147,7 @@ test('AI browser temporarily attaches read control to an existing open tab', asy
   await expect(page.locator('[data-browser-tab-id]')).toHaveCount(2)
 })
 
-test('browser inspection cannot cross session boundaries for same-named tabs', async ({
+test('browser inspection cannot inspect another session\'s user tab', async ({
   page,
 }) => {
   const requests = await openDesktopClient(page, {
@@ -4151,12 +4173,12 @@ test('browser inspection cannot cross session boundaries for same-named tabs', a
   address = workbench.getByRole('textbox', { name: 'Address' })
   await address.fill('https://secondary.example')
   await address.press('Enter')
-  await expect.poll(async () => (await browserRuntimeView(page, 'tab-1'))?.url).toBe(
+  await expect.poll(async () => (await browserRuntimeView(page, 'tab-2'))?.url).toBe(
     'https://secondary.example/',
   )
-  await expect(page.locator('[data-browser-tab-id="tab-1"]')).toHaveAttribute(
+  await expect(page.locator('[data-browser-tab-id="tab-2"]')).toHaveAttribute(
     'data-browser-runtime-tab-id',
-    'workspace:secondary-session:tab:tab-1',
+    'workspace:workbench:tab:tab-2',
   )
 
   await page.evaluate(() => {
@@ -4168,7 +4190,7 @@ test('browser inspection cannot cross session boundaries for same-named tabs', a
     emit?.('test-session', {
       type: 'browser_inspect_request',
       id: 'cross-session-inspection',
-      tabID: 'tab-1',
+      tabID: 'tab-2',
     })
   })
 
@@ -4182,10 +4204,10 @@ test('browser inspection cannot cross session boundaries for same-named tabs', a
     body: {
       status: 'failed',
       revision: 0,
-      error: 'Browser tab is not open',
+      error: 'Browser tab is not open in this session',
     },
   })
-  expect(await browserRuntimeView(page, 'tab-1')).toMatchObject({
+  expect(await browserRuntimeView(page, 'tab-2')).toMatchObject({
     url: 'https://secondary.example/',
     inspectCalls: 0,
   })

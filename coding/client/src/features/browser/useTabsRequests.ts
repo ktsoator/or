@@ -43,7 +43,7 @@ export function useBrowserTabsRequests({
 
     const key = `${sessionID}:${request.commandID}`
     processedRef.current.add(key)
-    const context = browserWorkspaceContext(workspace)
+    const context = browserWorkspaceContext(workspace, sessionID)
     const result: BrowserTabsResult = {
       status: 'completed',
       openTabs: context.openTabs,

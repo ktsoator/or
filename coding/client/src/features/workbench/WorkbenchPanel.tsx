@@ -121,6 +121,7 @@ export function WorkbenchPanel({
           key={`${source.sessionID ?? 'no-session'}:${index}`}
           source={source}
           workspace={browserWorkspace.workspaceForSession(source.sessionID)}
+          runtimeWorkspaceID={browserWorkspace.runtimeWorkspaceID}
           attachControl={browserWorkspace.attachControl}
           releaseControl={browserWorkspace.releaseControl}
           onBrowserTabsHandled={onBrowserTabsHandled}
@@ -193,6 +194,7 @@ export function WorkbenchPanel({
 
 function BrowserInspectionWorker({
   workspace,
+  runtimeWorkspaceID,
   attachControl,
   releaseControl,
   onBrowserTabsHandled,
@@ -200,6 +202,7 @@ function BrowserInspectionWorker({
   source,
 }: {
   workspace: BrowserWorkspaceState | undefined
+  runtimeWorkspaceID: string
   attachControl: ReturnType<typeof useBrowserWorkspace>['attachControl']
   releaseControl: ReturnType<typeof useBrowserWorkspace>['releaseControl']
   onBrowserTabsHandled: (sessionID: string, commandID: string) => void
@@ -214,6 +217,7 @@ function BrowserInspectionWorker({
   })
   useBrowserInspectionRequests({
     workspace,
+    runtimeWorkspaceID,
     sessionID: source.sessionID,
     browserCommands: source.browserCommands,
     browserInspections: source.browserInspections,

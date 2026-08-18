@@ -28,18 +28,15 @@ type BrowserWorkspaceContext = {
 export type BrowserWorkspaceState = {
   tabs: BrowserTab[]
   activeItemID: string
+  selectedBrowserTabID?: string
   conversationTabID?: string
   taskTabID?: string
   selectedTaskID?: string
-  agentSelectedTabID?: string
+  agentSelectedTabIDs: Record<string, string>
   nextUserTabSequence: number
   controlLeases: Record<string, BrowserControlLease>
   commandTargets: Record<string, string>
-  handledPreviewKey?: string
-}
-
-type BrowserWorkspaceRegistryState = {
-  workspaces: Record<string, BrowserWorkspaceState>
+  handledPreviewKeys: Record<string, string>
 }
 
 export type BrowserWorkspaceAction =
@@ -48,13 +45,14 @@ export type BrowserWorkspaceAction =
   | { t: 'open_tasks'; taskTabID: string; taskID?: string }
   | { t: 'select_task'; taskID: string }
   | { t: 'close_tasks' }
-  | { t: 'create_user_tab' }
-  | { t: 'open_user_tab'; target: BrowserNavigationTarget }
+  | { t: 'create_user_tab'; sessionID?: string }
+  | { t: 'open_user_tab'; sessionID?: string; target: BrowserNavigationTarget }
   | { t: 'close_tab'; tabID: string }
   | { t: 'tab_action'; action: BrowserTabsAction }
   | {
       t: 'attach_control'
       leaseID: string
+      sessionID: string
       tabID: string
       capabilities: BrowserControlCapability[]
       select?: boolean
@@ -79,13 +77,6 @@ export type BrowserWorkspaceAction =
       activate: boolean
     }
 
-type BrowserWorkspaceRegistryAction = {
-  t: 'workspace_action'
-  workspaceID: string
-  initialState: BrowserWorkspaceState
-  action: BrowserWorkspaceAction
-}
-
 export function createBrowserWorkspaceState({
   initialTab,
   activeItemID,
@@ -98,11 +89,16 @@ export function createBrowserWorkspaceState({
   handledPreviewKey?: string
 } = {}): BrowserWorkspaceState {
   const initiallyControlled = initialTab?.desired?.source === 'agent'
+  const initialSessionID = initiallyControlled ? initialTab.sessionID : undefined
   return {
     tabs: initialTab ? [initialTab] : [],
     activeItemID: activeItemID ?? initialTab?.id ?? '',
+    selectedBrowserTabID: initialTab?.id,
     conversationTabID,
-    agentSelectedTabID: initiallyControlled ? initialTab.id : undefined,
+    agentSelectedTabIDs:
+      initialSessionID && initialTab
+        ? { [initialSessionID]: initialTab.id }
+        : {},
     nextUserTabSequence: initialTab?.id === 'tab-1' ? 1 : 0,
     controlLeases: initiallyControlled
       ? {
@@ -113,31 +109,10 @@ export function createBrowserWorkspaceState({
         }
       : {},
     commandTargets: {},
-    handledPreviewKey,
-  }
-}
-
-export function createBrowserWorkspaceRegistryState(
-  workspaceID?: string,
-  workspace?: BrowserWorkspaceState,
-): BrowserWorkspaceRegistryState {
-  return {
-    workspaces: workspaceID && workspace ? { [workspaceID]: workspace } : {},
-  }
-}
-
-export function browserWorkspaceRegistryReducer(
-  state: BrowserWorkspaceRegistryState,
-  action: BrowserWorkspaceRegistryAction,
-): BrowserWorkspaceRegistryState {
-  const current = state.workspaces[action.workspaceID] ?? action.initialState
-  const workspace = browserWorkspaceReducer(current, action.action)
-  if (state.workspaces[action.workspaceID] === workspace) return state
-  return {
-    workspaces: {
-      ...state.workspaces,
-      [action.workspaceID]: workspace,
-    },
+    handledPreviewKeys:
+      initialSessionID && handledPreviewKey
+        ? { [initialSessionID]: handledPreviewKey }
+        : {},
   }
 }
 
@@ -149,7 +124,15 @@ export function browserWorkspaceReducer(
     case 'select_item':
       return action.itemID === state.activeItemID
         ? state
-        : { ...state, activeItemID: action.itemID }
+        : {
+            ...state,
+            activeItemID: action.itemID,
+            selectedBrowserTabID: state.tabs.some(
+              (tab) => tab.id === action.itemID,
+            )
+              ? action.itemID
+              : state.selectedBrowserTabID,
+          }
 
     case 'sync_conversation': {
       const previous = state.conversationTabID
@@ -202,8 +185,13 @@ export function browserWorkspaceReducer(
       const tabID = `tab-${nextUserTabSequence}`
       return {
         ...state,
-        tabs: browserTabsReducer(state.tabs, { t: 'create_tab', tabID }),
+        tabs: browserTabsReducer(state.tabs, {
+          t: 'create_tab',
+          tabID,
+          sessionID: action.sessionID,
+        }),
         activeItemID: tabID,
+        selectedBrowserTabID: tabID,
         nextUserTabSequence,
       }
     }
@@ -217,11 +205,13 @@ export function browserWorkspaceReducer(
           ...state.tabs,
           createBrowserTab({
             id: tabID,
+            sessionID: action.sessionID,
             target: action.target,
             source: 'address',
           }),
         ],
         activeItemID: tabID,
+        selectedBrowserTabID: tabID,
         nextUserTabSequence,
       }
     }
@@ -239,14 +229,18 @@ export function browserWorkspaceReducer(
         ...state,
         tabs,
         controlLeases,
-        agentSelectedTabID:
-          state.agentSelectedTabID === action.tabID
-            ? undefined
-            : state.agentSelectedTabID,
+        agentSelectedTabIDs: withoutTabSelection(
+          state.agentSelectedTabIDs,
+          action.tabID,
+        ),
         activeItemID:
           state.activeItemID === action.tabID
             ? next?.id ?? state.conversationTabID ?? state.taskTabID ?? ''
             : state.activeItemID,
+        selectedBrowserTabID:
+          state.selectedBrowserTabID === action.tabID
+            ? next?.id
+            : state.selectedBrowserTabID,
       }
     }
 
@@ -260,7 +254,9 @@ export function browserWorkspaceReducer(
     }
 
     case 'attach_control': {
-      if (!state.tabs.some((tab) => tab.id === action.tabID)) return state
+      if (!state.tabs.some(
+        (tab) => tab.id === action.tabID && tab.sessionID === action.sessionID,
+      )) return state
       const capabilities = uniqueCapabilities(action.capabilities)
       if (capabilities.length === 0) return state
       const lease: BrowserControlLease = {
@@ -272,17 +268,20 @@ export function browserWorkspaceReducer(
         current &&
         current.tabID === lease.tabID &&
         sameCapabilities(current.capabilities, lease.capabilities) &&
-        (!action.select || state.agentSelectedTabID === action.tabID)
+        (!action.select || state.agentSelectedTabIDs[action.sessionID] === action.tabID)
       ) {
         return state
       }
       return {
         ...state,
         controlLeases: { ...state.controlLeases, [action.leaseID]: lease },
-        agentSelectedTabID:
+        agentSelectedTabIDs:
           action.select && capabilities.includes('navigate')
-            ? action.tabID
-            : state.agentSelectedTabID,
+            ? {
+                ...state.agentSelectedTabIDs,
+                [action.sessionID]: action.tabID,
+              }
+            : state.agentSelectedTabIDs,
       }
     }
 
@@ -307,9 +306,15 @@ export function browserWorkspaceReducer(
           target: action.target,
         }),
         activeItemID: action.activate ? action.tabID : state.activeItemID,
-        agentSelectedTabID: action.selectForAgent
+        selectedBrowserTabID: action.activate
           ? action.tabID
-          : state.agentSelectedTabID,
+          : state.selectedBrowserTabID,
+        agentSelectedTabIDs: action.selectForAgent
+          ? {
+              ...state.agentSelectedTabIDs,
+              [action.sessionID]: action.tabID,
+            }
+          : state.agentSelectedTabIDs,
         controlLeases: {
           ...state.controlLeases,
           [browserNavigationLeaseID(action.tabID)]: {
@@ -324,7 +329,7 @@ export function browserWorkspaceReducer(
       }
 
     case 'restored_preview_received':
-      if (state.handledPreviewKey === action.previewKey) return state
+      if (state.handledPreviewKeys[action.sessionID] === action.previewKey) return state
       return {
         ...state,
         tabs: browserTabsReducer(state.tabs, {
@@ -334,7 +339,13 @@ export function browserWorkspaceReducer(
           target: action.target,
         }),
         activeItemID: action.activate ? action.tabID : state.activeItemID,
-        agentSelectedTabID: action.tabID,
+        selectedBrowserTabID: action.activate
+          ? action.tabID
+          : state.selectedBrowserTabID,
+        agentSelectedTabIDs: {
+          ...state.agentSelectedTabIDs,
+          [action.sessionID]: action.tabID,
+        },
         controlLeases: {
           ...state.controlLeases,
           [browserNavigationLeaseID(action.tabID)]: {
@@ -342,34 +353,54 @@ export function browserWorkspaceReducer(
             capabilities: ['read', 'navigate'],
           },
         },
-        handledPreviewKey: action.previewKey,
+        handledPreviewKeys: {
+          ...state.handledPreviewKeys,
+          [action.sessionID]: action.previewKey,
+        },
       }
   }
 }
 
 export function selectedBrowserTab(
   state: BrowserWorkspaceState,
+  sessionID?: string,
 ): BrowserTab | undefined {
-  if (
-    state.activeItemID === state.conversationTabID ||
-    state.activeItemID === state.taskTabID
-  ) {
-    return undefined
-  }
-  return state.tabs.find((tab) => tab.id === state.activeItemID) ?? state.tabs[0]
+  const tabs = visibleBrowserTabs(state, sessionID)
+  return tabs.find((tab) => tab.id === state.selectedBrowserTabID) ??
+    tabs.find((tab) => tab.id === state.activeItemID) ??
+    tabs[0]
+}
+
+export function visibleBrowserTabs(
+  state: BrowserWorkspaceState,
+  sessionID?: string,
+): BrowserTab[] {
+  if (sessionID === undefined) return state.tabs
+  return state.tabs.filter(
+    (tab) => tab.scope === 'workbench' || tab.sessionID === sessionID,
+  )
 }
 
 export function browserWorkspaceContext(
   state: BrowserWorkspaceState | undefined,
+  sessionID?: string,
 ): BrowserWorkspaceContext {
   if (!state) return { openTabs: [], controlledTabs: [] }
-  const controlledTabs = state.tabs.flatMap((tab) => {
+  const tabs = sessionID
+    ? state.tabs.filter((tab) => tab.sessionID === sessionID)
+    : state.tabs
+  const controlledTabs = tabs.flatMap((tab) => {
     const capabilities = browserWorkspaceControlCapabilities(state, tab.id)
     return capabilities.length > 0 ? [{ tabID: tab.id, capabilities }] : []
   })
   const controlledIDs = new Set(controlledTabs.map((tab) => tab.tabID))
+  const selectedTabID = sessionID
+    ? state.agentSelectedTabIDs[sessionID]
+    : Object.values(state.agentSelectedTabIDs).find((tabID) =>
+        controlledIDs.has(tabID),
+      )
   return {
-    openTabs: state.tabs.map((tab) => ({
+    openTabs: tabs.map((tab) => ({
       tabID: tab.id,
       url: browserContextURL(tab),
       title: tab.observed.title || tab.desired?.title || undefined,
@@ -377,8 +408,8 @@ export function browserWorkspaceContext(
     })),
     controlledTabs,
     selected:
-      state.agentSelectedTabID && controlledIDs.has(state.agentSelectedTabID)
-        ? state.agentSelectedTabID
+      selectedTabID && controlledIDs.has(selectedTabID)
+        ? selectedTabID
         : undefined,
   }
 }
@@ -389,9 +420,16 @@ export function browserWorkspaceInspectionTabID(
   requestedTabID?: string,
 ): string {
   const tab = requestedTabID
-    ? state?.tabs.find((candidate) => candidate.id === requestedTabID)
-    : state?.agentSelectedTabID
-      ? state.tabs.find((candidate) => candidate.id === state.agentSelectedTabID)
+    ? state?.tabs.find(
+        (candidate) =>
+          candidate.id === requestedTabID && candidate.sessionID === sessionID,
+      )
+    : state?.agentSelectedTabIDs[sessionID]
+      ? state.tabs.find(
+          (candidate) =>
+            candidate.id === state.agentSelectedTabIDs[sessionID] &&
+            candidate.sessionID === sessionID,
+        )
       : undefined
   if (requestedTabID && !tab) {
     throw new Error('Browser tab is not open in this session')
@@ -422,10 +460,12 @@ export function browserWorkspaceCommandTabID(
   if (disposition !== 'reuse_agent_tab') {
     return agentBrowserCommandTabID(sessionID, commandID)
   }
-  const selected = state.agentSelectedTabID
+  const selected = sessionID ? state.agentSelectedTabIDs[sessionID] : undefined
   if (
     selected &&
-    state.tabs.some((tab) => tab.id === selected) &&
+    state.tabs.some(
+      (tab) => tab.id === selected && tab.sessionID === sessionID,
+    ) &&
     browserWorkspaceHasControl(state, selected, 'navigate')
   ) {
     return selected
@@ -511,7 +551,22 @@ function releaseTabControl(
 function normalizeAgentSelection(
   state: BrowserWorkspaceState,
 ): BrowserWorkspaceState {
-  const selected = state.agentSelectedTabID
-  if (!selected || browserWorkspaceHasControl(state, selected, 'navigate')) return state
-  return { ...state, agentSelectedTabID: undefined }
+  const agentSelectedTabIDs = Object.fromEntries(
+    Object.entries(state.agentSelectedTabIDs).filter(([, tabID]) =>
+      browserWorkspaceHasControl(state, tabID, 'navigate'),
+    ),
+  )
+  return Object.keys(agentSelectedTabIDs).length ===
+    Object.keys(state.agentSelectedTabIDs).length
+    ? state
+    : { ...state, agentSelectedTabIDs }
+}
+
+function withoutTabSelection(
+  selections: Record<string, string>,
+  tabID: string,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(selections).filter(([, selectedTabID]) => selectedTabID !== tabID),
+  )
 }
