@@ -2,16 +2,16 @@
 
 The model catalog and protocol implementations are independent. `GetModels` returns catalog entries. A request is routable only when the current process has registered an adapter for the model's `Protocol`. Use `GetRunnableModels` for runtime model lists.
 
-<!-- catalog-stats: total=404 runnable=362 openai-completions=234 anthropic-messages=73 openai-responses=55 google-generative-ai=20 mistral-conversations=22 -->
+<!-- catalog-stats: total=425 runnable=382 openai-completions=250 anthropic-messages=76 openai-responses=56 google-generative-ai=21 mistral-conversations=22 -->
 
 ## Protocol status
 
 | Protocol | Catalog models | Status | Registration | Meaning |
 |---|---:|---|---|---|
-| `openai-completions` | 234 | Implemented | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Chat Completions and compatible endpoints |
-| `anthropic-messages` | 73 | Implemented | `_ "github.com/ktsoator/or/llm/anthropic"` | Anthropic Messages and compatible endpoints |
-| `openai-responses` | 55 | Implemented | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Responses API and compatible gateways |
-| `google-generative-ai` | 20 | Catalog only | None | No adapter |
+| `openai-completions` | 250 | Implemented | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Chat Completions and compatible endpoints |
+| `anthropic-messages` | 76 | Implemented | `_ "github.com/ktsoator/or/llm/anthropic"` | Anthropic Messages and compatible endpoints |
+| `openai-responses` | 56 | Implemented | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Responses API and compatible gateways |
+| `google-generative-ai` | 21 | Catalog only | None | No adapter |
 | `mistral-conversations` | 22 | Catalog only | None | No adapter |
 
 Importing `github.com/ktsoator/or/llm/all` registers the three implemented protocols. It does not implement the two catalog-only protocols.
@@ -36,31 +36,31 @@ The current catalog contains the following provider IDs. Counts come from `llm/c
 | Provider ID | Models | Protocol | Credential variables |
 |---|---:|---|---|
 | `anthropic` | 13 | Anthropic Messages | `ANTHROPIC_API_KEY` |
-| `cerebras` | 3 | OpenAI Completions | `CEREBRAS_API_KEY` |
+| `cerebras` | 2 | OpenAI Completions | `CEREBRAS_API_KEY` |
 | `deepseek` | 4 | OpenAI Completions | `DEEPSEEK_API_KEY` |
-| `fireworks` | 17 | Anthropic Messages | `FIREWORKS_API_KEY` |
-| `github-copilot` | 20 | Both implemented protocols | `COPILOT_GITHUB_TOKEN` |
-| `google` | 20 | Google Generative AI | `GEMINI_API_KEY` |
+| `fireworks` | 23 | Anthropic Messages | `FIREWORKS_API_KEY` |
+| `github-copilot` | 22 | Both implemented protocols | `COPILOT_GITHUB_TOKEN` |
+| `google` | 21 | Google Generative AI | `GEMINI_API_KEY` |
 | `groq` | 6 | OpenAI Completions | `GROQ_API_KEY` |
-| `huggingface` | 58 | OpenAI Completions | `HF_TOKEN` |
+| `huggingface` | 66 | OpenAI Completions | `HF_TOKEN` |
 | `kimi-coding` | 4 | Anthropic Messages | `KIMI_API_KEY` |
 | `minimax` | 7 | Anthropic Messages | `MINIMAX_API_KEY` |
 | `minimax-cn` | 7 | Anthropic Messages | `MINIMAX_CN_API_KEY` |
 | `mistral` | 22 | Mistral Conversations | `MISTRAL_API_KEY` |
 | `moonshotai` | 10 | OpenAI Completions | `MOONSHOT_API_KEY` |
 | `moonshotai-cn` | 10 | OpenAI Completions | `MOONSHOT_API_KEY` |
-| `nvidia` | 58 | OpenAI Completions | `NVIDIA_API_KEY` |
+| `nvidia` | 59 | OpenAI Completions | `NVIDIA_API_KEY` |
 | `openai` | 30 | OpenAI Responses | `OPENAI_API_KEY` |
 | `opencode` | 56 | All three implemented protocols | `OPENCODE_API_KEY` |
-| `opencode-go` | 18 | All three implemented protocols | `OPENCODE_API_KEY` |
-| `together` | 18 | OpenAI Completions | `TOGETHER_API_KEY` |
+| `opencode-go` | 19 | All three implemented protocols | `OPENCODE_API_KEY` |
+| `together` | 19 | OpenAI Completions | `TOGETHER_API_KEY` |
 | `xai` | 6 | OpenAI Completions | `XAI_API_KEY` |
 | `xiaomi` | 3 | OpenAI Completions | `XIAOMI_API_KEY` or `MIMO_API_KEY` |
 | `xiaomi-token-plan-ams` | 2 | OpenAI Completions | `XIAOMI_TOKEN_PLAN_AMS_API_KEY` |
 | `xiaomi-token-plan-cn` | 2 | OpenAI Completions | `XIAOMI_TOKEN_PLAN_CN_API_KEY` |
 | `xiaomi-token-plan-sgp` | 2 | OpenAI Completions | `XIAOMI_TOKEN_PLAN_SGP_API_KEY` |
-| `zai` | 4 | OpenAI Completions | `ZAI_API_KEY` |
-| `zai-coding-cn` | 4 | OpenAI Completions | `ZAI_CODING_CN_API_KEY` |
+| `zai` | 5 | OpenAI Completions | `ZAI_API_KEY` |
+| `zai-coding-cn` | 5 | OpenAI Completions | `ZAI_CODING_CN_API_KEY` |
 
 Built-in credential configuration is defined in `llm/keys.go`. At runtime, call
 `APIKeyEnvVars(provider)` to query the variable names for a provider.
