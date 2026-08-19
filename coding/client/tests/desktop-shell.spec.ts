@@ -222,6 +222,15 @@ async function openDesktopClient(
     createdAt: '2026-07-23T00:00:00Z',
     updatedAt: '2026-07-23T00:00:00Z',
   }
+  const secondWorkbenchSession = {
+    ...workbenchSession,
+    id: 'workbench-session-2',
+    workspacePath: '/tmp/workbench-session-2',
+    workspaceName: 'workbench-session-2',
+    createdAt: '2026-07-24T00:00:00Z',
+    updatedAt: '2026-07-24T00:00:00Z',
+  }
+  const workbenchSessions = [workbenchSession, secondWorkbenchSession]
   const branchSession = {
     ...createdSession,
     id: 'branch-session',
@@ -231,7 +240,7 @@ async function openDesktopClient(
     updatedAt: '2026-07-24T00:00:00Z',
   }
   let sessionCreated = Boolean(options.existingSession)
-  let workbenchSessionCreated = false
+  let workbenchSessionCreateCount = 0
   let branchSessionCreated = false
   let sessionHistoryEvents = options.historyEvents ?? []
   let sessionHistoryRunning = options.historyRunning ?? false
@@ -460,8 +469,10 @@ async function openDesktopClient(
         })
         return
       }
-      const created = sessionCreated ? workbenchSession : createdSession
-      if (created.id === workbenchSession.id) workbenchSessionCreated = true
+      const created = sessionCreated
+        ? workbenchSessions[workbenchSessionCreateCount] ?? secondWorkbenchSession
+        : createdSession
+      if (created.id !== createdSession.id) workbenchSessionCreateCount++
       sessionCreated = true
       await route.fulfill({
         status: 201,
@@ -883,7 +894,7 @@ async function openDesktopClient(
       body = sessionCreated
         ? [
             ...(branchSessionCreated ? [branchSession] : []),
-            ...(workbenchSessionCreated ? [workbenchSession] : []),
+            ...workbenchSessions.slice(0, workbenchSessionCreateCount),
             createdSession,
             ...(options.secondarySession ? [secondarySession] : []),
           ]
@@ -908,7 +919,7 @@ async function openDesktopClient(
         eventSeq: 0,
       }
     }
-    if (path === '/api/sessions/workbench-session/history') {
+    if (workbenchSessions.some((session) => path === `/api/sessions/${session.id}/history`)) {
       body = {
         events: [],
         queue: [],
@@ -934,7 +945,7 @@ async function openDesktopClient(
       body = {}
       status = 202
     }
-    if (path === '/api/sessions/workbench-session/prompt') {
+    if (workbenchSessions.some((session) => path === `/api/sessions/${session.id}/prompt`)) {
       body = {}
       status = 202
     }
@@ -2639,7 +2650,7 @@ test('background tasks open in one persistent workbench tab with responsive logs
   ).toBeGreaterThan(0)
 })
 
-test('Add view keeps multiple chats local until their first send', async ({ page }) => {
+test('Add view creates each local chat on its first send', async ({ page }) => {
   const requests = await openDesktopClient(page, {
     existingSession: true,
     historyEvents: [
@@ -2714,17 +2725,77 @@ test('Add view keeps multiple chats local until their first send', async ({ page
   await expect(tabs).toHaveCount(2)
   await expect(mainConversation.getByText('First draft stays local')).toHaveCount(0)
 
-  await workbench.getByRole('tab', { name: 'New session', exact: true }).click()
-  await expect(
-    workbench
-      .locator('[data-testid="workbench-conversation"]:visible')
-      .getByPlaceholder('Ask anything'),
-  ).toHaveValue('Second draft stays local')
+  await tabs.nth(1).getByRole('tab').click()
+  const secondConversation = workbench.locator(
+    '[data-testid="workbench-conversation"]:visible',
+  )
+  const secondActiveInput = secondConversation.getByPlaceholder('Ask anything')
+  await expect(secondActiveInput).toHaveValue('Second draft stays local')
   expect(
     requests.filter(
       (request) => request.path === '/api/sessions' && request.method === 'POST',
     ),
   ).toHaveLength(1)
+
+  await secondActiveInput.press('Enter')
+  await expect.poll(() =>
+    requests.filter(
+      (request) => request.path === '/api/sessions' && request.method === 'POST',
+    ).length,
+  ).toBe(2)
+  await expect.poll(() =>
+    requests.find(
+      (request) => request.path === '/api/sessions/workbench-session-2/prompt',
+    )?.body,
+  ).toEqual({ text: 'Second draft stays local', images: [] })
+  await expect.poll(() =>
+    requests.filter(
+      (request) =>
+        request.method === 'GET' &&
+        [
+          '/api/sessions/workbench-session/history',
+          '/api/sessions/workbench-session-2/history',
+        ].includes(request.path),
+    ).map((request) => request.path),
+  ).toEqual([
+    '/api/sessions/workbench-session/history',
+    '/api/sessions/workbench-session-2/history',
+  ])
+  await expect.poll(() =>
+    page.evaluate(() => {
+      const sources = (
+        window as Window & {
+          __eventSources?: Array<{ url: string; closed: boolean }>
+        }
+      ).__eventSources ?? []
+      return ['workbench-session', 'workbench-session-2'].map((sessionID) =>
+        sources.some(
+          (source) =>
+            !source.closed && source.url.includes(`/sessions/${sessionID}/events`),
+        ),
+      )
+    }),
+  ).toEqual([true, true])
+
+  await emitSessionEvent(page, 'workbench-session', {
+    type: 'delta',
+    kind: 'text',
+    delta: 'First draft response',
+  })
+  await emitSessionEvent(page, 'workbench-session-2', {
+    type: 'delta',
+    kind: 'text',
+    delta: 'Second draft response',
+  })
+  await expect(secondConversation.getByText('Second draft response')).toBeVisible()
+  await expect(secondConversation.getByText('First draft response')).toHaveCount(0)
+
+  await tabs.nth(0).getByRole('tab').click()
+  const firstConversation = workbench.locator(
+    '[data-testid="workbench-conversation"]:visible',
+  )
+  await expect(firstConversation.getByText('First draft response')).toBeVisible()
+  await expect(firstConversation.getByText('Second draft response')).toHaveCount(0)
 
   await workbench
     .locator('[data-testid="conversation-tab"][data-active="true"]')

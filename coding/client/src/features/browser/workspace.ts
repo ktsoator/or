@@ -157,6 +157,9 @@ export function browserWorkspaceReducer(
         action.conversationTabIDs.includes(action.activeConversationTabID)
           ? action.activeConversationTabID
           : undefined
+      const requestedActiveChanged =
+        requestedActive !== undefined &&
+        requestedActive !== state.activeConversationTabID
       if (
         sameTabs &&
         (!requestedActive || requestedActive === state.activeConversationTabID)
@@ -181,7 +184,7 @@ export function browserWorkspaceReducer(
         ...state,
         conversationTabIDs: action.conversationTabIDs,
         activeConversationTabID,
-        activeItemID: requestedActive
+        activeItemID: requestedActiveChanged
           ? requestedActive
           : activeConversationRemoved
             ? activeConversationTabID ?? state.taskTabID ?? state.tabs[0]?.id ?? ''

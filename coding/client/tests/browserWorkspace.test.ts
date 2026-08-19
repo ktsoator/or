@@ -103,6 +103,24 @@ describe('browser workspace reducer', () => {
     expect(state.activeItemID).toBe('tab-1')
   })
 
+  test('keeps the browser active when a background conversation closes', () => {
+    let state = createBrowserWorkspaceState({
+      initialTab: createBrowserTab({ id: 'tab-1' }),
+      conversationTabIDs: ['conversation:session-1', 'conversation:session-2'],
+      activeConversationTabID: 'conversation:session-1',
+      activeItemID: 'tab-1',
+    })
+
+    state = browserWorkspaceReducer(state, {
+      t: 'sync_conversations',
+      conversationTabIDs: ['conversation:session-1'],
+      activeConversationTabID: 'conversation:session-1',
+    })
+
+    expect(state.activeItemID).toBe('tab-1')
+    expect(state.activeConversationTabID).toBe('conversation:session-1')
+  })
+
   test('opens one task view, switches tasks, and closes without stopping task state', () => {
     let state = createBrowserWorkspaceState({
       initialTab: createBrowserTab({ id: 'tab-1' }),
