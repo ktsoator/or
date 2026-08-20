@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/observability"
@@ -113,6 +115,178 @@ func TestSessionCheckpointsPromptBeforeModelRequest(t *testing.T) {
 	}
 	if got := payloadBatchSizes(batches); !slices.Equal(got, []int{2, 1}) {
 		t.Fatalf("append batch sizes = %v, want [2 1]", got)
+	}
+}
+
+func TestSessionProviderDispatchUsesCheckpointedRequestBoundary(t *testing.T) {
+	ctx := context.Background()
+	store := &checkpointStore{}
+	temperature := 0.25
+	maxRetries := 2
+	model := llm.Model{
+		Provider: "test-provider",
+		ID:       "test-model",
+		Protocol: llm.ProtocolOpenAIResponses,
+	}
+	tool := tools.Tool{
+		AgentTool: agent.AgentTool{
+			Definition: llm.MustTool[checkpointToolArgs]("echo", "echo text"),
+			Execute: func(
+				context.Context,
+				string,
+				json.RawMessage,
+				func(agent.ToolProgress),
+			) (agent.ToolResult, error) {
+				return agent.ToolResult{}, nil
+			},
+		},
+		AccessFor: tools.InternalAccess,
+	}
+	baseOptions := llm.StreamOptions{
+		APIKey:      "stale-key",
+		BaseURL:     "https://provider.example/v1",
+		Temperature: &temperature,
+		MaxTokens:   321,
+		Headers:     map[string]string{"X-Feature": "request-baseline"},
+		Reasoning:   llm.ModelThinkingLow,
+		ProtocolOptions: &llm.OpenAIResponsesStreamOptions{
+			ThinkingDisplay: llm.ThinkingDisplayOmitted,
+		},
+		MaxRetries: &maxRetries,
+		Timeout:    3 * time.Second,
+	}
+
+	providerCalls := 0
+	keyProvider := ""
+	var gotModel llm.Model
+	var gotInput llm.Context
+	var gotOptions llm.StreamOptions
+	var dispatchEntries []transcript.Entry
+	session, err := New(ctx, Options{
+		Model:         model,
+		ThinkingLevel: llm.ModelThinkingHigh,
+		Cwd:           t.TempDir(),
+		Tools:         []tools.Tool{tool},
+		Store:         store,
+		Instructions:  "REQUEST HEADER BASELINE",
+		StreamOptions: baseOptions,
+		GetAPIKey: func(provider string) string {
+			keyProvider = provider
+			return "current-key"
+		},
+		StreamFn: func(
+			_ context.Context,
+			streamModel llm.Model,
+			input llm.Context,
+			options llm.StreamOptions,
+		) (<-chan llm.Event, error) {
+			providerCalls++
+			gotModel = streamModel
+			gotInput = input
+			gotOptions = options
+			dispatchEntries, _, _ = store.snapshot()
+			return assistantEvents(streamModel, "answer"), nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := session.Prompt(ctx, "question"); err != nil {
+		t.Fatal(err)
+	}
+	if providerCalls != 1 {
+		t.Fatalf("provider calls = %d, want 1", providerCalls)
+	}
+	if keyProvider != model.Provider {
+		t.Fatalf("API key provider = %q, want %q", keyProvider, model.Provider)
+	}
+	if len(dispatchEntries) == 0 {
+		t.Fatal("provider reached before transcript checkpoint")
+	}
+	dispatchSeq := dispatchEntries[len(dispatchEntries)-1].Seq
+	wantTypes := []transcript.EntryType{
+		transcript.RunStartEntry,
+		transcript.TurnStartEntry,
+		transcript.MessageEntry,
+		transcript.StepStartEntry,
+		transcript.ContextEntry,
+	}
+	if len(dispatchEntries) != len(wantTypes) {
+		t.Fatalf("dispatch checkpoint entries = %d, want %d", len(dispatchEntries), len(wantTypes))
+	}
+	for index, entry := range dispatchEntries {
+		if entry.Seq != int64(index) || entry.Type != wantTypes[index] {
+			t.Fatalf(
+				"dispatch checkpoint[%d] = seq %d type %q, want seq %d type %q",
+				index, entry.Seq, entry.Type, index, wantTypes[index],
+			)
+		}
+	}
+
+	projection, err := transcript.ProjectSession(dispatchEntries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if projection.AsOfSeq != dispatchSeq || projection.Open.RunID == "" ||
+		projection.Open.TurnID == "" || projection.Open.StepID == "" {
+		t.Fatalf(
+			"dispatch projection = seq %d open %#v, want seq %d and open step",
+			projection.AsOfSeq, projection.Open, dispatchSeq,
+		)
+	}
+
+	canonical, err := transcript.BuildContext(dispatchEntries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantMessages := make([]llm.Message, 0, len(projection.Contexts)+len(canonical))
+	for _, projected := range projection.Contexts {
+		if projected.Attachment.Placement == "prefix" {
+			wantMessages = append(wantMessages, llm.UserText(projected.Attachment.Rendered))
+		}
+	}
+	for _, message := range canonical {
+		projected, ok := agent.ToLLM(message)
+		if !ok {
+			t.Fatalf("canonical message %T is not model-facing", message)
+		}
+		wantMessages = append(wantMessages, projected)
+	}
+	for _, projected := range projection.Contexts {
+		if projected.Attachment.Placement == "after-current" {
+			wantMessages = append(wantMessages, llm.UserText(projected.Attachment.Rendered))
+		}
+	}
+	if !reflect.DeepEqual(gotInput.Messages, wantMessages) {
+		t.Fatalf(
+			"provider messages differ from checkpoint projection\ngot:  %#v\nwant: %#v",
+			gotInput.Messages, wantMessages,
+		)
+	}
+
+	if gotModel.Provider != model.Provider || gotModel.ID != model.ID ||
+		gotModel.Protocol != model.Protocol {
+		t.Fatalf("provider model = %#v, want %#v", gotModel, model)
+	}
+	if !strings.Contains(gotInput.SystemPrompt, "REQUEST HEADER BASELINE") {
+		t.Fatal("provider system prompt omitted configured instructions")
+	}
+	if len(gotInput.Tools) != 1 || !reflect.DeepEqual(gotInput.Tools[0], tool.Definition) {
+		t.Fatalf("provider tools = %#v, want echo definition", gotInput.Tools)
+	}
+	if gotOptions.APIKey != "current-key" || gotOptions.BaseURL != baseOptions.BaseURL ||
+		gotOptions.Temperature == nil || *gotOptions.Temperature != temperature ||
+		gotOptions.MaxTokens != baseOptions.MaxTokens ||
+		gotOptions.Headers["X-Feature"] != "request-baseline" ||
+		gotOptions.Reasoning != llm.ModelThinkingHigh ||
+		gotOptions.ProtocolOptions != baseOptions.ProtocolOptions ||
+		gotOptions.MaxRetries != baseOptions.MaxRetries || gotOptions.Timeout != baseOptions.Timeout {
+		t.Fatalf("effective stream options = %#v", gotOptions)
+	}
+	entries, _, _ := store.snapshot()
+	if finalSeq := entries[len(entries)-1].Seq; finalSeq <= dispatchSeq {
+		t.Fatalf("terminal transcript sequence = %d, want after dispatch boundary %d", finalSeq, dispatchSeq)
 	}
 }
 
