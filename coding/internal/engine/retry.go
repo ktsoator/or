@@ -57,7 +57,7 @@ func (s *Session) isRetryable(msg llm.AssistantMessage) bool {
 	if msg.StopReason != llm.StopReasonError {
 		return false // a clean stop or a user abort is not retryable
 	}
-	if llm.IsContextOverflow(msg, s.contextWindow) {
+	if llm.IsContextOverflow(msg, s.agent.Snapshot().Model.ContextWindow) {
 		return false // needs compaction, not a retry
 	}
 	text := strings.ToLower(msg.ErrorMessage)

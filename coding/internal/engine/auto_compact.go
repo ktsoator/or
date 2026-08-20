@@ -15,10 +15,11 @@ const autoCompactDivisor int64 = 5
 // A zero usage or window means the provider has not supplied enough information
 // to make a safe proactive decision; overflow recovery still remains available.
 func (s *Session) shouldAutoCompact(usedTokens int64) bool {
-	if usedTokens <= 0 || s.contextWindow <= 0 {
+	contextWindow := s.agent.Snapshot().Model.ContextWindow
+	if usedTokens <= 0 || contextWindow <= 0 {
 		return false
 	}
-	threshold := s.contextWindow - s.contextWindow/autoCompactDivisor
+	threshold := contextWindow - contextWindow/autoCompactDivisor
 	return usedTokens >= threshold
 }
 
@@ -26,7 +27,7 @@ func (s *Session) shouldAutoCompact(usedTokens int64) bool {
 // installs the compacted projection into both the long-lived Agent and the
 // current loop, so a long single run can reclaim context without restarting.
 func (s *Session) prepareNextTurn(turn agent.TurnCtx) *agent.TurnUpdate {
-	if s.runPersistenceError() != nil {
+	if s.execution.persistenceError() != nil {
 		return nil
 	}
 	if len(turn.ToolResults) == 0 && !s.agent.HasQueuedMessages() {
@@ -35,7 +36,7 @@ func (s *Session) prepareNextTurn(turn agent.TurnCtx) *agent.TurnUpdate {
 	if !s.shouldAutoCompact(usageTokens(turn.Message.Usage)) {
 		return nil
 	}
-	ctx, _, _ := s.activeRunState()
+	ctx := s.execution.runContext()
 	if ctx == nil {
 		return nil
 	}
@@ -53,12 +54,16 @@ func (s *Session) prepareNextTurn(turn agent.TurnCtx) *agent.TurnUpdate {
 // that is still too short does not consume the attempt, because later tool
 // output may make overflow recovery possible.
 func (s *Session) autoCompact(ctx context.Context) (bool, error) {
-	if s.autoCompactionWasAttempted() {
+	if !s.execution.claimAutoCompaction() {
 		return false, nil
 	}
+	return s.autoCompactClaimed(ctx)
+}
+
+func (s *Session) autoCompactClaimed(ctx context.Context) (bool, error) {
 	_, err := s.compactLocked(ctx, "", true)
-	if !IsNothingToCompact(err) {
-		s.markAutoCompactionAttempted()
+	if IsNothingToCompact(err) {
+		s.execution.releaseAutoCompactionClaim()
 	}
 	return err == nil, err
 }
@@ -68,17 +73,18 @@ func (s *Session) recoverContextOverflow(ctx context.Context, original error) (b
 	if overflowErr == nil {
 		overflowErr = errors.New("coding: model context overflow")
 	}
-	if s.autoCompactionWasAttempted() {
+	if !s.execution.claimAutoCompaction() {
 		return false, overflowErr
 	}
+	contextWindow := s.agent.Snapshot().Model.ContextWindow
 
 	s.dropTrailingAssistantStep(
 		"context_overflow",
 		func(message *llm.AssistantMessage) bool {
-			return llm.IsContextOverflow(*message, s.contextWindow)
+			return llm.IsContextOverflow(*message, contextWindow)
 		},
 	)
-	compacted, err := s.autoCompact(ctx)
+	compacted, err := s.autoCompactClaimed(ctx)
 	if err != nil {
 		return true, errors.Join(overflowErr, fmt.Errorf("automatic context compaction: %w", err))
 	}
@@ -89,10 +95,13 @@ func (s *Session) recoverContextOverflow(ctx context.Context, original error) (b
 }
 
 func (s *Session) trailingContextOverflow() bool {
-	messages := s.agent.Snapshot().Messages
-	if len(messages) == 0 {
+	state := s.agent.Snapshot()
+	if len(state.Messages) == 0 {
 		return false
 	}
-	assistant := asAssistant(messages[len(messages)-1])
-	return assistant != nil && llm.IsContextOverflow(*assistant, s.contextWindow)
+	assistant := asAssistant(state.Messages[len(state.Messages)-1])
+	return assistant != nil && llm.IsContextOverflow(
+		*assistant,
+		state.Model.ContextWindow,
+	)
 }

@@ -102,9 +102,8 @@ type Session struct {
 	context          *contextManager
 	toolRuntime      *toolRuntime
 
-	maxRetries    int
-	contextWindow int64
-	compactor     compaction.Compactor
+	maxRetries int
+	compactor  compaction.Compactor
 
 	runMu     sync.Mutex
 	execution runExecutionState
@@ -177,7 +176,6 @@ func (s *Session) Snapshot() agent.State { return s.agent.Snapshot() }
 // session is idle; an in-flight run has already captured its model.
 func (s *Session) SetModel(model llm.Model) {
 	s.agent.SetModel(model)
-	s.contextWindow = model.ContextWindow
 }
 
 // SetThinkingLevel replaces the reasoning effort used by the next run. Call it
