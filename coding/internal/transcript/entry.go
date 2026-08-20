@@ -15,24 +15,25 @@ import (
 )
 
 const (
-	CurrentVersion           = 6
+	CurrentVersion           = 7
 	unassignedSequence int64 = -1
 )
 
 type EntryType string
 
 const (
-	MessageEntry     EntryType = "message"
-	ToolCallEntry    EntryType = "tool_call"
-	ToolOutcomeEntry EntryType = "tool_outcome"
-	ContextEntry     EntryType = "context"
-	CompactionEntry  EntryType = "compaction"
-	RunStartEntry    EntryType = "run/start"
-	RunEndEntry      EntryType = "run/end"
-	TurnStartEntry   EntryType = "turn/start"
-	TurnEndEntry     EntryType = "turn/end"
-	StepStartEntry   EntryType = "step/start"
-	StepEndEntry     EntryType = "step/end"
+	MessageEntry       EntryType = "message"
+	ToolCallEntry      EntryType = "tool_call"
+	ToolOutcomeEntry   EntryType = "tool_outcome"
+	ContextEntry       EntryType = "context"
+	CompactionEntry    EntryType = "compaction"
+	RunStartEntry      EntryType = "run/start"
+	RunEndEntry        EntryType = "run/end"
+	TurnStartEntry     EntryType = "turn/start"
+	TurnEndEntry       EntryType = "turn/end"
+	StepStartEntry     EntryType = "step/start"
+	StepEndEntry       EntryType = "step/end"
+	RequestHeaderEntry EntryType = "request/header"
 )
 
 type LifecycleStatus string
@@ -55,16 +56,17 @@ func NewHeader() Header { return Header{Type: "session", Version: CurrentVersion
 // Entry is one item in the session's linear, append-only history. Seq is -1
 // while an entry is being prepared and becomes contiguous when it commits.
 type Entry struct {
-	Seq         int64
-	ID          string
-	Timestamp   time.Time
-	Type        EntryType
-	Message     agent.AgentMessage
-	ToolCall    *ToolCall
-	ToolOutcome *ToolOutcome
-	Context     *ContextAttachment
-	Compaction  *Compaction
-	Lifecycle   *Lifecycle
+	Seq           int64
+	ID            string
+	Timestamp     time.Time
+	Type          EntryType
+	Message       agent.AgentMessage
+	ToolCall      *ToolCall
+	ToolOutcome   *ToolOutcome
+	Context       *ContextAttachment
+	Compaction    *Compaction
+	Lifecycle     *Lifecycle
+	RequestHeader *RequestHeader
 }
 
 // Lifecycle identifies one durable Run, Turn, or Step boundary. Entry.Type
@@ -244,14 +246,14 @@ func (e Entry) Validate() error {
 	}
 	switch e.Type {
 	case MessageEntry:
-		if e.Message == nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Lifecycle != nil {
+		if e.Message == nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Lifecycle != nil || e.RequestHeader != nil {
 			return fmt.Errorf("transcript: message entry %s has invalid payload", e.ID)
 		}
 		if _, ok := agent.ToLLM(e.Message); !ok {
 			return fmt.Errorf("transcript: cannot persist custom message %T", e.Message)
 		}
 	case ToolCallEntry:
-		if e.Message != nil || e.ToolCall == nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Lifecycle != nil {
+		if e.Message != nil || e.ToolCall == nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Lifecycle != nil || e.RequestHeader != nil {
 			return fmt.Errorf("transcript: tool call entry %s has invalid payload", e.ID)
 		}
 		if e.ToolCall.ToolCallID == "" || e.ToolCall.ToolName == "" ||
@@ -262,7 +264,7 @@ func (e Entry) Validate() error {
 			return fmt.Errorf("transcript: tool call entry %s has invalid arguments", e.ID)
 		}
 	case ToolOutcomeEntry:
-		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome == nil || e.Context != nil || e.Compaction != nil || e.Lifecycle != nil {
+		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome == nil || e.Context != nil || e.Compaction != nil || e.Lifecycle != nil || e.RequestHeader != nil {
 			return fmt.Errorf("transcript: tool outcome entry %s has invalid payload", e.ID)
 		}
 		if e.ToolOutcome.ToolCallID == "" || e.ToolOutcome.Status == "" {
@@ -272,7 +274,7 @@ func (e Entry) Validate() error {
 			return fmt.Errorf("transcript: tool outcome entry %s has invalid data", e.ID)
 		}
 	case ContextEntry:
-		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context == nil || e.Compaction != nil || e.Lifecycle != nil {
+		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context == nil || e.Compaction != nil || e.Lifecycle != nil || e.RequestHeader != nil {
 			return fmt.Errorf("transcript: context entry %s has invalid payload", e.ID)
 		}
 		if e.Context.AttachmentID == "" ||
@@ -284,7 +286,7 @@ func (e Entry) Validate() error {
 			return fmt.Errorf("transcript: context entry %s is incomplete", e.ID)
 		}
 	case CompactionEntry:
-		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction == nil || e.Lifecycle != nil {
+		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction == nil || e.Lifecycle != nil || e.RequestHeader != nil {
 			return fmt.Errorf("transcript: compaction entry %s has invalid payload", e.ID)
 		}
 		if e.Compaction.Summary == "" || e.Compaction.FirstKeptEntryID == "" {
@@ -293,11 +295,18 @@ func (e Entry) Validate() error {
 	case RunStartEntry, RunEndEntry,
 		TurnStartEntry, TurnEndEntry,
 		StepStartEntry, StepEndEntry:
-		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Lifecycle == nil {
+		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Lifecycle == nil || e.RequestHeader != nil {
 			return fmt.Errorf("transcript: lifecycle entry %s has invalid payload", e.ID)
 		}
 		if err := validateLifecyclePayload(e.Type, *e.Lifecycle); err != nil {
 			return fmt.Errorf("transcript: lifecycle entry %s: %w", e.ID, err)
+		}
+	case RequestHeaderEntry:
+		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Lifecycle != nil || e.RequestHeader == nil {
+			return fmt.Errorf("transcript: request header entry %s has invalid payload", e.ID)
+		}
+		if err := validateRequestHeader(*e.RequestHeader, e.Seq); err != nil {
+			return fmt.Errorf("transcript: request header entry %s: %w", e.ID, err)
 		}
 	default:
 		return fmt.Errorf("transcript: entry %s has unknown type %q", e.ID, e.Type)
@@ -346,20 +355,21 @@ func (e Entry) MarshalJSON() ([]byte, error) {
 		return nil, fmt.Errorf("transcript: entry %s sequence is unassigned", e.ID)
 	}
 	wire := struct {
-		Seq         int64              `json:"seq"`
-		ID          string             `json:"id"`
-		Timestamp   time.Time          `json:"timestamp"`
-		Type        EntryType          `json:"type"`
-		Message     json.RawMessage    `json:"message,omitempty"`
-		ToolCall    *ToolCall          `json:"toolCall,omitempty"`
-		ToolOutcome *ToolOutcome       `json:"toolOutcome,omitempty"`
-		Context     *ContextAttachment `json:"context,omitempty"`
-		Compaction  *Compaction        `json:"compaction,omitempty"`
-		Lifecycle   *Lifecycle         `json:"lifecycle,omitempty"`
+		Seq           int64              `json:"seq"`
+		ID            string             `json:"id"`
+		Timestamp     time.Time          `json:"timestamp"`
+		Type          EntryType          `json:"type"`
+		Message       json.RawMessage    `json:"message,omitempty"`
+		ToolCall      *ToolCall          `json:"toolCall,omitempty"`
+		ToolOutcome   *ToolOutcome       `json:"toolOutcome,omitempty"`
+		Context       *ContextAttachment `json:"context,omitempty"`
+		Compaction    *Compaction        `json:"compaction,omitempty"`
+		Lifecycle     *Lifecycle         `json:"lifecycle,omitempty"`
+		RequestHeader *RequestHeader     `json:"requestHeader,omitempty"`
 	}{
 		Seq: e.Seq, ID: e.ID, Timestamp: e.Timestamp, Type: e.Type,
 		ToolCall: e.ToolCall, ToolOutcome: e.ToolOutcome, Context: e.Context,
-		Compaction: e.Compaction, Lifecycle: e.Lifecycle,
+		Compaction: e.Compaction, Lifecycle: e.Lifecycle, RequestHeader: e.RequestHeader,
 	}
 	if e.Message != nil {
 		message, _ := agent.ToLLM(e.Message)
@@ -377,16 +387,17 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 		return errors.New("transcript: decode into nil entry")
 	}
 	wire := struct {
-		Seq         *int64             `json:"seq"`
-		ID          string             `json:"id"`
-		Timestamp   time.Time          `json:"timestamp"`
-		Type        EntryType          `json:"type"`
-		Message     json.RawMessage    `json:"message"`
-		ToolCall    *ToolCall          `json:"toolCall"`
-		ToolOutcome *ToolOutcome       `json:"toolOutcome"`
-		Context     *ContextAttachment `json:"context"`
-		Compaction  *Compaction        `json:"compaction"`
-		Lifecycle   *Lifecycle         `json:"lifecycle"`
+		Seq           *int64             `json:"seq"`
+		ID            string             `json:"id"`
+		Timestamp     time.Time          `json:"timestamp"`
+		Type          EntryType          `json:"type"`
+		Message       json.RawMessage    `json:"message"`
+		ToolCall      *ToolCall          `json:"toolCall"`
+		ToolOutcome   *ToolOutcome       `json:"toolOutcome"`
+		Context       *ContextAttachment `json:"context"`
+		Compaction    *Compaction        `json:"compaction"`
+		Lifecycle     *Lifecycle         `json:"lifecycle"`
+		RequestHeader *RequestHeader     `json:"requestHeader"`
 	}{}
 	if err := json.Unmarshal(data, &wire); err != nil {
 		return err
@@ -397,7 +408,7 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 	decoded := Entry{
 		Seq: *wire.Seq, ID: wire.ID, Timestamp: wire.Timestamp,
 		Type: wire.Type, ToolCall: wire.ToolCall, ToolOutcome: wire.ToolOutcome, Context: wire.Context,
-		Compaction: wire.Compaction, Lifecycle: wire.Lifecycle,
+		Compaction: wire.Compaction, Lifecycle: wire.Lifecycle, RequestHeader: wire.RequestHeader,
 	}
 	if len(wire.Message) > 0 && string(wire.Message) != "null" {
 		message, err := llm.UnmarshalMessage(wire.Message)

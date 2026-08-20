@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"sync"
@@ -52,6 +53,10 @@ func newSessionJournal(
 	if err := projections.Register(sessionView); err != nil {
 		return nil, nil, nil, fmt.Errorf("coding: register session projection: %w", err)
 	}
+	modelContextView := transcript.NewModelContextProjectionUnit()
+	if err := projections.Register(modelContextView); err != nil {
+		return nil, nil, nil, fmt.Errorf("coding: register model-context projection: %w", err)
+	}
 	validator, repairs, err := transcript.RecoverSessionWithProjections(entries, projections)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("coding: recover session transcript: %w", err)
@@ -65,6 +70,13 @@ func newSessionJournal(
 	seed, err := transcript.BuildContext(entries)
 	if err != nil {
 		return nil, nil, nil, err
+	}
+	projectedSeed, err := modelContextView.Snapshot()
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("coding: snapshot restored model context: %w", err)
+	}
+	if err := validateModelContextParity(seed, projectedSeed.Messages); err != nil {
+		return nil, nil, nil, fmt.Errorf("coding: restored model-context parity: %w", err)
 	}
 	usageStart := 0
 	for _, entry := range entries {
@@ -130,7 +142,7 @@ func (j *sessionJournal) entriesSnapshot() ([]transcript.Entry, int) {
 func (j *sessionJournal) projectionSnapshot() (*transcript.SessionProjection, int, error) {
 	j.mu.RLock()
 	defer j.mu.RUnlock()
-	snapshot, err := j.projections.Snapshot()
+	snapshot, err := j.projections.SnapshotKey(transcript.SessionProjectionKey)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -152,6 +164,124 @@ func (j *sessionJournal) projectionSnapshot() (*transcript.SessionProjection, in
 		)
 	}
 	return projection, j.persistedLen, nil
+}
+
+func (j *sessionJournal) modelContextSnapshot() (*transcript.ModelContextProjection, error) {
+	j.mu.RLock()
+	defer j.mu.RUnlock()
+	snapshot, err := j.projections.SnapshotKey(transcript.ModelContextProjectionKey)
+	if err != nil {
+		return nil, err
+	}
+	value, ok := snapshot.Values[transcript.ModelContextProjectionKey]
+	if !ok {
+		return nil, fmt.Errorf("coding: model-context projection is not registered")
+	}
+	projection, ok := value.(*transcript.ModelContextProjection)
+	if !ok || projection == nil {
+		return nil, fmt.Errorf("coding: model-context projection has type %T", value)
+	}
+	wantSeq := j.validator.NextSeq() - 1
+	if snapshot.AsOfSeq != wantSeq || projection.AsOfSeq != wantSeq {
+		return nil, fmt.Errorf(
+			"coding: projection registry at sequence %d, model context at %d, validator at %d",
+			snapshot.AsOfSeq,
+			projection.AsOfSeq,
+			wantSeq,
+		)
+	}
+	return projection, nil
+}
+
+func (j *sessionJournal) validateModelContext(expected []agent.AgentMessage) error {
+	projection, err := j.modelContextSnapshot()
+	if err != nil {
+		return err
+	}
+	if err := validateModelContextParity(expected, projection.Messages); err != nil {
+		return fmt.Errorf("coding: committed model-context parity: %w", err)
+	}
+	return nil
+}
+
+func (j *sessionJournal) reconstructCommittedProviderRequest(
+	providerRequestID string,
+) (transcript.ProviderRequest, error) {
+	j.mu.RLock()
+	defer j.mu.RUnlock()
+	snapshot, err := j.projections.Snapshot()
+	if err != nil {
+		return transcript.ProviderRequest{}, err
+	}
+	wantSeq := j.validator.NextSeq() - 1
+	if snapshot.AsOfSeq != wantSeq {
+		return transcript.ProviderRequest{}, fmt.Errorf(
+			"coding: projection registry at sequence %d, validator at %d",
+			snapshot.AsOfSeq,
+			wantSeq,
+		)
+	}
+	session, ok := snapshot.Values[transcript.SessionProjectionKey].(*transcript.SessionProjection)
+	if !ok || session == nil {
+		return transcript.ProviderRequest{}, fmt.Errorf(
+			"coding: session projection has type %T",
+			snapshot.Values[transcript.SessionProjectionKey],
+		)
+	}
+	modelContext, ok := snapshot.Values[transcript.ModelContextProjectionKey].(*transcript.ModelContextProjection)
+	if !ok || modelContext == nil {
+		return transcript.ProviderRequest{}, fmt.Errorf(
+			"coding: model-context projection has type %T",
+			snapshot.Values[transcript.ModelContextProjectionKey],
+		)
+	}
+	return transcript.ReconstructCommittedProviderRequest(
+		session,
+		modelContext,
+		providerRequestID,
+	)
+}
+
+func validateModelContextParity(
+	expected []agent.AgentMessage,
+	projected []agent.AgentMessage,
+) error {
+	if len(projected) != len(expected) {
+		return fmt.Errorf(
+			"message count %d, want %d",
+			len(projected),
+			len(expected),
+		)
+	}
+	for index := range expected {
+		expectedMessage, expectedOK := agent.ToLLM(expected[index])
+		projectedMessage, projectedOK := agent.ToLLM(projected[index])
+		if !expectedOK || !projectedOK {
+			return fmt.Errorf(
+				"message %d is not model-facing: expected %T, projected %T",
+				index,
+				expected[index],
+				projected[index],
+			)
+		}
+		expectedJSON, err := llm.MarshalMessage(expectedMessage)
+		if err != nil {
+			return fmt.Errorf("encode expected message %d: %w", index, err)
+		}
+		projectedJSON, err := llm.MarshalMessage(projectedMessage)
+		if err != nil {
+			return fmt.Errorf("encode projected message %d: %w", index, err)
+		}
+		if !bytes.Equal(projectedJSON, expectedJSON) {
+			return fmt.Errorf(
+				"message %d differs: expected %T, projected %T",
+				index,
+				expectedMessage,
+				projectedMessage,
+			)
+		}
+	}
+	return nil
 }
 
 func (j *sessionJournal) usageStartIndex() int {

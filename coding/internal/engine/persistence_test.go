@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/observability"
@@ -108,11 +110,219 @@ func TestSessionCheckpointsPromptBeforeModelRequest(t *testing.T) {
 
 	entries, batches, _ := store.snapshot()
 	entries = withoutLifecycle(entries)
-	if len(entries) != 3 {
-		t.Fatalf("durable entries = %d, want user, context, assistant", len(entries))
+	if len(entries) != 4 {
+		t.Fatalf("durable entries = %d, want user, context, request header, assistant", len(entries))
 	}
-	if got := payloadBatchSizes(batches); !slices.Equal(got, []int{2, 1}) {
-		t.Fatalf("append batch sizes = %v, want [2 1]", got)
+	if got := payloadBatchSizes(batches); !slices.Equal(got, []int{3, 1}) {
+		t.Fatalf("append batch sizes = %v, want [3 1]", got)
+	}
+}
+
+func TestSessionProviderDispatchUsesCheckpointedRequestBoundary(t *testing.T) {
+	ctx := context.Background()
+	store := &checkpointStore{}
+	temperature := 0.25
+	maxRetries := 2
+	model := llm.Model{
+		Provider: "test-provider",
+		ID:       "test-model",
+		Protocol: llm.ProtocolOpenAIResponses,
+	}
+	tool := tools.Tool{
+		AgentTool: agent.AgentTool{
+			Definition: llm.MustTool[checkpointToolArgs]("echo", "echo text"),
+			Execute: func(
+				context.Context,
+				string,
+				json.RawMessage,
+				func(agent.ToolProgress),
+			) (agent.ToolResult, error) {
+				return agent.ToolResult{}, nil
+			},
+		},
+		AccessFor: tools.InternalAccess,
+	}
+	baseOptions := llm.StreamOptions{
+		APIKey:      "stale-key",
+		BaseURL:     "https://provider.example/v1",
+		Temperature: &temperature,
+		MaxTokens:   321,
+		Headers:     map[string]string{"X-Feature": "request-baseline"},
+		Reasoning:   llm.ModelThinkingLow,
+		ProtocolOptions: &llm.OpenAIResponsesStreamOptions{
+			ThinkingDisplay: llm.ThinkingDisplayOmitted,
+		},
+		MaxRetries: &maxRetries,
+		Timeout:    3 * time.Second,
+	}
+
+	providerCalls := 0
+	keyProvider := ""
+	var gotModel llm.Model
+	var gotInput llm.Context
+	var gotOptions llm.StreamOptions
+	var dispatchEntries []transcript.Entry
+	session, err := New(ctx, Options{
+		Model:         model,
+		ThinkingLevel: llm.ModelThinkingHigh,
+		Cwd:           t.TempDir(),
+		Tools:         []tools.Tool{tool},
+		Store:         store,
+		Instructions:  "REQUEST HEADER BASELINE",
+		StreamOptions: baseOptions,
+		GetAPIKey: func(provider string) string {
+			keyProvider = provider
+			return "current-key"
+		},
+		StreamFn: func(
+			_ context.Context,
+			streamModel llm.Model,
+			input llm.Context,
+			options llm.StreamOptions,
+		) (<-chan llm.Event, error) {
+			providerCalls++
+			gotModel = streamModel
+			gotInput = input
+			gotOptions = options
+			dispatchEntries, _, _ = store.snapshot()
+			return assistantEvents(streamModel, "answer"), nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := session.Prompt(ctx, "question"); err != nil {
+		t.Fatal(err)
+	}
+	if providerCalls != 1 {
+		t.Fatalf("provider calls = %d, want 1", providerCalls)
+	}
+	if keyProvider != model.Provider {
+		t.Fatalf("API key provider = %q, want %q", keyProvider, model.Provider)
+	}
+	if len(dispatchEntries) == 0 {
+		t.Fatal("provider reached before transcript checkpoint")
+	}
+	dispatchSeq := dispatchEntries[len(dispatchEntries)-1].Seq
+	wantTypes := []transcript.EntryType{
+		transcript.RunStartEntry,
+		transcript.TurnStartEntry,
+		transcript.MessageEntry,
+		transcript.StepStartEntry,
+		transcript.ContextEntry,
+		transcript.RequestHeaderEntry,
+	}
+	if len(dispatchEntries) != len(wantTypes) {
+		t.Fatalf("dispatch checkpoint entries = %d, want %d", len(dispatchEntries), len(wantTypes))
+	}
+	for index, entry := range dispatchEntries {
+		if entry.Seq != int64(index) || entry.Type != wantTypes[index] {
+			t.Fatalf(
+				"dispatch checkpoint[%d] = seq %d type %q, want seq %d type %q",
+				index, entry.Seq, entry.Type, index, wantTypes[index],
+			)
+		}
+	}
+
+	projection, err := transcript.ProjectSession(dispatchEntries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if projection.AsOfSeq != dispatchSeq || projection.Open.RunID == "" ||
+		projection.Open.TurnID == "" || projection.Open.StepID == "" {
+		t.Fatalf(
+			"dispatch projection = seq %d open %#v, want seq %d and open step",
+			projection.AsOfSeq, projection.Open, dispatchSeq,
+		)
+	}
+	if len(projection.ProviderRequests) != 1 ||
+		projection.ProviderRequests[0].EntrySeq != dispatchSeq ||
+		projection.ProviderRequests[0].Header.InputSeq != dispatchSeq-1 {
+		t.Fatalf("durable provider request = %#v", projection.ProviderRequests)
+	}
+	reconstructed, err := transcript.ReconstructProviderRequest(
+		dispatchEntries,
+		projection.ProviderRequests[0].Header.ProviderRequestID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(reconstructed.Input, gotInput) {
+		t.Fatalf(
+			"reconstructed provider input differs\ngot:  %#v\nwant: %#v",
+			reconstructed.Input,
+			gotInput,
+		)
+	}
+	if reconstructed.Options.APIKey != "" || reconstructed.Options.BaseURL != "" ||
+		len(reconstructed.Options.Headers) != 0 || reconstructed.Options.MaxRetries != nil ||
+		reconstructed.Options.Timeout != 0 {
+		t.Fatalf("durable request retained transport options: %#v", reconstructed.Options)
+	}
+	requestJSON, err := json.Marshal(dispatchEntries[len(dispatchEntries)-1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{
+		"stale-key", "current-key", "provider.example", "request-baseline",
+	} {
+		if strings.Contains(string(requestJSON), forbidden) {
+			t.Fatalf("durable request contains transport value %q: %s", forbidden, requestJSON)
+		}
+	}
+
+	canonical, err := transcript.BuildContext(dispatchEntries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantMessages := make([]llm.Message, 0, len(projection.Contexts)+len(canonical))
+	for _, projected := range projection.Contexts {
+		if projected.Attachment.Placement == "prefix" {
+			wantMessages = append(wantMessages, llm.UserText(projected.Attachment.Rendered))
+		}
+	}
+	for _, message := range canonical {
+		projected, ok := agent.ToLLM(message)
+		if !ok {
+			t.Fatalf("canonical message %T is not model-facing", message)
+		}
+		wantMessages = append(wantMessages, projected)
+	}
+	for _, projected := range projection.Contexts {
+		if projected.Attachment.Placement == "after-current" {
+			wantMessages = append(wantMessages, llm.UserText(projected.Attachment.Rendered))
+		}
+	}
+	if !reflect.DeepEqual(gotInput.Messages, wantMessages) {
+		t.Fatalf(
+			"provider messages differ from checkpoint projection\ngot:  %#v\nwant: %#v",
+			gotInput.Messages, wantMessages,
+		)
+	}
+
+	if gotModel.Provider != model.Provider || gotModel.ID != model.ID ||
+		gotModel.Protocol != model.Protocol {
+		t.Fatalf("provider model = %#v, want %#v", gotModel, model)
+	}
+	if !strings.Contains(gotInput.SystemPrompt, "REQUEST HEADER BASELINE") {
+		t.Fatal("provider system prompt omitted configured instructions")
+	}
+	if len(gotInput.Tools) != 1 || !reflect.DeepEqual(gotInput.Tools[0], tool.Definition) {
+		t.Fatalf("provider tools = %#v, want echo definition", gotInput.Tools)
+	}
+	if gotOptions.APIKey != "current-key" || gotOptions.BaseURL != baseOptions.BaseURL ||
+		gotOptions.Temperature == nil || *gotOptions.Temperature != temperature ||
+		gotOptions.MaxTokens != baseOptions.MaxTokens ||
+		gotOptions.Headers["X-Feature"] != "request-baseline" ||
+		gotOptions.Reasoning != llm.ModelThinkingHigh ||
+		gotOptions.ProtocolOptions != baseOptions.ProtocolOptions ||
+		gotOptions.MaxRetries != baseOptions.MaxRetries || gotOptions.Timeout != baseOptions.Timeout {
+		t.Fatalf("effective stream options = %#v", gotOptions)
+	}
+	entries, _, _ := store.snapshot()
+	if finalSeq := entries[len(entries)-1].Seq; finalSeq <= dispatchSeq {
+		t.Fatalf("terminal transcript sequence = %d, want after dispatch boundary %d", finalSeq, dispatchSeq)
 	}
 }
 
@@ -139,15 +349,15 @@ func TestSessionCheckpointsToolIntentBeforeExecution(t *testing.T) {
 				toolCalls++
 				entries, _, _ := store.snapshot()
 				entries = withoutLifecycle(entries)
-				if len(entries) != 4 {
-					bodyErr = fmt.Errorf("entries before tool body = %d, want context, user, assistant, intent", len(entries))
-				} else if _, ok := llmEntry(entries[2]).(*llm.AssistantMessage); !ok {
-					bodyErr = fmt.Errorf("checkpoint[2] = %T, want assistant", llmEntry(entries[2]))
-				} else if intent := entries[3]; intent.Type != transcript.ToolCallEntry ||
+				if len(entries) != 5 {
+					bodyErr = fmt.Errorf("entries before tool body = %d, want context, user, request header, assistant, intent", len(entries))
+				} else if _, ok := llmEntry(entries[3]).(*llm.AssistantMessage); !ok {
+					bodyErr = fmt.Errorf("checkpoint[3] = %T, want assistant", llmEntry(entries[3]))
+				} else if intent := entries[4]; intent.Type != transcript.ToolCallEntry ||
 					intent.ToolCall == nil || intent.ToolCall.ToolCallID != "call-1" ||
 					intent.ToolCall.ToolName != "echo" ||
 					string(intent.ToolCall.Arguments) != `{"text":"one"}` {
-					bodyErr = fmt.Errorf("checkpoint[3] = %#v, want durable tool intent", intent)
+					bodyErr = fmt.Errorf("checkpoint[4] = %#v, want durable tool intent", intent)
 				}
 				return agent.ToolResult{
 					Content: []llm.ToolResultContent{&llm.TextContent{Text: "one"}},
@@ -289,14 +499,14 @@ func TestSessionCheckpointsCompleteToolBatchBeforeNextModelRequest(t *testing.T)
 
 	entries, batches, _ := store.snapshot()
 	entries = withoutLifecycle(entries)
-	if len(entries) != 10 {
+	if len(entries) != 12 {
 		t.Fatalf(
-			"durable entries = %d, want user, context, assistant, two tool intents, two result/outcome pairs, final assistant",
+			"durable entries = %d, want user, context, two request headers, assistant, two tool intents, two result/outcome pairs, final assistant",
 			len(entries),
 		)
 	}
-	if got := payloadBatchSizes(batches); !slices.Equal(got, []int{2, 2, 1, 4, 1}) {
-		t.Fatalf("append batch sizes = %v, want [2 2 1 4 1]", got)
+	if got := payloadBatchSizes(batches); !slices.Equal(got, []int{3, 2, 1, 5, 1}) {
+		t.Fatalf("append batch sizes = %v, want [3 2 1 5 1]", got)
 	}
 
 	restored, err := New(ctx, Options{
@@ -399,8 +609,8 @@ func TestSessionToolCheckpointFailureDoesNotExecuteToolOrContinueModel(t *testin
 	if appendCalls != 3 {
 		t.Fatalf("store append attempts = %d, want provider checkpoint, failed tool checkpoint, and final flush", appendCalls)
 	}
-	if got := payloadBatchSizes(batches); !slices.Equal(got, []int{2, 5}) {
-		t.Fatalf("successful append batch sizes = %v, want [2 5]", got)
+	if got := payloadBatchSizes(batches); !slices.Equal(got, []int{3, 5}) {
+		t.Fatalf("successful append batch sizes = %v, want [3 5]", got)
 	}
 	for _, entry := range entries {
 		if entry.Type == transcript.ToolCallEntry {
@@ -446,22 +656,26 @@ func TestSessionCheckpointsFollowUpBeforeNextModelRequest(t *testing.T) {
 			if call == 1 {
 				entries, _, _ := store.snapshot()
 				entries = withoutLifecycle(entries)
-				if len(entries) != 4 {
+				if len(entries) != 6 {
 					checkpointErr = fmt.Errorf(
-						"entries before follow-up request = %d, want context, user, assistant, follow-up",
+						"entries before follow-up request = %d, want context, user, two request headers, assistant, follow-up",
 						len(entries),
 					)
 				} else {
 					_, firstUser := llmEntry(entries[0]).(*llm.UserMessage)
-					_, assistant := llmEntry(entries[2]).(*llm.AssistantMessage)
-					_, followUp := llmEntry(entries[3]).(*llm.UserMessage)
-					if entries[1].Type != transcript.ContextEntry || !firstUser || !assistant || !followUp {
+					_, assistant := llmEntry(entries[3]).(*llm.AssistantMessage)
+					_, followUp := llmEntry(entries[4]).(*llm.UserMessage)
+					if entries[1].Type != transcript.ContextEntry ||
+						entries[2].Type != transcript.RequestHeaderEntry ||
+						entries[5].Type != transcript.RequestHeaderEntry ||
+						!firstUser || !assistant || !followUp {
 						checkpointErr = fmt.Errorf(
-							"follow-up checkpoint types = %q, %T, %T, %T",
+							"follow-up checkpoint types = %q, %q, %T, %T, %q",
 							entries[1].Type,
+							entries[2].Type,
 							llmEntry(entries[0]),
-							llmEntry(entries[2]),
 							llmEntry(entries[3]),
+							entries[5].Type,
 						)
 					}
 				}
@@ -640,11 +854,18 @@ func TestSessionJournalAdvancesProjectionOnlyAfterStoreSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	modelContext, err := journal.modelContextSnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if projection.AsOfSeq != -1 || projection.AppliedEntries != 0 ||
+		modelContext.AsOfSeq != -1 || modelContext.AppliedEntries != 0 ||
+		len(modelContext.Messages) != 0 ||
 		journal.validator.NextSeq() != 0 || persistedLen != 0 {
 		t.Fatalf(
-			"state after Store failure = projection %#v validator %d persisted %d",
+			"state after Store failure = projection %#v model context %#v validator %d persisted %d",
 			projection,
+			modelContext,
 			journal.validator.NextSeq(),
 			persistedLen,
 		)
@@ -657,11 +878,18 @@ func TestSessionJournalAdvancesProjectionOnlyAfterStoreSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	modelContext, err = journal.modelContextSnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if projection.AsOfSeq != 2 || projection.AppliedEntries != 3 ||
+		modelContext.AsOfSeq != 2 || modelContext.AppliedEntries != 3 ||
+		len(modelContext.Messages) != 1 ||
 		journal.validator.NextSeq() != 3 || persistedLen != 1 || len(projection.Messages) != 1 {
 		t.Fatalf(
-			"state after retry = projection %#v validator %d persisted %d",
+			"state after retry = projection %#v model context %#v validator %d persisted %d",
 			projection,
+			modelContext,
 			journal.validator.NextSeq(),
 			persistedLen,
 		)
@@ -719,13 +947,13 @@ func TestSessionRetryDoesNotPersistFailedAssistantOrDuplicatePrompt(t *testing.T
 	}
 	assertLifecycleIDs(t, entries, 1, 1, 2)
 	entries = withoutLifecycle(entries)
-	if len(entries) != 3 {
-		t.Fatalf("durable entries = %d, want user, context, successful assistant", len(entries))
+	if len(entries) != 5 {
+		t.Fatalf("durable entries = %d, want user, context, two request headers, successful assistant", len(entries))
 	}
-	if got := payloadBatchSizes(batches); !slices.Equal(got, []int{2, 1}) {
-		t.Fatalf("append batch sizes = %v, want [2 1]", got)
+	if got := payloadBatchSizes(batches); !slices.Equal(got, []int{3, 1, 1}) {
+		t.Fatalf("append batch sizes = %v, want [3 1 1]", got)
 	}
-	assistant, ok := llmEntry(entries[2]).(*llm.AssistantMessage)
+	assistant, ok := llmEntry(entries[4]).(*llm.AssistantMessage)
 	if !ok || assistant.StopReason != llm.StopReasonStop || assistant.Text() != "recovered" {
 		t.Fatalf("persisted assistant = %#v, want successful retry only", assistant)
 	}
@@ -747,8 +975,8 @@ func validateToolCheckpoint(entries []transcript.Entry) error {
 	}
 	entries = withoutLifecycle(entries)
 	// The base context is checkpointed once inside the first model step.
-	if len(entries) != 9 {
-		return fmt.Errorf("entries before second model request = %d, want 9", len(entries))
+	if len(entries) != 11 {
+		return fmt.Errorf("entries before second model request = %d, want 11", len(entries))
 	}
 	if entries[1].Type != transcript.ContextEntry {
 		return fmt.Errorf("checkpoint[1] = %q, want context", entries[1].Type)
@@ -756,18 +984,21 @@ func validateToolCheckpoint(entries []transcript.Entry) error {
 	if _, ok := llmEntry(entries[0]).(*llm.UserMessage); !ok {
 		return fmt.Errorf("checkpoint[0] = %T, want user", llmEntry(entries[0]))
 	}
-	assistant, ok := llmEntry(entries[2]).(*llm.AssistantMessage)
+	if entries[2].Type != transcript.RequestHeaderEntry {
+		return fmt.Errorf("checkpoint[2] = %q, want request header", entries[2].Type)
+	}
+	assistant, ok := llmEntry(entries[3]).(*llm.AssistantMessage)
 	if !ok || len(assistant.ToolCalls()) != 2 {
-		return fmt.Errorf("checkpoint[2] = %#v, want assistant with two tool calls", assistant)
+		return fmt.Errorf("checkpoint[3] = %#v, want assistant with two tool calls", assistant)
 	}
 	for index, callID := range []string{"call-1", "call-2"} {
-		intentIndex := 3 + index
+		intentIndex := 4 + index
 		intent := entries[intentIndex]
 		if intent.Type != transcript.ToolCallEntry || intent.ToolCall == nil ||
 			intent.ToolCall.ToolCallID != callID {
 			return fmt.Errorf("checkpoint[%d] = %#v, want tool intent %s", intentIndex, intent, callID)
 		}
-		messageIndex := 5 + index*2
+		messageIndex := 6 + index*2
 		outcomeIndex := messageIndex + 1
 		result, ok := llmEntry(entries[messageIndex]).(*llm.ToolResultMessage)
 		if !ok || result.ToolCallID != callID {
@@ -778,6 +1009,9 @@ func validateToolCheckpoint(entries []transcript.Entry) error {
 			outcome.ToolOutcome.ToolCallID != callID {
 			return fmt.Errorf("checkpoint[%d] = %#v, want tool outcome %s", outcomeIndex, outcome, callID)
 		}
+	}
+	if entries[10].Type != transcript.RequestHeaderEntry {
+		return fmt.Errorf("checkpoint[10] = %q, want second request header", entries[10].Type)
 	}
 	return nil
 }
