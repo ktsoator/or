@@ -49,13 +49,13 @@ type ProjectionSnapshot struct {
 // and snapshot access.
 type ProjectionRegistry struct {
 	units   []ProjectionUnit
-	keys    map[string]struct{}
+	keys    map[string]ProjectionUnit
 	asOfSeq int64
 }
 
 func NewProjectionRegistry() *ProjectionRegistry {
 	return &ProjectionRegistry{
-		keys:    make(map[string]struct{}),
+		keys:    make(map[string]ProjectionUnit),
 		asOfSeq: -1,
 	}
 }
@@ -82,7 +82,7 @@ func (r *ProjectionRegistry) Register(unit ProjectionUnit) error {
 	if _, exists := r.keys[key]; exists {
 		return fmt.Errorf("transcript: projection key %q is already registered", key)
 	}
-	r.keys[key] = struct{}{}
+	r.keys[key] = unit
 	r.units = append(r.units, unit)
 	return nil
 }
@@ -125,6 +125,33 @@ func (r *ProjectionRegistry) Snapshot() (ProjectionSnapshot, error) {
 		values[unit.ProjectionKey()] = value
 	}
 	return ProjectionSnapshot{AsOfSeq: r.asOfSeq, Values: values}, nil
+}
+
+// SnapshotKey returns one detached projection at the registry's committed
+// watermark without forcing unrelated units to clone their state.
+func (r *ProjectionRegistry) SnapshotKey(key string) (ProjectionSnapshot, error) {
+	if r == nil {
+		return ProjectionSnapshot{}, fmt.Errorf("transcript: projection registry is nil")
+	}
+	unit, ok := r.keys[key]
+	if !ok {
+		return ProjectionSnapshot{}, fmt.Errorf(
+			"transcript: projection %q is not registered",
+			key,
+		)
+	}
+	value, err := unit.SnapshotProjection()
+	if err != nil {
+		return ProjectionSnapshot{}, fmt.Errorf(
+			"transcript: snapshot projection %q: %w",
+			key,
+			err,
+		)
+	}
+	return ProjectionSnapshot{
+		AsOfSeq: r.asOfSeq,
+		Values:  map[string]any{key: value},
+	}, nil
 }
 
 func newProjectionEvent(

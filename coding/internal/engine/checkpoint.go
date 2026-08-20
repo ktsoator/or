@@ -376,10 +376,13 @@ func (s *Session) persistModelInput(
 			Rendered:     attachment.Rendered,
 		})
 	}
-	return s.journal.persistMessages(
+	if err := s.journal.persistMessages(
 		ctx,
 		messages,
 		contextEntries,
 		positioned,
-	)
+	); err != nil {
+		return err
+	}
+	return s.journal.validateModelContext(messages)
 }

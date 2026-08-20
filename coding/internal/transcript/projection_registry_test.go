@@ -37,6 +37,19 @@ func (p *eventCaptureProjection) SnapshotProjection() (any, error) {
 	return append([]ProjectionEvent(nil), p.events...), nil
 }
 
+type snapshotCountingProjection struct {
+	snapshots int
+}
+
+func (*snapshotCountingProjection) ProjectionKey() string { return "test/snapshot-count" }
+
+func (*snapshotCountingProjection) ApplyProjection(ProjectionEvent) {}
+
+func (p *snapshotCountingProjection) SnapshotProjection() (any, error) {
+	p.snapshots++
+	return p.snapshots, nil
+}
+
 func TestProjectionRegistryDrivesRegisteredUnitsAtOneWatermark(t *testing.T) {
 	registry := NewProjectionRegistry()
 	types := &entryTypeProjection{}
@@ -84,6 +97,40 @@ func TestProjectionRegistryDrivesRegisteredUnitsAtOneWatermark(t *testing.T) {
 		RunStartEntry, TurnStartEntry, MessageEntry,
 	}) {
 		t.Fatalf("entry type projection = %v", got)
+	}
+}
+
+func TestProjectionRegistrySnapshotsOneKeyWithoutCloningOtherUnits(t *testing.T) {
+	registry := NewProjectionRegistry()
+	types := &entryTypeProjection{}
+	other := &snapshotCountingProjection{}
+	if err := registry.Register(types); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.Register(other); err != nil {
+		t.Fatal(err)
+	}
+	entries := sequencedForTest(NewRunStart("run-1"))
+	if _, err := validateSession(entries, registry); err != nil {
+		t.Fatal(err)
+	}
+
+	snapshot, err := registry.SnapshotKey(types.ProjectionKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.AsOfSeq != 0 || other.snapshots != 0 {
+		t.Fatalf("targeted snapshot = %#v, unrelated snapshots = %d", snapshot, other.snapshots)
+	}
+	if got := snapshot.Values[types.ProjectionKey()].([]EntryType); !reflect.DeepEqual(
+		got,
+		[]EntryType{RunStartEntry},
+	) {
+		t.Fatalf("targeted projection = %v", got)
+	}
+	if _, err := registry.SnapshotKey("missing"); err == nil ||
+		!strings.Contains(err.Error(), "not registered") {
+		t.Fatalf("missing projection error = %v", err)
 	}
 }
 

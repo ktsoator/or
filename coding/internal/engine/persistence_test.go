@@ -814,11 +814,18 @@ func TestSessionJournalAdvancesProjectionOnlyAfterStoreSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	modelContext, err := journal.modelContextSnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if projection.AsOfSeq != -1 || projection.AppliedEntries != 0 ||
+		modelContext.AsOfSeq != -1 || modelContext.AppliedEntries != 0 ||
+		len(modelContext.Messages) != 0 ||
 		journal.validator.NextSeq() != 0 || persistedLen != 0 {
 		t.Fatalf(
-			"state after Store failure = projection %#v validator %d persisted %d",
+			"state after Store failure = projection %#v model context %#v validator %d persisted %d",
 			projection,
+			modelContext,
 			journal.validator.NextSeq(),
 			persistedLen,
 		)
@@ -831,11 +838,18 @@ func TestSessionJournalAdvancesProjectionOnlyAfterStoreSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	modelContext, err = journal.modelContextSnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if projection.AsOfSeq != 2 || projection.AppliedEntries != 3 ||
+		modelContext.AsOfSeq != 2 || modelContext.AppliedEntries != 3 ||
+		len(modelContext.Messages) != 1 ||
 		journal.validator.NextSeq() != 3 || persistedLen != 1 || len(projection.Messages) != 1 {
 		t.Fatalf(
-			"state after retry = projection %#v validator %d persisted %d",
+			"state after retry = projection %#v model context %#v validator %d persisted %d",
 			projection,
+			modelContext,
 			journal.validator.NextSeq(),
 			persistedLen,
 		)
