@@ -51,7 +51,7 @@ func (s *Session) recordToolCheckpoint(
 	startedAt time.Time,
 	err error,
 ) {
-	correlation := s.activeRequestCorrelation()
+	correlation := s.lifecycle.activeRequest()
 	event := observability.Event{
 		Name:      observability.CheckpointCompleted,
 		SessionID: s.sessionID, RunID: correlation.runID,

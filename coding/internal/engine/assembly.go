@@ -185,7 +185,8 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 			// Correlate before observeAgentEvent removes terminal tool state.
 			s.correlateVisibleEvent(&projected)
 		}
-		s.observeAgentEvent(ev)
+		lifecycleDecision := s.coordinateAgentLifecycle(ev)
+		s.observeAgentEvent(ev, lifecycleDecision)
 		if visible {
 			if projected.Type == MessageCompleted {
 				projected.ContextUsage = s.ContextUsage()

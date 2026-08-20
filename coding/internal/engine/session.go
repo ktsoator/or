@@ -124,9 +124,10 @@ type Session struct {
 	contextWindow int64
 	compactor     compaction.Compactor
 
-	runMu    sync.Mutex
-	runState sessionRunState
-	events   eventBus
+	runMu     sync.Mutex
+	execution runExecutionState
+	lifecycle lifecycleCoordinator
+	events    eventBus
 }
 
 // QueueHandle identifies one message submitted to this Session's queue. The

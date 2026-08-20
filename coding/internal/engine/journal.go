@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/transcript"
@@ -315,32 +314,17 @@ func (s *Session) persistNew(ctx context.Context) error {
 
 func (s *Session) persistRunTerminal(
 	ctx context.Context,
-	runID string,
-	completedAt time.Time,
-	status transcript.LifecycleStatus,
-	reason string,
+	terminal lifecycleRunTerminal,
 ) error {
 	all := s.agent.Snapshot().Messages
-	pending := s.pendingLifecycle()
-	_, turnID := s.lifecycleIDs()
-	turnEnd := transcript.NewTurnEnd(runID, turnID, status, reason)
-	runEnd := transcript.NewRunEnd(runID, status, reason)
-	turnEnd.Timestamp = completedAt.UTC()
-	runEnd.Timestamp = completedAt.UTC()
-	terminal := positionedLifecycle(
-		len(all),
-		turnEnd,
-		runEnd,
-	)
-	positioned := append(append([]positionedJournalEntry(nil), pending...), terminal...)
 	err := s.journal.persistMessages(
 		ctx,
 		all,
 		nil,
-		positioned,
+		terminal.entries,
 	)
 	if err == nil {
-		s.clearPendingLifecycle(len(pending))
+		s.lifecycle.commitPending(terminal.pendingCount)
 	}
 	return err
 }

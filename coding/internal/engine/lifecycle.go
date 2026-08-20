@@ -4,114 +4,60 @@ import (
 	"context"
 	"time"
 
-	"github.com/ktsoator/or/coding/internal/observability"
-	"github.com/ktsoator/or/coding/internal/transcript"
+	"github.com/ktsoator/or/agent"
+	"github.com/ktsoator/or/llm"
 )
 
-func (s *Session) queueRunLifecycleStart(runID, turnID string, startedAt time.Time) {
+type agentLifecycleDecision struct {
+	followUp     lifecycleTurnTransition
+	stepComplete lifecycleStepCompleted
+}
+
+// coordinateAgentLifecycle translates reusable-agent facts into lifecycle
+// transitions. Observability consumes the returned decision but never drives it.
+func (s *Session) coordinateAgentLifecycle(event agent.AgentEvent) agentLifecycleDecision {
+	now := time.Now().UTC()
 	messageIndex := len(s.agent.Snapshot().Messages)
-	runStart := transcript.NewRunStart(runID)
-	turnStart := transcript.NewTurnStart(runID, turnID)
-	runStart.Timestamp = startedAt.UTC()
-	turnStart.Timestamp = startedAt.UTC()
-	s.queueLifecycle(
-		positionedJournalEntry{
-			messageIndex: messageIndex,
-			entry:        runStart,
-		},
-		positionedJournalEntry{
-			messageIndex: messageIndex,
-			entry:        turnStart,
-		},
-	)
-}
-
-func (s *Session) queueStepEnd(
-	state stepCorrelationState,
-	status transcript.LifecycleStatus,
-	reason string,
-) {
-	if !state.lifecycleDurable {
-		return
-	}
-	messageIndex := len(s.agent.Snapshot().Messages)
-	s.queueLifecycle(positionedJournalEntry{
-		messageIndex: messageIndex,
-		entry: transcript.NewStepEnd(
-			state.runID,
-			state.lifecycleTurnID,
-			state.stepID,
-			status,
-			reason,
-		),
-	})
-}
-
-func (s *Session) queueFollowUpTurn() {
-	messageIndex := len(s.agent.Snapshot().Messages)
-	nextTurnID := observability.NewID("turn")
-	startedAt := time.Now().UTC()
-	runID, previousTurnID, previousStartedAt := s.transitionLifecycleTurn(nextTurnID, startedAt)
-	if runID == "" || previousTurnID == "" {
-		return
-	}
-	s.recordTurnTerminal(
-		runID, previousTurnID, "completed", "", previousStartedAt, startedAt,
-	)
-	s.recordTurnStarted(runID, nextTurnID, startedAt)
-	turnEnd := transcript.NewTurnEnd(
-		runID,
-		previousTurnID,
-		transcript.LifecycleCompleted,
-		"",
-	)
-	turnStart := transcript.NewTurnStart(runID, nextTurnID)
-	turnEnd.Timestamp = startedAt
-	turnStart.Timestamp = startedAt
-	s.queueLifecycle(
-		positionedJournalEntry{
-			messageIndex: messageIndex,
-			entry:        turnEnd,
-		},
-		positionedJournalEntry{
-			messageIndex: messageIndex,
-			entry:        turnStart,
-		},
-	)
-}
-
-func (s *Session) closeOpenSteps(status transcript.LifecycleStatus, reason string) {
-	for _, step := range s.finishOpenSteps() {
-		s.queueStepEnd(step, status, reason)
-	}
-}
-
-func positionedLifecycle(
-	messageIndex int,
-	entries ...transcript.Entry,
-) []positionedJournalEntry {
-	result := make([]positionedJournalEntry, len(entries))
-	for index, entry := range entries {
-		result[index] = positionedJournalEntry{messageIndex: messageIndex, entry: entry}
-	}
-	return result
-}
-
-func lifecycleTerminal(
-	status, reason string,
-) (transcript.LifecycleStatus, string) {
-	switch status {
-	case "completed":
-		return transcript.LifecycleCompleted, ""
-	case "cancelled":
-		return transcript.LifecycleCancelled, reason
+	switch event.Type {
+	case agent.FollowUpStart:
+		return agentLifecycleDecision{
+			followUp: s.lifecycle.claimFollowUp(messageIndex, now),
+		}
+	case agent.TurnEnd:
+		status, errorCode := s.stepStatus(event)
+		return agentLifecycleDecision{
+			stepComplete: s.lifecycle.completeStep(
+				messageIndex,
+				now,
+				status,
+				errorCode,
+			),
+		}
 	default:
-		return transcript.LifecycleFailed, reason
+		return agentLifecycleDecision{}
+	}
+}
+
+func (s *Session) stepStatus(event agent.AgentEvent) (status, errorCode string) {
+	if s.runPersistenceError() != nil {
+		return "failed", "checkpoint_failed"
+	}
+	message, ok := eventAssistantMessage(event.Message)
+	if !ok {
+		return "failed", "assistant_message_missing"
+	}
+	switch message.StopReason {
+	case llm.StopReasonAborted:
+		return "cancelled", "context_cancelled"
+	case llm.StopReasonError:
+		return "failed", "provider_request_failed"
+	default:
+		return "completed", ""
 	}
 }
 
 func (s *Session) persistPendingLifecycle(ctx context.Context) error {
-	pending := s.pendingLifecycle()
+	pending := s.lifecycle.pendingEntries()
 	if len(pending) == 0 {
 		return s.journal.persistMessages(
 			ctx,
@@ -127,7 +73,42 @@ func (s *Session) persistPendingLifecycle(ctx context.Context) error {
 		pending,
 	)
 	if err == nil {
-		s.clearPendingLifecycle(len(pending))
+		s.lifecycle.commitPending(len(pending))
 	}
 	return err
+}
+
+func (s *Session) correlateVisibleEvent(event *Event) {
+	if event == nil || event.ProviderRequestID != "" {
+		return
+	}
+	switch event.Type {
+	case TextDelta, ThinkingDelta,
+		ToolInputStarted, ToolInputDelta, ToolInputCompleted,
+		ToolStarted, ToolFinished, MessageCompleted:
+	default:
+		return
+	}
+	if event.ToolCallID != "" {
+		if tool, ok := s.toolState(event.ToolCallID); ok {
+			event.ProviderRequestID = tool.correlation.requestID
+			return
+		}
+	}
+	event.ProviderRequestID = s.lifecycle.activeRequest().requestID
+}
+
+func (s *Session) beginTool(
+	toolCallID, toolName string,
+	startedAt time.Time,
+) (toolCorrelationState, bool) {
+	return s.lifecycle.beginTool(toolCallID, toolName, startedAt)
+}
+
+func (s *Session) finishTool(toolCallID string) (toolCorrelationState, bool) {
+	return s.lifecycle.finishTool(toolCallID)
+}
+
+func (s *Session) toolState(toolCallID string) (toolCorrelationState, bool) {
+	return s.lifecycle.toolState(toolCallID)
 }

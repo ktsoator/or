@@ -12,30 +12,51 @@ import (
 	"github.com/ktsoator/or/llm"
 )
 
-func (s *Session) observeAgentEvent(event agent.AgentEvent) {
+func (s *Session) observeAgentEvent(
+	event agent.AgentEvent,
+	decision agentLifecycleDecision,
+) {
 	switch event.Type {
 	case agent.FollowUpStart:
-		s.queueFollowUpTurn()
+		transition := decision.followUp
+		if transition.runID == "" {
+			return
+		}
+		s.recordTurnTerminal(
+			transition.runID,
+			transition.previousTurnID,
+			"completed",
+			"",
+			transition.previousStartedAt,
+			transition.nextStartedAt,
+		)
+		s.recordTurnStarted(
+			transition.runID,
+			transition.nextTurnID,
+			transition.nextStartedAt,
+		)
 	case agent.ToolStart:
 		s.beginObservedTool(event.ToolCallID, event.ToolName)
 	case agent.ToolEnd:
 		s.finishObservedTool(event)
 	case agent.TurnEnd:
-		completedAt := time.Now().UTC()
-		step := s.finishStep()
+		completed := decision.stepComplete
+		step := completed.step
+		if step.stepID == "" {
+			return
+		}
 		correlation := requestCorrelation{
 			runID: step.runID, turnID: step.lifecycleTurnID,
 			stepID: step.stepID, requestID: step.requestID,
 		}
-		status, errorCode := s.stepStatus(event)
-		lifecycleStatus, lifecycleReason := lifecycleTerminal(status, errorCode)
-		s.queueStepEnd(step, lifecycleStatus, lifecycleReason)
 		s.recorder.Record(observability.Event{
 			Name: observability.StepCompleted, SessionID: s.sessionID,
 			RunID: correlation.runID, TurnID: correlation.turnID,
 			StepID:    correlation.stepID,
-			RequestID: correlation.requestID, Status: status, ErrorCode: errorCode,
-			StartedAt: step.startedAt, Duration: elapsed(step.startedAt, completedAt),
+			RequestID: correlation.requestID,
+			Status:    completed.status, ErrorCode: completed.errorCode,
+			StartedAt: step.startedAt,
+			Duration:  elapsed(step.startedAt, completed.completedAt),
 		})
 	}
 }
@@ -196,18 +217,6 @@ func (a *observedApprover) Decide(
 	return response, err
 }
 
-func (s *Session) beginObservedStep() stepCorrelationState {
-	startedAt := time.Now().UTC()
-	stepID := observability.NewID("step")
-	step := s.beginStep(stepID, startedAt)
-	s.recorder.Record(observability.Event{
-		Name: observability.StepStarted, SessionID: s.sessionID,
-		RunID: step.runID, TurnID: step.lifecycleTurnID, StepID: stepID,
-		Status: "running", StartedAt: startedAt,
-	})
-	return step
-}
-
 func (s *Session) recordTurnStarted(runID, turnID string, startedAt time.Time) {
 	s.recorder.Record(observability.Event{
 		Name: observability.TurnStarted, SessionID: s.sessionID,
@@ -229,26 +238,8 @@ func (s *Session) recordTurnTerminal(
 	})
 }
 
-func (s *Session) stepStatus(event agent.AgentEvent) (status, errorCode string) {
-	if s.runPersistenceError() != nil {
-		return "failed", "checkpoint_failed"
-	}
-	message, ok := eventAssistantMessage(event.Message)
-	if !ok {
-		return "failed", "assistant_message_missing"
-	}
-	switch message.StopReason {
-	case llm.StopReasonAborted:
-		return "cancelled", "context_cancelled"
-	case llm.StopReasonError:
-		return "failed", "provider_request_failed"
-	default:
-		return "completed", ""
-	}
-}
-
-func (s *Session) recordStepDiscarded(reason string) {
-	correlation := s.lastStepCorrelation()
+func (s *Session) recordStepDiscarded(discarded lifecycleStepDiscarded) {
+	correlation := discarded.correlation
 	if correlation.stepID == "" {
 		return
 	}
@@ -257,7 +248,7 @@ func (s *Session) recordStepDiscarded(reason string) {
 		RunID: correlation.runID, TurnID: correlation.turnID,
 		StepID:    correlation.stepID,
 		RequestID: correlation.requestID,
-		Status:    "discarded", Reason: reason,
+		Status:    "discarded", Reason: discarded.reason,
 	})
 }
 

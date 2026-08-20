@@ -32,24 +32,18 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 		input llm.Context,
 		options llm.StreamOptions,
 	) (<-chan llm.Event, error) {
-		step := s.beginObservedStep()
-		requestID := observability.NewID("request")
-		correlation := s.attachRequest(requestID)
+		checkpoint := s.lifecycle.beginStepCheckpoint(
+			len(input.Messages),
+			time.Now().UTC(),
+		)
+		step := checkpoint.step
+		correlation := s.lifecycle.attachProviderRequest()
+		s.recorder.Record(observability.Event{
+			Name: observability.StepStarted, SessionID: s.sessionID,
+			RunID: step.runID, TurnID: step.lifecycleTurnID, StepID: step.stepID,
+			Status: "running", StartedAt: step.startedAt,
+		})
 		prepared := s.contextProjection.PrepareStep(input)
-		pendingLifecycle := s.pendingLifecycle()
-		stepStart := transcript.NewStepStart(
-			step.runID,
-			step.lifecycleTurnID,
-			step.stepID,
-		)
-		stepStart.Timestamp = step.startedAt
-		positioned := append(
-			append([]positionedJournalEntry(nil), pendingLifecycle...),
-			positionedJournalEntry{
-				messageIndex: len(input.Messages),
-				entry:        stepStart,
-			},
-		)
 		checkpointStarted := time.Now().UTC()
 		providerInput := prepared.Input
 		requestHeader, checkpointErr := s.buildProviderRequestHeader(
@@ -63,7 +57,7 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 				ctx,
 				input.Messages,
 				prepared.Pending,
-				positioned,
+				checkpoint.entries,
 				requestHeader,
 			)
 		}
@@ -90,8 +84,7 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 			s.recordRunPersistenceError(checkpointErr)
 			return nil, checkpointErr
 		}
-		s.clearPendingLifecycle(len(pendingLifecycle))
-		s.markStepDurable(step.stepID)
+		s.lifecycle.commitStepCheckpoint(step.stepID, checkpoint.pendingCount)
 		s.recorder.Record(observability.Event{
 			Name:      observability.CheckpointCompleted,
 			SessionID: s.sessionID, RunID: correlation.runID,
