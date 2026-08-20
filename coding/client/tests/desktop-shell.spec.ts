@@ -3038,7 +3038,11 @@ test('Agent preview tabs stay scoped to their selected session', async ({
     'aria-selected',
     'true',
   )
-  await expect(workbench.getByRole('tab')).toHaveCount(1)
+  await expect(workbench.getByRole('tab')).toHaveCount(2)
+  await expect(workbench.getByRole('tab', { name: 'Secondary task' })).toHaveAttribute(
+    'aria-selected',
+    'false',
+  )
 
   await page.evaluate(() => {
     const emit = (
@@ -3110,7 +3114,7 @@ test('Agent preview tabs stay scoped to their selected session', async ({
     })
   })
 
-  await expect(workbench.getByRole('tab')).toHaveCount(1)
+  await expect(workbench.getByRole('tab')).toHaveCount(2)
   await expect(workbench.getByRole('tab', { name: 'Secondary preview' })).toHaveCount(0)
   await expect(workbench.getByRole('tab', { name: 'Main preview' })).toHaveAttribute(
     'aria-selected',
