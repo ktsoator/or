@@ -49,12 +49,16 @@ type sessionReducer struct {
 	parent *sessionReducer
 	scope  sessionScope
 
-	entryIDs   map[string]struct{}
-	messageIDs map[string]struct{}
-	runIDs     map[string]struct{}
-	turnIDs    map[string]struct{}
-	stepIDs    map[string]struct{}
-	toolIDs    map[string]struct{}
+	entryIDs                map[string]struct{}
+	messageIDs              map[string]struct{}
+	runIDs                  map[string]struct{}
+	turnIDs                 map[string]struct{}
+	stepIDs                 map[string]struct{}
+	toolIDs                 map[string]struct{}
+	requestIDs              map[string]struct{}
+	requestSteps            map[string]struct{}
+	contextAttachments      map[string]ContextAttachment
+	activeCompactionEntryID string
 
 	tools        map[string]*reducedToolState
 	pendingTools []string
@@ -62,28 +66,35 @@ type sessionReducer struct {
 
 func newSessionReducer(capacity int) *sessionReducer {
 	return &sessionReducer{
-		entryIDs:   make(map[string]struct{}, capacity),
-		messageIDs: make(map[string]struct{}),
-		runIDs:     make(map[string]struct{}),
-		turnIDs:    make(map[string]struct{}),
-		stepIDs:    make(map[string]struct{}),
-		toolIDs:    make(map[string]struct{}),
-		tools:      make(map[string]*reducedToolState),
+		entryIDs:           make(map[string]struct{}, capacity),
+		messageIDs:         make(map[string]struct{}),
+		runIDs:             make(map[string]struct{}),
+		turnIDs:            make(map[string]struct{}),
+		stepIDs:            make(map[string]struct{}),
+		toolIDs:            make(map[string]struct{}),
+		requestIDs:         make(map[string]struct{}),
+		requestSteps:       make(map[string]struct{}),
+		contextAttachments: make(map[string]ContextAttachment),
+		tools:              make(map[string]*reducedToolState),
 	}
 }
 
 func newStagedSessionReducer(parent *sessionReducer, capacity int) *sessionReducer {
 	return &sessionReducer{
-		parent:       parent,
-		scope:        parent.scope,
-		entryIDs:     make(map[string]struct{}, capacity),
-		messageIDs:   make(map[string]struct{}),
-		runIDs:       make(map[string]struct{}),
-		turnIDs:      make(map[string]struct{}),
-		stepIDs:      make(map[string]struct{}),
-		toolIDs:      make(map[string]struct{}),
-		tools:        make(map[string]*reducedToolState),
-		pendingTools: append([]string(nil), parent.pendingTools...),
+		parent:                  parent,
+		scope:                   parent.scope,
+		entryIDs:                make(map[string]struct{}, capacity),
+		messageIDs:              make(map[string]struct{}),
+		runIDs:                  make(map[string]struct{}),
+		turnIDs:                 make(map[string]struct{}),
+		stepIDs:                 make(map[string]struct{}),
+		toolIDs:                 make(map[string]struct{}),
+		requestIDs:              make(map[string]struct{}),
+		requestSteps:            make(map[string]struct{}),
+		contextAttachments:      make(map[string]ContextAttachment),
+		activeCompactionEntryID: parent.activeCompactionEntryID,
+		tools:                   make(map[string]*reducedToolState),
+		pendingTools:            append([]string(nil), parent.pendingTools...),
 	}
 }
 
@@ -98,6 +109,12 @@ func (r *sessionReducer) commitStage(stage *sessionReducer) {
 	mergeReducerSet(r.turnIDs, stage.turnIDs)
 	mergeReducerSet(r.stepIDs, stage.stepIDs)
 	mergeReducerSet(r.toolIDs, stage.toolIDs)
+	mergeReducerSet(r.requestIDs, stage.requestIDs)
+	mergeReducerSet(r.requestSteps, stage.requestSteps)
+	for id, attachment := range stage.contextAttachments {
+		r.contextAttachments[id] = attachment
+	}
+	r.activeCompactionEntryID = stage.activeCompactionEntryID
 	for id, tool := range stage.tools {
 		r.tools[id] = tool
 	}
@@ -139,6 +156,27 @@ func (r *sessionReducer) hasStepID(id string) bool {
 func (r *sessionReducer) hasToolID(id string) bool {
 	_, exists := r.toolIDs[id]
 	return exists || r.parent != nil && r.parent.hasToolID(id)
+}
+
+func (r *sessionReducer) hasRequestID(id string) bool {
+	_, exists := r.requestIDs[id]
+	return exists || r.parent != nil && r.parent.hasRequestID(id)
+}
+
+func (r *sessionReducer) hasRequestStep(id string) bool {
+	_, exists := r.requestSteps[id]
+	return exists || r.parent != nil && r.parent.hasRequestStep(id)
+}
+
+func (r *sessionReducer) findContextAttachment(id string) (ContextAttachment, bool) {
+	attachment, exists := r.contextAttachments[id]
+	if exists {
+		return attachment, true
+	}
+	if r.parent == nil {
+		return ContextAttachment{}, false
+	}
+	return r.parent.findContextAttachment(id)
 }
 
 func (r *sessionReducer) findTool(id string) (*reducedToolState, bool) {
@@ -230,6 +268,14 @@ func (r *sessionReducer) Apply(index int, entry Entry) (sessionTransition, error
 		if err := r.requireOpenStep(entry); err != nil {
 			return sessionTransition{}, err
 		}
+		if _, exists := r.findContextAttachment(entry.Context.AttachmentID); exists {
+			return sessionTransition{}, fmt.Errorf(
+				"transcript: context entry %s repeats attachment id %s",
+				entry.ID,
+				entry.Context.AttachmentID,
+			)
+		}
+		r.contextAttachments[entry.Context.AttachmentID] = *entry.Context
 		transition.Scope = r.scope
 		return transition, nil
 
@@ -243,6 +289,14 @@ func (r *sessionReducer) Apply(index int, entry Entry) (sessionTransition, error
 				entry.ID,
 				entry.Compaction.FirstKeptEntryID,
 			)
+		}
+		r.activeCompactionEntryID = entry.ID
+		transition.Scope = r.scope
+		return transition, nil
+
+	case RequestHeaderEntry:
+		if err := r.applyRequestHeader(entry); err != nil {
+			return sessionTransition{}, err
 		}
 		transition.Scope = r.scope
 		return transition, nil
@@ -322,6 +376,61 @@ func (r *sessionReducer) applyLifecycle(entry Entry) error {
 		}
 		r.scope.StepID = ""
 	}
+	return nil
+}
+
+func (r *sessionReducer) applyRequestHeader(entry Entry) error {
+	if err := r.requireOpenStep(entry); err != nil {
+		return err
+	}
+	header := *entry.RequestHeader
+	if header.RunID != r.scope.RunID ||
+		header.TurnID != r.scope.TurnID ||
+		header.StepID != r.scope.StepID {
+		return sessionOrderError(
+			entry,
+			"scope %s/%s/%s does not match open step %s/%s/%s",
+			header.RunID,
+			header.TurnID,
+			header.StepID,
+			r.scope.RunID,
+			r.scope.TurnID,
+			r.scope.StepID,
+		)
+	}
+	if r.hasRequestID(header.ProviderRequestID) {
+		return sessionOrderError(
+			entry,
+			"reuses provider request id %s",
+			header.ProviderRequestID,
+		)
+	}
+	if r.hasRequestStep(header.StepID) {
+		return sessionOrderError(
+			entry,
+			"adds a second provider request to step %s",
+			header.StepID,
+		)
+	}
+	if header.ActiveCompactionEntryID != r.activeCompactionEntryID {
+		return sessionOrderError(
+			entry,
+			"compaction boundary %q does not match active boundary %q",
+			header.ActiveCompactionEntryID,
+			r.activeCompactionEntryID,
+		)
+	}
+	for _, reference := range header.Attachments {
+		if _, exists := r.findContextAttachment(reference.AttachmentID); !exists {
+			return sessionOrderError(
+				entry,
+				"references unknown context attachment %s",
+				reference.AttachmentID,
+			)
+		}
+	}
+	r.requestIDs[header.ProviderRequestID] = struct{}{}
+	r.requestSteps[header.StepID] = struct{}{}
 	return nil
 }
 

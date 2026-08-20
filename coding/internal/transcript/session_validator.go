@@ -127,6 +127,11 @@ func SequenceEntries(entries []Entry, firstSeq int64) ([]Entry, error) {
 	sequenced := append([]Entry(nil), entries...)
 	for index := range sequenced {
 		sequenced[index].Seq = firstSeq + int64(index)
+		if sequenced[index].RequestHeader != nil {
+			header := cloneRequestHeader(*sequenced[index].RequestHeader)
+			header.InputSeq = sequenced[index].Seq - 1
+			sequenced[index].RequestHeader = &header
+		}
 	}
 	return sequenced, nil
 }

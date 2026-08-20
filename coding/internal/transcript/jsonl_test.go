@@ -47,8 +47,8 @@ func TestJSONLLoadRejectsLegacyMessagesWithoutRewriting(t *testing.T) {
 	}
 }
 
-func TestJSONLRejectsOlderVersions(t *testing.T) {
-	for _, version := range []int{2, 3, 4, 5} {
+func TestJSONLRejectsUnsupportedVersions(t *testing.T) {
+	for _, version := range []int{2, 3, 4, 5, 6, 8} {
 		t.Run(fmt.Sprintf("version_%d", version), func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "session.jsonl")
 			data := []byte(fmt.Sprintf("{\"type\":\"session\",\"version\":%d}\n", version))
@@ -61,7 +61,35 @@ func TestJSONLRejectsOlderVersions(t *testing.T) {
 				!strings.Contains(err.Error(), fmt.Sprintf("unsupported session version %d", version)) {
 				t.Fatalf("Load() error = %v, want unsupported version %d", err, version)
 			}
+			got, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, data) {
+				t.Fatalf("rejected version %d was rewritten:\n%s", version, got)
+			}
 		})
+	}
+}
+
+func TestJSONLAppendRejectsV6WithoutRewriting(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	data := []byte(`{"type":"session","version":6}` + "\n")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	entry := sequencedForTest(NewMessage(agent.UserMessage("current")))[0]
+	if err := NewJSONL(path).Append(context.Background(), entry); err == nil ||
+		!strings.Contains(err.Error(), "unsupported session version 6") {
+		t.Fatalf("Append() error = %v, want unsupported version 6", err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, data) {
+		t.Fatalf("rejected v6 append rewrote the transcript:\n%s", got)
 	}
 }
 
@@ -182,8 +210,8 @@ func TestJSONLRoundTripsLifecycleTiming(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(data, []byte(`"version":6`)) {
-		t.Fatalf("session header is not v6:\n%s", data)
+	if !bytes.Contains(data, []byte(`"version":7`)) {
+		t.Fatalf("session header is not v7:\n%s", data)
 	}
 	if !bytes.Contains(data, []byte(`"seq":0`)) || !bytes.Contains(data, []byte(`"seq":1`)) {
 		t.Fatalf("session entries have no durable sequence:\n%s", data)

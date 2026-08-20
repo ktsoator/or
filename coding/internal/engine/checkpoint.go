@@ -1,7 +1,9 @@
 package engine
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -49,7 +51,31 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 			},
 		)
 		checkpointStarted := time.Now().UTC()
-		if err := s.persistModelInput(ctx, input.Messages, prepared.Pending, positioned); err != nil {
+		providerInput := prepared.Input
+		requestHeader, checkpointErr := s.buildProviderRequestHeader(
+			model,
+			prepared,
+			options,
+			correlation,
+		)
+		if checkpointErr == nil {
+			checkpointErr = s.persistModelInput(
+				ctx,
+				input.Messages,
+				prepared.Pending,
+				positioned,
+				requestHeader,
+			)
+		}
+		if checkpointErr == nil {
+			providerInput, checkpointErr = s.validateCommittedProviderRequest(
+				model,
+				prepared.Input,
+				options,
+				correlation,
+			)
+		}
+		if checkpointErr != nil {
 			s.recorder.Record(observability.Event{
 				Name: observability.CheckpointFailed, Level: slog.LevelError,
 				SessionID: s.sessionID, RunID: correlation.runID,
@@ -60,7 +86,7 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 				StartedAt: checkpointStarted, Duration: time.Since(checkpointStarted),
 				MessageCount: len(input.Messages), AttachmentCount: len(prepared.Pending),
 			})
-			checkpointErr := fmt.Errorf("coding: persist model request checkpoint: %w", err)
+			checkpointErr = fmt.Errorf("coding: persist model request checkpoint: %w", checkpointErr)
 			s.recordRunPersistenceError(checkpointErr)
 			return nil, checkpointErr
 		}
@@ -83,10 +109,10 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 		_ = s.requestSnapshots.Save(snapshot.NewSnapshot(
 			s.sessionID, correlation.runID, correlation.turnID, correlation.stepID,
 			correlation.requestID,
-			model.Provider, model.ID, prepared.Input,
+			model.Provider, model.ID, providerInput,
 			projectedSnapshotAttachments(prepared.Attachments),
 		))
-		return s.observeProviderStream(ctx, delegate, model, prepared.Input, options, correlation)
+		return s.observeProviderStream(ctx, delegate, model, providerInput, options, correlation)
 	}
 }
 
@@ -359,6 +385,7 @@ func (s *Session) persistModelInput(
 	input []llm.Message,
 	attachments []contextprojection.Attachment,
 	positioned []positionedJournalEntry,
+	requestHeader transcript.Entry,
 ) error {
 	messages := make([]agent.AgentMessage, len(input))
 	for index, message := range input {
@@ -381,8 +408,128 @@ func (s *Session) persistModelInput(
 		messages,
 		contextEntries,
 		positioned,
+		requestHeader,
 	); err != nil {
 		return err
 	}
 	return s.journal.validateModelContext(messages)
+}
+
+func (s *Session) buildProviderRequestHeader(
+	model llm.Model,
+	prepared contextprojection.PreparedStep,
+	options llm.StreamOptions,
+	correlation requestCorrelation,
+) (transcript.Entry, error) {
+	modelContext, err := s.journal.modelContextSnapshot()
+	if err != nil {
+		return transcript.Entry{}, fmt.Errorf("coding: read model-context boundary: %w", err)
+	}
+	capturedOptions, err := transcript.CaptureRequestOptions(
+		model.Protocol,
+		prepared.Input.Tools,
+		options,
+	)
+	if err != nil {
+		return transcript.Entry{}, err
+	}
+	attachments := make([]transcript.RequestAttachment, len(prepared.Attachments))
+	for index, attachment := range prepared.Attachments {
+		attachments[index] = transcript.RequestAttachment{
+			AttachmentID: attachment.ID,
+			MessageIndex: attachment.MessageIndex,
+		}
+	}
+	return transcript.NewRequestHeader(transcript.RequestHeader{
+		ProviderRequestID: correlation.requestID,
+		RunID:             correlation.runID, TurnID: correlation.turnID, StepID: correlation.stepID,
+		Provider: model.Provider, Model: model.ID, Protocol: model.Protocol,
+		ThinkingLevel:           options.Reasoning,
+		SystemPrompt:            prepared.Input.SystemPrompt,
+		Tools:                   prepared.Input.Tools,
+		Options:                 capturedOptions,
+		ActiveCompactionEntryID: modelContext.ActiveCompactionEntryID,
+		Attachments:             attachments,
+	}), nil
+}
+
+func (s *Session) validateCommittedProviderRequest(
+	model llm.Model,
+	input llm.Context,
+	options llm.StreamOptions,
+	correlation requestCorrelation,
+) (llm.Context, error) {
+	reconstructed, err := s.journal.reconstructCommittedProviderRequest(
+		correlation.requestID,
+	)
+	if err != nil {
+		return llm.Context{}, fmt.Errorf("coding: reconstruct committed provider request: %w", err)
+	}
+	header := reconstructed.Header
+	if header.RunID != correlation.runID || header.TurnID != correlation.turnID ||
+		header.StepID != correlation.stepID ||
+		header.ProviderRequestID != correlation.requestID {
+		return llm.Context{}, fmt.Errorf("coding: reconstructed provider request has different lifecycle ids")
+	}
+	if header.Provider != model.Provider || header.Model != model.ID ||
+		header.Protocol != model.Protocol || header.ThinkingLevel != options.Reasoning {
+		return llm.Context{}, fmt.Errorf("coding: reconstructed provider request has different model settings")
+	}
+	if err := validateProviderInputParity(input, reconstructed.Input); err != nil {
+		return llm.Context{}, fmt.Errorf("coding: reconstructed provider input: %w", err)
+	}
+	captured, err := transcript.CaptureRequestOptions(model.Protocol, input.Tools, options)
+	if err != nil {
+		return llm.Context{}, err
+	}
+	expectedOptions, err := json.Marshal(captured)
+	if err != nil {
+		return llm.Context{}, fmt.Errorf("coding: encode provider request options: %w", err)
+	}
+	actualOptions, err := json.Marshal(header.Options)
+	if err != nil {
+		return llm.Context{}, fmt.Errorf("coding: encode reconstructed provider request options: %w", err)
+	}
+	if !bytes.Equal(actualOptions, expectedOptions) {
+		return llm.Context{}, fmt.Errorf("coding: reconstructed provider request has different semantic options")
+	}
+	return reconstructed.Input, nil
+}
+
+func validateProviderInputParity(expected, reconstructed llm.Context) error {
+	if expected.SystemPrompt != reconstructed.SystemPrompt {
+		return fmt.Errorf("system prompt differs")
+	}
+	expectedTools, err := json.Marshal(expected.Tools)
+	if err != nil {
+		return fmt.Errorf("encode expected tools: %w", err)
+	}
+	reconstructedTools, err := json.Marshal(reconstructed.Tools)
+	if err != nil {
+		return fmt.Errorf("encode reconstructed tools: %w", err)
+	}
+	if !bytes.Equal(reconstructedTools, expectedTools) {
+		return fmt.Errorf("tools differ")
+	}
+	if len(expected.Messages) != len(reconstructed.Messages) {
+		return fmt.Errorf(
+			"message count %d, want %d",
+			len(reconstructed.Messages),
+			len(expected.Messages),
+		)
+	}
+	for index := range expected.Messages {
+		expectedMessage, err := llm.MarshalMessage(expected.Messages[index])
+		if err != nil {
+			return fmt.Errorf("encode expected message %d: %w", index, err)
+		}
+		reconstructedMessage, err := llm.MarshalMessage(reconstructed.Messages[index])
+		if err != nil {
+			return fmt.Errorf("encode reconstructed message %d: %w", index, err)
+		}
+		if !bytes.Equal(reconstructedMessage, expectedMessage) {
+			return fmt.Errorf("message %d differs", index)
+		}
+	}
+	return nil
 }

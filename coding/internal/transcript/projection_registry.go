@@ -224,6 +224,10 @@ func cloneProjectionEntry(entry Entry, message agent.AgentMessage) Entry {
 		lifecycle := *entry.Lifecycle
 		clone.Lifecycle = &lifecycle
 	}
+	if entry.RequestHeader != nil {
+		header := cloneRequestHeader(*entry.RequestHeader)
+		clone.RequestHeader = &header
+	}
 	return clone
 }
 

@@ -204,6 +204,44 @@ func (j *sessionJournal) validateModelContext(expected []agent.AgentMessage) err
 	return nil
 }
 
+func (j *sessionJournal) reconstructCommittedProviderRequest(
+	providerRequestID string,
+) (transcript.ProviderRequest, error) {
+	j.mu.RLock()
+	defer j.mu.RUnlock()
+	snapshot, err := j.projections.Snapshot()
+	if err != nil {
+		return transcript.ProviderRequest{}, err
+	}
+	wantSeq := j.validator.NextSeq() - 1
+	if snapshot.AsOfSeq != wantSeq {
+		return transcript.ProviderRequest{}, fmt.Errorf(
+			"coding: projection registry at sequence %d, validator at %d",
+			snapshot.AsOfSeq,
+			wantSeq,
+		)
+	}
+	session, ok := snapshot.Values[transcript.SessionProjectionKey].(*transcript.SessionProjection)
+	if !ok || session == nil {
+		return transcript.ProviderRequest{}, fmt.Errorf(
+			"coding: session projection has type %T",
+			snapshot.Values[transcript.SessionProjectionKey],
+		)
+	}
+	modelContext, ok := snapshot.Values[transcript.ModelContextProjectionKey].(*transcript.ModelContextProjection)
+	if !ok || modelContext == nil {
+		return transcript.ProviderRequest{}, fmt.Errorf(
+			"coding: model-context projection has type %T",
+			snapshot.Values[transcript.ModelContextProjectionKey],
+		)
+	}
+	return transcript.ReconstructCommittedProviderRequest(
+		session,
+		modelContext,
+		providerRequestID,
+	)
+}
+
 func validateModelContextParity(
 	expected []agent.AgentMessage,
 	projected []agent.AgentMessage,

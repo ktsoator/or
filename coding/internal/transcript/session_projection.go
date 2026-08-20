@@ -14,14 +14,15 @@ const SessionProjectionKey = "session"
 // SessionProjection is a deterministic snapshot of one committed transcript
 // prefix. AsOfSeq identifies the last event included in the view.
 type SessionProjection struct {
-	AppliedEntries int
-	AsOfSeq        int64
-	Runs           []ProjectedRun
-	Messages       []ProjectedMessage
-	ToolCalls      []ProjectedToolCall
-	Contexts       []ProjectedContext
-	Compactions    []ProjectedCompaction
-	Open           ProjectedLifecycle
+	AppliedEntries   int
+	AsOfSeq          int64
+	Runs             []ProjectedRun
+	Messages         []ProjectedMessage
+	ToolCalls        []ProjectedToolCall
+	Contexts         []ProjectedContext
+	Compactions      []ProjectedCompaction
+	ProviderRequests []ProjectedProviderRequest
+	Open             ProjectedLifecycle
 }
 
 // ProjectedLifecycle identifies the currently open durable boundaries. An
@@ -131,6 +132,15 @@ type ProjectedCompaction struct {
 	Compaction Compaction
 }
 
+// ProjectedProviderRequest associates one complete durable request definition
+// with its checkpoint sequence and open lifecycle scope.
+type ProjectedProviderRequest struct {
+	EntryID    string
+	EntryIndex int
+	EntrySeq   int64
+	Header     RequestHeader
+}
+
 type sessionProjector struct {
 	projection SessionProjection
 	runIndex   int
@@ -226,6 +236,14 @@ func (p *sessionProjector) apply(event ProjectionEvent) {
 			RunID: event.Scope.RunID, TurnID: event.Scope.TurnID,
 			StepID: event.Scope.StepID, Compaction: compaction,
 		})
+	case RequestHeaderEntry:
+		p.projection.ProviderRequests = append(
+			p.projection.ProviderRequests,
+			ProjectedProviderRequest{
+				EntryID: entry.ID, EntryIndex: index, EntrySeq: entry.Seq,
+				Header: cloneRequestHeader(*entry.RequestHeader),
+			},
+		)
 	}
 	p.projection.AppliedEntries = index + 1
 	p.projection.AsOfSeq = entry.Seq
@@ -411,6 +429,11 @@ func cloneSessionProjection(source SessionProjection) (*SessionProjection, error
 			[]string(nil),
 			compaction.Compaction.ModifiedFiles...,
 		)
+	}
+	clone.ProviderRequests = make([]ProjectedProviderRequest, len(source.ProviderRequests))
+	for index, request := range source.ProviderRequests {
+		clone.ProviderRequests[index] = request
+		clone.ProviderRequests[index].Header = cloneRequestHeader(request.Header)
 	}
 	return &clone, nil
 }

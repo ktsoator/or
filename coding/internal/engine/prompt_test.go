@@ -110,8 +110,8 @@ func TestSessionProjectsBaseContextOutsideStableSystemPrompt(t *testing.T) {
 
 	entries, batches, _ := store.snapshot()
 	entries = withoutLifecycle(entries)
-	if len(entries) != 4 {
-		t.Fatalf("durable entries = %d, want user, two contexts, assistant", len(entries))
+	if len(entries) != 5 {
+		t.Fatalf("durable entries = %d, want user, two contexts, request header, assistant", len(entries))
 	}
 	if entries[1].Type != transcript.ContextEntry || entries[1].Context == nil {
 		t.Fatalf("first durable context = %#v", entries[1])
@@ -126,8 +126,11 @@ func TestSessionProjectsBaseContextOutsideStableSystemPrompt(t *testing.T) {
 		entries[2].Context.Kind != "skill_listing" {
 		t.Fatalf("second durable context = %#v, want skill listing", entries[2])
 	}
-	if got := payloadBatchSizes(batches); !slices.Equal(got, []int{3, 1}) {
-		t.Fatalf("append batch sizes = %v, want [3 1]", got)
+	if entries[3].Type != transcript.RequestHeaderEntry {
+		t.Fatalf("durable request header = %#v", entries[3])
+	}
+	if got := payloadBatchSizes(batches); !slices.Equal(got, []int{4, 1}) {
+		t.Fatalf("append batch sizes = %v, want [4 1]", got)
 	}
 	history := session.History()
 	for _, item := range history {
@@ -363,11 +366,11 @@ func TestBaseContextIsCheckpointedOnceAcrossAppRetry(t *testing.T) {
 	if contextCount != 1 {
 		t.Fatalf("durable context entries = %d, want 1", contextCount)
 	}
-	if len(entries) != 3 {
-		t.Fatalf("durable entries = %d, want user, context, assistant", len(entries))
+	if len(entries) != 5 {
+		t.Fatalf("durable entries = %d, want user, context, two request headers, assistant", len(entries))
 	}
-	if got := payloadBatchSizes(batches); !slices.Equal(got, []int{2, 1}) {
-		t.Fatalf("append batch sizes = %v, want [2 1]", got)
+	if got := payloadBatchSizes(batches); !slices.Equal(got, []int{3, 1, 1}) {
+		t.Fatalf("append batch sizes = %v, want [3 1 1]", got)
 	}
 }
 
