@@ -13,12 +13,12 @@ type Context struct {
 	Tools        []AgentTool
 }
 
-// TurnCtx is passed to the per-turn hooks after a turn's assistant message and
+// StepCtx is passed to the per-step hooks after a step's assistant message and
 // tool results have been appended.
-type TurnCtx struct {
-	// Message is the assistant message that completed the turn.
+type StepCtx struct {
+	// Message is the assistant message that completed the step.
 	Message llm.AssistantMessage
-	// ToolResults are the tool results produced during the turn.
+	// ToolResults are the tool results produced during the step.
 	ToolResults []llm.ToolResultMessage
 	// Context is the current run context.
 	Context Context
@@ -26,9 +26,9 @@ type TurnCtx struct {
 	NewMessages []AgentMessage
 }
 
-// TurnUpdate replaces runtime state before the next turn. Nil fields keep the
+// StepUpdate replaces runtime state before the next step. Nil fields keep the
 // current value.
-type TurnUpdate struct {
+type StepUpdate struct {
 	Context       *Context
 	Model         *llm.Model
 	ThinkingLevel *llm.ModelThinkingLevel
@@ -70,18 +70,18 @@ type AfterToolCallResult struct {
 // zero value of each is "no hook". Given a Model and ConvertToLLM, the zero
 // config is a plain tool loop with no interception.
 type LoopConfig struct {
-	// Model is the model used for turns until PrepareNextTurn replaces it.
+	// Model is the model used for steps until PrepareNextStep replaces it.
 	Model llm.Model
 	// StreamOptions are the per-request options passed to the stream function.
 	StreamOptions llm.StreamOptions
-	// StreamFn reaches a model for one turn. A nil value uses llm.Stream. It
+	// StreamFn reaches a model for one step. A nil value uses llm.Stream. It
 	// exists mainly as a seam for tests and custom transports.
 	StreamFn StreamFn
 	// ConvertToLLM projects the transcript into llm.Message values for one
 	// request. A nil value uses the default, which unwraps FromLLM messages and
 	// drops everything else.
 	ConvertToLLM func([]AgentMessage) []llm.Message
-	// GetAPIKey resolves the API key for the model's provider before each turn,
+	// GetAPIKey resolves the API key for the model's provider before each step,
 	// for short-lived tokens that may expire during a long run. A non-empty
 	// return overrides StreamOptions.APIKey; nil or "" leaves it unchanged.
 	GetAPIKey func(provider string) string
@@ -96,22 +96,22 @@ type LoopConfig struct {
 	// executed result field by field; nil keeps it unchanged.
 	AfterToolCall func(AfterToolCallCtx) *AfterToolCallResult
 
-	// ShouldStopAfterTurn requests a graceful stop after the current turn,
+	// ShouldStopAfterStep requests a graceful stop after the current step,
 	// before another model request starts.
-	ShouldStopAfterTurn func(TurnCtx) bool
+	ShouldStopAfterStep func(StepCtx) bool
 
-	// PrepareNextTurn may replace the model, thinking level, or context for the
-	// next turn. Returning nil keeps the current settings.
-	PrepareNextTurn func(TurnCtx) *TurnUpdate
+	// PrepareNextStep may replace the model, thinking level, or context for the
+	// next step. Returning nil keeps the current settings.
+	PrepareNextStep func(StepCtx) *StepUpdate
 
 	// TransformContext adjusts the transcript before projection. It is the
 	// attachment point for context compaction; phase one ships no default.
 	TransformContext func([]AgentMessage) []AgentMessage
 
-	// GetSteeringMessages is polled after each turn's tool calls finish, to
+	// GetSteeringMessages is polled after each step's tool calls finish, to
 	// inject messages mid-run.
 	GetSteeringMessages func() []AgentMessage
 	// GetFollowUpMessages is polled when the agent would otherwise stop, to
-	// continue it with another turn.
+	// continue it with another step.
 	GetFollowUpMessages func() []AgentMessage
 }

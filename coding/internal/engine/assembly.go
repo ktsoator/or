@@ -102,10 +102,10 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		GetAPIKey:      opts.GetAPIKey,
 		BeforeToolCall: s.toolRuntime.beforeToolCall,
 		AfterToolCall:  s.toolRuntime.afterToolCall,
-		ShouldStopAfterTurn: func(agent.TurnCtx) bool {
+		ShouldStopAfterStep: func(agent.StepCtx) bool {
 			return s.execution.persistenceError() != nil
 		},
-		PrepareNextTurn: s.prepareNextTurn,
+		PrepareNextStep: s.prepareNextStep,
 	}
 	s.agent = agent.New(agentOpts)
 	s.toolRuntime.bindAgent(s.agent)

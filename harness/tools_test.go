@@ -31,7 +31,7 @@ func TestInitialActiveToolsSubset(t *testing.T) {
 
 func TestSetActiveToolsRestrictsAdvertised(t *testing.T) {
 	ctx := context.Background()
-	rec := &recordingStream{turns: [][]llm.Event{textTurn("ok")}}
+	rec := &recordingStream{steps: [][]llm.Event{textStep("ok")}}
 	h, err := harness.New(ctx, harness.Options{
 		Model:    testModel,
 		StreamFn: rec.fn(),

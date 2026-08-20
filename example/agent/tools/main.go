@@ -1,7 +1,7 @@
 // Command tools lets an agent run a typed tool loop for a weather question.
 //
 // Unlike the llm/tools example, this program does not hand-write the loop. The
-// agent streams a turn, executes get_weather when the model asks for it, appends
+// agent streams a step, executes get_weather when the model asks for it, appends
 // the tool result, and keeps going until the model gives a final answer.
 //
 // The API key is read from the provider's environment variable when

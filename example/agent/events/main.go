@@ -59,8 +59,8 @@ func main() {
 
 	unsubscribe := assistant.Subscribe(func(event agent.AgentEvent) {
 		switch event.Type {
-		case agent.TurnStart:
-			fmt.Println("\n--- turn ---")
+		case agent.StepStart:
+			fmt.Println("\n--- step ---")
 		case agent.MessageUpdate:
 			if event.LLMEvent == nil {
 				return

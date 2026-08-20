@@ -11,7 +11,7 @@ import (
 	"github.com/ktsoator/or/llm"
 )
 
-// twoEchoCalls is an assistant turn that calls the echo tool twice.
+// twoEchoCalls is an assistant step that calls the echo tool twice.
 func twoEchoCalls() *llm.AssistantMessage {
 	return &llm.AssistantMessage{
 		StopReason: llm.StopReasonToolUse,
@@ -67,7 +67,7 @@ func TestExecuteToolCallsRunConcurrently(t *testing.T) {
 			return ToolResult{Content: []llm.ToolResultContent{&llm.TextContent{Text: "echoed: " + parsed.Text}}}, nil
 		},
 	}
-	rec := &recorder{turns: [][]llm.Event{
+	rec := &recorder{steps: [][]llm.Event{
 		{done(twoEchoCalls())},
 		{done(textAssistant("done"))},
 	}}
@@ -265,7 +265,7 @@ func TestParallelToolProgressMayInterleaveButTerminalOrderIsStable(t *testing.T)
 func TestExecuteToolCallsSequentialModeDoesNotOverlap(t *testing.T) {
 	var mu sync.Mutex
 	active, maxActive := 0, 0
-	rec := &recorder{turns: [][]llm.Event{
+	rec := &recorder{steps: [][]llm.Event{
 		{done(twoEchoCalls())},
 		{done(textAssistant("done"))},
 	}}
@@ -284,7 +284,7 @@ func TestExecuteToolCallsSequentialModeDoesNotOverlap(t *testing.T) {
 func TestExecuteToolCallsSequentialToolForcesBatch(t *testing.T) {
 	var mu sync.Mutex
 	active, maxActive := 0, 0
-	rec := &recorder{turns: [][]llm.Event{
+	rec := &recorder{steps: [][]llm.Event{
 		{done(twoEchoCalls())},
 		{done(textAssistant("done"))},
 	}}

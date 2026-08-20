@@ -14,7 +14,7 @@ import (
 )
 
 // maxSessionLine caps a single persisted message line, generous enough for long
-// assistant turns while bounding memory on malformed input.
+// assistant messages while bounding memory on malformed input.
 const maxSessionLine = 16 << 20 // 16 MiB
 
 // JSONLSession persists the transcript as JSON Lines — one message per line — in

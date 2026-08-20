@@ -31,7 +31,7 @@ func TestAgentQueueHelpers(t *testing.T) {
 }
 
 func TestAgentReset(t *testing.T) {
-	rec := &recorder{turns: [][]llm.Event{{done(textAssistant("hi"))}}}
+	rec := &recorder{steps: [][]llm.Event{{done(textAssistant("hi"))}}}
 	a := New(Options{Model: testModel, StreamFn: rec.fn()})
 
 	if err := a.Prompt(context.Background(), "hi"); err != nil {

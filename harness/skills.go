@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// Skill is a named set of instructions the harness can inject as a turn. Unlike
+// Skill is a named set of instructions the harness can inject as a user message. Unlike
 // the reference implementation, a Skill is in-memory content rather than a file:
 // loading from disk is left to the caller.
 type Skill struct {
@@ -22,7 +22,7 @@ type Skill struct {
 }
 
 // Skill invokes a registered skill by name: it injects the skill's instructions
-// (plus any additional instructions) as a new user turn and runs it like Prompt.
+// (plus any additional instructions) as a new user message and runs it like Prompt.
 // It returns an error if the skill is unknown, or ErrBusy if a run is already in
 // progress.
 func (h *Harness) Skill(ctx context.Context, name string, additionalInstructions ...string) error {
@@ -60,7 +60,7 @@ func findSkill(skills []Skill, name string) (Skill, bool) {
 	return Skill{}, false
 }
 
-// formatSkillInvocation renders a skill as the user turn that invokes it.
+// formatSkillInvocation renders a skill as the user message that invokes it.
 func formatSkillInvocation(skill Skill, additionalInstructions string) string {
 	block := fmt.Sprintf("<skill name=%q>\n%s\n</skill>", skill.Name, skill.Content)
 	if additionalInstructions != "" {

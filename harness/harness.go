@@ -78,10 +78,10 @@ func New(ctx context.Context, opts Options) (*Harness, error) {
 		StreamFn:      opts.StreamFn,
 		StreamOptions: opts.StreamOptions,
 	}
-	// The builder rebuilds the prompt before each later turn; the first turn is
+	// The builder rebuilds the prompt before each later step; the first step is
 	// seeded in run() just before the loop starts.
 	if h.buildPrompt != nil {
-		agentOpts.PrepareNextTurn = h.prepareNextTurn
+		agentOpts.PrepareNextStep = h.prepareNextStep
 	}
 	if h.compactor != nil {
 		agentOpts.TransformContext = h.transformContext
@@ -92,7 +92,7 @@ func New(ctx context.Context, opts Options) (*Harness, error) {
 }
 
 // transformContext runs the configured Compactor over the transcript before each
-// turn's request. On error it keeps the full transcript so the run proceeds
+// step's request. On error it keeps the full transcript so the run proceeds
 // uncompacted rather than failing.
 func (h *Harness) transformContext(messages []agent.AgentMessage) []agent.AgentMessage {
 	ctx := h.runCtx
@@ -106,30 +106,30 @@ func (h *Harness) transformContext(messages []agent.AgentMessage) []agent.AgentM
 	return compacted
 }
 
-// prepareNextTurn rebuilds the system prompt for the turn that follows the one
+// prepareNextStep rebuilds the system prompt for the step that follows the one
 // just completed, from the live transcript and the agent's current model.
-func (h *Harness) prepareNextTurn(turn agent.TurnCtx) *agent.TurnUpdate {
+func (h *Harness) prepareNextStep(step agent.StepCtx) *agent.StepUpdate {
 	snapshot := h.agent.Snapshot()
-	info := TurnInfo{
+	info := StepInfo{
 		Model:         snapshot.Model,
 		ThinkingLevel: snapshot.ThinkingLevel,
-		Tools:         turn.Context.Tools,
-		Messages:      turn.Context.Messages,
+		Tools:         step.Context.Tools,
+		Messages:      step.Context.Messages,
 		Skills:        h.skillsSnapshot(),
 	}
-	next := turn.Context
+	next := step.Context
 	next.SystemPrompt = h.buildPrompt(info)
-	return &agent.TurnUpdate{Context: &next}
+	return &agent.StepUpdate{Context: &next}
 }
 
-// applyInitialSystemPrompt builds and sets the system prompt for the first turn
-// of a run. Later turns are handled by prepareNextTurn.
+// applyInitialSystemPrompt builds and sets the system prompt for the first step
+// of a run. Later steps are handled by prepareNextStep.
 func (h *Harness) applyInitialSystemPrompt() {
 	if h.buildPrompt == nil {
 		return
 	}
 	snapshot := h.agent.Snapshot()
-	info := TurnInfo{
+	info := StepInfo{
 		Model:         snapshot.Model,
 		ThinkingLevel: snapshot.ThinkingLevel,
 		Tools:         snapshot.Tools,
@@ -187,7 +187,7 @@ func (h *Harness) persistNew(ctx context.Context) error {
 
 // Compact rewrites the transcript to a compacted form using the configured
 // Compactor, making the reduction permanent — unlike the projection-only
-// compaction that runs automatically during a turn, this frees stored history.
+// compaction that runs automatically during a step, this frees stored history.
 // It compacts only when the Compactor decides it is warranted (e.g. over the
 // threshold) and reports whether it did.
 //
@@ -228,7 +228,7 @@ func (h *Harness) Compact(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// Steer queues a message to inject after the current turn's tool calls finish.
+// Steer queues a message to inject after the current step's tool calls finish.
 func (h *Harness) Steer(text string, images ...llm.ImageContent) {
 	h.agent.Steer(agent.UserMessage(text, images...))
 }
@@ -265,7 +265,7 @@ func (h *Harness) SetThinkingLevel(level llm.ModelThinkingLevel) { h.agent.SetTh
 
 // SetSystemPrompt sets the static system prompt for subsequent runs. It has no
 // effect while BuildSystemPrompt is configured, which rebuilds the prompt each
-// turn.
+// step.
 func (h *Harness) SetSystemPrompt(prompt string) { h.agent.SetSystemPrompt(prompt) }
 
 // namesSet builds a lookup set from tool names, returning nil for an empty list

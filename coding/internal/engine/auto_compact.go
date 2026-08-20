@@ -23,17 +23,17 @@ func (s *Session) shouldAutoCompact(usedTokens int64) bool {
 	return usedTokens >= threshold
 }
 
-// prepareNextTurn runs after a tool turn or before queued work continues. It
+// prepareNextStep runs after a tool step or before queued work continues. It
 // installs the compacted projection into both the long-lived Agent and the
 // current loop, so a long single run can reclaim context without restarting.
-func (s *Session) prepareNextTurn(turn agent.TurnCtx) *agent.TurnUpdate {
+func (s *Session) prepareNextStep(step agent.StepCtx) *agent.StepUpdate {
 	if s.execution.persistenceError() != nil {
 		return nil
 	}
-	if len(turn.ToolResults) == 0 && !s.agent.HasQueuedMessages() {
+	if len(step.ToolResults) == 0 && !s.agent.HasQueuedMessages() {
 		return nil
 	}
-	if !s.shouldAutoCompact(usageTokens(turn.Message.Usage)) {
+	if !s.shouldAutoCompact(usageTokens(step.Message.Usage)) {
 		return nil
 	}
 	ctx := s.execution.runContext()
@@ -45,9 +45,9 @@ func (s *Session) prepareNextTurn(turn agent.TurnCtx) *agent.TurnUpdate {
 		return nil
 	}
 
-	next := turn.Context
+	next := step.Context
 	next.Messages = s.agent.Snapshot().Messages
-	return &agent.TurnUpdate{Context: &next}
+	return &agent.StepUpdate{Context: &next}
 }
 
 // autoCompact performs at most one real compaction attempt per run. A history

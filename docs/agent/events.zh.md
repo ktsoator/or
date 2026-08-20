@@ -1,7 +1,7 @@
 # 事件与状态
 
 一次运行在推进时会发出一串事件，agent 把这些事件折叠进一份可随时读取的实时状态。两者
-配合，能让 UI 实时渲染一次运行——流式文本、工具进度、回合边界——而无需轮询。
+配合，能让 UI 实时渲染一次运行——流式文本、工具进度、步骤边界——而无需轮询。
 
 ## 订阅
 
@@ -34,7 +34,7 @@ type AgentEvent struct {
 	Type        AgentEventType
 	Message     AgentMessage         // 生命周期事件指向的消息
 	LLMEvent    *llm.Event           // 底层 llm 事件，在 MessageUpdate 上设置
-	ToolResults []llm.ToolResultMessage // 在 TurnEnd 上设置
+	ToolResults []llm.ToolResultMessage // 在 StepEnd 上设置
 	ToolCallID  string
 	ToolName    string
 	Args        any                  // 校验后的工具参数，在工具事件上
@@ -50,7 +50,7 @@ type AgentEvent struct {
 | 事件 | 含义 | 关键字段 |
 |---|---|---|
 | `AgentStart` / `AgentEnd` | 运行边界 | `AgentEnd.Messages` —— 本次运行追加的全部内容 |
-| `TurnStart` / `TurnEnd` | 一轮 assistant 响应及其工具 | `TurnEnd.ToolResults` |
+| `StepStart` / `StepEnd` | 一次模型响应及其工具批次 | `StepEnd.ToolResults` |
 | `MessageStart` / `MessageUpdate` / `MessageEnd` | 一条消息进入、流式、完成 | `MessageUpdate.LLMEvent` —— 底层 `llm.Event` |
 | `ToolStart` / `ToolUpdate` / `ToolEnd` | 一个工具在执行 | `ToolUpdate.Progress`；`ToolEnd.Result`、`ToolEnd.IsError` |
 
@@ -63,20 +63,20 @@ type AgentEvent struct {
 
 ```
 AgentStart
-  TurnStart
+  StepStart
     MessageStart / MessageEnd        （用户提示）
-    MessageStart / MessageUpdate* / MessageEnd   （assistant 轮次，流式）
-    ToolStart / ToolUpdate* / ToolEnd            （该轮调用的每个工具）
+    MessageStart / MessageUpdate* / MessageEnd   （assistant 响应，流式）
+    ToolStart / ToolUpdate* / ToolEnd            （该步骤调用的每个工具）
     MessageStart / MessageEnd        （每个工具结果）
-  TurnEnd
-  ... 模型继续调用工具时，又一个 TurnStart ...
+  StepEnd
+  ... 模型继续调用工具时，又一个 StepStart ...
 AgentEnd
 ```
 
 每个被接受的工具调用恰好发出一个 `ToolEnd`。在这个终态事件之前可以有零到多个
 `ToolUpdate`，但终态事件之后不会再有进度更新。
 
-一个不调用任何工具、也没有留下引导消息的回合，会在 `TurnEnd` 之后结束运行。
+一个不调用任何工具、也没有留下引导消息的步骤，会在 `StepEnd` 之后结束运行。
 `AgentEnd.Messages` 与无状态 `RunLoop` 返回的切片相同——即本次运行追加进 transcript 的
 全部内容。
 
@@ -94,7 +94,7 @@ type State struct {
 	IsStreaming      bool           // 一次 prompt 或 continuation 正在进行
 	StreamingMessage AgentMessage   // 在途响应，或 nil
 	PendingToolCalls []string       // 当前正在执行的工具调用 id
-	ErrorMessage     string         // 最近一次失败回合的文本
+	ErrorMessage     string         // 最近一次失败步骤的文本
 }
 ```
 
@@ -114,4 +114,4 @@ if state.IsStreaming {
 ## 下一步
 
 - 在[引导与追加](steering.md)里于运行流式进行时注入消息，或在它停止后继续。
-- 在[生命周期钩子](hooks.md)里拦截工具调用、在回合之间切换模型。
+- 在[生命周期钩子](hooks.md)里拦截工具调用、在步骤之间切换模型。

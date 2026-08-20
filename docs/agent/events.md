@@ -2,7 +2,7 @@
 
 A run emits a stream of events as it progresses, and the agent folds those events
 into a live state you can read at any time. Together they let a UI render a run as
-it happens — streaming text, tool progress, and turn boundaries — without polling.
+it happens — streaming text, tool progress, and step boundaries — without polling.
 
 ## Subscribing
 
@@ -37,7 +37,7 @@ type AgentEvent struct {
 	Type        AgentEventType
 	Message     AgentMessage         // the message a lifecycle event refers to
 	LLMEvent    *llm.Event           // underlying llm event, set on MessageUpdate
-	ToolResults []llm.ToolResultMessage // set on TurnEnd
+	ToolResults []llm.ToolResultMessage // set on StepEnd
 	ToolCallID  string
 	ToolName    string
 	Args        any                  // validated tool arguments, on tool events
@@ -53,7 +53,7 @@ Fields are populated according to `Type`; unrelated fields are zero.
 | Event | Meaning | Notable fields |
 |---|---|---|
 | `AgentStart` / `AgentEnd` | run boundaries | `AgentEnd.Messages` — everything the run appended |
-| `TurnStart` / `TurnEnd` | one assistant response and its tools | `TurnEnd.ToolResults` |
+| `StepStart` / `StepEnd` | one model response and its tool batch | `StepEnd.ToolResults` |
 | `MessageStart` / `MessageUpdate` / `MessageEnd` | a message entering, streaming, completing | `MessageUpdate.LLMEvent` — the underlying `llm.Event` |
 | `ToolStart` / `ToolUpdate` / `ToolEnd` | one tool executing | `ToolUpdate.Progress`; `ToolEnd.Result`, `ToolEnd.IsError` |
 
@@ -67,21 +67,21 @@ Events arrive in a predictable order:
 
 ```
 AgentStart
-  TurnStart
+  StepStart
     MessageStart / MessageEnd        (the user prompt)
-    MessageStart / MessageUpdate* / MessageEnd   (the assistant turn, streaming)
-    ToolStart / ToolUpdate* / ToolEnd            (each tool the turn called)
+    MessageStart / MessageUpdate* / MessageEnd   (the assistant response, streaming)
+    ToolStart / ToolUpdate* / ToolEnd            (each tool the step called)
     MessageStart / MessageEnd        (each tool result)
-  TurnEnd
-  ... another TurnStart while the model keeps calling tools ...
+  StepEnd
+  ... another StepStart while the model keeps calling tools ...
 AgentEnd
 ```
 
 Each accepted tool call emits exactly one `ToolEnd`. It may emit zero or more
 `ToolUpdate` events before that terminal event, but never after it.
 
-A turn that calls no tools and leaves no steering messages ends the run after
-`TurnEnd`. `AgentEnd.Messages` is the same slice the stateless `RunLoop` returns —
+A step that calls no tools and leaves no steering messages ends the run after
+`StepEnd`. `AgentEnd.Messages` is the same slice the stateless `RunLoop` returns —
 everything the run appended to the transcript.
 
 ## Reading state
@@ -99,7 +99,7 @@ type State struct {
 	IsStreaming      bool           // a prompt or continuation is in progress
 	StreamingMessage AgentMessage   // the in-flight response, or nil
 	PendingToolCalls []string       // ids of tool calls currently executing
-	ErrorMessage     string         // text of the most recent failed turn
+	ErrorMessage     string         // text of the most recent failed step
 }
 ```
 
@@ -122,5 +122,5 @@ if state.IsStreaming {
 
 - Inject messages while a run is streaming, or continue after it stops, in
   [Steering and follow-ups](steering.md).
-- Intercept tool calls and switch models between turns in
+- Intercept tool calls and switch models between steps in
   [Lifecycle hooks](hooks.md).

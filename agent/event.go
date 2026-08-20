@@ -10,10 +10,10 @@ const (
 	AgentStart AgentEventType = "agent_start"
 	// AgentEnd is the final event of a run; it carries the appended messages.
 	AgentEnd AgentEventType = "agent_end"
-	// TurnStart marks the beginning of one assistant turn.
-	TurnStart AgentEventType = "turn_start"
-	// TurnEnd marks the end of a turn, after its tool calls are executed.
-	TurnEnd AgentEventType = "turn_end"
+	// StepStart marks the beginning of one assistant step.
+	StepStart AgentEventType = "step_start"
+	// StepEnd marks the end of a step, after its tool calls are executed.
+	StepEnd AgentEventType = "step_end"
 	// FollowUpStart marks a queued follow-up becoming the next unit of user
 	// intent in the same run. Steering messages do not emit this event.
 	FollowUpStart AgentEventType = "follow_up_start"
@@ -42,7 +42,7 @@ type AgentEvent struct {
 	Message AgentMessage
 	// LLMEvent is the underlying llm event, set on MessageUpdate.
 	LLMEvent *llm.Event
-	// ToolResults are the tool results produced during a turn, set on TurnEnd.
+	// ToolResults are the tool results produced during a step, set on StepEnd.
 	ToolResults []llm.ToolResultMessage
 
 	// ToolCallID and ToolName identify the tool on tool execution events.

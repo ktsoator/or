@@ -75,7 +75,7 @@ assistant := agent.New(agent.Options{
 })
 ```
 
-The projection runs at the request boundary on every turn, after
+The projection runs at the request boundary on every step, after
 `TransformContext`, so it always sees the current transcript.
 
 ## Persisting a transcript

@@ -58,8 +58,8 @@ type LoopConfig struct {
 
 	BeforeToolCall      func(BeforeToolCallCtx) (block bool, reason string)
 	AfterToolCall       func(AfterToolCallCtx) *AfterToolCallResult
-	ShouldStopAfterTurn func(TurnCtx) bool
-	PrepareNextTurn     func(TurnCtx) *TurnUpdate
+	ShouldStopAfterStep func(StepCtx) bool
+	PrepareNextStep     func(StepCtx) *StepUpdate
 	TransformContext    func([]AgentMessage) []AgentMessage
 
 	GetSteeringMessages func() []AgentMessage
@@ -75,8 +75,8 @@ The hook fields behave exactly as on `agent.Options` — see
 `Agent` backs `Steer` and `FollowUp` with concurrency-safe queues. With `RunLoop`
 you provide the source functions yourself:
 
-- `GetSteeringMessages` is polled after each turn's tool calls finish; return
-  messages to inject before the next turn.
+- `GetSteeringMessages` is polled after each step's tool calls finish; return
+  messages to inject before the next step.
 - `GetFollowUpMessages` is polled when the run would otherwise stop; return
   messages to keep it going.
 

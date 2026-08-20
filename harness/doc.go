@@ -2,23 +2,23 @@
 //
 // Where agent.Agent is a thin wrapper over the run loop, Harness composes the
 // surrounding concerns an application usually needs — transcript persistence,
-// context compaction, and a per-turn system prompt — without forking the loop.
+// context compaction, and a per-step system prompt — without forking the loop.
 // It wraps an agent.Agent and drives the existing LoopConfig hooks, so the core
 // transcript, steering and follow-up queues, and event subscription are reused
 // rather than reimplemented.
 //
 // Each concern is a field on Options; leaving one nil disables it, so the
 // zero-configured Harness behaves like a plain Agent. It implements Session
-// (transcript persistence and resume), a per-turn system-prompt builder, and a
+// (transcript persistence and resume), a per-step system-prompt builder, and a
 // Compactor that shrinks the transcript projected to the model. Automatic
 // compaction is projection-only: the Session and transcript keep the full
 // history. Compact rewrites history permanently for explicit reclamation.
 //
-// A run can be reconfigured between turns via the Set* methods — model, thinking
+// A run can be reconfigured between steps via the Set* methods — model, thinking
 // level, system prompt, the tool registry, and which registered tools are active
 // (advertised to the model). Changes apply from the next run.
 //
 // Skills are named, reusable instruction sets: Skill injects a skill's
-// instructions as a turn, and FormatSkillsForSystemPrompt advertises the
+// instructions as a user message, and FormatSkillsForSystemPrompt advertises the
 // model-invocable skills inside a system prompt.
 package harness

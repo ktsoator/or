@@ -28,7 +28,7 @@ func (a *Agent) Prompt(ctx context.Context, input any) error {
 // messages were appended out of band.
 //
 // The transcript must be non-empty. A provider needs a user or tool result as
-// the latest turn, so when the transcript ends with an assistant message,
+// the latest message, so when the transcript ends with an assistant message,
 // Continue falls back to queued messages: it drains the steering queue first,
 // then the follow-up queue, and runs whatever it finds as the next prompt. It
 // returns an error only when the last message is an assistant and both queues
@@ -161,8 +161,8 @@ func (a *Agent) loopConfigLocked(skipInitialSteering bool) LoopConfig {
 		ToolExecution:       a.toolExecution,
 		BeforeToolCall:      a.beforeToolCall,
 		AfterToolCall:       a.afterToolCall,
-		ShouldStopAfterTurn: a.shouldStopAfterTurn,
-		PrepareNextTurn:     a.prepareNextTurn,
+		ShouldStopAfterStep: a.shouldStopAfterStep,
+		PrepareNextStep:     a.prepareNextStep,
 		GetSteeringMessages: getSteering,
 		GetFollowUpMessages: a.followUp.drain,
 	}
@@ -189,7 +189,7 @@ func toPrompts(input any) ([]AgentMessage, error) {
 	}
 }
 
-// lastAssistantError returns the error text of the run's final assistant turn
+// lastAssistantError returns the error text of the run's final assistant step
 // when it failed or was aborted, or "" otherwise.
 func lastAssistantError(messages []AgentMessage) string {
 	for index := len(messages) - 1; index >= 0; index-- {

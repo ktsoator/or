@@ -89,7 +89,7 @@ type ToolOutcome struct {
 }
 ```
 
-- `Content` is the answer the model reads on the next turn — text and, for
+- `Content` is the answer the model reads on the next step — text and, for
   vision models, images.
 - `Outcome` is the only terminal state. Its `Data` is arbitrary structured data
   attached to `ToolEnd` for logging or UI rendering; the model never sees it.

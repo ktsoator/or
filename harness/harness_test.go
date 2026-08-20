@@ -13,7 +13,7 @@ import (
 
 var testModel = llm.Model{ID: "m", Provider: "p", Protocol: llm.ProtocolOpenAICompletions}
 
-// scriptedStream returns one text assistant turn per call, each ending the run.
+// scriptedStream returns one text assistant step per call, each ending the run.
 func scriptedStream(texts ...string) agent.StreamFn {
 	calls := 0
 	return func(context.Context, llm.Model, llm.Context, llm.StreamOptions) (<-chan llm.Event, error) {
@@ -29,10 +29,10 @@ func scriptedStream(texts ...string) agent.StreamFn {
 	}
 }
 
-// recordingStream returns scripted turns and records the system prompt the model
+// recordingStream returns scripted steps and records the system prompt the model
 // saw on each call.
 type recordingStream struct {
-	turns         [][]llm.Event
+	steps         [][]llm.Event
 	calls         int
 	prompts       []string
 	messageCounts []int
@@ -48,10 +48,10 @@ func (r *recordingStream) fn() agent.StreamFn {
 			names = append(names, tool.Name)
 		}
 		r.toolNames = append(r.toolNames, names)
-		turn := r.turns[r.calls]
+		step := r.steps[r.calls]
 		r.calls++
-		ch := make(chan llm.Event, len(turn))
-		for _, event := range turn {
+		ch := make(chan llm.Event, len(step))
+		for _, event := range step {
 			ch <- event
 		}
 		close(ch)
@@ -59,7 +59,7 @@ func (r *recordingStream) fn() agent.StreamFn {
 	}
 }
 
-func toolCallTurn(id, name string) []llm.Event {
+func toolCallStep(id, name string) []llm.Event {
 	message := &llm.AssistantMessage{
 		StopReason: llm.StopReasonToolUse,
 		Content:    []llm.AssistantContent{&llm.ToolCall{ID: id, Name: name, Arguments: map[string]any{}}},
@@ -67,7 +67,7 @@ func toolCallTurn(id, name string) []llm.Event {
 	return []llm.Event{{Type: llm.EventDone, Message: message}}
 }
 
-func textTurn(text string) []llm.Event {
+func textStep(text string) []llm.Event {
 	message := &llm.AssistantMessage{
 		StopReason: llm.StopReasonStop,
 		Content:    []llm.AssistantContent{&llm.TextContent{Text: text}},
@@ -158,12 +158,12 @@ func TestResumeSeedsFromSession(t *testing.T) {
 
 func TestDynamicSystemPromptReachesModel(t *testing.T) {
 	ctx := context.Background()
-	rec := &recordingStream{turns: [][]llm.Event{textTurn("ok")}}
+	rec := &recordingStream{steps: [][]llm.Event{textStep("ok")}}
 
 	h, err := harness.New(ctx, harness.Options{
 		Model:             testModel,
 		StreamFn:          rec.fn(),
-		BuildSystemPrompt: func(harness.TurnInfo) string { return "dynamic prompt" },
+		BuildSystemPrompt: func(harness.StepInfo) string { return "dynamic prompt" },
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -177,20 +177,20 @@ func TestDynamicSystemPromptReachesModel(t *testing.T) {
 	}
 }
 
-func TestSystemPromptRebuiltEachTurn(t *testing.T) {
+func TestSystemPromptRebuiltEachStep(t *testing.T) {
 	ctx := context.Background()
-	// Turn one calls a tool; turn two ends the run. The builder keys off the
-	// transcript length, so the two turns must see different prompts.
-	rec := &recordingStream{turns: [][]llm.Event{
-		toolCallTurn("call-1", "noop"),
-		textTurn("done"),
+	// Step one calls a tool; step two ends the run. The builder keys off the
+	// transcript length, so the two steps must see different prompts.
+	rec := &recordingStream{steps: [][]llm.Event{
+		toolCallStep("call-1", "noop"),
+		textStep("done"),
 	}}
 
 	h, err := harness.New(ctx, harness.Options{
 		Model:             testModel,
 		StreamFn:          rec.fn(),
 		Tools:             []agent.AgentTool{noopTool()},
-		BuildSystemPrompt: func(info harness.TurnInfo) string { return fmt.Sprintf("msgs=%d", len(info.Messages)) },
+		BuildSystemPrompt: func(info harness.StepInfo) string { return fmt.Sprintf("msgs=%d", len(info.Messages)) },
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -200,10 +200,10 @@ func TestSystemPromptRebuiltEachTurn(t *testing.T) {
 	}
 
 	if len(rec.prompts) != 2 {
-		t.Fatalf("saw %d turns, want 2: %#v", len(rec.prompts), rec.prompts)
+		t.Fatalf("saw %d steps, want 2: %#v", len(rec.prompts), rec.prompts)
 	}
 	if rec.prompts[0] == rec.prompts[1] {
-		t.Fatalf("system prompt not rebuilt between turns: both %q", rec.prompts[0])
+		t.Fatalf("system prompt not rebuilt between steps: both %q", rec.prompts[0])
 	}
 }
 

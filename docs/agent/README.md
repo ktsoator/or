@@ -1,7 +1,7 @@
 # Agent package
 
 `github.com/ktsoator/or/agent` turns a model into an autonomous multi-step actor.
-It runs the tool-call loop — stream a turn, execute the tools the model requests,
+It runs the tool-call loop — stream a step, execute the tools the model requests,
 append the results, and continue until the model stops — on top of the `or/llm`
 package, while leaving history storage and context compaction to the caller.
 
@@ -19,9 +19,9 @@ asks the loop to stop.
 
 Use `agent` when your application needs to:
 
-- Let a model think across multiple turns, call tools, read results, and continue.
+- Let a model work across multiple steps, call tools, read results, and continue.
 - Keep user messages, assistant messages, and tool results in one transcript.
-- Observe progress in real time: text deltas, tool starts/ends, tool updates, and turn boundaries.
+- Observe progress in real time: text deltas, tool starts/ends, tool updates, and step boundaries.
 - Inject steering while a run is active, queue follow-up work, or abort the agent.
 - Control behavior with function hooks, such as blocking a tool call, replacing a result, switching models, or compacting context.
 
@@ -29,7 +29,7 @@ Use [`or/llm`](../llm/README.md) directly when you want to manage a single model
 request yourself. Use
 [`or/harness`](https://pkg.go.dev/github.com/ktsoator/or/harness)
 on top of `agent` when you also want transcript persistence, automatic context
-compaction, per-turn system prompts, or skills.
+compaction, per-step system prompts, or skills.
 
 ## What a run does
 
@@ -131,7 +131,7 @@ library to retain another copy.
 - Stateful transcript and read-only snapshots.
 - Streaming event subscriptions.
 - Mid-run steering, follow-ups, and abort.
-- Tool execution order, progress updates, interception, and turn-level hooks.
+- Tool execution order, progress updates, interception, and step-level hooks.
 - Provider-neutral model switching, reasoning level, and dynamic API keys.
 
 `agent` does not provide:

@@ -68,7 +68,7 @@ func TestQueueEnvelopeDoesNotChangeModelProjection(t *testing.T) {
 }
 
 func TestAgentEventsDistinguishPromptFromQueuedMessage(t *testing.T) {
-	rec := &recorder{turns: [][]llm.Event{{done(textAssistant("ok"))}}}
+	rec := &recorder{steps: [][]llm.Event{{done(textAssistant("ok"))}}}
 	a := New(Options{Model: testModel, StreamFn: rec.fn()})
 	queued := a.Steer(userPrompt("same"))
 	var userHandles []QueueHandle
@@ -158,8 +158,8 @@ func TestAgentCancelQueuedRemovesOnlyItsHandle(t *testing.T) {
 	}
 }
 
-func TestAgentSteeringOneAtATimeSpansTurns(t *testing.T) {
-	rec := &recorder{turns: [][]llm.Event{
+func TestAgentSteeringOneAtATimeSpansSteps(t *testing.T) {
+	rec := &recorder{steps: [][]llm.Event{
 		{done(textAssistant("a1"))},
 		{done(textAssistant("a2"))},
 	}}
@@ -171,12 +171,12 @@ func TestAgentSteeringOneAtATimeSpansTurns(t *testing.T) {
 		t.Fatalf("prompt: %v", err)
 	}
 	if rec.calls != 2 {
-		t.Fatalf("stream calls = %d, want 2 (one steering message injected per turn)", rec.calls)
+		t.Fatalf("stream calls = %d, want 2 (one steering message injected per step)", rec.calls)
 	}
 }
 
 func TestAgentSteeringAllInjectsTogether(t *testing.T) {
-	rec := &recorder{turns: [][]llm.Event{
+	rec := &recorder{steps: [][]llm.Event{
 		{done(textAssistant("a1"))},
 	}}
 	a := New(Options{Model: testModel, StreamFn: rec.fn(), SteeringMode: QueueAll})
@@ -192,7 +192,7 @@ func TestAgentSteeringAllInjectsTogether(t *testing.T) {
 }
 
 func TestAgentDefaultSteeringModeIsOneAtATime(t *testing.T) {
-	rec := &recorder{turns: [][]llm.Event{
+	rec := &recorder{steps: [][]llm.Event{
 		{done(textAssistant("a1"))},
 		{done(textAssistant("a2"))},
 	}}
@@ -204,6 +204,6 @@ func TestAgentDefaultSteeringModeIsOneAtATime(t *testing.T) {
 		t.Fatalf("prompt: %v", err)
 	}
 	if rec.calls != 2 {
-		t.Fatalf("stream calls = %d, want 2 (default one-at-a-time spreads steering over turns)", rec.calls)
+		t.Fatalf("stream calls = %d, want 2 (default one-at-a-time spreads steering over steps)", rec.calls)
 	}
 }

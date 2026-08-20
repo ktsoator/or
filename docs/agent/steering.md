@@ -16,9 +16,9 @@ All of an agent's methods are safe for concurrent use.
 
 ## Steering: inject mid-run
 
-`Steer` queues a message to inject before the run's next turn. The loop drains the
-steering queue after each turn's tool calls finish, so a steering message is seen
-by the model on the following turn — useful for redirecting a long task without
+`Steer` queues a message to inject before the run's next step. The loop drains the
+steering queue after each step's tool calls finish, so a steering message is seen
+by the model on the following step — useful for redirecting a long task without
 restarting it.
 
 ```go
@@ -29,13 +29,13 @@ assistant.Steer(agent.FromLLM(llm.UserText("Stop and show me what you have so fa
 
 `FollowUp` queues a message to process when the agent would otherwise stop. When a
 run reaches the point of ending, the loop drains the follow-up queue and, if it
-finds anything, runs another turn instead of finishing.
+finds anything, runs another step instead of finishing.
 
 ```go
 assistant.FollowUp(agent.FromLLM(llm.UserText("Now write the tests.")))
 ```
 
-The difference is timing: steering interrupts an in-progress run between turns;
+The difference is timing: steering redirects an in-progress run between steps;
 a follow-up extends a run that was about to end.
 
 ## How many drain at once
@@ -49,7 +49,7 @@ returns:
 
 ```go
 assistant := agent.New(agent.Options{
-	SteeringMode: agent.QueueAll,        // inject all pending steering at the next turn
+	SteeringMode: agent.QueueAll,        // inject all pending steering at the next step
 	FollowUpMode: agent.QueueOneAtATime, // process follow-ups one run at a time
 	/* ... */
 })
@@ -60,7 +60,7 @@ assistant := agent.New(agent.Options{
 `Continue` resumes from the current transcript without adding a new message — for
 a retry, or after appending messages out of band.
 
-A provider needs a user or tool result as the latest turn. When the transcript
+A provider needs a user or tool result as the latest message. When the transcript
 ends with an assistant message, `Continue` falls back to the queues: it drains the
 steering queue first, then the follow-up queue, and runs whatever it finds. It
 returns an error only when the last message is an assistant message and both
@@ -74,7 +74,7 @@ if err := assistant.Continue(ctx); err != nil {
 
 ## Aborting
 
-`Abort` cancels the current run, if any. The in-flight turn ends with an aborted
+`Abort` cancels the current run, if any. The in-flight step ends with an aborted
 stop reason, and any tools still pending receive an aborted result so every tool
 call is still answered and the transcript stays valid for a later request.
 

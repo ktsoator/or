@@ -27,11 +27,11 @@ these packages.
 - Stream text, reasoning, tool calls, usage, and errors through typed events.
 - Define tools from Go structs and validate model-generated arguments.
 - Preserve provider metadata needed for multi-turn reasoning and tool use.
-- Switch models between turns without rebuilding conversation history.
+- Switch models between requests without rebuilding conversation history.
 - Add custom model protocols without expanding the shared request API.
 - Run autonomous multi-step tool loops with streaming events, mid-run steering,
-  and per-turn model switching.
-- Layer transcript persistence, context compaction, per-turn system prompts, and
+  and per-step model switching.
+- Layer transcript persistence, context compaction, per-step system prompts, and
   skills on top with the harness.
 
 ## Packages
@@ -40,7 +40,7 @@ these packages.
 |---|---|---|
 | [`or/llm`](docs/llm/README.md) | Available | Unified model access, streaming, tools, reasoning, images, and conversation history |
 | [`or/agent`](docs/agent/README.md) | Available | Stateful agent loop with tools, streaming events, steering, follow-ups, and abort |
-| [`or/harness`](https://pkg.go.dev/github.com/ktsoator/or/harness) | Available | Orchestration over the agent: transcript persistence, context compaction, per-turn system prompt, and skills |
+| [`or/harness`](https://pkg.go.dev/github.com/ktsoator/or/harness) | Available | Orchestration over the agent: transcript persistence, context compaction, per-step system prompt, and skills |
 | [`Or`](coding/README.md) | Product | Coding agent service, React client, and Electron desktop application |
 
 Future packages can build higher-level orchestration on the same foundations

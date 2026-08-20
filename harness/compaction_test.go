@@ -209,7 +209,7 @@ func TestCompactionShrinksProjectionThroughHarness(t *testing.T) {
 		t.Fatalf("seed Append() error = %v", err)
 	}
 
-	rec := &recordingStream{turns: [][]llm.Event{textTurn("ok")}}
+	rec := &recordingStream{steps: [][]llm.Event{textStep("ok")}}
 	compactor := &harness.SummarizingCompactor{
 		Model:     smallWindowModel,
 		Settings:  harness.CompactionSettings{ReserveTokens: 10, KeepRecentTokens: 20},
@@ -229,7 +229,7 @@ func TestCompactionShrinksProjectionThroughHarness(t *testing.T) {
 		t.Fatalf("Prompt() error = %v", err)
 	}
 
-	// Pre-turn transcript was the 4 seed messages plus the new prompt = 5; the
+	// Pre-step transcript was the 4 seed messages plus the new prompt = 5; the
 	// model must have seen fewer than that after compaction.
 	if len(rec.messageCounts) != 1 {
 		t.Fatalf("model ran %d times, want 1", len(rec.messageCounts))

@@ -616,7 +616,7 @@ const en = {
   'queue.removeFollowUp': 'Remove queued follow-up message',
   'queue.remove': 'Remove from queue',
   'delivery.choose': 'Choose how this message is delivered',
-  'delivery.steerHint': 'Apply on the next turn',
+  'delivery.steerHint': 'Apply after current tools finish',
   'delivery.followUpHint': 'Run after this reply',
 
   'model.fallback': 'Model',
@@ -1493,7 +1493,7 @@ const zh: Record<TranslationKey, string> = {
   'queue.removeFollowUp': '删除后续消息',
   'queue.remove': '从队列删除',
   'delivery.choose': '选择发送时机',
-  'delivery.steerHint': '下一轮生效',
+  'delivery.steerHint': '当前工具执行完成后生效',
   'delivery.followUpHint': '当前回复结束后发送',
 
   'model.fallback': '模型',

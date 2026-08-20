@@ -9,16 +9,16 @@ import (
 // harness drives, plus the subsystem hooks. A zero value beyond Model is a plain
 // agent run with no persistence.
 type Options struct {
-	// Model is the model used for turns. Required.
+	// Model is the model used for steps. Required.
 	Model llm.Model
 	// SystemPrompt is the static system prompt, used when BuildSystemPrompt is
 	// nil.
 	SystemPrompt string
-	// BuildSystemPrompt, when set, builds the system prompt before every turn and
+	// BuildSystemPrompt, when set, builds the system prompt before every step and
 	// takes precedence over SystemPrompt. Use it for prompts that depend on the
 	// model or conversation state.
 	BuildSystemPrompt SystemPromptFunc
-	// ThinkingLevel sets the reasoning effort for each turn.
+	// ThinkingLevel sets the reasoning effort for each step.
 	ThinkingLevel llm.ModelThinkingLevel
 	// Tools is the full tool registry. The model is advertised the active subset
 	// (see ActiveTools and SetActiveTools).
@@ -29,15 +29,15 @@ type Options struct {
 	// ToolExecution is the default batch execution mode. Empty means parallel.
 	ToolExecution agent.ExecutionMode
 
-	// StreamOptions are the base per-request options for every turn.
+	// StreamOptions are the base per-request options for every step.
 	StreamOptions llm.StreamOptions
-	// StreamFn reaches a model for one turn. A nil value uses llm.Stream; it
+	// StreamFn reaches a model for one step. A nil value uses llm.Stream; it
 	// exists mainly as a seam for tests and custom transports.
 	StreamFn agent.StreamFn
 	// ConvertToLLM projects the transcript into llm messages for one request. A
 	// nil value uses the agent default.
 	ConvertToLLM func([]agent.AgentMessage) []llm.Message
-	// GetAPIKey resolves the provider API key before each turn, for short-lived
+	// GetAPIKey resolves the provider API key before each step, for short-lived
 	// tokens. A non-empty return overrides StreamOptions.APIKey.
 	GetAPIKey func(provider string) string
 
@@ -49,7 +49,7 @@ type Options struct {
 	// Session persists the transcript and seeds it on construction. A nil Session
 	// disables persistence.
 	Session Session
-	// Compactor shrinks the transcript projected to the model each turn. A nil
+	// Compactor shrinks the transcript projected to the model each step. A nil
 	// Compactor disables compaction.
 	Compactor Compactor
 
