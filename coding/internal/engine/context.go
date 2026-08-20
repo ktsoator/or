@@ -67,7 +67,7 @@ func (s *Session) ContextUsage() ContextUsage {
 		if result.Measured {
 			result.Breakdown = estimateContextBreakdown(
 				state,
-				s.contextProjection.ProjectedAttachments(),
+				s.context.projectedAttachments(),
 				result.UsedTokens,
 			)
 		}
