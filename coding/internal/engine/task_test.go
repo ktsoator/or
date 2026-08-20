@@ -31,7 +31,10 @@ func TestSessionExposesBackgroundTaskLifecycle(t *testing.T) {
 			completed <- event
 		}
 	})
-	info, err := session.tasks.Start(`printf ready; while true; do sleep 1; done`, "Start test server", session.cwd)
+	info, err := session.toolRuntime.startTask(
+		`printf ready; while true; do sleep 1; done`,
+		"Start test server",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +85,7 @@ func TestBackgroundTaskCompletionReachesEventsAndNextModelRequest(t *testing.T) 
 			taskEvents <- event
 		}
 	})
-	info, err := session.tasks.Start(`printf '<ready>'`, "Print readiness", session.cwd)
+	info, err := session.toolRuntime.startTask(`printf '<ready>'`, "Print readiness")
 	if err != nil {
 		t.Fatal(err)
 	}

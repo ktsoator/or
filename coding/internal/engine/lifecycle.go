@@ -90,25 +90,10 @@ func (s *Session) correlateVisibleEvent(event *Event) {
 		return
 	}
 	if event.ToolCallID != "" {
-		if tool, ok := s.toolState(event.ToolCallID); ok {
+		if tool, ok := s.toolRuntime.toolState(event.ToolCallID); ok {
 			event.ProviderRequestID = tool.correlation.requestID
 			return
 		}
 	}
 	event.ProviderRequestID = s.lifecycle.activeRequest().requestID
-}
-
-func (s *Session) beginTool(
-	toolCallID, toolName string,
-	startedAt time.Time,
-) (toolCorrelationState, bool) {
-	return s.lifecycle.beginTool(toolCallID, toolName, startedAt)
-}
-
-func (s *Session) finishTool(toolCallID string) (toolCorrelationState, bool) {
-	return s.lifecycle.finishTool(toolCallID)
-}
-
-func (s *Session) toolState(toolCallID string) (toolCorrelationState, bool) {
-	return s.lifecycle.toolState(toolCallID)
 }

@@ -340,7 +340,7 @@ func executeSkill(t *testing.T, session *Session, name string) string {
 }
 
 func executeSkillResult(session *Session, name string) (agent.ToolResult, error) {
-	tool := session.toolByName[skills.ToolName]
+	tool, _ := session.toolRuntime.lookup(skills.ToolName)
 	raw, _ := json.Marshal(map[string]string{"name": name})
 	return tool.Execute(context.Background(), "test-call", raw, nil)
 }

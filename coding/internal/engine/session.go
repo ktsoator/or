@@ -99,16 +99,8 @@ type Session struct {
 	sessionID        string
 	recorder         observability.Recorder
 	requestSnapshots snapshot.Writer
-	tools            []tools.Tool
-	allTools         []tools.Tool
-	toolByName       map[string]tools.Tool
-	authorizer       *permission.Service
-	tasks            *tools.TaskManager
-
-	taskUnsubscribe func()
-	cwd             string
-
-	context *contextManager
+	context          *contextManager
+	toolRuntime      *toolRuntime
 
 	maxRetries    int
 	contextWindow int64
@@ -168,11 +160,8 @@ func (s *Session) Abort() { s.agent.Abort() }
 // Close is safe to call more than once, and a no-op when the session was built
 // with a caller-supplied tool set.
 func (s *Session) Close() {
-	if s.taskUnsubscribe != nil {
-		s.taskUnsubscribe()
-	}
-	if s.tasks != nil {
-		s.tasks.Shutdown()
+	if s.toolRuntime != nil {
+		s.toolRuntime.close()
 	}
 }
 
@@ -200,5 +189,5 @@ func (s *Session) SetThinkingLevel(level llm.ModelThinkingLevel) {
 // SetPermissionMode changes the permission mode used by subsequent tool calls.
 // Call it only while the session is idle.
 func (s *Session) SetPermissionMode(mode permission.Mode) {
-	s.authorizer.SetMode(mode)
+	s.toolRuntime.setPermissionMode(mode)
 }

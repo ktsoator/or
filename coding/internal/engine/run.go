@@ -35,7 +35,7 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 		return err
 	}
 	s.context.prepareSkillRefresh()
-	s.setSkillToolAvailable(s.context.hasSkills())
+	s.toolRuntime.setSkillAvailable(s.context.hasSkills())
 	s.context.prepareContextRefresh()
 	startedAt := time.Now().UTC()
 	started := s.lifecycle.startRun(

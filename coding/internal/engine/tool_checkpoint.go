@@ -15,14 +15,14 @@ const toolCheckpointBlockedMessage = "tool execution blocked because its dispatc
 
 // checkpointToolCall persists the complete message prefix and one authorized
 // dispatch intent before the tool body can run.
-func (s *Session) checkpointToolCall(call agent.BeforeToolCallCtx) error {
-	if err := s.runPersistenceError(); err != nil {
+func (runtime *toolRuntime) checkpointToolCall(call agent.BeforeToolCallCtx) error {
+	if err := runtime.runPersistenceError(); err != nil {
 		return err
 	}
 	arguments, err := json.Marshal(call.Args)
 	if err != nil {
 		checkpointErr := fmt.Errorf("coding: encode tool call checkpoint: %w", err)
-		s.recordToolCheckpoint(call, time.Now().UTC(), checkpointErr)
+		runtime.recordToolCheckpoint(call, time.Now().UTC(), checkpointErr)
 		return checkpointErr
 	}
 
@@ -32,9 +32,9 @@ func (s *Session) checkpointToolCall(call agent.BeforeToolCallCtx) error {
 		ToolName:   call.ToolCall.Name,
 		Arguments:  arguments,
 	})
-	err = s.journal.persistMessages(
+	err = runtime.journal.persistMessages(
 		call.RunContext,
-		s.agent.Snapshot().Messages,
+		runtime.agent.Snapshot().Messages,
 		nil,
 		nil,
 		entry,
@@ -42,19 +42,19 @@ func (s *Session) checkpointToolCall(call agent.BeforeToolCallCtx) error {
 	if err != nil {
 		err = fmt.Errorf("coding: persist tool call checkpoint: %w", err)
 	}
-	s.recordToolCheckpoint(call, startedAt, err)
+	runtime.recordToolCheckpoint(call, startedAt, err)
 	return err
 }
 
-func (s *Session) recordToolCheckpoint(
+func (runtime *toolRuntime) recordToolCheckpoint(
 	call agent.BeforeToolCallCtx,
 	startedAt time.Time,
 	err error,
 ) {
-	correlation := s.lifecycle.activeRequest()
+	correlation := runtime.lifecycle.activeRequest()
 	event := observability.Event{
 		Name:      observability.CheckpointCompleted,
-		SessionID: s.sessionID, RunID: correlation.runID,
+		SessionID: runtime.sessionID, RunID: correlation.runID,
 		TurnID: correlation.turnID, RequestID: correlation.requestID,
 		StepID:     correlation.stepID,
 		ToolCallID: call.ToolCall.ID, ToolName: call.ToolCall.Name,
@@ -67,5 +67,5 @@ func (s *Session) recordToolCheckpoint(
 		event.Status = "failed"
 		event.ErrorCode = "checkpoint_persist_failed"
 	}
-	s.recorder.Record(event)
+	runtime.recorder.Record(event)
 }
