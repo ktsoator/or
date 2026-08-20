@@ -61,11 +61,18 @@ const skillProtocol = "## Skills\n" +
 	"- When the task matches a listed skill, call the `skill` tool before acting and follow the loaded instructions.\n" +
 	"- Never guess a skill name that was not listed."
 
+const userUpdatesProtocol = "## User updates\n" +
+	"- If the request requires tools, send a brief update before the first tool call that states your understanding and immediate next step.\n" +
+	"- During longer work, send one or two concise sentences after meaningful discoveries or completed milestones, and do not leave the user without an update for more than 60 seconds while actively working.\n" +
+	"- Say what you learned and what you will do next. Before a longer heads-down stretch, explain what you are investigating and report back with the result.\n" +
+	"- Group related work into one update. Do not narrate each tool call or send repetitive status messages.\n" +
+	"- Intermediate updates are not the final answer; keep the final response self-contained."
+
 const responseStyle = "## Response style\n" +
 	"- Never use emojis, pictographs, decorative Unicode symbols, or emoji-style numbered bullets.\n" +
 	"- Use ordinary text and Markdown for structure; responses are rendered as Markdown, so put code and commands in fenced blocks.\n" +
 	"- Reference code as `path:line` so the user can open it.\n" +
-	"- Do not narrate each tool call or restate the code you just wrote."
+	"- Do not restate the code you just wrote."
 
 // BuildSystem assembles the stable system prompt from opts. Dynamic instruction
 // files, environment, and skill listings deliberately do not belong here;
@@ -93,6 +100,7 @@ func BuildSystem(opts SystemOptions) string {
 		workingRules,
 		approvalProtocol,
 		sessionContextProtocol,
+		userUpdatesProtocol,
 	} {
 		b.WriteString("\n\n")
 		b.WriteString(section)

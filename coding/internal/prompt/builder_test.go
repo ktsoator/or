@@ -24,10 +24,28 @@ func TestBuildSystemContainsStableProtocols(t *testing.T) {
 		"`context_update`",
 		"## Skills",
 		"call the `skill` tool",
+		"## User updates",
 		"## Response style",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestBuildSystemKeepsUserUpdatesWithCustomInstructions(t *testing.T) {
+	out := BuildSystem(SystemOptions{Instructions: "Custom instructions."})
+
+	for _, want := range []string{
+		"## User updates",
+		"before the first tool call",
+		"meaningful discoveries or completed milestones",
+		"more than 60 seconds",
+		"Do not narrate each tool call",
+		"keep the final response self-contained",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing user-update rule %q:\n%s", want, out)
 		}
 	}
 }
