@@ -23,7 +23,7 @@ type State struct {
 	// PendingToolCalls holds the ids of tool calls currently executing, in the
 	// order they started.
 	PendingToolCalls []string
-	// ErrorMessage holds the error from the most recent failed turn, if any.
+	// ErrorMessage holds the error from the most recent failed step, if any.
 	ErrorMessage string
 }
 
@@ -39,18 +39,18 @@ type Options struct {
 	ConvertToLLM     func([]AgentMessage) []llm.Message
 	TransformContext func([]AgentMessage) []AgentMessage
 	ToolExecution    ExecutionMode
-	// GetAPIKey resolves the provider API key before each turn, for short-lived
+	// GetAPIKey resolves the provider API key before each step, for short-lived
 	// tokens. A non-empty return overrides the key; nil or "" leaves it unchanged.
 	GetAPIKey func(provider string) string
 	// SteeringMode and FollowUpMode control how many queued messages are injected
 	// at one drain point. The zero value is QueueOneAtATime.
 	SteeringMode QueueMode
 	FollowUpMode QueueMode
-	// StreamFn reaches a model for one turn. A nil value uses llm.Stream. It
+	// StreamFn reaches a model for one step. A nil value uses llm.Stream. It
 	// exists mainly as a seam for tests and custom transports.
 	StreamFn StreamFn
 	// StreamOptions are the base per-request options passed to the stream
-	// function on every turn, for knobs like Temperature, MaxTokens, Headers, the
+	// function on every step, for knobs like Temperature, MaxTokens, Headers, the
 	// OnRequest and OnResponse observers, or the RewriteRequest hook. The agent
 	// sets Reasoning from ThinkingLevel and resolves APIKey via GetAPIKey, so
 	// values in those two fields are ignored here.
@@ -58,8 +58,8 @@ type Options struct {
 
 	BeforeToolCall      func(BeforeToolCallCtx) (block bool, reason string)
 	AfterToolCall       func(AfterToolCallCtx) *AfterToolCallResult
-	ShouldStopAfterTurn func(TurnCtx) bool
-	PrepareNextTurn     func(TurnCtx) *TurnUpdate
+	ShouldStopAfterStep func(StepCtx) bool
+	PrepareNextStep     func(StepCtx) *StepUpdate
 }
 
 // Agent is a stateful wrapper over RunLoop. It owns the transcript, fans events
@@ -89,8 +89,8 @@ type Agent struct {
 	streamOptions       llm.StreamOptions
 	beforeToolCall      func(BeforeToolCallCtx) (bool, string)
 	afterToolCall       func(AfterToolCallCtx) *AfterToolCallResult
-	shouldStopAfterTurn func(TurnCtx) bool
-	prepareNextTurn     func(TurnCtx) *TurnUpdate
+	shouldStopAfterStep func(StepCtx) bool
+	prepareNextStep     func(StepCtx) *StepUpdate
 
 	steering *messageQueue
 	followUp *messageQueue
@@ -115,8 +115,8 @@ func New(opts Options) *Agent {
 		streamOptions:       opts.StreamOptions,
 		beforeToolCall:      opts.BeforeToolCall,
 		afterToolCall:       opts.AfterToolCall,
-		shouldStopAfterTurn: opts.ShouldStopAfterTurn,
-		prepareNextTurn:     opts.PrepareNextTurn,
+		shouldStopAfterStep: opts.ShouldStopAfterStep,
+		prepareNextStep:     opts.PrepareNextStep,
 		steering:            &messageQueue{mode: queueModeOrDefault(opts.SteeringMode)},
 		followUp:            &messageQueue{mode: queueModeOrDefault(opts.FollowUpMode)},
 		listeners:           make(map[int]func(AgentEvent)),

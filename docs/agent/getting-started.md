@@ -34,7 +34,7 @@ built-in protocol at once. See
 
 `agent.New` builds a stateful agent; `Prompt` runs one task to completion and
 appends the result to the agent's transcript. A run is the full tool-call loop,
-not a single model call: the agent streams an assistant turn, executes any tools
+not a single model call: the agent streams an assistant step, executes any tools
 the model requested, appends the results, and continues until the model stops.
 
 ```go
@@ -99,7 +99,7 @@ cancellation — see [Reading the result](#reading-the-result).
 ## What a run produces
 
 A run appends every message it generated to the transcript, in order: the user
-prompt, each assistant turn, and each tool result. `Snapshot` returns a read-only
+prompt, each assistant step, and each tool result. `Snapshot` returns a read-only
 copy of the current state, including the full transcript:
 
 ```go
@@ -126,7 +126,7 @@ the same prompt is safe to send to any model.
 
 ## Reading the result
 
-Errors travel as messages: a failed turn becomes an assistant message with a
+Errors travel as messages: a failed step becomes an assistant message with a
 non-clean stop reason rather than a panic. `Prompt` surfaces that as a Go error,
 and `Snapshot().ErrorMessage` holds the text of the most recent failure.
 
@@ -138,7 +138,7 @@ if err := assistant.Prompt(ctx, "..."); err != nil {
 
 ## Next steps
 
-- Watch a run as it happens — text deltas, tool progress, turn boundaries — in
+- Watch a run as it happens — text deltas, tool progress, step boundaries — in
   [Events and state](events.md).
 - Define richer tools, stream their progress, and control execution order in
   [Tools](tools.md).

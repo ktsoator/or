@@ -1,6 +1,6 @@
 # 配置
 
-agent 有两层设置：描述运行的 agent 级选项（模型、系统提示、工具、推理），以及每一轮
+agent 有两层设置：描述运行的 agent 级选项（模型、系统提示、工具、推理），以及每个步骤
 传给模型的基础 `llm.StreamOptions`，用于请求级配置。
 
 ## 推理与请求选项
@@ -27,12 +27,12 @@ assistant := agent.New(agent.Options{
 
 agent 会用 `ThinkingLevel` 填充 `StreamOptions.Reasoning`、用 `GetAPIKey` 填充
 `StreamOptions.APIKey`，所以你在这两个字段里放的任何值都会被忽略。`StreamOptions` 中的
-其它一切——包括 `OnRequest`、`OnResponse` 和 `RewriteRequest` 钩子——都作用于每一轮。
+其它一切——包括 `OnRequest`、`OnResponse` 和 `RewriteRequest` 钩子——都作用于每个步骤。
 每个选项的作用见 llm 的[配置](../llm/configuration.md)指南。
 
 ## 动态 API 密钥
 
-`GetAPIKey` 在每一轮之前解析 provider 密钥，用于在长运行中可能过期的短时令牌。非空返回
+`GetAPIKey` 在每个步骤之前解析 provider 密钥，用于在长运行中可能过期的短时令牌。非空返回
 覆盖密钥；空返回则交由环境变量决定。
 
 ```go
@@ -43,8 +43,8 @@ GetAPIKey: func(provider string) string {
 
 ## 自定义传输
 
-`StreamFn` 为一轮触达模型，默认是 `llm.Stream`。它主要作为测试与自定义传输的接缝——
-录制的固件、代理，或返回预设轮次的假实现。
+`StreamFn` 为一个步骤触达模型，默认是 `llm.Stream`。它主要作为测试与自定义传输的接缝——
+录制的固件、代理，或返回预设步骤的假实现。
 
 ```go
 StreamFn: func(ctx context.Context, model llm.Model, input llm.Context, opts llm.StreamOptions) (<-chan llm.Event, error) {
@@ -65,8 +65,8 @@ assistant.SetTools([]agent.AgentTool{weatherTool}) // 切片会被拷贝
 assistant.SetToolExecution(agent.ExecutionSequential)
 ```
 
-若要在**单次运行内**切换模型，改用 `PrepareNextTurn`——见
-[生命周期钩子](hooks.md#回合间的模型切换)。
+若要在**单次运行内**切换模型，改用 `PrepareNextStep`——见
+[生命周期钩子](hooks.md#步骤间的模型切换)。
 
 `Reset` 清空 transcript、最近错误和两个队列，同时保留以上全部配置，因此下一次运行会以
 相同设置开始一段全新对话。

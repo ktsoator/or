@@ -10,7 +10,7 @@ import (
 )
 
 func TestAgentPromptAppendsTranscript(t *testing.T) {
-	rec := &recorder{turns: [][]llm.Event{
+	rec := &recorder{steps: [][]llm.Event{
 		{done(textAssistant("one"))},
 		{done(textAssistant("two"))},
 	}}
@@ -39,7 +39,7 @@ func TestAgentPromptAppendsTranscript(t *testing.T) {
 }
 
 func TestAgentSubscribeReceivesEvents(t *testing.T) {
-	rec := &recorder{turns: [][]llm.Event{
+	rec := &recorder{steps: [][]llm.Event{
 		{done(textAssistant("hi"))},
 		{done(textAssistant("again"))},
 	}}
@@ -69,7 +69,7 @@ func TestAgentSubscribeReceivesEvents(t *testing.T) {
 
 func TestAgentPromptToolLoop(t *testing.T) {
 	executed := 0
-	rec := &recorder{turns: [][]llm.Event{
+	rec := &recorder{steps: [][]llm.Event{
 		{done(toolCallAssistant("c1", "echo", map[string]any{"text": "hi"}))},
 		{done(textAssistant("done"))},
 	}}
@@ -118,11 +118,11 @@ func TestAgentPromptRejectedWhileStreaming(t *testing.T) {
 }
 
 func TestAgentSteerInjectsMessage(t *testing.T) {
-	rec := &recorder{turns: [][]llm.Event{{done(textAssistant("ok"))}}}
+	rec := &recorder{steps: [][]llm.Event{{done(textAssistant("ok"))}}}
 	a := New(Options{Model: testModel, StreamFn: rec.fn()})
 
 	// A steering message enqueued before the run is drained at the first poll,
-	// before the first turn.
+	// before the first step.
 	a.Steer(userPrompt("steered"))
 
 	if err := a.Prompt(context.Background(), "hi"); err != nil {
@@ -143,7 +143,7 @@ func TestAgentSteerInjectsMessage(t *testing.T) {
 }
 
 func TestAgentContinueRunsWithoutNewPrompt(t *testing.T) {
-	rec := &recorder{turns: [][]llm.Event{{done(textAssistant("resumed"))}}}
+	rec := &recorder{steps: [][]llm.Event{{done(textAssistant("resumed"))}}}
 	a := New(Options{
 		Model:    testModel,
 		StreamFn: rec.fn(),
@@ -197,7 +197,7 @@ func TestAgentContinueRejectsAssistantLast(t *testing.T) {
 }
 
 func TestAgentContinueDrainsSteeringFromAssistant(t *testing.T) {
-	rec := &recorder{turns: [][]llm.Event{{done(textAssistant("after steer"))}}}
+	rec := &recorder{steps: [][]llm.Event{{done(textAssistant("after steer"))}}}
 	a := New(Options{
 		Model:    testModel,
 		StreamFn: rec.fn(),
@@ -224,7 +224,7 @@ func TestAgentContinueDrainsSteeringFromAssistant(t *testing.T) {
 }
 
 func TestAgentContinueDrainsFollowUpWhenNoSteering(t *testing.T) {
-	rec := &recorder{turns: [][]llm.Event{{done(textAssistant("after follow-up"))}}}
+	rec := &recorder{steps: [][]llm.Event{{done(textAssistant("after follow-up"))}}}
 	a := New(Options{
 		Model:    testModel,
 		StreamFn: rec.fn(),
@@ -251,7 +251,7 @@ func TestAgentContinueDrainsFollowUpWhenNoSteering(t *testing.T) {
 }
 
 func TestAgentContinuePrefersSteeringOverFollowUp(t *testing.T) {
-	rec := &recorder{turns: [][]llm.Event{
+	rec := &recorder{steps: [][]llm.Event{
 		{done(textAssistant("r1"))},
 		{done(textAssistant("r2"))},
 	}}
@@ -280,9 +280,9 @@ func TestAgentContinuePrefersSteeringOverFollowUp(t *testing.T) {
 	}
 }
 
-// streamingTurn emits a start, one text delta, and a done event so the loop
+// streamingStep emits a start, one text delta, and a done event so the loop
 // produces message_start/message_update/message_end for an assistant response.
-func streamingTurn(text string) []llm.Event {
+func streamingStep(text string) []llm.Event {
 	partial := &llm.AssistantMessage{
 		StopReason: llm.StopReasonStop,
 		Content:    []llm.AssistantContent{&llm.TextContent{Text: text}},
@@ -295,13 +295,13 @@ func streamingTurn(text string) []llm.Event {
 }
 
 func TestAgentLiveStateDuringToolCall(t *testing.T) {
-	rec := &recorder{turns: [][]llm.Event{
+	rec := &recorder{steps: [][]llm.Event{
 		{done(toolCallAssistant("c1", "echo", map[string]any{"text": "hi"}))},
 		{done(textAssistant("done"))},
 	}}
 	a := New(Options{Model: testModel, StreamFn: rec.fn(), Tools: []AgentTool{echoTool(nil)}})
 
-	// By the time a tool starts, the assistant turn that requested it has already
+	// By the time a tool starts, the assistant response that requested it has
 	// completed, so its message is visible and the call id is pending.
 	var pendingAtStart []string
 	var messagesAtStart int
@@ -329,7 +329,7 @@ func TestAgentLiveStateDuringToolCall(t *testing.T) {
 }
 
 func TestAgentStreamingMessageVisibleDuringRun(t *testing.T) {
-	rec := &recorder{turns: [][]llm.Event{streamingTurn("hello")}}
+	rec := &recorder{steps: [][]llm.Event{streamingStep("hello")}}
 	a := New(Options{Model: testModel, StreamFn: rec.fn()})
 
 	sawStreaming := false
@@ -351,7 +351,7 @@ func TestAgentStreamingMessageVisibleDuringRun(t *testing.T) {
 }
 
 func TestAgentSettersReconfigureNextRun(t *testing.T) {
-	rec := &recorder{turns: [][]llm.Event{{done(textAssistant("ok"))}}}
+	rec := &recorder{steps: [][]llm.Event{{done(textAssistant("ok"))}}}
 	a := New(Options{Model: testModel, StreamFn: rec.fn()})
 
 	model2 := llm.Model{ID: "m2", Provider: "p2", Protocol: llm.ProtocolAnthropicMessages}
@@ -384,7 +384,7 @@ func TestAgentSettersReconfigureNextRun(t *testing.T) {
 }
 
 func TestAgentSetToolsCopiesSlice(t *testing.T) {
-	rec := &recorder{turns: [][]llm.Event{{done(textAssistant("ok"))}}}
+	rec := &recorder{steps: [][]llm.Event{{done(textAssistant("ok"))}}}
 	a := New(Options{Model: testModel, StreamFn: rec.fn()})
 
 	tools := []AgentTool{echoTool(nil)}

@@ -22,7 +22,7 @@ type QueueHandle struct {
 	id    uint64
 }
 
-// Steer queues a message to inject into the current run before its next turn.
+// Steer queues a message to inject into the current run before its next step.
 func (a *Agent) Steer(message AgentMessage) QueueHandle {
 	return QueueHandle{queue: a.steering, id: a.steering.enqueue(message)}
 }

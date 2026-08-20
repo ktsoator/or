@@ -39,7 +39,7 @@ func (s *Session) observeAgentEvent(
 		s.toolRuntime.beginObservedTool(event.ToolCallID, event.ToolName)
 	case agent.ToolEnd:
 		s.toolRuntime.finishObservedTool(event)
-	case agent.TurnEnd:
+	case agent.StepEnd:
 		completed := decision.stepComplete
 		step := completed.step
 		if step.stepID == "" {

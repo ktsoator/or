@@ -8,7 +8,7 @@ import (
 	"github.com/ktsoator/or/llm"
 )
 
-func TestRunLoopGetAPIKeyOverridesPerTurn(t *testing.T) {
+func TestRunLoopGetAPIKeyOverridesPerStep(t *testing.T) {
 	var seenKey string
 	streamFn := func(_ context.Context, _ llm.Model, _ llm.Context, options llm.StreamOptions) (<-chan llm.Event, error) {
 		seenKey = options.APIKey
@@ -48,7 +48,7 @@ func TestRunLoopPrepareArgumentsRewritesBeforeValidation(t *testing.T) {
 			return ToolResult{Content: []llm.ToolResultContent{&llm.TextContent{Text: "ok"}}}, nil
 		},
 	}
-	rec := &recorder{turns: [][]llm.Event{
+	rec := &recorder{steps: [][]llm.Event{
 		{done(toolCallAssistant("c1", "echo", map[string]any{}))},
 		{done(textAssistant("done"))},
 	}}

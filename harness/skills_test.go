@@ -11,7 +11,7 @@ import (
 
 func TestSkillInvocationInjectsContent(t *testing.T) {
 	ctx := context.Background()
-	rec := &recordingStream{turns: [][]llm.Event{textTurn("ok")}}
+	rec := &recordingStream{steps: [][]llm.Event{textStep("ok")}}
 	h, err := harness.New(ctx, harness.Options{
 		Model:    testModel,
 		StreamFn: rec.fn(),
@@ -27,13 +27,13 @@ func TestSkillInvocationInjectsContent(t *testing.T) {
 		t.Fatalf("Skill() error = %v", err)
 	}
 
-	// The injected user turn carries the skill content and the extra instruction.
+	// The injected user message carries the skill content and the extra instruction.
 	prompt := messageText(t, h.Snapshot().Messages[0])
 	if !strings.Contains(prompt, "Review the diff carefully.") {
-		t.Fatalf("invoked turn missing skill content: %q", prompt)
+		t.Fatalf("invoked message missing skill content: %q", prompt)
 	}
 	if !strings.Contains(prompt, "Focus on error handling.") {
-		t.Fatalf("invoked turn missing additional instructions: %q", prompt)
+		t.Fatalf("invoked message missing additional instructions: %q", prompt)
 	}
 }
 
@@ -69,12 +69,12 @@ func TestFormatSkillsForSystemPrompt(t *testing.T) {
 
 func TestSkillsListedInDynamicPrompt(t *testing.T) {
 	ctx := context.Background()
-	rec := &recordingStream{turns: [][]llm.Event{textTurn("ok")}}
+	rec := &recordingStream{steps: [][]llm.Event{textStep("ok")}}
 	h, err := harness.New(ctx, harness.Options{
 		Model:    testModel,
 		StreamFn: rec.fn(),
 		Skills:   []harness.Skill{{Name: "review", Description: "review code"}},
-		BuildSystemPrompt: func(info harness.TurnInfo) string {
+		BuildSystemPrompt: func(info harness.StepInfo) string {
 			return "Base.\n\n" + harness.FormatSkillsForSystemPrompt(info.Skills)
 		},
 	})

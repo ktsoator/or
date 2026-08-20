@@ -16,8 +16,9 @@ agent 的所有方法都可安全并发使用。
 
 ## 引导：运行中注入
 
-`Steer` 把一条消息排队，在运行的下一轮之前注入。循环在每一轮工具调用结束后排空引导队列，
-所以一条引导消息会在紧接的下一轮被模型看到——用于在不重启的情况下重新引导一个长任务。
+`Steer` 把一条消息排队，在运行的下一步骤之前注入。循环在每个步骤的工具调用结束后排空
+引导队列，所以一条引导消息会在紧接的下一步骤被模型看到——用于在不重启的情况下重新引导
+一个长任务。
 
 ```go
 assistant.Steer(agent.FromLLM(llm.UserText("Stop and show me what you have so far.")))
@@ -26,13 +27,13 @@ assistant.Steer(agent.FromLLM(llm.UserText("Stop and show me what you have so fa
 ## 追加：越过停止点继续
 
 `FollowUp` 把一条消息排队，在 agent 本应停止时处理。当一次运行到达结束点时，循环会排空
-追加队列；若发现内容，就再跑一轮而不是结束。
+追加队列；若发现内容，就再跑一个步骤而不是结束。
 
 ```go
 assistant.FollowUp(agent.FromLLM(llm.UserText("Now write the tests.")))
 ```
 
-区别在时机：引导在回合之间打断一次进行中的运行；追加则延长一次本将结束的运行。
+区别在时机：引导在步骤之间调整一次进行中的运行；追加则延长一次本将结束的运行。
 
 ## 单次排空的数量
 
@@ -43,7 +44,7 @@ assistant.FollowUp(agent.FromLLM(llm.UserText("Now write the tests.")))
 
 ```go
 assistant := agent.New(agent.Options{
-	SteeringMode: agent.QueueAll,        // 下一轮注入全部待处理引导
+	SteeringMode: agent.QueueAll,        // 下一步骤注入全部待处理引导
 	FollowUpMode: agent.QueueOneAtATime, // 追加每次运行处理一条
 	/* ... */
 })
@@ -54,7 +55,7 @@ assistant := agent.New(agent.Options{
 `Continue` 在不添加新消息的情况下，从当前 transcript 恢复——用于重试，或在带外追加消息
 之后。
 
-provider 需要最新一轮是用户或工具结果。当 transcript 以 assistant 消息结尾时，`Continue`
+provider 需要最后一条消息是用户或工具结果。当 transcript 以 assistant 消息结尾时，`Continue`
 会回退到队列：先排空引导队列，再排空追加队列，并运行找到的内容。只有当最后一条是 assistant
 消息且两个队列都为空时，它才返回错误。
 
@@ -66,7 +67,7 @@ if err := assistant.Continue(ctx); err != nil {
 
 ## 中止
 
-`Abort` 取消当前运行（如果有）。在途的一轮以中止停止原因结束，仍在等待的工具会收到一个
+`Abort` 取消当前运行（如果有）。在途的步骤以中止停止原因结束，仍在等待的工具会收到一个
 中止结果，从而每个工具调用都仍被回应、transcript 对后续请求仍然有效。
 
 ```go

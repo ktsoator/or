@@ -54,8 +54,8 @@ type LoopConfig struct {
 
 	BeforeToolCall      func(BeforeToolCallCtx) (block bool, reason string)
 	AfterToolCall       func(AfterToolCallCtx) *AfterToolCallResult
-	ShouldStopAfterTurn func(TurnCtx) bool
-	PrepareNextTurn     func(TurnCtx) *TurnUpdate
+	ShouldStopAfterStep func(StepCtx) bool
+	PrepareNextStep     func(StepCtx) *StepUpdate
 	TransformContext    func([]AgentMessage) []AgentMessage
 
 	GetSteeringMessages func() []AgentMessage
@@ -71,7 +71,7 @@ type LoopConfig struct {
 `Agent` 用并发安全的队列支撑 `Steer` 和 `FollowUp`。用 `RunLoop` 时，你自己提供来源
 函数：
 
-- `GetSteeringMessages` 在每一轮工具调用结束后被轮询；返回要在下一轮之前注入的消息。
+- `GetSteeringMessages` 在每个步骤的工具调用结束后被轮询；返回要在下一步骤之前注入的消息。
 - `GetFollowUpMessages` 在运行本应停止时被轮询；返回消息以让它继续。
 
 ```go

@@ -7,7 +7,7 @@ import (
 	"github.com/ktsoator/or/llm"
 )
 
-// StreamFn reaches a model for one turn. It has the same shape as llm.Stream,
+// StreamFn reaches a model for one step. It has the same shape as llm.Stream,
 // which is the default when LoopConfig.StreamFn is nil.
 //
 // Like llm.Stream, it must not fail by panicking: a setup failure is returned as
@@ -19,8 +19,8 @@ type StreamFn func(ctx context.Context, model llm.Model, input llm.Context, opti
 // final AgentEnd event carries the messages the run appended to the transcript.
 //
 // prompts are the new messages that start the run; base is the existing context
-// they extend. The loop streams an assistant turn, executes any tool calls,
-// appends results, then consults PrepareNextTurn and ShouldStopAfterTurn before
+// they extend. The loop streams an assistant step, executes any tool calls,
+// appends results, then consults PrepareNextStep and ShouldStopAfterStep before
 // continuing. When no tool calls and no steering messages remain, it polls
 // GetFollowUpMessages; if none arrive, the run ends.
 //
@@ -52,7 +52,7 @@ func RunLoop(ctx context.Context, prompts []AgentMessage, base Context, cfg Loop
 }
 
 // engine holds the mutable state of one RunLoop invocation. cfg changes across
-// turns when PrepareNextTurn replaces the model or thinking level.
+// steps when PrepareNextStep replaces the model or thinking level.
 type engine struct {
 	ctx      context.Context
 	cfg      LoopConfig
@@ -67,13 +67,13 @@ func (e *engine) run(prompts []AgentMessage, base Context) {
 	current.Messages = append(append([]AgentMessage(nil), base.Messages...), prompts...)
 
 	e.emit(AgentEvent{Type: AgentStart})
-	e.emit(AgentEvent{Type: TurnStart})
+	e.emit(AgentEvent{Type: StepStart})
 	for _, prompt := range prompts {
 		e.emit(AgentEvent{Type: MessageStart, Message: prompt})
 		e.emit(AgentEvent{Type: MessageEnd, Message: prompt})
 	}
 
-	firstTurn := true
+	firstStep := true
 	var pending []AgentMessage
 	if e.cfg.GetSteeringMessages != nil {
 		pending = e.cfg.GetSteeringMessages()
@@ -83,10 +83,10 @@ func (e *engine) run(prompts []AgentMessage, base Context) {
 		hasMoreToolCalls := true
 
 		for hasMoreToolCalls || len(pending) > 0 {
-			if firstTurn {
-				firstTurn = false
+			if firstStep {
+				firstStep = false
 			} else {
-				e.emit(AgentEvent{Type: TurnStart})
+				e.emit(AgentEvent{Type: StepStart})
 			}
 
 			for _, message := range pending {
@@ -103,7 +103,7 @@ func (e *engine) run(prompts []AgentMessage, base Context) {
 			newMessages = append(newMessages, assistant)
 
 			if message.StopReason == llm.StopReasonError || message.StopReason == llm.StopReasonAborted {
-				e.emit(AgentEvent{Type: TurnEnd, Message: assistant})
+				e.emit(AgentEvent{Type: StepEnd, Message: assistant})
 				e.emit(AgentEvent{Type: AgentEnd, Messages: newMessages})
 				return
 			}
@@ -121,16 +121,16 @@ func (e *engine) run(prompts []AgentMessage, base Context) {
 				}
 			}
 
-			e.emit(AgentEvent{Type: TurnEnd, Message: FromLLM(&message), ToolResults: toolResults})
+			e.emit(AgentEvent{Type: StepEnd, Message: FromLLM(&message), ToolResults: toolResults})
 
-			turn := TurnCtx{
+			step := StepCtx{
 				Message:     message,
 				ToolResults: toolResults,
 				Context:     current,
 				NewMessages: newMessages,
 			}
-			if e.cfg.PrepareNextTurn != nil {
-				if update := e.cfg.PrepareNextTurn(turn); update != nil {
+			if e.cfg.PrepareNextStep != nil {
+				if update := e.cfg.PrepareNextStep(step); update != nil {
 					if update.Context != nil {
 						current = *update.Context
 					}
@@ -143,7 +143,7 @@ func (e *engine) run(prompts []AgentMessage, base Context) {
 				}
 			}
 
-			if e.cfg.ShouldStopAfterTurn != nil && e.cfg.ShouldStopAfterTurn(TurnCtx{
+			if e.cfg.ShouldStopAfterStep != nil && e.cfg.ShouldStopAfterStep(StepCtx{
 				Message:     message,
 				ToolResults: toolResults,
 				Context:     current,
@@ -252,7 +252,7 @@ func (e *engine) emitErrorMessage(text string) llm.AssistantMessage {
 
 // recoverPanic turns a panic on the loop goroutine — from the engine itself or
 // from a caller-supplied hook like ConvertToLLM, TransformContext,
-// PrepareNextTurn, ShouldStopAfterTurn, or the tool-call hooks — into a terminal
+// PrepareNextStep, ShouldStopAfterStep, or the tool-call hooks — into a terminal
 // error event, so a misbehaving callback ends the run cleanly instead of
 // crashing the process. Tool execution panics are handled closer to the tool in
 // executePrepared, since those may run on their own goroutines.

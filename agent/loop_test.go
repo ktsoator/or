@@ -17,10 +17,10 @@ type echoArgs struct {
 	Text string `json:"text"`
 }
 
-// recorder is a scripted StreamFn that returns one prepared turn per call and
+// recorder is a scripted StreamFn that returns one prepared step per call and
 // records the model and input it was given.
 type recorder struct {
-	turns  [][]llm.Event
+	steps  [][]llm.Event
 	calls  int
 	models []llm.Model
 	inputs []llm.Context
@@ -30,10 +30,10 @@ func (r *recorder) fn() StreamFn {
 	return func(_ context.Context, model llm.Model, input llm.Context, _ llm.StreamOptions) (<-chan llm.Event, error) {
 		r.models = append(r.models, model)
 		r.inputs = append(r.inputs, input)
-		turn := r.turns[r.calls]
+		step := r.steps[r.calls]
 		r.calls++
-		ch := make(chan llm.Event, len(turn))
-		for _, event := range turn {
+		ch := make(chan llm.Event, len(step))
+		for _, event := range step {
 			ch <- event
 		}
 		close(ch)
@@ -144,16 +144,16 @@ func echoTool(execute func()) AgentTool {
 // --- tests ----------------------------------------------------------------
 
 func TestRunLoopTextResponse(t *testing.T) {
-	rec := &recorder{turns: [][]llm.Event{{done(textAssistant("hello"))}}}
+	rec := &recorder{steps: [][]llm.Event{{done(textAssistant("hello"))}}}
 	cfg := LoopConfig{Model: testModel, StreamFn: rec.fn()}
 
 	events := collect(RunLoop(context.Background(), []AgentMessage{userPrompt("hi")}, Context{}, cfg))
 
 	want := []AgentEventType{
-		AgentStart, TurnStart,
+		AgentStart, StepStart,
 		MessageStart, MessageEnd, // prompt
 		MessageStart, MessageEnd, // assistant
-		TurnEnd, AgentEnd,
+		StepEnd, AgentEnd,
 	}
 	if got := eventTypes(events); !equalTypes(got, want) {
 		t.Fatalf("event sequence:\n got %v\nwant %v", got, want)
@@ -173,7 +173,7 @@ func TestRunLoopTextResponse(t *testing.T) {
 
 func TestRunLoopToolCallThenText(t *testing.T) {
 	executed := 0
-	rec := &recorder{turns: [][]llm.Event{
+	rec := &recorder{steps: [][]llm.Event{
 		{done(toolCallAssistant("c1", "echo", map[string]any{"text": "hi"}))},
 		{done(textAssistant("done"))},
 	}}
@@ -194,18 +194,18 @@ func TestRunLoopToolCallThenText(t *testing.T) {
 	if len(rec.inputs) != 2 {
 		t.Fatalf("recorded inputs = %d, want 2", len(rec.inputs))
 	}
-	secondTurn := rec.inputs[1].Messages
-	if len(secondTurn) != 3 {
-		t.Fatalf("second-turn history = %d messages, want 3 (user, assistant tool call, tool result)", len(secondTurn))
+	secondStep := rec.inputs[1].Messages
+	if len(secondStep) != 3 {
+		t.Fatalf("second-step history = %d messages, want 3 (user, assistant tool call, tool result)", len(secondStep))
 	}
-	if _, ok := secondTurn[0].(*llm.UserMessage); !ok {
-		t.Fatalf("second-turn message 0 = %T, want *llm.UserMessage", secondTurn[0])
+	if _, ok := secondStep[0].(*llm.UserMessage); !ok {
+		t.Fatalf("second-step message 0 = %T, want *llm.UserMessage", secondStep[0])
 	}
-	if _, ok := secondTurn[1].(*llm.AssistantMessage); !ok {
-		t.Fatalf("second-turn message 1 = %T, want *llm.AssistantMessage", secondTurn[1])
+	if _, ok := secondStep[1].(*llm.AssistantMessage); !ok {
+		t.Fatalf("second-step message 1 = %T, want *llm.AssistantMessage", secondStep[1])
 	}
-	if _, ok := secondTurn[2].(*llm.ToolResultMessage); !ok {
-		t.Fatalf("second-turn message 2 = %T, want *llm.ToolResultMessage", secondTurn[2])
+	if _, ok := secondStep[2].(*llm.ToolResultMessage); !ok {
+		t.Fatalf("second-step message 2 = %T, want *llm.ToolResultMessage", secondStep[2])
 	}
 	if !hasType(events, ToolStart) || !hasType(events, ToolEnd) {
 		t.Fatal("missing tool execution events")
@@ -229,7 +229,7 @@ func TestRunLoopBeforeToolCallBlocks(t *testing.T) {
 	type contextKey struct{}
 	runContext := context.WithValue(context.Background(), contextKey{}, "run")
 	var hookContext context.Context
-	rec := &recorder{turns: [][]llm.Event{
+	rec := &recorder{steps: [][]llm.Event{
 		{done(toolCallAssistant("c1", "echo", map[string]any{"text": "hi"}))},
 		{done(textAssistant("ok"))},
 	}}
@@ -261,7 +261,7 @@ func TestRunLoopBeforeToolCallBlocks(t *testing.T) {
 }
 
 func TestRunLoopAfterToolCallOverridesAndTerminates(t *testing.T) {
-	rec := &recorder{turns: [][]llm.Event{
+	rec := &recorder{steps: [][]llm.Event{
 		{done(toolCallAssistant("c1", "echo", map[string]any{"text": "hi"}))},
 	}}
 	cfg := LoopConfig{
@@ -288,7 +288,7 @@ func TestRunLoopAfterToolCallOverridesAndTerminates(t *testing.T) {
 }
 
 func TestRunLoopToolTerminateStopsLoop(t *testing.T) {
-	rec := &recorder{turns: [][]llm.Event{
+	rec := &recorder{steps: [][]llm.Event{
 		{done(toolCallAssistant("c1", "stop", nil))},
 	}}
 	stopTool := AgentTool{
@@ -312,7 +312,7 @@ func TestRunLoopToolTerminateStopsLoop(t *testing.T) {
 
 func TestRunLoopErrorStopReasonEndsRun(t *testing.T) {
 	failed := &llm.AssistantMessage{StopReason: llm.StopReasonError, ErrorMessage: "boom"}
-	rec := &recorder{turns: [][]llm.Event{
+	rec := &recorder{steps: [][]llm.Event{
 		{{Type: llm.EventError, Message: failed}},
 		{done(textAssistant("unreached"))},
 	}}
@@ -328,17 +328,17 @@ func TestRunLoopErrorStopReasonEndsRun(t *testing.T) {
 	}
 }
 
-func TestRunLoopPrepareNextTurnSwitchesModel(t *testing.T) {
+func TestRunLoopPrepareNextStepSwitchesModel(t *testing.T) {
 	second := llm.Model{ID: "m2", Provider: "p2", Protocol: llm.ProtocolAnthropicMessages}
-	rec := &recorder{turns: [][]llm.Event{
+	rec := &recorder{steps: [][]llm.Event{
 		{done(toolCallAssistant("c1", "echo", map[string]any{"text": "hi"}))},
 		{done(textAssistant("done"))},
 	}}
 	cfg := LoopConfig{
 		Model:    testModel,
 		StreamFn: rec.fn(),
-		PrepareNextTurn: func(TurnCtx) *TurnUpdate {
-			return &TurnUpdate{Model: &second}
+		PrepareNextStep: func(StepCtx) *StepUpdate {
+			return &StepUpdate{Model: &second}
 		},
 	}
 	base := Context{Tools: []AgentTool{echoTool(nil)}}
@@ -354,7 +354,7 @@ func TestRunLoopPrepareNextTurnSwitchesModel(t *testing.T) {
 }
 
 func TestRunLoopFollowUpContinuesRun(t *testing.T) {
-	rec := &recorder{turns: [][]llm.Event{
+	rec := &recorder{steps: [][]llm.Event{
 		{done(textAssistant("first"))},
 		{done(textAssistant("second"))},
 	}}
@@ -379,7 +379,7 @@ func TestRunLoopFollowUpContinuesRun(t *testing.T) {
 	types := eventTypes(events)
 	followUpIndex := slices.Index(types, FollowUpStart)
 	if followUpIndex < 1 || followUpIndex+1 >= len(types) ||
-		types[followUpIndex-1] != TurnEnd || types[followUpIndex+1] != TurnStart {
+		types[followUpIndex-1] != StepEnd || types[followUpIndex+1] != StepStart {
 		t.Fatalf("follow-up boundary sequence = %v", types)
 	}
 	messages := agentEndMessages(t, events)
@@ -426,11 +426,11 @@ func TestToLLMUnwrapsAdaptedMessages(t *testing.T) {
 }
 
 func TestRunLoopRecoversFromCallbackPanic(t *testing.T) {
-	rec := &recorder{turns: [][]llm.Event{{done(textAssistant("hi"))}}}
+	rec := &recorder{steps: [][]llm.Event{{done(textAssistant("hi"))}}}
 	cfg := LoopConfig{
 		Model:    testModel,
 		StreamFn: rec.fn(),
-		PrepareNextTurn: func(TurnCtx) *TurnUpdate {
+		PrepareNextStep: func(StepCtx) *StepUpdate {
 			panic("boom")
 		},
 	}
@@ -456,7 +456,7 @@ func TestRunLoopRecoversFromToolPanic(t *testing.T) {
 			panic("tool boom")
 		},
 	}
-	rec := &recorder{turns: [][]llm.Event{
+	rec := &recorder{steps: [][]llm.Event{
 		{done(toolCallAssistant("c1", "echo", map[string]any{"text": "x"}))},
 		{done(textAssistant("recovered"))},
 	}}
@@ -490,7 +490,7 @@ func TestRunLoopSequentialAbortSkipsRemainingTools(t *testing.T) {
 			return ToolResult{Content: []llm.ToolResultContent{&llm.TextContent{Text: "ok"}}}, nil
 		},
 	}
-	rec := &recorder{turns: [][]llm.Event{
+	rec := &recorder{steps: [][]llm.Event{
 		{done(twoEchoCalls())}, // tool calls "a" then "b"
 		{{Type: llm.EventError, Message: &llm.AssistantMessage{StopReason: llm.StopReasonAborted, ErrorMessage: "aborted"}}},
 	}}

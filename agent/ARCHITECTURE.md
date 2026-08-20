@@ -40,9 +40,9 @@ Owns one task's execution mechanics:
 
 - `RunLoop`, the stateless model/tool loop;
 - tool argument validation, execution, progress, and results;
-- ordered run, turn, message, and tool events;
+- ordered run, step, message, and tool events;
 - `Agent`, the optional in-memory transcript and live-state wrapper;
-- steering, follow-up, cancellation, and per-turn hooks.
+- steering, follow-up, cancellation, and per-step hooks.
 
 It must remain free of concrete tools, persistence formats, system prompts,
 permissions, retry policy, and product-specific context.
@@ -55,7 +55,7 @@ agent_run.go      Prompt, Continue, run lifecycle, and loop configuration
 agent_state.go    snapshots, reconfiguration, reset, and event reduction
 queue.go          steering and follow-up queues
 subscription.go   listener registration and event fan-out
-loop.go           stateless turn loop and model streaming
+loop.go           stateless step loop and model streaming
 tools_exec.go     tool preflight, execution, and result finalization
 message.go        transcript message adaptation
 config.go         stateless loop context and hooks
@@ -69,7 +69,7 @@ Owns reusable orchestration that SDK consumers may opt into:
 
 - transcript persistence through caller-provided `Session` interfaces;
 - generic context compaction;
-- per-turn system-prompt construction;
+- per-step system-prompt construction;
 - a generic tool registry and Skills abstraction.
 
 It composes `agent.Agent`; it does not fork or replace the run loop. Product
@@ -97,7 +97,7 @@ Refactors must preserve these behavioral contracts:
 
 1. One `Agent` runs at most one `Prompt` or `Continue` at a time.
 2. A run captures its model, tools, prompt, and hooks before entering `RunLoop`;
-   setters affect the next run unless a turn hook explicitly changes it.
+   setters affect the next run unless a step hook explicitly changes it.
 3. Every model tool call produces exactly one tool-result message, including
    validation failures, blocked calls, panics, cancellation, and timeouts.
 4. Tool batches may execute concurrently, but preflight, terminal events, and

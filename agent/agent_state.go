@@ -31,7 +31,7 @@ func (a *Agent) SetSystemPrompt(prompt string) {
 }
 
 // SetModel replaces the model used on the next run. To switch models within a
-// single run, use PrepareNextTurn instead.
+// single run, use PrepareNextStep instead.
 func (a *Agent) SetModel(model llm.Model) {
 	a.mu.Lock()
 	a.model = model

@@ -23,7 +23,7 @@ func (s *Session) coordinateAgentLifecycle(event agent.AgentEvent) agentLifecycl
 		return agentLifecycleDecision{
 			followUp: s.lifecycle.claimFollowUp(messageIndex, now),
 		}
-	case agent.TurnEnd:
+	case agent.StepEnd:
 		status, errorCode := s.stepStatus(event)
 		return agentLifecycleDecision{
 			stepComplete: s.lifecycle.completeStep(

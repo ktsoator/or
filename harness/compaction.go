@@ -12,12 +12,12 @@ import (
 )
 
 // Compactor shrinks a transcript before it is projected to the model. It runs on
-// every turn via the agent's TransformContext hook and returns the messages to
+// every step via the agent's TransformContext hook and returns the messages to
 // send for that request. It must not mutate its input.
 //
 // Compaction here is projection-only: the harness and Session keep the full
 // transcript, and only what travels to the model is shortened. Returning the
-// input unchanged (the common case below the threshold) disables it for a turn.
+// input unchanged (the common case below the threshold) disables it for a step.
 type Compactor interface {
 	Compact(ctx context.Context, messages []agent.AgentMessage) ([]agent.AgentMessage, error)
 }
@@ -58,7 +58,7 @@ type SummarizingCompactor struct {
 	Summarize SummarizeFunc
 
 	// mu guards the single-entry summary cache, which avoids re-summarizing an
-	// unchanged prefix on every turn while the cut point holds steady.
+	// unchanged prefix on every step while the cut point holds steady.
 	mu            sync.Mutex
 	cachedCut     int
 	cachedSummary string
