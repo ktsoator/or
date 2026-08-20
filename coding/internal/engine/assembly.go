@@ -58,7 +58,6 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		requestSnapshots: snapshot.OrDiscard(opts.RequestSnapshots),
 		context:          contextState,
 		maxRetries:       maxRetries,
-		contextWindow:    opts.Model.ContextWindow,
 		compactor:        opts.Compactor,
 	}
 	toolState, err := newToolRuntime(toolRuntimeOptions{
@@ -75,8 +74,8 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		lifecycle:              &s.lifecycle,
 		recorder:               s.recorder,
 		sessionID:              s.sessionID,
-		runPersistenceError:    s.runPersistenceError,
-		recordPersistenceError: s.recordRunPersistenceError,
+		runPersistenceError:    s.execution.persistenceError,
+		recordPersistenceError: s.execution.recordPersistenceError,
 		systemPrompt:           contextState.systemPrompt,
 		activateSkill:          contextState.activateSkill,
 		stageTaskStatus:        contextState.stageTaskStatus,
@@ -104,7 +103,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		BeforeToolCall: s.toolRuntime.beforeToolCall,
 		AfterToolCall:  s.toolRuntime.afterToolCall,
 		ShouldStopAfterTurn: func(agent.TurnCtx) bool {
-			return s.runPersistenceError() != nil
+			return s.execution.persistenceError() != nil
 		},
 		PrepareNextTurn: s.prepareNextTurn,
 	}

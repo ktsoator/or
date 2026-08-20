@@ -44,10 +44,10 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 	)
 	runID := started.runID
 	turnID := started.turnID
-	s.setRunExecutionState(ctx)
+	s.execution.begin(ctx)
 	defer func() {
 		s.lifecycle.reset()
-		s.clearRunExecutionState()
+		s.execution.end()
 	}()
 	s.dispatchEvent(Event{Type: RunStarted, RunID: runID, StartedAt: startedAt})
 	s.recorder.Record(observability.Event{
@@ -72,18 +72,18 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 	defer unsubscribe()
 
 	runErr := fn(ctx)
-	checkpointErr := s.runPersistenceError()
+	checkpointErr := s.execution.persistenceError()
 	if checkpointErr == nil && runErr != nil && !s.trailingContextOverflow() && s.maxRetries > 0 {
 		runErr = s.withRetry(ctx, runErr)
-		checkpointErr = s.runPersistenceError()
+		checkpointErr = s.execution.persistenceError()
 	}
 	if checkpointErr == nil && s.trailingContextOverflow() {
 		recovered, err := s.recoverContextOverflow(ctx, runErr)
 		runErr = err
-		checkpointErr = s.runPersistenceError()
+		checkpointErr = s.execution.persistenceError()
 		if checkpointErr == nil && recovered && runErr != nil && s.maxRetries > 0 {
 			runErr = s.withRetry(ctx, runErr)
-			checkpointErr = s.runPersistenceError()
+			checkpointErr = s.execution.persistenceError()
 		}
 	}
 	if checkpointErr != nil {

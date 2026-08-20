@@ -81,7 +81,7 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 				MessageCount: len(input.Messages), AttachmentCount: len(prepared.Pending),
 			})
 			checkpointErr = fmt.Errorf("coding: persist model request checkpoint: %w", checkpointErr)
-			s.recordRunPersistenceError(checkpointErr)
+			s.execution.recordPersistenceError(checkpointErr)
 			return nil, checkpointErr
 		}
 		s.lifecycle.commitStepCheckpoint(step.stepID, checkpoint.pendingCount)

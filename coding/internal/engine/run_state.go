@@ -3,7 +3,6 @@ package engine
 import (
 	"context"
 	"sync"
-	"time"
 )
 
 // runExecutionState contains run-scoped mechanics that are not lifecycle
@@ -11,60 +10,62 @@ import (
 type runExecutionState struct {
 	mu sync.RWMutex
 
-	ctx                  context.Context
-	autoCompactAttempted bool
-	persistenceErr       error
+	ctx                context.Context
+	autoCompactClaimed bool
+	persistenceErr     error
 }
 
-func (s *Session) setRunExecutionState(ctx context.Context) {
-	s.execution.mu.Lock()
-	s.execution.ctx = ctx
-	s.execution.autoCompactAttempted = false
-	s.execution.persistenceErr = nil
-	s.execution.mu.Unlock()
+func (state *runExecutionState) begin(ctx context.Context) {
+	state.mu.Lock()
+	state.ctx = ctx
+	state.autoCompactClaimed = false
+	state.persistenceErr = nil
+	state.mu.Unlock()
 }
 
-func (s *Session) clearRunExecutionState() {
-	s.execution.mu.Lock()
-	s.execution.ctx = nil
-	s.execution.autoCompactAttempted = false
-	s.execution.persistenceErr = nil
-	s.execution.mu.Unlock()
+func (state *runExecutionState) end() {
+	state.mu.Lock()
+	state.ctx = nil
+	state.autoCompactClaimed = false
+	state.persistenceErr = nil
+	state.mu.Unlock()
 }
 
-func (s *Session) recordRunPersistenceError(err error) {
+func (state *runExecutionState) recordPersistenceError(err error) {
 	if err == nil {
 		return
 	}
-	s.execution.mu.Lock()
-	if s.execution.persistenceErr == nil {
-		s.execution.persistenceErr = err
+	state.mu.Lock()
+	if state.persistenceErr == nil {
+		state.persistenceErr = err
 	}
-	s.execution.mu.Unlock()
+	state.mu.Unlock()
 }
 
-func (s *Session) runPersistenceError() error {
-	s.execution.mu.RLock()
-	defer s.execution.mu.RUnlock()
-	return s.execution.persistenceErr
+func (state *runExecutionState) persistenceError() error {
+	state.mu.RLock()
+	defer state.mu.RUnlock()
+	return state.persistenceErr
 }
 
-func (s *Session) activeRunState() (context.Context, string, time.Time) {
-	s.execution.mu.RLock()
-	ctx := s.execution.ctx
-	s.execution.mu.RUnlock()
-	runID, startedAt := s.lifecycle.activeRun()
-	return ctx, runID, startedAt
+func (state *runExecutionState) runContext() context.Context {
+	state.mu.RLock()
+	defer state.mu.RUnlock()
+	return state.ctx
 }
 
-func (s *Session) autoCompactionWasAttempted() bool {
-	s.execution.mu.RLock()
-	defer s.execution.mu.RUnlock()
-	return s.execution.autoCompactAttempted
+func (state *runExecutionState) claimAutoCompaction() bool {
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if state.autoCompactClaimed {
+		return false
+	}
+	state.autoCompactClaimed = true
+	return true
 }
 
-func (s *Session) markAutoCompactionAttempted() {
-	s.execution.mu.Lock()
-	s.execution.autoCompactAttempted = true
-	s.execution.mu.Unlock()
+func (state *runExecutionState) releaseAutoCompactionClaim() {
+	state.mu.Lock()
+	state.autoCompactClaimed = false
+	state.mu.Unlock()
 }

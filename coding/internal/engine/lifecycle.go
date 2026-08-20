@@ -39,7 +39,7 @@ func (s *Session) coordinateAgentLifecycle(event agent.AgentEvent) agentLifecycl
 }
 
 func (s *Session) stepStatus(event agent.AgentEvent) (status, errorCode string) {
-	if s.runPersistenceError() != nil {
+	if s.execution.persistenceError() != nil {
 		return "failed", "checkpoint_failed"
 	}
 	message, ok := eventAssistantMessage(event.Message)

@@ -86,7 +86,7 @@ func (s *Session) Entries() []transcript.Entry {
 // History returns a displayable snapshot of the conversation in transcript
 // order. The returned slice is detached from the agent's mutable state.
 func (s *Session) History() []HistoryItem {
-	_, activeRunID, activeStartedAt := s.activeRunState()
+	activeRunID, activeStartedAt := s.lifecycle.activeRun()
 	projection, persistedLen, err := s.journal.projectionSnapshot()
 	if err != nil {
 		// Loaded and engine-produced logs are validated before Session is exposed.
