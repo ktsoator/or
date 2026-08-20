@@ -1,4 +1,4 @@
 export { ConversationActionsMenu } from './ConversationActionsMenu'
 export { ConversationPane } from './ConversationPane'
-export { ConversationView } from './ConversationView'
+export { ConversationView, DraftConversationView } from './ConversationView'
 export { useConversationScroll } from './useScroll'

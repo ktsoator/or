@@ -11,8 +11,8 @@ import {
   LoaderCircle,
   PanelRight,
 } from 'lucide-react'
-import { useSession } from '@/features/session'
-import type { SessionSummary } from '@/types'
+import { useSession, type SessionDraft } from '@/features/session'
+import type { MessageImage, PromptFile, SessionSummary } from '@/types'
 import { cn } from '@/lib/utils'
 import { Composer } from '@/features/composer'
 import { chooseNativeDirectory, revealNativePath } from '@/lib/desktop'
@@ -22,6 +22,7 @@ import {
   useWorkbenchLayout,
   type WorkbenchTaskRequest,
   type WorkbenchTaskSource,
+  type WorkbenchConversation,
 } from '@/features/workbench'
 import { AppSidebar } from './AppSidebar'
 import {
@@ -62,9 +63,21 @@ type BranchPointTarget = {
   messageID: string
 }
 
+type WorkbenchConversationTab =
+  | { id: string; kind: 'draft'; draft: SessionDraft }
+  | { id: string; kind: 'session' }
+
 export default function App() {
   const { t } = useI18n()
-  const [secondarySessionID, setSecondarySessionID] = useState<string>()
+  const [workbenchConversationTabs, setWorkbenchConversationTabs] =
+    useState<WorkbenchConversationTab[]>([])
+  const [activeWorkbenchConversationID, setActiveWorkbenchConversationID] =
+    useState<string>()
+  const [creatingWorkbenchDraftIDs, setCreatingWorkbenchDraftIDs] =
+    useState<ReadonlySet<string>>(() => new Set())
+  const secondarySessionIDs = workbenchConversationTabs.flatMap((conversation) =>
+    conversation.kind === 'session' ? [conversation.id] : [],
+  )
   const [branchPointTarget, setBranchPointTarget] = useState<BranchPointTarget>()
   const [workbenchTaskRequest, setWorkbenchTaskRequest] =
     useState<WorkbenchTaskRequest>()
@@ -98,7 +111,9 @@ export default function App() {
     registerWorkspace,
     removeWorkspace,
     startDraft,
+    createChatDraft,
     createChatSession,
+    draftReady,
     updateDraftWorkspace,
     deleteSession,
     renameSession,
@@ -118,8 +133,8 @@ export default function App() {
     queueBrowserResult,
     handleBrowserTabs,
     handleBrowserInspection,
-    secondaryThread,
-  } = useSession(secondarySessionID)
+    secondaryThreads,
+  } = useSession(secondarySessionIDs)
   const {
     scrollRef: logRef,
     onScroll: trackScrollPosition,
@@ -128,7 +143,6 @@ export default function App() {
     awayFromLatest,
     hasNewContent,
   } = useConversationScroll(activeSessionID, items)
-  const [workbenchCreateError, setWorkbenchCreateError] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<SessionSummary>()
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
@@ -145,6 +159,9 @@ export default function App() {
   const diagnosticsStatesRef = useRef<Record<string, DiagnosticsSessionState>>({})
   const [workspaceOpenError, setWorkspaceOpenError] = useState('')
   const [selectedWorkspacePath, setSelectedWorkspacePath] = useState<string>()
+  const activeSecondaryThread = secondaryThreads.find(
+    (thread) => thread.session.id === activeWorkbenchConversationID,
+  )
   const {
     mobileSessionsOpen,
     collapsed: sidebarCollapsed,
@@ -192,9 +209,9 @@ export default function App() {
     activeDraftID: draft?.id,
     primaryPreviewRevision: preview?.revision,
     primaryPreviewOpen: previewOpen,
-    secondarySessionID: secondaryThread?.session.id,
-    secondaryPreviewRevision: secondaryThread?.preview?.revision,
-    secondaryPreviewOpen: secondaryThread?.previewOpen ?? false,
+    secondarySessionID: activeSecondaryThread?.session.id,
+    secondaryPreviewRevision: activeSecondaryThread?.preview?.revision,
+    secondaryPreviewOpen: activeSecondaryThread?.previewOpen ?? false,
   })
 
   const workspacePickerPath =
@@ -205,9 +222,12 @@ export default function App() {
   const branchSessions = activeSession
     ? sessions.filter((session) => session.forkedFromSessionId === activeSession.id)
     : []
+  const previewSecondaryThread = secondaryThreads.find(
+    (thread) => thread.session.id === workbenchPreviewSessionID,
+  )
   const workbenchPreview =
-    secondaryThread && workbenchPreviewSessionID === secondaryThread.session.id
-      ? secondaryThread.preview
+    previewSecondaryThread
+      ? previewSecondaryThread.preview
       : !workbenchPreviewSessionID || workbenchPreviewSessionID === activeSessionID
         ? preview
         : undefined
@@ -217,19 +237,20 @@ export default function App() {
   const workbenchBrowserSessionID =
     workbenchPreviewOwnerID ??
     workbenchTaskRequest?.sessionID ??
-    secondaryThread?.session.id ??
+    activeSecondaryThread?.session.id ??
     activeSessionID ??
     draft?.id
   const workbenchBrowserCommands =
-    secondaryThread && workbenchBrowserSessionID === secondaryThread.session.id
-      ? secondaryThread.browserCommands
-      : workbenchBrowserSessionID === activeSessionID
-        ? browserCommands
-        : []
+    secondaryThreads.find(
+      (thread) => thread.session.id === workbenchBrowserSessionID,
+    )?.browserCommands ??
+    (workbenchBrowserSessionID === activeSessionID
+      ? browserCommands
+      : [])
   const activateWorkbenchPreview = workbenchPreviewOwnerID === activeSessionID
     ? previewOpen
-    : secondaryThread && workbenchPreviewOwnerID === secondaryThread.session.id
-      ? secondaryThread.previewOpen
+    : previewSecondaryThread
+      ? previewSecondaryThread.previewOpen
       : false
   const workbenchTaskSources: WorkbenchTaskSource[] = activeSessionID
     ? [{
@@ -239,7 +260,8 @@ export default function App() {
         onReadTaskOutput: readTaskOutput,
       }]
     : []
-  if (secondaryThread && secondaryThread.session.id !== activeSessionID) {
+  for (const secondaryThread of secondaryThreads) {
+    if (secondaryThread.session.id === activeSessionID) continue
     workbenchTaskSources.push({
       sessionID: secondaryThread.session.id,
       tasks: secondaryThread.tasks,
@@ -249,20 +271,40 @@ export default function App() {
   }
   useEffect(() => {
     if (
-      secondarySessionID &&
-      !loading &&
-      !sessions.some((session) => session.id === secondarySessionID)
-    ) {
-      setSecondarySessionID(undefined)
-    }
-    if (
       workbenchTaskRequest &&
       !loading &&
       !sessions.some((session) => session.id === workbenchTaskRequest.sessionID)
     ) {
       setWorkbenchTaskRequest(undefined)
     }
-  }, [loading, secondarySessionID, sessions, workbenchTaskRequest])
+  }, [loading, sessions, workbenchTaskRequest])
+
+  useEffect(() => {
+    if (loading) return
+    const invalidSessionIDs = new Set(
+      workbenchConversationTabs.flatMap((conversation) =>
+        conversation.kind === 'session' &&
+        !sessions.some((session) => session.id === conversation.id)
+          ? [conversation.id]
+          : [],
+      ),
+    )
+    if (invalidSessionIDs.size === 0) return
+    setWorkbenchConversationTabs((current) =>
+      current.filter((conversation) => !invalidSessionIDs.has(conversation.id)),
+    )
+    if (
+      activeWorkbenchConversationID &&
+      invalidSessionIDs.has(activeWorkbenchConversationID)
+    ) {
+      setActiveWorkbenchConversationID(undefined)
+    }
+  }, [
+    activeWorkbenchConversationID,
+    loading,
+    sessions,
+    workbenchConversationTabs,
+  ])
 
   useEffect(() => {
     if (draft || selectedWorkspacePath) return
@@ -305,27 +347,109 @@ export default function App() {
 
   const openSessionInWorkbench = (id: string) => {
     if (!sessions.some((session) => session.id === id)) return
-    setWorkbenchCreateError('')
     setWorkbenchTaskRequest(undefined)
-    setSecondarySessionID(id)
+    setWorkbenchConversationTabs((current) =>
+      current.some((conversation) => conversation.id === id)
+        ? current
+        : [...current, { id, kind: 'session' }],
+    )
+    setActiveWorkbenchConversationID(id)
     showSessionInWorkbench(id)
     setView({ type: 'conversation' })
     closeMobileSessions()
   }
 
-  const createSessionInWorkbench = async () => {
-    setWorkbenchCreateError('')
+  const createSessionInWorkbench = () => {
     setWorkbenchTaskRequest(undefined)
-    try {
-      const created = await createChatSession()
-      setSecondarySessionID(created.id)
-      showSessionInWorkbench(created.id)
-    } catch (error) {
-      setWorkbenchCreateError(
-        error instanceof Error ? error.message : t('workbench.createChatFailed'),
+    const nextDraft = createChatDraft()
+    setWorkbenchConversationTabs((current) => [
+      ...current,
+      { id: nextDraft.id, kind: 'draft', draft: nextDraft },
+    ])
+    setActiveWorkbenchConversationID(nextDraft.id)
+    showSessionInWorkbench(nextDraft.id)
+  }
+
+  const selectWorkbenchConversation = (conversationID: string) => {
+    setActiveWorkbenchConversationID(conversationID)
+  }
+
+  const closeWorkbenchConversation = (conversationID: string) => {
+    const closingIndex = workbenchConversationTabs.findIndex(
+      (conversation) => conversation.id === conversationID,
+    )
+    if (closingIndex < 0) return
+    const next = workbenchConversationTabs.filter(
+      (conversation) => conversation.id !== conversationID,
+    )
+    setWorkbenchConversationTabs(next)
+    if (activeWorkbenchConversationID === conversationID) {
+      setActiveWorkbenchConversationID(
+        next[Math.min(closingIndex, next.length - 1)]?.id,
       )
     }
   }
+
+  const updateWorkbenchDraft = (draft: SessionDraft) => {
+    setWorkbenchConversationTabs((current) =>
+      current.map((conversation) =>
+        conversation.kind === 'draft' && conversation.id === draft.id
+          ? { ...conversation, draft }
+          : conversation,
+      ),
+    )
+  }
+
+  const sendWorkbenchDraft = async (
+    draft: SessionDraft,
+    text: string,
+    images: MessageImage[],
+    files: PromptFile[],
+  ): Promise<boolean> => {
+    setCreatingWorkbenchDraftIDs((current) => new Set(current).add(draft.id))
+    try {
+      const created = await createChatSession(draft, { text, images, files })
+      setWorkbenchConversationTabs((current) =>
+        current.map((conversation) =>
+          conversation.kind === 'draft' && conversation.id === draft.id
+            ? { id: created.id, kind: 'session' }
+            : conversation,
+        ),
+      )
+      setActiveWorkbenchConversationID((current) =>
+        current === draft.id ? created.id : current,
+      )
+      return true
+    } finally {
+      setCreatingWorkbenchDraftIDs((current) => {
+        const next = new Set(current)
+        next.delete(draft.id)
+        return next
+      })
+    }
+  }
+
+  const workbenchConversations: WorkbenchConversation[] =
+    workbenchConversationTabs.flatMap<WorkbenchConversation>((conversation) => {
+      if (conversation.kind === 'session') {
+        const thread = secondaryThreads.find(
+          (candidate) => candidate.session.id === conversation.id,
+        )
+        return thread
+          ? [{ id: conversation.id, kind: 'session' as const, thread }]
+          : []
+      }
+      return [{
+        id: conversation.id,
+        kind: 'draft' as const,
+        draft: conversation.draft,
+        connected: draftReady,
+        creating: creatingWorkbenchDraftIDs.has(conversation.id),
+        onChange: updateWorkbenchDraft,
+        onSend: (text: string, images: MessageImage[], files: PromptFile[]) =>
+          sendWorkbenchDraft(conversation.draft, text, images, files),
+      }]
+    })
 
   const addSession = (workspacePath?: string, projectScoped = false) => {
     setSelectedWorkspacePath(projectScoped ? workspacePath : undefined)
@@ -337,8 +461,6 @@ export default function App() {
 
   const openTaskInWorkbench = (taskID: string) => {
     if (!activeSessionID) return
-    setWorkbenchCreateError('')
-    setSecondarySessionID(undefined)
     setWorkbenchTaskRequest((current) => ({
       sessionID: activeSessionID,
       taskID,
@@ -375,7 +497,7 @@ export default function App() {
         delete next[deleteTarget.id]
         return next
       })
-      if (secondarySessionID === deleteTarget.id) setSecondarySessionID(undefined)
+      closeWorkbenchConversation(deleteTarget.id)
       if (workbenchTaskRequest?.sessionID === deleteTarget.id) {
         setWorkbenchTaskRequest(undefined)
       }
@@ -746,17 +868,17 @@ export default function App() {
             browserCommands={workbenchBrowserCommands}
             sessionID={workbenchBrowserSessionID}
             activatePreview={activateWorkbenchPreview}
-            conversation={secondaryThread}
+            conversations={workbenchConversations}
+            activeConversationID={activeWorkbenchConversationID}
             taskRequest={workbenchTaskRequest}
             taskSources={workbenchTaskSources}
             models={models}
             workspaces={workspaces}
             maximized={workbenchMaximized}
             creatingConversation={creating}
-            creationError={workbenchCreateError}
-            onCreateConversation={() => void createSessionInWorkbench()}
-            onDismissCreationError={() => setWorkbenchCreateError('')}
-            onCloseConversation={() => setSecondarySessionID(undefined)}
+            onCreateConversation={createSessionInWorkbench}
+            onSelectConversation={selectWorkbenchConversation}
+            onCloseConversation={closeWorkbenchConversation}
             onBrowserResult={queueBrowserResult}
             browserInspectionSources={[
               {
@@ -765,12 +887,16 @@ export default function App() {
                 browserTabsRequests,
                 browserInspections,
               },
-              {
-                sessionID: secondaryThread?.session.id,
-                browserCommands: secondaryThread?.browserCommands ?? [],
-                browserTabsRequests: secondaryThread?.browserTabsRequests ?? [],
-                browserInspections: secondaryThread?.browserInspections ?? [],
-              },
+              ...secondaryThreads.flatMap((secondaryThread) =>
+                secondaryThread.session.id === activeSessionID
+                  ? []
+                  : [{
+                      sessionID: secondaryThread.session.id,
+                      browserCommands: secondaryThread.browserCommands,
+                      browserTabsRequests: secondaryThread.browserTabsRequests,
+                      browserInspections: secondaryThread.browserInspections,
+                    }],
+              ),
             ]}
             onBrowserTabsHandled={handleBrowserTabs}
             onBrowserInspectionHandled={handleBrowserInspection}

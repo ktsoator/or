@@ -32,6 +32,10 @@ The right-side Browser has no web iframe fallback. In Electron it renders public
 sites, localhost apps, and workspace HTML with `<webview>` elements managed by a
 renderer-side registry. Public pages share a persistent browser partition;
 workspace HTML uses an in-memory partition and a preview-only sidecar origin.
+User browser tabs stay mounted across Workbench conversation changes while
+Agent preview visibility and inspection remain session-scoped.
+Workbench conversation tabs can coexist, and an empty new conversation stays a
+local draft until its first message creates the backing session.
 Browser-only Playwright tests use a test bridge; they do not provide a separately
 deployable product mode.
 

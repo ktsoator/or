@@ -1,7 +1,12 @@
 import { useMemo } from 'react'
 import { LoaderCircle } from 'lucide-react'
-import type { ModelOption, WorkspaceSummary } from '@/types'
-import type { SessionThread } from '@/features/session'
+import type {
+  MessageImage,
+  ModelOption,
+  PromptFile,
+  WorkspaceSummary,
+} from '@/types'
+import type { SessionDraft, SessionThread } from '@/features/session'
 import { useI18n } from '@/i18n'
 import { groupItems } from './groupItems'
 import { cn } from '@/lib/utils'
@@ -140,6 +145,88 @@ export function ConversationView({
         )}
       </div>
       {!thread.loading && !empty && composer()}
+    </section>
+  )
+}
+
+export function DraftConversationView({
+  draft,
+  connected,
+  creating,
+  models,
+  workspaces,
+  onChange,
+  onSend,
+  onConfigureModel,
+}: {
+  draft: SessionDraft
+  connected: boolean
+  creating: boolean
+  models: ModelOption[]
+  workspaces: WorkspaceSummary[]
+  onChange: (draft: SessionDraft) => void
+  onSend: (
+    text: string,
+    images: MessageImage[],
+    files: PromptFile[],
+  ) => Promise<boolean>
+  onConfigureModel: () => void
+}) {
+  const { t } = useI18n()
+
+  return (
+    <section
+      className="flex h-full min-h-0 flex-col bg-canvas"
+      data-testid="workbench-conversation"
+      aria-label={t('app.newSession')}
+    >
+      <div className="grid min-h-0 flex-1 place-items-center overflow-y-auto px-3">
+        <div className="flex w-full max-w-[680px] -translate-y-[2vh] flex-col items-center gap-7">
+          <div className="max-w-sm text-center">
+            <h2 className="m-0 text-[1.25rem] leading-tight font-medium text-ink">
+              {t('app.emptyTitle')}
+            </h2>
+            <p className="mt-2 text-[0.875rem] leading-5 text-ink-muted">
+              {t('app.emptyDescription')}
+            </p>
+          </div>
+          <Composer
+            key={draft.id}
+            connected={connected && !creating}
+            running={false}
+            queuedMessages={[]}
+            centered
+            projectPickerVisible={false}
+            workspaces={workspaces}
+            models={models}
+            modelProvider={draft.modelProvider}
+            modelID={draft.modelID}
+            thinkingLevel={draft.thinkingLevel}
+            permissionMode={draft.permissionMode}
+            updatingSettings={false}
+            compacting={false}
+            onSend={onSend}
+            onRemoveQueued={async () => {}}
+            onStop={() => {}}
+            onResolve={async () => {}}
+            onResolveQuestion={async () => {}}
+            onSelectProject={() => {}}
+            onBrowseProjects={() => {}}
+            onConfigureModel={onConfigureModel}
+            onSettingsChange={async (provider, model, thinkingLevel) => {
+              onChange({
+                ...draft,
+                modelProvider: provider,
+                modelID: model,
+                thinkingLevel,
+              })
+            }}
+            onPermissionModeChange={async (permissionMode) => {
+              onChange({ ...draft, permissionMode })
+            }}
+          />
+        </div>
+      </div>
     </section>
   )
 }

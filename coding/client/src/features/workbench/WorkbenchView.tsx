@@ -19,11 +19,11 @@ import type {
   ModelOption,
   WorkspaceSummary,
 } from '@/types'
-import type { SessionThread } from '@/features/session'
 import {
   BrowserSurface,
   browserRuntimeTabID,
   browserTabNavigationURL,
+  conversationWorkbenchTabID,
   type BrowserWorkspaceController,
 } from '@/features/browser'
 import { cn } from '@/lib/utils'
@@ -35,7 +35,9 @@ import {
 import {
   ConversationActionsMenu,
   ConversationView,
+  DraftConversationView,
 } from '@/features/conversation'
+import type { WorkbenchConversation } from './conversations'
 
 function addressTitle(url: string): string {
   try {
@@ -47,7 +49,7 @@ function addressTitle(url: string): string {
 
 export function WorkbenchView({
   workspace,
-  conversation,
+  conversations,
   taskSource,
   creatingConversation,
   models,
@@ -61,13 +63,13 @@ export function WorkbenchView({
   toggleControl,
 }: {
   workspace: BrowserWorkspaceController
-  conversation?: SessionThread
+  conversations: WorkbenchConversation[]
   taskSource?: WorkbenchTaskSource
   creatingConversation: boolean
   models: ModelOption[]
   workspaces: WorkspaceSummary[]
   onCloseTab: () => void
-  onCloseConversation: () => void
+  onCloseConversation: (conversationID: string) => void
   onCreateConversation: () => void
   onConfigureModel: () => void
   maximized: boolean
@@ -79,8 +81,8 @@ export function WorkbenchView({
     taskSource?.tasks.filter((task) => task.status === 'running').length ?? 0
   const {
     tabs,
-    workspaceID,
-    conversationTabID,
+    runtimeWorkspaceID,
+    activeConversationID,
     conversationActive,
     taskTabID,
     selectedTaskID,
@@ -102,6 +104,10 @@ export function WorkbenchView({
     goForward,
     openExternal,
   } = workspace
+  const browserItemActive = !conversationActive && !tasksActive
+  const activeConversation = conversations.find(
+    (conversation) => conversation.id === activeConversationID,
+  )
 
   const navigate = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -131,10 +137,10 @@ export function WorkbenchView({
               desired?.workspacePath?.split('/').at(-1) ||
               addressTitle(tab.observed.committedURL || desired?.requestedURL || '') ||
               t('preview.newTab')
-            const active = !conversationActive && tab.id === activeTab?.id
+            const active = browserItemActive && tab.id === activeTab?.id
             return (
               <div
-                key={`${workspaceID}:${tab.id}`}
+                key={`${runtimeWorkspaceID}:${tab.id}`}
                 className={cn(
                   'group flex h-8 min-w-[7rem] max-w-[11rem] shrink-0 items-center rounded-md border transition-colors',
                   active
@@ -176,46 +182,53 @@ export function WorkbenchView({
               </div>
             )
           })}
-          {conversation && conversationTabID && (
-            <div
-              className={cn(
-                'group flex h-8 min-w-[7rem] max-w-[11rem] shrink-0 items-center rounded-md border transition-colors',
-                conversationActive
-                  ? 'border-edge/80 bg-canvas text-ink-soft shadow-sm'
-                  : 'border-transparent text-ink-muted hover:bg-canvas-sunken/80 hover:text-ink-soft',
-              )}
-              data-testid="conversation-tab"
-              data-active={conversationActive}
-            >
-              <button
-                className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 self-stretch px-2.5 text-left text-[0.8125rem] outline-none focus-visible:bg-canvas-sunken"
-                type="button"
-                role="tab"
-                aria-selected={conversationActive}
-                title={conversation.session.title}
-                onClick={() => selectItem(conversationTabID)}
-              >
-                <MessageSquare className="size-3.5 shrink-0 text-ink-faint" aria-hidden="true" />
-                <span className="min-w-0 flex-1 truncate">
-                  {conversation.session.title === 'New session'
-                    ? t('app.newSession')
-                    : conversation.session.title}
-                </span>
-              </button>
-              <button
+          {conversations.map((conversation) => {
+            const conversationTabID = conversationWorkbenchTabID(conversation.id)!
+            const active =
+              conversationActive && conversation.id === activeConversationID
+            const title = conversation.kind === 'draft'
+              ? t('app.newSession')
+              : conversation.thread.session.title === 'New session'
+                ? t('app.newSession')
+                : conversation.thread.session.title
+            return (
+              <div
+                key={conversation.id}
                 className={cn(
-                  'mr-1 grid size-5 shrink-0 cursor-pointer place-items-center rounded text-ink-faint outline-none transition-[opacity,color,background-color] hover:bg-canvas-sunken hover:text-ink-soft focus-visible:bg-canvas-sunken focus-visible:text-ink-soft focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100',
-                  conversationActive ? 'opacity-100' : 'opacity-0',
+                  'group flex h-8 min-w-[7rem] max-w-[11rem] shrink-0 items-center rounded-md border transition-colors',
+                  active
+                    ? 'border-edge/80 bg-canvas text-ink-soft shadow-sm'
+                    : 'border-transparent text-ink-muted hover:bg-canvas-sunken/80 hover:text-ink-soft',
                 )}
-                type="button"
-                title={t('workbench.closeConversation')}
-                aria-label={t('workbench.closeConversation')}
-                onClick={onCloseConversation}
+                data-testid="conversation-tab"
+                data-active={active}
               >
-                <X className="size-3.5" aria-hidden="true" />
-              </button>
-            </div>
-          )}
+                <button
+                  className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 self-stretch px-2.5 text-left text-[0.8125rem] outline-none focus-visible:bg-canvas-sunken"
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  title={title}
+                  onClick={() => selectItem(conversationTabID)}
+                >
+                  <MessageSquare className="size-3.5 shrink-0 text-ink-faint" aria-hidden="true" />
+                  <span className="min-w-0 flex-1 truncate">{title}</span>
+                </button>
+                <button
+                  className={cn(
+                    'mr-1 grid size-5 shrink-0 cursor-pointer place-items-center rounded text-ink-faint outline-none transition-[opacity,color,background-color] hover:bg-canvas-sunken hover:text-ink-soft focus-visible:bg-canvas-sunken focus-visible:text-ink-soft focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100',
+                    active ? 'opacity-100' : 'opacity-0',
+                  )}
+                  type="button"
+                  title={t('workbench.closeConversation')}
+                  aria-label={t('workbench.closeConversation')}
+                  onClick={() => onCloseConversation(conversation.id)}
+                >
+                  <X className="size-3.5" aria-hidden="true" />
+                </button>
+              </div>
+            )
+          })}
           {taskTabID && taskSource && (
             <div
               className={cn(
@@ -273,10 +286,10 @@ export function WorkbenchView({
           creatingConversation={creatingConversation}
           onCreateConversation={onCreateConversation}
           conversationActions={
-            conversationActive && conversation ? (
+            conversationActive && activeConversation?.kind === 'session' ? (
               <ConversationActionsMenu
-                sessionID={conversation.session.id}
-                tasks={conversation.tasks}
+                sessionID={activeConversation.thread.session.id}
+                tasks={activeConversation.thread.tasks}
                 onSelectTask={workspace.openTasks}
               />
             ) : undefined
@@ -286,14 +299,36 @@ export function WorkbenchView({
         />
       </div>
 
-      {conversationActive && conversation && (
-        <ConversationView
-          thread={conversation}
-          models={models}
-          workspaces={workspaces}
-          onConfigureModel={onConfigureModel}
-        />
-      )}
+      {conversations.map((conversation) => {
+        const active = conversationActive && conversation.id === activeConversationID
+        return (
+          <div
+            key={conversation.id}
+            className={active ? 'min-h-0 flex-1' : 'hidden'}
+            aria-hidden={!active}
+          >
+            {conversation.kind === 'session' ? (
+              <ConversationView
+                thread={conversation.thread}
+                models={models}
+                workspaces={workspaces}
+                onConfigureModel={onConfigureModel}
+              />
+            ) : (
+              <DraftConversationView
+                draft={conversation.draft}
+                connected={conversation.connected}
+                creating={conversation.creating}
+                models={models}
+                workspaces={workspaces}
+                onChange={conversation.onChange}
+                onSend={conversation.onSend}
+                onConfigureModel={onConfigureModel}
+              />
+            )}
+          </div>
+        )
+      })}
       {tasksActive && taskSource && (
         <BackgroundTasksView
           {...taskSource}
@@ -305,7 +340,7 @@ export function WorkbenchView({
         <div
           className={cn(
             'min-h-0 flex-1 flex-col',
-            conversationActive ? 'hidden' : 'flex',
+            browserItemActive ? 'flex' : 'hidden',
           )}
         >
           <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-edge bg-canvas px-2.5">
@@ -379,7 +414,7 @@ export function WorkbenchView({
               const active = tab.id === activeTab.id
               return (
                 <div
-                  key={`${workspaceID}:${tab.id}`}
+                  key={`${runtimeWorkspaceID}:${tab.id}`}
                   className={cn(
                     'absolute inset-0 flex',
                     active ? 'visible' : 'invisible pointer-events-none',
@@ -388,7 +423,7 @@ export function WorkbenchView({
                 >
                   <BrowserSurface
                     active={active}
-                    runtimeTabID={browserRuntimeTabID(workspaceID, tab.id)}
+                    runtimeTabID={browserRuntimeTabID(runtimeWorkspaceID, tab.id)}
                     tabID={tab.id}
                     navigation={desired?.revision ?? 0}
                     observed={tab.observed}

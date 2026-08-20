@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, type Dispatch } from 'react'
 import { agentBrowserTabID, type BrowserTab } from './tabs'
 import {
   browserWorkspaceCommandTabID,
+  visibleBrowserTabs,
   type BrowserWorkspaceAction,
   type BrowserWorkspaceState,
 } from './workspace'
@@ -118,13 +119,14 @@ export function useBrowserCommandCoordinator({
   }, [activatePreview, browserCommands, dispatch, reportCancelled, sessionID, state])
 
   const previewKey = browserPreviewKey(preview, sessionID)
+  const previewSessionID = sessionID ?? 'unknown'
   useEffect(() => {
     if (
       !previewKey ||
       (!preview?.url && !preview?.path) ||
       preview.commandID ||
       preview.disposition ||
-      state.handledPreviewKey === previewKey
+      state.handledPreviewKeys[previewSessionID] === previewKey
     ) {
       return
     }
@@ -132,19 +134,29 @@ export function useBrowserCommandCoordinator({
       t: 'restored_preview_received',
       previewKey,
       tabID: agentBrowserTabID(sessionID),
-      sessionID: sessionID ?? 'unknown',
+      sessionID: previewSessionID,
       target: browserPreviewTarget(preview, sessionID),
       activate: activatePreview,
     })
-  }, [activatePreview, dispatch, preview, previewKey, sessionID, state.handledPreviewKey])
+  }, [
+    activatePreview,
+    dispatch,
+    preview,
+    previewKey,
+    previewSessionID,
+    sessionID,
+    state.handledPreviewKeys,
+  ])
 
   const closeTab = useCallback((tabID: string): boolean => {
     const current = stateRef.current
     reportCancelled(current.tabs.find((tab) => tab.id === tabID))
     void closeBrowser(browserRuntimeTabID(workspaceID, tabID))
     dispatch({ t: 'close_tab', tabID })
-    return current.tabs.length === 1 && !current.conversationTabID && !current.taskTabID
-  }, [dispatch, reportCancelled, workspaceID])
+    return visibleBrowserTabs(current, sessionID).length === 1 &&
+      current.conversationTabIDs.length === 0 &&
+      !current.taskTabID
+  }, [dispatch, reportCancelled, sessionID, workspaceID])
 
   const runtimeStateReceived = useCallback((
     tabID: string,

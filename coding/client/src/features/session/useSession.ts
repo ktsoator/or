@@ -6,11 +6,11 @@ import {
   useState,
 } from 'react'
 import { sessionCommands } from './commands'
-import { useSessionConnection } from './connection'
+import { useSessionConnection, useSessionConnections } from './connection'
 import { threadsReducer } from './reducer'
 import { sessionResourceAPI } from './resourceApi'
 import { findEvictableThreadIDs } from './threadRetention'
-import type { Session } from './types'
+import type { Session, SessionDraftSubmission, SessionThread } from './types'
 import { useBrowserResultOutbox } from './useBrowserResultOutbox'
 import { useServiceConnection } from '@/serviceConnection'
 import {
@@ -18,7 +18,9 @@ import {
   createSessionStoreState,
   resolveSessionDraft,
   sessionStoreReducer,
+  type DraftSubmission,
   type ModelDefaults,
+  type SessionDraft,
 } from './store'
 import type {
   ApprovalChoice,
@@ -41,7 +43,7 @@ import type {
 export type { SessionDraft } from './store'
 export type { Session, SessionThread } from './types'
 
-export function useSession(secondarySessionID?: string): Session {
+export function useSession(secondarySessionIDs: string[] = []): Session {
   const [threads, dispatch] = useReducer(threadsReducer, {})
   const [sessionStore, dispatchSessionStore] = useReducer(
     sessionStoreReducer,
@@ -57,6 +59,8 @@ export function useSession(secondarySessionID?: string): Session {
   const [compactingSessionID, setCompactingSessionID] = useState<string>()
   const [models, setModels] = useState<ModelOption[]>([])
   const [modelDefaults, setModelDefaults] = useState<ModelDefaults>()
+  const [pendingSecondaryDraftSends, setPendingSecondaryDraftSends] =
+    useState<Record<string, DraftSubmission>>({})
 
   const acknowledgeBrowserResult = useCallback((sessionID: string, id: string) => {
     dispatch({ t: 'browserResultAcknowledged', sessionID, id })
@@ -137,41 +141,50 @@ export function useSession(secondarySessionID?: string): Session {
 
   const thread = activeSessionID ? threads[activeSessionID] : undefined
   const activeCheckpoint = thread?.loaded ? { eventSeq: thread.serverEventSeq } : undefined
-  const connectedSecondarySessionID =
-    secondarySessionID && secondarySessionID !== activeSessionID
-      ? secondarySessionID
-      : undefined
-  const secondaryConnectionThread = connectedSecondarySessionID
-    ? threads[connectedSecondarySessionID]
-    : undefined
-  const secondaryCheckpoint = secondaryConnectionThread?.loaded
-    ? { eventSeq: secondaryConnectionThread.serverEventSeq }
-    : undefined
+  const requestedSecondarySessionIDs = [
+    ...secondarySessionIDs,
+    ...Object.keys(pendingSecondaryDraftSends),
+  ]
+  const connectedSecondarySessionIDs = requestedSecondarySessionIDs.filter(
+    (sessionID, index) =>
+      sessionID !== activeSessionID && requestedSecondarySessionIDs.indexOf(sessionID) === index,
+  )
+  const secondaryCheckpoints = Object.fromEntries(
+    connectedSecondarySessionIDs.map((sessionID) => {
+      const secondaryThread = threads[sessionID]
+      return [
+        sessionID,
+        secondaryThread?.loaded
+          ? { eventSeq: secondaryThread.serverEventSeq }
+          : undefined,
+      ]
+    }),
+  )
 
   useEffect(() => {
     const retainedSessionIDs = new Set(
-      [activeSessionID, connectedSecondarySessionID].filter(
+      [activeSessionID, ...connectedSecondarySessionIDs].filter(
         (sessionID): sessionID is string => Boolean(sessionID),
       ),
     )
     for (const sessionID of findEvictableThreadIDs(threads, retainedSessionIDs)) {
       dispatch({ t: 'forget', sessionID })
     }
-  }, [activeSessionID, connectedSecondarySessionID, threads])
+  }, [activeSessionID, connectedSecondarySessionIDs, threads])
 
   useSessionConnection(activeSessionID, {
     onWire: applySessionWire,
     onSnapshot: applySessionSnapshot,
     onStatus: applyPrimarySessionStatus,
   }, activeCheckpoint)
-  useSessionConnection(
-    connectedSecondarySessionID,
+  useSessionConnections(
+    connectedSecondarySessionIDs,
     {
       onWire: applySessionWire,
       onSnapshot: applySessionSnapshot,
       onStatus: applySessionStatus,
     },
-    secondaryCheckpoint,
+    secondaryCheckpoints,
   )
 
   const activeSession = sessions.find((session) => session.id === activeSessionID)
@@ -230,32 +243,47 @@ export function useSession(secondarySessionID?: string): Session {
     return created
   }
 
-  const createChatSession = async () => {
-    if (creating) throw new Error('session creation is already in progress')
-    const settings = effectiveDraft ?? createSessionDraft(
+  const createChatDraft = () => {
+    const created = createSessionDraft(
       undefined,
       false,
       activeSession,
       models,
       modelDefaults,
     )
+    return effectiveDraft
+      ? {
+          ...created,
+          modelProvider: effectiveDraft.modelProvider,
+          modelID: effectiveDraft.modelID,
+          thinkingLevel: effectiveDraft.thinkingLevel,
+          permissionMode: effectiveDraft.permissionMode,
+        }
+      : created
+  }
+
+  const createChatSession = async (
+    requestedDraft: SessionDraft,
+    submission: SessionDraftSubmission,
+  ) => {
+    const settings = resolveSessionDraft(requestedDraft, models, modelDefaults)
     if (!settings.modelProvider || !settings.modelID || !settings.thinkingLevel) {
       throw new Error('configure a model before creating a session')
     }
-    setCreating(true)
-    try {
-      return await createSessionRecord(
-        undefined,
-        false,
-        settings.modelProvider,
-        settings.modelID,
-        settings.thinkingLevel,
-        settings.permissionMode,
-        false,
-      )
-    } finally {
-      setCreating(false)
-    }
+    const created = await createSessionRecord(
+      undefined,
+      false,
+      settings.modelProvider,
+      settings.modelID,
+      settings.thinkingLevel,
+      settings.permissionMode,
+      false,
+    )
+    setPendingSecondaryDraftSends((current) => ({
+      ...current,
+      [created.id]: { sessionID: created.id, ...submission },
+    }))
+    return created
   }
 
   const deleteSession = async (id: string) => {
@@ -526,6 +554,27 @@ export function useSession(secondarySessionID?: string): Session {
     )
   }, [activeSessionID, pendingDraftSend, startSessionPrompt, thread?.loaded, thread?.status])
 
+  useEffect(() => {
+    for (const submission of Object.values(pendingSecondaryDraftSends)) {
+      const targetThread = threads[submission.sessionID]
+      if (!targetThread?.loaded || targetThread.status !== 'ready') continue
+      setPendingSecondaryDraftSends((current) => {
+        if (!current[submission.sessionID]) return current
+        const next = { ...current }
+        delete next[submission.sessionID]
+        return next
+      })
+      const id = `local-${submission.sessionID}-${crypto.randomUUID()}`
+      startSessionPrompt(
+        submission.sessionID,
+        id,
+        submission.text,
+        submission.images,
+        submission.files,
+      )
+    }
+  }, [pendingSecondaryDraftSends, startSessionPrompt, threads])
+
   const sendToSession = async (
     sessionID: string,
     text: string,
@@ -691,16 +740,17 @@ export function useSession(secondarySessionID?: string): Session {
   const items =
     thread?.items.filter((item) => item.kind !== 'approval' && item.kind !== 'question') ?? []
 
-  const secondarySession = sessions.find((session) => session.id === secondarySessionID)
-  const secondaryState = secondarySessionID ? threads[secondarySessionID] : undefined
-  const secondaryApproval = secondaryState?.items.findLast(
-    (item): item is ApprovalItem => item.kind === 'approval',
-  )
-  const secondaryQuestion = secondaryState?.items.findLast(
-    (item): item is QuestionItem => item.kind === 'question',
-  )
-  const secondaryThread = secondarySession
-    ? {
+  const secondaryThreads = secondarySessionIDs.flatMap((secondarySessionID) => {
+    const secondarySession = sessions.find((session) => session.id === secondarySessionID)
+    if (!secondarySession) return []
+    const secondaryState = threads[secondarySessionID]
+    const secondaryApproval = secondaryState?.items.findLast(
+      (item): item is ApprovalItem => item.kind === 'approval',
+    )
+    const secondaryQuestion = secondaryState?.items.findLast(
+      (item): item is QuestionItem => item.kind === 'question',
+    )
+    const secondaryThread: SessionThread = {
         session: secondarySession,
         items:
           secondaryState?.items.filter(
@@ -743,7 +793,8 @@ export function useSession(secondarySessionID?: string): Session {
           updateSessionPermissionMode(secondarySession.id, mode),
         compactContext: () => compactSessionContext(secondarySession.id),
       }
-    : undefined
+    return [secondaryThread]
+  })
 
   return {
     sessions,
@@ -777,7 +828,9 @@ export function useSession(secondarySessionID?: string): Session {
     registerWorkspace,
     removeWorkspace,
     startDraft,
+    createChatDraft,
     createChatSession,
+    draftReady: serviceStatus === 'ready',
     updateDraftWorkspace,
     deleteSession,
     renameSession,
@@ -805,7 +858,7 @@ export function useSession(secondarySessionID?: string): Session {
       dispatch({ t: 'browserTabsHandled', sessionID, id }),
     handleBrowserInspection: (sessionID: string, id: string) =>
       dispatch({ t: 'browserInspectionHandled', sessionID, id }),
-    secondaryThread,
+    secondaryThreads,
   }
 }
 

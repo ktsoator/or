@@ -3,7 +3,7 @@ export { browserRuntimeTabID } from './runtimeID'
 export { browserTabNavigationURL } from './tabs'
 export { useBrowserInspectionRequests } from './useInspectionRequests'
 export { useBrowserTabsRequests } from './useTabsRequests'
-export { useBrowserWorkspace } from './useWorkspace'
+export { conversationWorkbenchTabID, useBrowserWorkspace } from './useWorkspace'
 export type {
   BrowserWorkspaceController,
   WorkbenchTaskRequest,

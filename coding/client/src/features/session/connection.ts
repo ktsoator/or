@@ -145,6 +145,49 @@ export function useSessionConnection(
   }, [onSnapshot, onStatus, onWire, sessionID])
 }
 
+export function useSessionConnections(
+  sessionIDs: string[],
+  handlers: SessionConnectionHandlers,
+  checkpoints: Record<string, SessionConnectionCheckpoint | undefined> = {},
+) {
+  const handlersRef = useRef(handlers)
+  const checkpointsRef = useRef(checkpoints)
+  const connectionsRef = useRef<Map<string, () => void>>(new Map())
+  handlersRef.current = handlers
+  checkpointsRef.current = checkpoints
+  const sessionKey = sessionIDs.join('\0')
+
+  useEffect(() => {
+    const desired = new Set(sessionKey ? sessionKey.split('\0') : [])
+    for (const [sessionID, close] of connectionsRef.current) {
+      if (desired.has(sessionID)) continue
+      close()
+      connectionsRef.current.delete(sessionID)
+    }
+    for (const sessionID of desired) {
+      if (connectionsRef.current.has(sessionID)) continue
+      connectionsRef.current.set(
+        sessionID,
+        startSessionConnection(
+          sessionID,
+          {
+            onWire: (...args) => handlersRef.current.onWire(...args),
+            onSnapshot: (...args) => handlersRef.current.onSnapshot(...args),
+            onStatus: (...args) => handlersRef.current.onStatus(...args),
+          },
+          browserDependencies,
+          checkpointsRef.current[sessionID],
+        ),
+      )
+    }
+  }, [sessionKey])
+
+  useEffect(() => () => {
+    for (const close of connectionsRef.current.values()) close()
+    connectionsRef.current.clear()
+  }, [])
+}
+
 function parseEventSequence(value: string): number | undefined {
   if (!value.trim()) return undefined
   const parsed = Number(value)

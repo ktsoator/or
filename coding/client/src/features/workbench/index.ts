@@ -1,5 +1,6 @@
 export { WorkbenchPanel } from './WorkbenchPanel'
 export type { BrowserInspectionSource } from './WorkbenchPanel'
 export type { WorkbenchTaskSource } from './BackgroundTasksView'
+export type { WorkbenchConversation } from './conversations'
 export { useWorkbenchLayout } from './useLayout'
 export type { WorkbenchTaskRequest } from '@/features/browser'

@@ -6,11 +6,10 @@ import {
   browserWorkspaceContext,
   browserWorkspaceHasControl,
   browserWorkspaceInspectionTabID,
-  browserWorkspaceRegistryReducer,
   browserWorkspaceReducer,
-  createBrowserWorkspaceRegistryState,
   createBrowserWorkspaceState,
   selectedBrowserTab,
+  visibleBrowserTabs,
 } from '../src/features/browser/workspace'
 
 const webTarget = (
@@ -75,28 +74,58 @@ describe('browser workspace reducer', () => {
     expect(state.activeItemID).toBe('tab-3')
   })
 
-  test('selects a new conversation and restores the first browser tab when it closes', () => {
+  test('keeps multiple conversations and restores the first browser tab when they close', () => {
     let state = createBrowserWorkspaceState({
       initialTab: createBrowserTab({ id: 'tab-1' }),
     })
     state = browserWorkspaceReducer(state, {
-      t: 'sync_conversation',
-      conversationTabID: 'conversation:session-1',
+      t: 'sync_conversations',
+      conversationTabIDs: ['conversation:session-1', 'conversation:session-2'],
+      activeConversationTabID: 'conversation:session-2',
     })
-    expect(state.activeItemID).toBe('conversation:session-1')
-    expect(selectedBrowserTab(state)).toBeUndefined()
+    expect(state.conversationTabIDs).toEqual([
+      'conversation:session-1',
+      'conversation:session-2',
+    ])
+    expect(state.activeItemID).toBe('conversation:session-2')
+    expect(selectedBrowserTab(state)?.id).toBe('tab-1')
 
     state = browserWorkspaceReducer(state, {
-      t: 'sync_conversation',
-      conversationTabID: undefined,
+      t: 'sync_conversations',
+      conversationTabIDs: ['conversation:session-1'],
+    })
+    expect(state.activeItemID).toBe('conversation:session-1')
+
+    state = browserWorkspaceReducer(state, {
+      t: 'sync_conversations',
+      conversationTabIDs: [],
     })
     expect(state.activeItemID).toBe('tab-1')
+  })
+
+  test('keeps the browser active when a background conversation closes', () => {
+    let state = createBrowserWorkspaceState({
+      initialTab: createBrowserTab({ id: 'tab-1' }),
+      conversationTabIDs: ['conversation:session-1', 'conversation:session-2'],
+      activeConversationTabID: 'conversation:session-1',
+      activeItemID: 'tab-1',
+    })
+
+    state = browserWorkspaceReducer(state, {
+      t: 'sync_conversations',
+      conversationTabIDs: ['conversation:session-1'],
+      activeConversationTabID: 'conversation:session-1',
+    })
+
+    expect(state.activeItemID).toBe('tab-1')
+    expect(state.activeConversationTabID).toBe('conversation:session-1')
   })
 
   test('opens one task view, switches tasks, and closes without stopping task state', () => {
     let state = createBrowserWorkspaceState({
       initialTab: createBrowserTab({ id: 'tab-1' }),
-      conversationTabID: 'conversation:session-1',
+      conversationTabIDs: ['conversation:session-1'],
+      activeConversationTabID: 'conversation:session-1',
       activeItemID: 'conversation:session-1',
     })
     state = browserWorkspaceReducer(state, {
@@ -109,7 +138,7 @@ describe('browser workspace reducer', () => {
       selectedTaskID: 'task-1',
       activeItemID: 'tasks:session-1',
     })
-    expect(selectedBrowserTab(state)).toBeUndefined()
+    expect(selectedBrowserTab(state)?.id).toBe('tab-1')
 
     state = browserWorkspaceReducer(state, { t: 'select_task', taskID: 'task-2' })
     expect(state.selectedTaskID).toBe('task-2')
@@ -156,7 +185,7 @@ describe('browser workspace reducer', () => {
     state = browserWorkspaceReducer(state, { t: 'create_user_tab' })
 
     expect(state.activeItemID).toBe('tab-1')
-    expect(state.agentSelectedTabID).toBe('preview:session-1')
+    expect(state.agentSelectedTabIDs['session-1']).toBe('preview:session-1')
     expect(
       browserWorkspaceCommandTabID(
         state,
@@ -188,7 +217,7 @@ describe('browser workspace reducer', () => {
       },
     })
 
-    expect(state.agentSelectedTabID).toBeUndefined()
+    expect(state.agentSelectedTabIDs['session-1']).toBeUndefined()
     expect(state.controlLeases).toEqual({})
     expect(
       browserWorkspaceCommandTabID(
@@ -221,7 +250,7 @@ describe('browser workspace reducer', () => {
       selectForAgent: false,
     })
 
-    expect(state.agentSelectedTabID).toBe('preview:session-1')
+    expect(state.agentSelectedTabIDs['session-1']).toBe('preview:session-1')
     expect(
       browserWorkspaceCommandTabID(
         state,
@@ -251,52 +280,43 @@ describe('browser workspace reducer', () => {
     expect(state.activeItemID).toBe('tab-1')
   })
 
-  test('keeps tabs, selections, leases, and command targets isolated by session', () => {
-    const first = createBrowserWorkspaceState()
-    let registry = createBrowserWorkspaceRegistryState('session-1', first)
-    registry = browserWorkspaceRegistryReducer(registry, {
-      t: 'workspace_action',
-      workspaceID: 'session-1',
-      initialState: first,
-      action: { t: 'create_user_tab' },
+  test('keeps user tabs visible while filtering Agent tabs by session', () => {
+    let state = createBrowserWorkspaceState()
+    state = browserWorkspaceReducer(state, {
+      t: 'create_user_tab',
+      sessionID: 'session-1',
+    })
+    state = browserWorkspaceReducer(state, {
+      t: 'agent_command_received',
+      commandKey: 'session-1:command-1',
+      tabID: 'preview:session-1',
+      sessionID: 'session-1',
+      target: webTarget('https://one.example/', 'command-1'),
+      activate: false,
+      selectForAgent: true,
+    })
+    state = browserWorkspaceReducer(state, {
+      t: 'agent_command_received',
+      commandKey: 'session-2:command-1',
+      tabID: 'preview:session-2',
+      sessionID: 'session-2',
+      target: webTarget('https://two.example/', 'command-1'),
+      activate: false,
+      selectForAgent: true,
     })
 
-    const second = createBrowserWorkspaceState()
-    registry = browserWorkspaceRegistryReducer(registry, {
-      t: 'workspace_action',
-      workspaceID: 'session-2',
-      initialState: second,
-      action: {
-        t: 'agent_command_received',
-        commandKey: 'session-2:command-1',
-        tabID: 'preview:session-2',
-        sessionID: 'session-2',
-        target: webTarget('https://github.com/', 'command-1'),
-        activate: true,
-        selectForAgent: true,
-      },
+    expect(visibleBrowserTabs(state, 'session-2').map((tab) => tab.id)).toEqual([
+      'tab-1',
+      'preview:session-2',
+    ])
+    expect(browserWorkspaceContext(state, 'session-2').openTabs.map((tab) => tab.tabID))
+      .toEqual(['preview:session-2'])
+    expect(state.agentSelectedTabIDs).toEqual({
+      'session-1': 'preview:session-1',
+      'session-2': 'preview:session-2',
     })
-
-    expect(registry.workspaces['session-1']).toMatchObject({
-      activeItemID: 'tab-1',
-      agentSelectedTabID: undefined,
-      controlLeases: {},
-      commandTargets: {},
-    })
-    expect(registry.workspaces['session-2']).toMatchObject({
-      activeItemID: 'preview:session-2',
-      agentSelectedTabID: 'preview:session-2',
-      commandTargets: {
-        'session-2:command-1': 'preview:session-2',
-      },
-    })
-    expect(
-      browserWorkspaceHasControl(
-        registry.workspaces['session-2']!,
-        'preview:session-2',
-        'navigate',
-      ),
-    ).toBe(true)
+    expect(browserWorkspaceHasControl(state, 'preview:session-1', 'navigate')).toBe(true)
+    expect(browserWorkspaceHasControl(state, 'preview:session-2', 'navigate')).toBe(true)
   })
 
   test('projects shared open tabs and temporary control independently', () => {
@@ -320,7 +340,10 @@ describe('browser workspace reducer', () => {
         canGoForward: false,
       },
     })
-    state = browserWorkspaceReducer(state, { t: 'create_user_tab' })
+    state = browserWorkspaceReducer(state, {
+      t: 'create_user_tab',
+      sessionID: 'session-1',
+    })
 
     expect(browserWorkspaceContext(state)).toEqual({
       openTabs: [
@@ -349,6 +372,7 @@ describe('browser workspace reducer', () => {
     state = browserWorkspaceReducer(state, {
       t: 'attach_control',
       leaseID: 'inspection:1',
+      sessionID: 'session-1',
       tabID: 'tab-1',
       capabilities: ['read'],
     })
@@ -386,7 +410,7 @@ describe('browser workspace reducer', () => {
 
     expect(state.tabs).toEqual([])
     expect(state.controlLeases).toEqual({})
-    expect(state.agentSelectedTabID).toBeUndefined()
+    expect(state.agentSelectedTabIDs['session-1']).toBeUndefined()
     expect(state.commandTargets).toEqual({
       'session-1:command-1': 'preview:session-1',
     })

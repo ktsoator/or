@@ -117,7 +117,11 @@ The right-side Browser is rendered with Electron `<webview>` elements. React
 owns their layout and tab lifecycle, so menus and dialogs can compose above a
 page without hiding a separate native child view. A renderer-side registry owns
 navigation revisions, history state, failure reporting, and bounded read-only
-inspection.
+inspection. User-opened tabs belong to the Workbench and remain mounted when a
+conversation or task view opens; Agent preview tabs and control stay scoped to
+their owning session. The Workbench can keep multiple conversation tabs open;
+new empty conversations remain renderer-local drafts and appear in the session
+list only after their first message is sent.
 
 Public HTTP(S) pages use the persistent `persist:or-browser` session. Workspace
 files use the in-memory `or-preview` session and a separate preview-only
