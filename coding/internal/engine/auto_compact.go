@@ -72,7 +72,12 @@ func (s *Session) recoverContextOverflow(ctx context.Context, original error) (b
 		return false, overflowErr
 	}
 
-	s.dropTrailingOverflowStep()
+	s.dropTrailingAssistantStep(
+		"context_overflow",
+		func(message *llm.AssistantMessage) bool {
+			return llm.IsContextOverflow(*message, s.contextWindow)
+		},
+	)
 	compacted, err := s.autoCompact(ctx)
 	if err != nil {
 		return true, errors.Join(overflowErr, fmt.Errorf("automatic context compaction: %w", err))
@@ -90,30 +95,4 @@ func (s *Session) trailingContextOverflow() bool {
 	}
 	assistant := asAssistant(messages[len(messages)-1])
 	return assistant != nil && llm.IsContextOverflow(*assistant, s.contextWindow)
-}
-
-func (s *Session) dropTrailingOverflowStep() {
-	messages := s.agent.Snapshot().Messages
-	if len(messages) == 0 {
-		return
-	}
-	assistant := asAssistant(messages[len(messages)-1])
-	if assistant != nil && llm.IsContextOverflow(*assistant, s.contextWindow) {
-		s.recordStepDiscarded("context_overflow")
-		s.dispatchEvent(Event{Type: TurnDiscarded})
-		s.agent.SetMessages(messages[:len(messages)-1])
-		s.rewindPendingLifecycle(len(messages) - 1)
-	}
-}
-
-func (s *Session) autoCompactionWasAttempted() bool {
-	s.runState.mu.RLock()
-	defer s.runState.mu.RUnlock()
-	return s.runState.autoCompactAttempted
-}
-
-func (s *Session) markAutoCompactionAttempted() {
-	s.runState.mu.Lock()
-	s.runState.autoCompactAttempted = true
-	s.runState.mu.Unlock()
 }

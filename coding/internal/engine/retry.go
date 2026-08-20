@@ -72,16 +72,27 @@ func (s *Session) isRetryable(msg llm.AssistantMessage) bool {
 // dropTrailingErrorStep removes a trailing failed assistant message so Continue
 // can resume from the preceding user or tool-result message.
 func (s *Session) dropTrailingErrorStep(reason string) {
+	s.dropTrailingAssistantStep(reason, func(message *llm.AssistantMessage) bool {
+		return message.StopReason == llm.StopReasonError
+	})
+}
+
+// dropTrailingAssistantStep applies one coordinator discard decision before
+// removing a synthetic or recoverable assistant failure from model context.
+func (s *Session) dropTrailingAssistantStep(
+	reason string,
+	shouldDrop func(*llm.AssistantMessage) bool,
+) {
 	msgs := s.agent.Snapshot().Messages
 	n := len(msgs)
 	if n == 0 {
 		return
 	}
-	if a := asAssistant(msgs[n-1]); a != nil && a.StopReason == llm.StopReasonError {
-		s.recordStepDiscarded(reason)
+	if assistant := asAssistant(msgs[n-1]); assistant != nil && shouldDrop(assistant) {
+		discarded := s.lifecycle.discardLastStep(n-1, reason)
+		s.recordStepDiscarded(discarded)
 		s.dispatchEvent(Event{Type: TurnDiscarded})
 		s.agent.SetMessages(msgs[:n-1])
-		s.rewindPendingLifecycle(n - 1)
 	}
 }
 

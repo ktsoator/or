@@ -191,17 +191,28 @@ func TestRunObservabilityReportsFinalPersistenceFailure(t *testing.T) {
 }
 
 func TestStepCorrelationQueuesNextStepBeforePriorStepEnds(t *testing.T) {
-	session := &Session{}
+	coordinator := &lifecycleCoordinator{}
 	startedAt := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
-	session.setRunState(context.Background(), "run-1", "lifecycle-turn-1", startedAt)
-	defer session.clearRunState()
-
-	session.beginStep("step-1", startedAt.Add(time.Millisecond))
-	firstRequest := session.attachRequest("request-1")
-	session.beginStep("step-2", startedAt.Add(2*time.Millisecond))
-	secondRequest := session.attachRequest("request-2")
-	firstStep := session.finishStep()
-	secondStep := session.finishStep()
+	coordinator.startRunWithIDs(
+		0,
+		"run-1",
+		"lifecycle-turn-1",
+		startedAt,
+	)
+	coordinator.beginStepCheckpointWithID(
+		0,
+		"step-1",
+		startedAt.Add(time.Millisecond),
+	)
+	firstRequest := coordinator.attachProviderRequestWithID("request-1")
+	coordinator.beginStepCheckpointWithID(
+		0,
+		"step-2",
+		startedAt.Add(2*time.Millisecond),
+	)
+	secondRequest := coordinator.attachProviderRequestWithID("request-2")
+	firstStep := coordinator.completeStep(0, startedAt.Add(3*time.Millisecond), "completed", "").step
+	secondStep := coordinator.completeStep(0, startedAt.Add(4*time.Millisecond), "completed", "").step
 
 	if firstRequest.turnID != "lifecycle-turn-1" || secondRequest.turnID != "lifecycle-turn-1" ||
 		firstRequest.stepID != "step-1" || secondRequest.stepID != "step-2" {

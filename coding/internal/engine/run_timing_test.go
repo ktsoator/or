@@ -132,8 +132,17 @@ func TestHistoryDoesNotDuplicateRunAfterCompletedEntryIsPersisted(t *testing.T) 
 	completedRun := projection.Runs[0]
 	// Recreate the interval after persistRunTerminal and before the deferred active
 	// run state is cleared.
-	session.setRunState(ctx, completedRun.ID, "turn-test", completedRun.StartedAt)
-	defer session.clearRunState()
+	session.setRunExecutionState(ctx)
+	session.lifecycle.startRunWithIDs(
+		len(session.agent.Snapshot().Messages),
+		completedRun.ID,
+		"turn-test",
+		completedRun.StartedAt,
+	)
+	defer func() {
+		session.clearRunExecutionState()
+		session.lifecycle.reset()
+	}()
 
 	history := session.History()
 	runs := 0

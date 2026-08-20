@@ -7,7 +7,6 @@ import (
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/observability"
-	"github.com/ktsoator/or/coding/internal/transcript"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -38,12 +37,18 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 	s.prepareSkillRefresh()
 	s.setSkillToolAvailable(s.currentSkillRegistry().Len() > 0)
 	s.prepareContextRefresh()
-	runID := observability.NewID("run")
-	turnID := observability.NewID("turn")
 	startedAt := time.Now().UTC()
-	s.setRunState(ctx, runID, turnID, startedAt)
-	defer s.clearRunState()
-	s.queueRunLifecycleStart(runID, turnID, startedAt)
+	started := s.lifecycle.startRun(
+		len(s.agent.Snapshot().Messages),
+		startedAt,
+	)
+	runID := started.runID
+	turnID := started.turnID
+	s.setRunExecutionState(ctx)
+	defer func() {
+		s.lifecycle.reset()
+		s.clearRunExecutionState()
+	}()
 	s.dispatchEvent(Event{Type: RunStarted, RunID: runID, StartedAt: startedAt})
 	s.recorder.Record(observability.Event{
 		Name: observability.RunStarted, SessionID: s.sessionID, RunID: runID,
@@ -90,19 +95,15 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 		runErr = checkpointErr
 	}
 	completedAt := time.Now().UTC()
-	lifecycleStatus := transcript.LifecycleCompleted
-	lifecycleReason := ""
-	if runErr != nil {
-		status, reason := runFailure(runErr, checkpointErr, nil)
-		lifecycleStatus, lifecycleReason = lifecycleTerminal(status, reason)
-	}
-	s.closeOpenSteps(lifecycleStatus, lifecycleReason)
+	terminal := s.lifecycle.finishRun(
+		len(s.agent.Snapshot().Messages),
+		completedAt,
+		runErr,
+		checkpointErr,
+	)
 	persistErr := s.persistRunTerminal(
 		ctx,
-		runID,
-		completedAt,
-		lifecycleStatus,
-		lifecycleReason,
+		terminal,
 	)
 	// The durable terminal entries above describe execution and are part of the
 	// batch that may fail. Diagnostics run after that attempt, so they can expose
@@ -112,9 +113,13 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 	if finalErr := errors.Join(runErr, persistErr); finalErr != nil {
 		turnStatus, turnErrorCode = runFailure(finalErr, checkpointErr, persistErr)
 	}
-	activeRunID, activeTurnID, turnStartedAt := s.activeLifecycleTurn()
 	s.recordTurnTerminal(
-		activeRunID, activeTurnID, turnStatus, turnErrorCode, turnStartedAt, completedAt,
+		terminal.runID,
+		terminal.turnID,
+		turnStatus,
+		turnErrorCode,
+		terminal.turnStartedAt,
+		completedAt,
 	)
 	userMessageIDs, assistantMessageID := s.persistedRunMessageIDs(runID)
 	s.dispatchEvent(Event{
