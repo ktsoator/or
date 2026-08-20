@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +16,51 @@ import (
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/llm"
 )
+
+var errInjectedAppendFailure = errors.New("injected append failure")
+
+type partialWriteFile struct {
+	appendFile
+}
+
+func (f *partialWriteFile) Write(data []byte) (int, error) {
+	limit := len(data) / 2
+	if limit == 0 {
+		limit = len(data)
+	}
+	written, err := f.appendFile.Write(data[:limit])
+	if err != nil {
+		return written, err
+	}
+	return written, errInjectedAppendFailure
+}
+
+type syncFailureFile struct {
+	appendFile
+}
+
+type shortWriteFile struct {
+	appendFile
+}
+
+func (f *shortWriteFile) Write(data []byte) (int, error) {
+	return f.appendFile.Write(data[:len(data)/2])
+}
+
+func (f *syncFailureFile) Sync() error {
+	return errInjectedAppendFailure
+}
+
+type closeFailureFile struct {
+	appendFile
+}
+
+func (f *closeFailureFile) Close() error {
+	if err := f.appendFile.Close(); err != nil {
+		return err
+	}
+	return errInjectedAppendFailure
+}
 
 func TestJSONLLoadRejectsLegacyMessagesWithoutRewriting(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session.jsonl")
@@ -155,6 +202,246 @@ func TestJSONLAppendRejectsSequenceGapWithoutChangingLog(t *testing.T) {
 	}
 	if len(loaded) != 1 || loaded[0].Seq != 0 {
 		t.Fatalf("entries after rejected append = %#v", loaded)
+	}
+}
+
+func TestJSONLAppendRollsBackFailedBatch(t *testing.T) {
+	tests := []struct {
+		name    string
+		wrap    func(appendFile) appendFile
+		want    string
+		wantErr error
+	}{
+		{
+			name:    "partial write error",
+			wrap:    func(file appendFile) appendFile { return &partialWriteFile{appendFile: file} },
+			want:    "append",
+			wantErr: errInjectedAppendFailure,
+		},
+		{
+			name:    "short write",
+			wrap:    func(file appendFile) appendFile { return &shortWriteFile{appendFile: file} },
+			want:    "append",
+			wantErr: io.ErrShortWrite,
+		},
+		{
+			name:    "sync",
+			wrap:    func(file appendFile) appendFile { return &syncFailureFile{appendFile: file} },
+			want:    "sync",
+			wantErr: errInjectedAppendFailure,
+		},
+		{
+			name:    "close",
+			wrap:    func(file appendFile) appendFile { return &closeFailureFile{appendFile: file} },
+			want:    "close",
+			wantErr: errInjectedAppendFailure,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "session.jsonl")
+			store := NewJSONL(path)
+			first := sequencedForTest(NewMessage(agent.UserMessage("committed")))[0]
+			if err := store.Append(context.Background(), first); err != nil {
+				t.Fatal(err)
+			}
+			before, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			next := NewMessage(agent.UserMessage("retry me"))
+			next.Seq = 1
+			store.openFile = func(path string, flag int, mode os.FileMode) (appendFile, error) {
+				file, err := openAppendFile(path, flag, mode)
+				if err != nil {
+					return nil, err
+				}
+				return test.wrap(file), nil
+			}
+			if err := store.Append(context.Background(), next); err == nil ||
+				!strings.Contains(err.Error(), test.want) ||
+				!errors.Is(err, test.wantErr) {
+				t.Fatalf("Append() error = %v, want injected %s failure", err, test.want)
+			}
+			after, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(after, before) {
+				t.Fatalf("failed append changed committed bytes:\n%s", after)
+			}
+
+			store.openFile = openAppendFile
+			if err := store.Append(context.Background(), next); err != nil {
+				t.Fatalf("retry Append() error = %v", err)
+			}
+			loaded, err := NewJSONL(path).Load(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(loaded) != 2 || loaded[0].ID != first.ID || loaded[1].ID != next.ID {
+				t.Fatalf("entries after retry = %#v", loaded)
+			}
+		})
+	}
+}
+
+func TestJSONLLoadRecoversUnterminatedTailAtRecordBoundary(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	store := NewJSONL(path)
+	first := sequencedForTest(NewMessage(agent.UserMessage("first")))[0]
+	if err := store.Append(context.Background(), first); err != nil {
+		t.Fatal(err)
+	}
+	committed, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	second := NewMessage(agent.UserMessage("second"))
+	second.Seq = 1
+	third := NewMessage(agent.UserMessage("third"))
+	third.Seq = 2
+	secondLine, err := encodeEntries([]Entry{second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	thirdLine, err := encodeEntries([]Entry{third})
+	if err != nil {
+		t.Fatal(err)
+	}
+	torn := thirdLine[:len(thirdLine)/2]
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, privateFileMode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.Write(append(append([]byte(nil), secondLine...), torn...)); err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := NewJSONL(path).Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 2 || loaded[0].ID != first.ID || loaded[1].ID != second.ID {
+		t.Fatalf("recovered entries = %#v", loaded)
+	}
+	wantBytes := append(append([]byte(nil), committed...), secondLine...)
+	gotBytes, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(gotBytes, wantBytes) {
+		t.Fatalf("recovered transcript bytes:\n%s\nwant:\n%s", gotBytes, wantBytes)
+	}
+	if err := NewJSONL(path).Append(context.Background(), third); err != nil {
+		t.Fatalf("append after recovery: %v", err)
+	}
+}
+
+func TestJSONLLoadDropsCompleteButUnterminatedEntry(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	store := NewJSONL(path)
+	first := sequencedForTest(NewMessage(agent.UserMessage("first")))[0]
+	if err := store.Append(context.Background(), first); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := NewMessage(agent.UserMessage("not committed"))
+	second.Seq = 1
+	line, err := encodeEntries([]Entry{second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	line = bytes.TrimSuffix(line, []byte{'\n'})
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, privateFileMode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.Write(line); err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := NewJSONL(path).Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 1 || loaded[0].ID != first.ID {
+		t.Fatalf("loaded entries = %#v", loaded)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, before) {
+		t.Fatalf("unterminated entry was treated as committed:\n%s", after)
+	}
+}
+
+func TestJSONLLoadRejectsTerminatedCorruptionWithoutRewriting(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	store := NewJSONL(path)
+	first := sequencedForTest(NewMessage(agent.UserMessage("first")))[0]
+	if err := store.Append(context.Background(), first); err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, privateFileMode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.Write([]byte("{\"seq\":1\n")); err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := NewJSONL(path).Load(context.Background()); err == nil ||
+		!strings.Contains(err.Error(), "decode session line") {
+		t.Fatalf("Load() error = %v, want committed corruption", err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, before) {
+		t.Fatalf("committed corruption was rewritten:\n%s", after)
+	}
+}
+
+func TestJSONLLoadDoesNotTruncateUncommittedHeader(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	data := []byte(`{"type":"session","version":7}`)
+	if err := os.WriteFile(path, data, privateFileMode); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewJSONL(path).Load(context.Background()); err == nil ||
+		!strings.Contains(err.Error(), "no committed header") {
+		t.Fatalf("Load() error = %v, want missing committed header", err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, data) {
+		t.Fatalf("uncommitted header was truncated:\n%s", after)
 	}
 }
 

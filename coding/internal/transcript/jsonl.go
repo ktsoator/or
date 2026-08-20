@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -14,17 +15,33 @@ import (
 
 const maxLine = 16 << 20 // 16 MiB
 
+type appendFile interface {
+	Chmod(os.FileMode) error
+	Write([]byte) (int, error)
+	Sync() error
+	Close() error
+}
+
+type appendFileOpener func(string, int, os.FileMode) (appendFile, error)
+
 // JSONL persists a session log: one header followed by typed append-only
 // entries.
 type JSONL struct {
 	mu       sync.Mutex
 	path     string
+	openFile appendFileOpener
 	ready    bool
 	nextSeq  int64
 	entryIDs map[string]struct{}
 }
 
-func NewJSONL(path string) *JSONL { return &JSONL{path: path} }
+func NewJSONL(path string) *JSONL {
+	return &JSONL{path: path, openFile: openAppendFile}
+}
+
+func openAppendFile(path string, flag int, mode os.FileMode) (appendFile, error) {
+	return os.OpenFile(path, flag, mode)
+}
 
 func (s *JSONL) Load(_ context.Context) ([]Entry, error) {
 	s.mu.Lock()
@@ -70,8 +87,14 @@ func (s *JSONL) Append(_ context.Context, entries ...Entry) error {
 		}
 		encoded = append(append(header, '\n'), encoded...)
 	}
+	previousSize := int64(0)
+	if info, err := os.Stat(s.path); err == nil {
+		previousSize = info.Size()
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("store: stat append boundary for %s: %w", s.path, err)
+	}
 
-	file, err := os.OpenFile(s.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, privateFileMode)
+	file, err := s.openFile(s.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, privateFileMode)
 	if err != nil {
 		return fmt.Errorf("store: open %s: %w", s.path, err)
 	}
@@ -79,16 +102,30 @@ func (s *JSONL) Append(_ context.Context, entries ...Entry) error {
 		_ = file.Close()
 		return fmt.Errorf("store: secure %s: %w", s.path, err)
 	}
-	if _, err := file.Write(encoded); err != nil {
-		_ = file.Close()
-		return fmt.Errorf("store: append %s: %w", s.path, err)
+	written, writeErr := file.Write(encoded)
+	if writeErr == nil && written != len(encoded) {
+		writeErr = io.ErrShortWrite
+	}
+	if writeErr != nil {
+		return s.rollbackAppendFailure(
+			previousSize,
+			fmt.Errorf("store: append %s: %w", s.path, writeErr),
+			file.Close(),
+		)
 	}
 	if err := file.Sync(); err != nil {
-		_ = file.Close()
-		return fmt.Errorf("store: sync %s: %w", s.path, err)
+		return s.rollbackAppendFailure(
+			previousSize,
+			fmt.Errorf("store: sync %s: %w", s.path, err),
+			file.Close(),
+		)
 	}
 	if err := file.Close(); err != nil {
-		return fmt.Errorf("store: close %s: %w", s.path, err)
+		return s.rollbackAppendFailure(
+			previousSize,
+			fmt.Errorf("store: close %s: %w", s.path, err),
+			nil,
+		)
 	}
 	s.ready = true
 	s.nextSeq += int64(len(entries))
@@ -162,11 +199,14 @@ func (s *JSONL) loadLocked() ([]Entry, error) {
 	if err != nil {
 		return nil, fmt.Errorf("store: read %s: %w", s.path, err)
 	}
-	lines, err := splitLines(data)
+	lines, committedBytes, tornTail, err := splitCommittedLines(data)
 	if err != nil {
 		return nil, err
 	}
 	if len(lines) == 0 {
+		if len(data) != 0 {
+			return nil, fmt.Errorf("store: session has no committed header")
+		}
 		s.ready = false
 		s.nextSeq = 0
 		s.entryIDs = nil
@@ -190,15 +230,30 @@ func (s *JSONL) loadLocked() ([]Entry, error) {
 	if err := validateEntries(entries); err != nil {
 		return nil, err
 	}
+	if tornTail {
+		if err := truncateAndSync(s.path, committedBytes); err != nil {
+			return nil, fmt.Errorf("store: recover torn tail for %s: %w", s.path, err)
+		}
+	}
 	s.ready = true
 	s.nextSeq = int64(len(entries))
 	s.entryIDs = collectEntryIDs(entries)
 	return entries, nil
 }
 
-func splitLines(data []byte) ([][]byte, error) {
+func splitCommittedLines(data []byte) ([][]byte, int64, bool, error) {
+	committed := data
+	tornTail := len(data) > 0 && data[len(data)-1] != '\n'
+	if tornTail {
+		lastNewline := bytes.LastIndexByte(data, '\n')
+		if lastNewline < 0 {
+			committed = nil
+		} else {
+			committed = data[:lastNewline+1]
+		}
+	}
 	var lines [][]byte
-	scanner := bufio.NewScanner(bytes.NewReader(data))
+	scanner := bufio.NewScanner(bytes.NewReader(committed))
 	scanner.Buffer(make([]byte, 0, 64<<10), maxLine)
 	for scanner.Scan() {
 		line := bytes.TrimSpace(scanner.Bytes())
@@ -207,9 +262,43 @@ func splitLines(data []byte) ([][]byte, error) {
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("store: read JSONL: %w", err)
+		return nil, 0, false, fmt.Errorf("store: read JSONL: %w", err)
 	}
-	return lines, nil
+	return lines, int64(len(committed)), tornTail, nil
+}
+
+func (s *JSONL) rollbackAppendFailure(size int64, primary, closeErr error) error {
+	s.ready = false
+	s.nextSeq = 0
+	s.entryIDs = nil
+	var closeFailure error
+	if closeErr != nil {
+		closeFailure = fmt.Errorf("store: close failed append %s: %w", s.path, closeErr)
+	}
+	var rollbackFailure error
+	if err := truncateAndSync(s.path, size); err != nil {
+		rollbackFailure = fmt.Errorf("store: rollback failed append %s: %w", s.path, err)
+	}
+	return errors.Join(primary, closeFailure, rollbackFailure)
+}
+
+func truncateAndSync(path string, size int64) error {
+	file, err := os.OpenFile(path, os.O_WRONLY, privateFileMode)
+	if err != nil {
+		return fmt.Errorf("open: %w", err)
+	}
+	if err := file.Truncate(size); err != nil {
+		closeErr := file.Close()
+		return errors.Join(fmt.Errorf("truncate to %d bytes: %w", size, err), closeErr)
+	}
+	if err := file.Sync(); err != nil {
+		closeErr := file.Close()
+		return errors.Join(fmt.Errorf("sync: %w", err), closeErr)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("close: %w", err)
+	}
+	return nil
 }
 
 func decodeEntries(lines [][]byte) ([]Entry, error) {
