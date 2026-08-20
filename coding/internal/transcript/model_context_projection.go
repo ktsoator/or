@@ -59,9 +59,7 @@ func (u *ModelContextProjectionUnit) ApplyProjection(event ProjectionEvent) {
 		active[0] = agent.UserMessage(
 			summaryPrefix + event.Entry.Compaction.Summary + summarySuffix,
 		)
-		for _, message := range u.allMessages[first:] {
-			active = append(active, message)
-		}
+		active = append(active, u.allMessages[first:]...)
 		u.projection.Messages = active
 		u.projection.ActiveCompactionEntryID = event.Entry.ID
 		u.projection.FirstKeptEntryID = event.Entry.Compaction.FirstKeptEntryID
