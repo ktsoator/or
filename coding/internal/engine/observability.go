@@ -36,9 +36,9 @@ func (s *Session) observeAgentEvent(
 			transition.nextStartedAt,
 		)
 	case agent.ToolStart:
-		s.beginObservedTool(event.ToolCallID, event.ToolName)
+		s.toolRuntime.beginObservedTool(event.ToolCallID, event.ToolName)
 	case agent.ToolEnd:
-		s.finishObservedTool(event)
+		s.toolRuntime.finishObservedTool(event)
 	case agent.TurnEnd:
 		completed := decision.stepComplete
 		step := completed.step
@@ -61,19 +61,20 @@ func (s *Session) observeAgentEvent(
 	}
 }
 
-func (s *Session) beginObservedTool(toolCallID, toolName string) {
+func (runtime *toolRuntime) beginObservedTool(toolCallID, toolName string) {
 	startedAt := time.Now().UTC()
-	state, started := s.beginTool(toolCallID, toolName, startedAt)
+	state, started := runtime.lifecycle.beginTool(toolCallID, toolName, startedAt)
 	if !started {
 		return
 	}
-	s.recorder.Record(toolEvent(
-		s, state, observability.ToolStarted, "running", "", slog.LevelInfo, startedAt,
+	runtime.recorder.Record(toolEvent(
+		runtime.sessionID, state,
+		observability.ToolStarted, "running", "", slog.LevelInfo, startedAt,
 	))
 }
 
-func (s *Session) finishObservedTool(event agent.AgentEvent) {
-	state, found := s.finishTool(event.ToolCallID)
+func (runtime *toolRuntime) finishObservedTool(event agent.AgentEvent) {
+	state, found := runtime.lifecycle.finishTool(event.ToolCallID)
 	if !found {
 		return
 	}
@@ -90,9 +91,17 @@ func (s *Session) finishObservedTool(event agent.AgentEvent) {
 		errorCode = toolFailureCode(event.Result.Outcome)
 	}
 	completedAt := time.Now().UTC()
-	record := toolEvent(s, state, name, status, errorCode, level, state.startedAt)
+	record := toolEvent(
+		runtime.sessionID,
+		state,
+		name,
+		status,
+		errorCode,
+		level,
+		state.startedAt,
+	)
 	record.Duration = elapsed(state.startedAt, completedAt)
-	s.recorder.Record(record)
+	runtime.recorder.Record(record)
 }
 
 func toolFailureCode(outcome agent.ToolOutcome) string {
@@ -144,7 +153,7 @@ var stableToolErrorCodes = map[string]bool{
 }
 
 func toolEvent(
-	s *Session,
+	sessionID string,
 	state toolCorrelationState,
 	name, status, errorCode string,
 	level slog.Level,
@@ -152,7 +161,7 @@ func toolEvent(
 ) observability.Event {
 	return observability.Event{
 		Name: name, Level: level,
-		SessionID: s.sessionID, RunID: state.correlation.runID,
+		SessionID: sessionID, RunID: state.correlation.runID,
 		TurnID: state.correlation.turnID, RequestID: state.correlation.requestID,
 		StepID:     state.correlation.stepID,
 		ToolCallID: state.toolCallID, ToolName: state.toolName,
@@ -161,28 +170,28 @@ func toolEvent(
 }
 
 type observedApprover struct {
-	session  *Session
+	runtime  *toolRuntime
 	delegate permission.Approver
 }
 
-func (s *Session) observedApprover(delegate permission.Approver) permission.Approver {
+func (runtime *toolRuntime) observedApprover(delegate permission.Approver) permission.Approver {
 	if delegate == nil {
 		return nil
 	}
-	return &observedApprover{session: s, delegate: delegate}
+	return &observedApprover{runtime: runtime, delegate: delegate}
 }
 
 func (a *observedApprover) Decide(
 	ctx context.Context,
 	request permission.ApprovalRequest,
 ) (permission.ApprovalResponse, error) {
-	state, found := a.session.toolState(request.Request.ToolCallID)
+	state, found := a.runtime.toolState(request.Request.ToolCallID)
 	if !found {
 		return a.delegate.Decide(ctx, request)
 	}
 	startedAt := time.Now().UTC()
-	a.session.recorder.Record(toolEvent(
-		a.session, state, observability.ApprovalStarted,
+	a.runtime.recorder.Record(toolEvent(
+		a.runtime.sessionID, state, observability.ApprovalStarted,
 		"waiting", "", slog.LevelInfo, startedAt,
 	))
 	response, err := a.delegate.Decide(ctx, request)
@@ -211,9 +220,17 @@ func (a *observedApprover) Decide(
 		errorCode = "invalid_approval_choice"
 		level = slog.LevelError
 	}
-	record := toolEvent(a.session, state, name, status, errorCode, level, startedAt)
+	record := toolEvent(
+		a.runtime.sessionID,
+		state,
+		name,
+		status,
+		errorCode,
+		level,
+		startedAt,
+	)
 	record.Duration = elapsed(startedAt, completedAt)
-	a.session.recorder.Record(record)
+	a.runtime.recorder.Record(record)
 	return response, err
 }
 

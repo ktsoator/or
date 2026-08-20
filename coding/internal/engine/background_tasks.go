@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/ktsoator/or/coding/internal/tools"
@@ -40,33 +39,15 @@ func projectBackgroundTask(state tools.TaskState) BackgroundTask {
 
 // Tasks returns every managed task's latest state in creation order.
 func (s *Session) Tasks() []BackgroundTask {
-	if s.tasks == nil {
-		return nil
-	}
-	states := s.tasks.Snapshot()
-	tasks := make([]BackgroundTask, 0, len(states))
-	for _, state := range states {
-		tasks = append(tasks, projectBackgroundTask(state))
-	}
-	return tasks
+	return s.toolRuntime.backgroundTasks()
 }
 
 // StopTask terminates one session-owned background task.
 func (s *Session) StopTask(id string) error {
-	if s.tasks == nil {
-		return fmt.Errorf("%w: %s", tools.ErrTaskNotFound, id)
-	}
-	return s.tasks.Stop(id)
+	return s.toolRuntime.stopTask(id)
 }
 
 // TaskOutput returns a bounded tail of one session-owned task's logs.
 func (s *Session) TaskOutput(id string) (TaskOutput, error) {
-	if s.tasks == nil {
-		return TaskOutput{}, fmt.Errorf("%w: %s", tools.ErrTaskNotFound, id)
-	}
-	output, err := s.tasks.ReadOutput(id, 0)
-	if err != nil {
-		return TaskOutput{}, err
-	}
-	return TaskOutput{Content: output.Content, Truncated: output.Truncated}, nil
+	return s.toolRuntime.taskOutput(id)
 }

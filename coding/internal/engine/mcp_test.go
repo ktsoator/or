@@ -20,7 +20,7 @@ func TestNewAppendsProductIntegrationTools(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer session.Close()
-	if _, ok := session.toolByName["external_tool"]; !ok {
+	if _, ok := session.toolRuntime.lookup("external_tool"); !ok {
 		t.Fatal("additional tool was not added")
 	}
 }

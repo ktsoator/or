@@ -138,16 +138,6 @@ func (manager *contextManager) activateSkill(name string) {
 	)
 }
 
-func (s *Session) setSkillToolAvailable(available bool) {
-	next := toolsWithSkillAvailability(s.allTools, available)
-	if sameToolNames(s.tools, next) {
-		return
-	}
-	s.tools = next
-	s.agent.SetTools(tools.AgentTools(next))
-	s.agent.SetSystemPrompt(s.context.systemPrompt(next))
-}
-
 // prepareSkillRefresh stages one immutable snapshot for the next request. The
 // live tool registry is not replaced here; modelStreamFn publishes it only after
 // the matching hidden update and canonical request prefix are durable.
