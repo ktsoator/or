@@ -43,7 +43,7 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 			RunID: step.runID, TurnID: step.lifecycleTurnID, StepID: step.stepID,
 			Status: "running", StartedAt: step.startedAt,
 		})
-		prepared := s.contextProjection.PrepareStep(input)
+		prepared := s.context.prepareStep(input)
 		checkpointStarted := time.Now().UTC()
 		providerInput := prepared.Input
 		requestHeader, checkpointErr := s.buildProviderRequestHeader(
@@ -94,9 +94,7 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 			Duration: time.Since(checkpointStarted), MessageCount: len(input.Messages),
 			AttachmentCount: len(prepared.Pending),
 		})
-		s.contextProjection.Commit(prepared)
-		s.commitSkillRefresh(prepared.Pending)
-		s.commitContextRefresh(prepared.Pending)
+		s.context.commit(prepared)
 		// Content snapshots are diagnostic and deliberately fail-open: a local
 		// write failure must never prevent a provider request from running.
 		_ = s.requestSnapshots.Save(snapshot.NewSnapshot(

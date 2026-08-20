@@ -34,9 +34,9 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 	if err := s.persistNew(ctx); err != nil {
 		return err
 	}
-	s.prepareSkillRefresh()
-	s.setSkillToolAvailable(s.currentSkillRegistry().Len() > 0)
-	s.prepareContextRefresh()
+	s.context.prepareSkillRefresh()
+	s.setSkillToolAvailable(s.context.hasSkills())
+	s.context.prepareContextRefresh()
 	startedAt := time.Now().UTC()
 	started := s.lifecycle.startRun(
 		len(s.agent.Snapshot().Messages),

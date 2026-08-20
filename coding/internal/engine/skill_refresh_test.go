@@ -318,7 +318,7 @@ func TestSkillRefreshPersistenceFailureDoesNotPublishRegistry(t *testing.T) {
 	if got := executeSkill(t, session, "review"); !strings.Contains(got, "old body") {
 		t.Fatalf("failed refresh published new registry: %q", got)
 	}
-	state := session.contextProjection.State()
+	state := session.context.state().Projection
 	if state.StagedSkillsRevision == "" || state.ActiveSkillsRevision != "" {
 		t.Fatalf("model context state = %#v, want uncommitted staged update", state)
 	}

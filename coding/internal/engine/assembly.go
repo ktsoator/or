@@ -7,7 +7,6 @@ import (
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/compaction"
-	"github.com/ktsoator/or/coding/internal/contextprojection"
 	"github.com/ktsoator/or/coding/internal/observability"
 	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/coding/internal/skills"
@@ -68,6 +67,13 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	if opts.MaxRetries != nil {
 		maxRetries = *opts.MaxRetries
 	}
+	contextState := newContextManager(
+		cwd,
+		opts.Instructions,
+		dynamicSkills,
+		opts.SkillLoader,
+		entries,
+	)
 
 	s := &Session{
 		journal:          journal,
@@ -79,10 +85,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		toolByName:       toolsByName(toolSet),
 		tasks:            tasks,
 		cwd:              cwd,
-		instructions:     opts.Instructions,
-		skillRegistry:    dynamicSkills,
-		skillLoader:      opts.SkillLoader,
-		skillRevision:    initialRegistry.Revision(),
+		context:          contextState,
 		maxRetries:       maxRetries,
 		contextWindow:    opts.Model.ContextWindow,
 		compactor:        opts.Compactor,
@@ -102,20 +105,10 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 			GetAPIKey: opts.GetAPIKey,
 		}
 	}
-	baseRendered, baseRevision := s.buildBaseContext()
-	s.contextRevision = baseRevision
-	s.contextProjection = contextprojection.New(
-		nextContextEpoch(entries),
-		baseRevision,
-		baseRendered,
-		s.skillRevision,
-		s.buildSkillListing(),
-	)
-	s.contextProjection.RestoreActivatedSkills(restoredActivatedSkills(entries))
 	if s.tasks != nil {
 		s.taskUnsubscribe = s.tasks.Subscribe(func(state tools.TaskState) {
 			if state.Status != tools.TaskRunning {
-				s.contextProjection.StageTaskStatus(renderTaskStatus(s.tasks.Completed()))
+				s.context.stageTaskStatus(renderTaskStatus(s.tasks.Completed()))
 			}
 			eventType := TaskCompleted
 			if state.Status == tools.TaskRunning {
@@ -129,7 +122,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	}
 
 	agentOpts := agent.Options{
-		SystemPrompt:  s.buildSystemPrompt(opts.Instructions),
+		SystemPrompt:  s.context.systemPrompt(activeToolSet),
 		Model:         opts.Model,
 		ThinkingLevel: opts.ThinkingLevel,
 		Tools:         tools.AgentTools(activeToolSet),
@@ -166,7 +159,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 			if ctx.ToolCall.Name == skills.ToolName && !ctx.Result.Outcome.Failed() {
 				if args, ok := ctx.Args.(map[string]any); ok {
 					if name, ok := args["name"].(string); ok {
-						s.activateSkill(name)
+						s.context.activateSkill(name)
 					}
 				}
 			}

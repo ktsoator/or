@@ -1,56 +1,137 @@
 package engine
 
 import (
+	"sync"
+
 	"github.com/ktsoator/or/coding/internal/contextprojection"
 	"github.com/ktsoator/or/coding/internal/prompt"
 	"github.com/ktsoator/or/coding/internal/skills"
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/transcript"
+	"github.com/ktsoator/or/llm"
 )
 
-// buildSystemPrompt assembles only the stable coding prompt. Session
-// instructions and skill listings are projected at the request
-// boundary and never become part of the Agent's canonical system prompt.
-func (s *Session) buildSystemPrompt(instructions string) string {
-	infos := make([]prompt.ToolInfo, len(s.tools))
-	for i, t := range s.tools {
+// contextManager owns the mutable product context projected at provider request
+// boundaries. Its staged revisions become active only through commit, after the
+// matching journal checkpoint and committed-request validation have succeeded.
+type contextManager struct {
+	// Manager methods acquire mu before entering projection. Projection code
+	// never calls back into this owner, so the lock order stays one-way.
+	mu sync.Mutex
+
+	cwd          string
+	instructions string
+
+	skillRegistry        *skills.DynamicRegistry
+	skillLoader          func() []skills.Skill
+	skillRevision        string
+	pendingSkills        *skills.Registry
+	pendingSkillRevision string
+
+	contextRevision        string
+	pendingContextRevision string
+	projection             *contextprojection.Manager
+}
+
+type contextManagerState struct {
+	Projection             contextprojection.State
+	SkillRevision          string
+	PendingSkillRevision   string
+	ContextRevision        string
+	PendingContextRevision string
+}
+
+func newContextManager(
+	cwd string,
+	instructions string,
+	skillRegistry *skills.DynamicRegistry,
+	skillLoader func() []skills.Skill,
+	entries []transcript.Entry,
+) *contextManager {
+	if skillRegistry == nil {
+		skillRegistry = skills.NewDynamicRegistry(skills.NewRegistry(nil))
+	}
+	registry := skillRegistry.Snapshot()
+	skillRevision := registry.Revision()
+	env := prompt.DetectEnvironment(cwd)
+	files := prompt.LoadContextFiles(cwd)
+	baseRendered := prompt.RenderBaseContext(env, files)
+	baseRevision := prompt.ContextRevision(env, files)
+	projection := contextprojection.New(
+		nextContextEpoch(entries),
+		baseRevision,
+		baseRendered,
+		skillRevision,
+		prompt.RenderSkillListing(skillRevision, skillInfos(registry.List())),
+	)
+	projection.RestoreActivatedSkills(restoredActivatedSkills(entries))
+	return &contextManager{
+		cwd:             cwd,
+		instructions:    instructions,
+		skillRegistry:   skillRegistry,
+		skillLoader:     skillLoader,
+		skillRevision:   skillRevision,
+		contextRevision: baseRevision,
+		projection:      projection,
+	}
+}
+
+// systemPrompt assembles only the stable coding prompt. Session instructions
+// and skill listings are projected at the request boundary and never become
+// part of the Agent's canonical system prompt.
+func (manager *contextManager) systemPrompt(toolSet []tools.Tool) string {
+	infos := make([]prompt.ToolInfo, len(toolSet))
+	for i, t := range toolSet {
 		infos[i] = prompt.ToolInfo{Name: t.Name(), Guidelines: t.Guidelines}
 	}
 	return prompt.BuildSystem(prompt.SystemOptions{
-		Instructions: instructions,
+		Instructions: manager.instructions,
 		Tools:        infos,
 	})
 }
 
-// buildBaseContext renders the session's environment and instruction files, with
-// the revision that fingerprints them. prepareContextRefresh compares against
-// that revision to decide whether the model's view has gone stale.
-func (s *Session) buildBaseContext() (rendered, revision string) {
-	env := prompt.DetectEnvironment(s.cwd)
-	files := prompt.LoadContextFiles(s.cwd)
-	return prompt.RenderBaseContext(env, files), prompt.ContextRevision(env, files)
-}
-
-func (s *Session) buildSkillListing() string {
-	return prompt.RenderSkillListing(
-		s.skillRevision,
-		skillInfos(s.skillRegistry.List()),
-	)
-}
-
-func (s *Session) currentSkillRegistry() *skills.Registry {
-	if s.pendingSkills != nil {
-		return s.pendingSkills
+func (manager *contextManager) currentSkillRegistryLocked() *skills.Registry {
+	if manager.pendingSkills != nil {
+		return manager.pendingSkills
 	}
-	return s.skillRegistry.Snapshot()
+	return manager.skillRegistry.Snapshot()
 }
 
-func (s *Session) activateSkill(name string) {
-	skill, ok := s.currentSkillRegistry().Lookup(name)
+func (manager *contextManager) hasSkills() bool {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	return manager.currentSkillRegistryLocked().Len() > 0
+}
+
+func (manager *contextManager) preparePrompt(text string) (string, error) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	registry := manager.currentSkillRegistryLocked()
+	_, matched, err := registry.ResolveExplicitInvocation(text)
+	if err != nil {
+		return "", err
+	}
+	if !matched {
+		return text, nil
+	}
+	if activated, ok := registry.ExplicitInvocationSkill(text); ok {
+		manager.projection.StageActivatedSkill(
+			activated.Name,
+			"",
+			skills.FormatActivatedContext(activated),
+		)
+	}
+	return registry.DisplayExplicitInvocation(text), nil
+}
+
+func (manager *contextManager) activateSkill(name string) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	skill, ok := manager.currentSkillRegistryLocked().Lookup(name)
 	if !ok {
 		return
 	}
-	s.contextProjection.StageActivatedSkill(
+	manager.projection.StageActivatedSkill(
 		skill.Name,
 		"",
 		skills.FormatActivatedContext(skill),
@@ -64,45 +145,47 @@ func (s *Session) setSkillToolAvailable(available bool) {
 	}
 	s.tools = next
 	s.agent.SetTools(tools.AgentTools(next))
-	s.agent.SetSystemPrompt(s.buildSystemPrompt(s.instructions))
+	s.agent.SetSystemPrompt(s.context.systemPrompt(next))
 }
 
 // prepareSkillRefresh stages one immutable snapshot for the next request. The
 // live tool registry is not replaced here; modelStreamFn publishes it only after
 // the matching hidden update and canonical request prefix are durable.
-func (s *Session) prepareSkillRefresh() {
-	if s.skillLoader == nil {
+func (manager *contextManager) prepareSkillRefresh() {
+	if manager.skillLoader == nil {
 		return
 	}
-	next := skills.NewRegistry(s.skillLoader())
+	next := skills.NewRegistry(manager.skillLoader())
 	nextRevision := next.Revision()
 
-	if s.pendingSkills != nil {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	if manager.pendingSkills != nil {
 		switch nextRevision {
-		case s.pendingSkillRevision:
-			s.pendingSkills = next
+		case manager.pendingSkillRevision:
+			manager.pendingSkills = next
 			return
-		case s.skillRevision:
-			s.pendingSkills = nil
-			s.pendingSkillRevision = ""
-			s.contextProjection.CancelStagedSkillsUpdate()
-			s.skillRegistry.Replace(next)
+		case manager.skillRevision:
+			manager.pendingSkills = nil
+			manager.pendingSkillRevision = ""
+			manager.projection.CancelStagedSkillsUpdate()
+			manager.skillRegistry.Replace(next)
 			return
 		}
-	} else if nextRevision == s.skillRevision {
-		s.skillRegistry.Replace(next)
+	} else if nextRevision == manager.skillRevision {
+		manager.skillRegistry.Replace(next)
 		return
 	}
 
-	delta := skills.Diff(s.skillRegistry.Snapshot(), next)
+	delta := skills.Diff(manager.skillRegistry.Snapshot(), next)
 	rendered := prompt.RenderSkillsUpdate(
 		nextRevision,
 		skillInfos(next.List()),
 		promptSkillDelta(delta),
 	)
-	s.pendingSkills = next
-	s.pendingSkillRevision = nextRevision
-	s.contextProjection.StageSkillsUpdate(nextRevision, rendered)
+	manager.pendingSkills = next
+	manager.pendingSkillRevision = nextRevision
+	manager.projection.StageSkillsUpdate(nextRevision, rendered)
 }
 
 // prepareContextRefresh restages the environment and instruction files when they
@@ -110,61 +193,82 @@ func (s *Session) prepareSkillRefresh() {
 // switch, or a session that crossed midnight. The refresh is projected after the
 // canonical messages, so a change costs one bounded block rather than the
 // session's cached request prefix.
-func (s *Session) prepareContextRefresh() {
-	env := prompt.DetectEnvironment(s.cwd)
-	files := prompt.LoadContextFiles(s.cwd)
+func (manager *contextManager) prepareContextRefresh() {
+	env := prompt.DetectEnvironment(manager.cwd)
+	files := prompt.LoadContextFiles(manager.cwd)
 	nextRevision := prompt.ContextRevision(env, files)
 
-	if s.pendingContextRevision != "" {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	if manager.pendingContextRevision != "" {
 		switch nextRevision {
-		case s.pendingContextRevision:
+		case manager.pendingContextRevision:
 			return
-		case s.contextRevision:
+		case manager.contextRevision:
 			// The files reverted before the staged block was ever sent.
-			s.pendingContextRevision = ""
-			s.contextProjection.CancelStagedContextUpdate()
+			manager.pendingContextRevision = ""
+			manager.projection.CancelStagedContextUpdate()
 			return
 		}
-	} else if nextRevision == s.contextRevision {
+	} else if nextRevision == manager.contextRevision {
 		return
 	}
 
-	s.pendingContextRevision = nextRevision
-	s.contextProjection.StageContextUpdate(
+	manager.pendingContextRevision = nextRevision
+	manager.projection.StageContextUpdate(
 		nextRevision,
 		prompt.RenderContextUpdate(nextRevision, env, files),
 	)
 }
 
-func (s *Session) commitContextRefresh(attachments []contextprojection.Attachment) {
-	if s.pendingContextRevision == "" {
-		return
-	}
-	for _, attachment := range attachments {
-		if attachment.Kind != contextprojection.ContextUpdate ||
-			attachment.Revision != s.pendingContextRevision {
-			continue
+func (manager *contextManager) prepareStep(input llm.Context) contextprojection.PreparedStep {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	return manager.projection.PrepareStep(input)
+}
+
+func (manager *contextManager) commit(prepared contextprojection.PreparedStep) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	manager.projection.Commit(prepared)
+	for _, attachment := range prepared.Pending {
+		switch {
+		case attachment.Kind == contextprojection.ContextUpdate &&
+			attachment.Revision == manager.pendingContextRevision:
+			manager.contextRevision = manager.pendingContextRevision
+			manager.pendingContextRevision = ""
+		case attachment.Kind == contextprojection.SkillsUpdate &&
+			manager.pendingSkills != nil &&
+			attachment.Revision == manager.pendingSkillRevision:
+			manager.skillRegistry.Replace(manager.pendingSkills)
+			manager.skillRevision = manager.pendingSkillRevision
+			manager.pendingSkills = nil
+			manager.pendingSkillRevision = ""
 		}
-		s.contextRevision = s.pendingContextRevision
-		s.pendingContextRevision = ""
-		return
 	}
 }
 
-func (s *Session) commitSkillRefresh(attachments []contextprojection.Attachment) {
-	if s.pendingSkills == nil {
-		return
-	}
-	for _, attachment := range attachments {
-		if attachment.Kind != contextprojection.SkillsUpdate ||
-			attachment.Revision != s.pendingSkillRevision {
-			continue
-		}
-		s.skillRegistry.Replace(s.pendingSkills)
-		s.skillRevision = s.pendingSkillRevision
-		s.pendingSkills = nil
-		s.pendingSkillRevision = ""
-		return
+func (manager *contextManager) stageTaskStatus(rendered string) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	manager.projection.StageTaskStatus(rendered)
+}
+
+func (manager *contextManager) projectedAttachments() []contextprojection.Attachment {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	return manager.projection.ProjectedAttachments()
+}
+
+func (manager *contextManager) state() contextManagerState {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	return contextManagerState{
+		Projection:             manager.projection.State(),
+		SkillRevision:          manager.skillRevision,
+		PendingSkillRevision:   manager.pendingSkillRevision,
+		ContextRevision:        manager.contextRevision,
+		PendingContextRevision: manager.pendingContextRevision,
 	}
 }
 

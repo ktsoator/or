@@ -9,7 +9,6 @@ import (
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/compaction"
-	"github.com/ktsoator/or/coding/internal/contextprojection"
 	"github.com/ktsoator/or/coding/internal/observability"
 	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/coding/internal/skills"
@@ -109,16 +108,7 @@ type Session struct {
 	taskUnsubscribe func()
 	cwd             string
 
-	skillRegistry        *skills.DynamicRegistry
-	skillLoader          func() []skills.Skill
-	skillRevision        string
-	pendingSkills        *skills.Registry
-	pendingSkillRevision string
-
-	contextRevision        string
-	pendingContextRevision string
-	contextProjection      *contextprojection.Manager
-	instructions           string
+	context *contextManager
 
 	maxRetries    int
 	contextWindow int64
