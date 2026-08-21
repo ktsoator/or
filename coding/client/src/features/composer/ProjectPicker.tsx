@@ -8,6 +8,7 @@ import {
   composerControlTextClass,
   composerMenuTriggerClass,
 } from '@/shared/ui/composerControlStyles'
+import { ComposerControlTooltip } from './ComposerControlTooltip'
 
 export function ProjectPicker({
   workspaces,
@@ -54,11 +55,12 @@ export function ProjectPicker({
     >
       <DropdownMenu.Trigger asChild>
         <button
+          data-testid="project-picker-trigger"
           type="button"
           className={cn(
             composerMenuTriggerClass,
             composerControlTextClass,
-            'h-[30px] max-w-full gap-1.5 rounded-[10px] px-2 disabled:opacity-45 max-sm:size-[30px] max-sm:justify-center max-sm:p-0',
+            'max-w-full disabled:opacity-45 max-sm:size-[28px] max-sm:justify-center max-sm:p-0',
           )}
           aria-label={t('workspace.chooseProject')}
           disabled={disabled}
@@ -67,6 +69,9 @@ export function ProjectPicker({
           <span className="min-w-0 truncate max-sm:hidden">
             {selected?.name ?? t('workspace.chooseProject')}
           </span>
+          <ComposerControlTooltip align="start">
+            {t('workspace.chooseProject')}
+          </ComposerControlTooltip>
         </button>
       </DropdownMenu.Trigger>
 
@@ -74,7 +79,7 @@ export function ProjectPicker({
         <DropdownMenu.Content
           side="top"
           align="start"
-          sideOffset={8}
+          sideOffset={2}
           collisionPadding={12}
           className="z-[110] w-[19rem] max-w-[calc(100vw-24px)] animate-[fade-in_110ms_ease-out] rounded-2xl border border-edge bg-canvas p-1 text-[0.875rem] text-ink shadow-[0_18px_48px_-26px_rgba(28,25,23,0.5)] outline-none"
         >

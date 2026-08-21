@@ -15,6 +15,7 @@ import {
   composerControlTextClass,
   composerMenuTriggerClass,
 } from '@/shared/ui/composerControlStyles'
+import { ComposerControlTooltip } from './ComposerControlTooltip'
 
 type PermissionLabelKey =
   | 'permission.ask'
@@ -24,10 +25,6 @@ type PermissionLabelKey =
 type ModeOption = {
   value: PermissionMode
   labelKey: PermissionLabelKey
-  shortLabelKey:
-    | 'permission.askShort'
-    | 'permission.autoEditShort'
-    | 'permission.fullAccessShort'
   descriptionKey:
     | 'permission.askDescription'
     | 'permission.autoEditDescription'
@@ -38,19 +35,16 @@ const options: ModeOption[] = [
   {
     value: 'ask',
     labelKey: 'permission.ask',
-    shortLabelKey: 'permission.askShort',
     descriptionKey: 'permission.askDescription',
   },
   {
     value: 'auto_edit',
     labelKey: 'permission.autoEdit',
-    shortLabelKey: 'permission.autoEditShort',
     descriptionKey: 'permission.autoEditDescription',
   },
   {
     value: 'full_access',
     labelKey: 'permission.fullAccess',
-    shortLabelKey: 'permission.fullAccessShort',
     descriptionKey: 'permission.fullAccessDescription',
   },
 ]
@@ -119,19 +113,21 @@ export function PermissionModeMenu({
             className={cn(
               composerMenuTriggerClass,
               composerControlTextClass,
-              'h-[30px] max-w-[10rem] rounded-[10px] px-2',
+              'max-w-[10rem]',
               fullAccessSelected && 'text-warning hover:text-warning focus-visible:text-warning',
             )}
             aria-label={t('permission.choose')}
-            title={t(selected.labelKey)}
             disabled={disabled}
           >
             <span
               data-testid="permission-mode-label"
               className="min-w-0 truncate"
             >
-              {t(selected.shortLabelKey)}
+              {t(selected.labelKey)}
             </span>
+            <ComposerControlTooltip align="start">
+              {t('permission.change')}
+            </ComposerControlTooltip>
           </button>
         </DropdownMenu.Trigger>
 

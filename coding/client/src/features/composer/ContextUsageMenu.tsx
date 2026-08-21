@@ -3,6 +3,7 @@ import { DropdownMenu } from 'radix-ui'
 import type { ContextUsage } from '@/types'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
+import { ComposerControlTooltip } from './ComposerControlTooltip'
 
 export function ContextUsageMenu({
   usage,
@@ -79,12 +80,9 @@ export function ContextUsageMenu({
           disabled={disabled}
         >
           <ContextRing measured={measured} percentage={percentage} />
-          <span
-            className="pointer-events-none absolute right-0 bottom-[calc(100%+0.5625rem)] z-50 translate-y-1 whitespace-nowrap rounded-md bg-canvas-inverse px-2.5 py-1.5 text-[0.75rem] leading-4 font-medium text-ink-inverse opacity-0 shadow-lg transition-[opacity,transform] duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100 group-data-[state=open]:hidden"
-            aria-hidden="true"
-          >
+          <ComposerControlTooltip align="end">
             {usageLabel}
-          </span>
+          </ComposerControlTooltip>
         </button>
       </DropdownMenu.Trigger>
 
@@ -92,14 +90,14 @@ export function ContextUsageMenu({
         <DropdownMenu.Content
           side="top"
           align="end"
-          sideOffset={8}
+          sideOffset={2}
           collisionPadding={10}
           className="z-[100] w-[19rem] max-w-[calc(100vw-1.25rem)] animate-[fade-in_110ms_ease-out] rounded-2xl border border-edge bg-canvas p-1 text-ink shadow-[0_16px_44px_-24px_rgba(28,25,23,0.48)] outline-none"
           data-testid="context-window-panel"
         >
-          <div className="px-3 pt-2.5 pb-2.5" aria-label={t('model.contextUsage')}>
+          <div className="px-2.5 pt-2 pb-2" aria-label={t('model.contextUsage')}>
             <div
-              className="flex items-baseline gap-3 text-[0.8125rem] leading-5 tabular-nums"
+              className="flex items-baseline gap-3 text-[0.875rem] leading-5 tabular-nums"
               data-testid="context-window-summary"
             >
               <span className="font-medium text-ink-muted">{t('model.context')}</span>
@@ -109,7 +107,7 @@ export function ContextUsageMenu({
                 {measured && <span className="text-ink-muted"> · {formatNumber(Math.round(percentage))}%</span>}
               </span>
             </div>
-            <div className="mt-2.5 flex h-1 overflow-hidden rounded-full bg-canvas-sunken">
+            <div className="mt-2 flex h-1 overflow-hidden rounded-full bg-canvas-sunken">
               {rows.length > 0
                 ? rows.slice(0, -1).map((row) => row.tokens > 0 && (
                     <span
@@ -136,18 +134,18 @@ export function ContextUsageMenu({
             </div>
 
             {rows.length > 0 ? (
-              <div className="mt-3.5" data-testid="context-window-breakdown">
-                <div className="mb-1.5 text-[0.6875rem] leading-4 text-ink-faint">
+              <div className="mt-3" data-testid="context-window-breakdown">
+                <div className="mb-1 text-[0.75rem] leading-4 font-medium text-ink-faint">
                   {t('model.contextBreakdown')}
                 </div>
                 <div className="space-y-0.5">
                   {rows.map((row) => (
                     <div
                       key={row.key}
-                      className="grid h-6 grid-cols-[minmax(0,1fr)_4rem_3.25rem] items-center gap-2 text-[0.75rem] leading-5 tabular-nums"
+                      className="grid h-6 grid-cols-[minmax(0,1fr)_4rem_3.25rem] items-center gap-2 text-[0.875rem] leading-5 tabular-nums"
                       data-testid={`context-breakdown-${row.key}`}
                     >
-                      <span className="flex min-w-0 items-center gap-2 text-ink-soft">
+                      <span className="flex min-w-0 items-center gap-2 text-ink">
                         <span
                           className={cn('size-2.5 shrink-0 rounded-[2px]', row.swatch)}
                           aria-hidden="true"
@@ -173,9 +171,9 @@ export function ContextUsageMenu({
 
           {onCompact && (
             <>
-              <DropdownMenu.Separator className="mx-2 h-px bg-canvas-sunken" />
+              <DropdownMenu.Separator className="mx-1.5 my-0.5 h-px bg-canvas-sunken" />
               <DropdownMenu.Item
-                className="my-1 flex h-[30px] cursor-default select-none items-center gap-2.5 rounded-[10px] px-2.5 text-[0.8125rem] outline-none data-[highlighted]:bg-surface-active data-[disabled]:opacity-40"
+                className="flex h-[30px] cursor-default select-none items-center gap-2.5 rounded-[10px] px-2.5 text-[0.875rem] outline-none data-[highlighted]:bg-surface-active data-[disabled]:opacity-40"
                 disabled={compacting || compactDisabled}
                 onSelect={onCompact}
               >

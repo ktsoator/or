@@ -3,7 +3,7 @@ import {
   BookPlus,
   FolderOpen,
   ImagePlus,
-  ListChecks,
+  Lightbulb,
   Plus,
   ScanLine,
   Target,
@@ -12,6 +12,7 @@ import {
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { composerFloatingPanelClass } from './panelStyles'
+import { ComposerControlTooltip } from './ComposerControlTooltip'
 
 export const composerAddPanelID = 'composer-add-panel'
 const composerAddOptionID = (index: number) => `${composerAddPanelID}-${index}`
@@ -22,18 +23,24 @@ export function ComposerAddMenu({
   imageAttachmentAvailable,
   imageLimitReached,
   fileLimitReached,
+  planMode,
+  planModeDisabled,
   onOpenChange,
   onAttachImages,
   onAttachFiles,
+  onEnablePlanMode,
 }: {
   disabled: boolean
   open: boolean
   imageAttachmentAvailable: boolean
   imageLimitReached: boolean
   fileLimitReached: boolean
+  planMode: boolean
+  planModeDisabled: boolean
   onOpenChange: (open: boolean) => void
   onAttachImages: () => void
   onAttachFiles: () => void
+  onEnablePlanMode?: () => void
 }) {
   const { t } = useI18n()
   const [activeIndex, setActiveIndex] = useState(0)
@@ -43,7 +50,7 @@ export function ComposerAddMenu({
     disabled || !imageAttachmentAvailable || imageLimitReached
   const attachFilesDisabled = disabled || fileLimitReached
   const items: Array<{
-    action: 'files' | 'images' | 'preview'
+    action: 'files' | 'images' | 'plan' | 'preview'
     icon: LucideIcon
     label: string
     description: string
@@ -79,12 +86,15 @@ export function ComposerAddMenu({
       label: t('composer.addGoal'),
       description: t('composer.addGoalDescription'),
     },
-    {
-      action: 'preview',
-      icon: ListChecks,
-      label: t('composer.planMode'),
-      description: t('composer.planModeDescription'),
-    },
+    ...(!planMode && onEnablePlanMode
+      ? [{
+          action: 'plan' as const,
+          icon: Lightbulb,
+          label: t('composer.planMode'),
+          description: t('composer.planModeDescription'),
+          disabled: planModeDisabled,
+        }]
+      : []),
     {
       action: 'preview',
       icon: BookPlus,
@@ -98,7 +108,7 @@ export function ComposerAddMenu({
     if (!panelOpen) return
     setActiveIndex(!attachFilesDisabled ? 0 : !attachDisabled ? 1 : 2)
     setKeyboardNavigating(false)
-  }, [attachDisabled, attachFilesDisabled, panelOpen])
+  }, [attachDisabled, attachFilesDisabled, panelOpen, planMode])
 
   useEffect(() => {
     if (disabled && open) onOpenChange(false)
@@ -121,6 +131,7 @@ export function ComposerAddMenu({
     onOpenChange(false)
     if (item.action === 'files') onAttachFiles()
     if (item.action === 'images') onAttachImages()
+    if (item.action === 'plan') onEnablePlanMode?.()
   }
 
   return (
@@ -132,7 +143,6 @@ export function ComposerAddMenu({
         )}
         type="button"
         aria-label={t('composer.addContent')}
-        title={t('composer.addContent')}
         aria-haspopup="listbox"
         aria-expanded={panelOpen}
         aria-controls={panelOpen ? composerAddPanelID : undefined}
@@ -173,6 +183,9 @@ export function ComposerAddMenu({
           )}
           aria-hidden="true"
         />
+        <ComposerControlTooltip align="start">
+          {t('composer.addContent')}
+        </ComposerControlTooltip>
       </button>
       {panelOpen && (
         <div

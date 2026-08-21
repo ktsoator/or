@@ -2525,8 +2525,37 @@ test('plan mode restores, runs slash commands, and reviews the complete plan', a
   const input = composer.locator('textarea')
 
   await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+  await expect(toggle).toHaveAccessibleName('Disable plan mode')
+  await expect(toggle).toContainText('Plan')
+  await expect(toggle).toHaveCSS('height', '28px')
+  const lightbulb = toggle.getByTestId('plan-mode-lightbulb')
+  const exit = toggle.getByTestId('plan-mode-exit')
+  await expect(lightbulb).toHaveCSS('opacity', '1')
+  await expect(exit).toHaveCSS('opacity', '0')
+  const restingBox = await toggle.boundingBox()
+  const permissionBox = await composer.getByTestId('permission-mode-trigger').boundingBox()
+  expect(restingBox).not.toBeNull()
+  expect(permissionBox).not.toBeNull()
+  expect(permissionBox!.x + permissionBox!.width).toBeLessThanOrEqual(restingBox!.x)
+  expect(await toggle.evaluate((element) => (
+    Number.parseFloat(getComputedStyle(element).borderRadius) >= element.clientHeight / 2
+  ))).toBe(true)
+
+  await toggle.hover()
+  await expect(toggle).toHaveCSS('background-color', 'rgb(244, 244, 244)')
+  await expect(lightbulb).toHaveCSS('opacity', '0')
+  await expect(exit).toHaveCSS('opacity', '1')
+  const hoverBox = await toggle.boundingBox()
+  expect(hoverBox).toEqual(restingBox)
+
+  await page.mouse.move(0, 0)
+  await composer.getByTestId('permission-mode-trigger').focus()
+  await page.keyboard.press('Tab')
+  await expect(toggle).toBeFocused()
+  await expect(lightbulb).toHaveCSS('opacity', '0')
+  await expect(exit).toHaveCSS('opacity', '1')
   await toggle.click()
-  await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+  await expect(toggle).toHaveCount(0)
   await expect.poll(() =>
     requests.findLast(
       (request) => request.path === '/api/sessions/test-session/plan-mode',
@@ -2603,10 +2632,7 @@ test('a new chat enters plan mode before its first prompt', async ({ page }) => 
   const composer = page.getByTestId('composer')
   const input = composer.locator('textarea')
 
-  await expect(composer.getByTestId('composer-plan-mode')).toHaveAttribute(
-    'aria-pressed',
-    'false',
-  )
+  await expect(composer.getByTestId('composer-plan-mode')).toHaveCount(0)
   await input.fill('/plan design the authentication change')
   await input.press('Enter')
 
@@ -2634,6 +2660,35 @@ test('a new chat enters plan mode before its first prompt', async ({ page }) => 
     'aria-pressed',
     'true',
   )
+})
+
+test('the add menu enables plan mode and hides its redundant action', async ({ page }) => {
+  const requests = await openDesktopClient(page, { existingSession: true })
+  const composer = page.getByTestId('composer')
+  const planStatus = composer.getByTestId('composer-plan-mode')
+
+  await expect(planStatus).toHaveCount(0)
+  await composer.getByRole('button', { name: 'Add content' }).click()
+  const planOption = page.getByRole('option').filter({
+    has: page.getByText('Plan before making changes', { exact: true }),
+  })
+  await expect(planOption).toContainText('Plan')
+  await expect(planOption).not.toContainText('Coming soon')
+  await expect(planOption.locator('.lucide-lightbulb')).toBeVisible()
+  await planOption.click()
+
+  await expect(page.getByRole('listbox', { name: 'Add content' })).toHaveCount(0)
+  await expect(planStatus).toHaveAttribute('aria-pressed', 'true')
+  await expect.poll(() =>
+    requests.findLast(
+      (request) => request.path === '/api/sessions/test-session/plan-mode',
+    )?.body,
+  ).toEqual({ active: true })
+
+  await composer.getByRole('button', { name: 'Add content' }).click()
+  await expect(page.getByRole('option').filter({
+    has: page.getByText('Plan before making changes', { exact: true }),
+  })).toHaveCount(0)
 })
 
 test('workbench opens before a preview and launches Browser without hiding Chat', async ({
@@ -5672,17 +5727,21 @@ test('Composer controls stay separate and compact when Chat is narrow', async ({
   ).toBeGreaterThan(330)
 
   const composer = page.getByTestId('composer')
+  const composerSurface = composer.getByTestId('composer-surface')
+  const addContent = composer.getByRole('button', { name: 'Add content' })
   const permission = page.getByTestId('permission-mode-trigger')
   const model = page.getByTestId('model-settings-trigger')
   const send = page.getByTestId('composer-send')
-  const [composerBox, permissionBox, modelBox, sendBox] = await Promise.all([
+  const [composerBox, addContentBox, permissionBox, modelBox, sendBox] = await Promise.all([
     composer.boundingBox(),
+    addContent.boundingBox(),
     permission.boundingBox(),
     model.boundingBox(),
     send.boundingBox(),
   ])
 
   expect(composerBox).not.toBeNull()
+  expect(addContentBox).not.toBeNull()
   expect(permissionBox).not.toBeNull()
   expect(modelBox).not.toBeNull()
   expect(sendBox).not.toBeNull()
@@ -5692,6 +5751,40 @@ test('Composer controls stay separate and compact when Chat is narrow', async ({
     composerBox!.x + composerBox!.width,
   )
   expect(modelBox!.width).toBeGreaterThan(40)
+  expect(permissionBox!.x - (addContentBox!.x + addContentBox!.width)).toBeGreaterThanOrEqual(4)
+  expect(permissionBox!.x - (addContentBox!.x + addContentBox!.width)).toBeLessThanOrEqual(8)
+  await expect(composerSurface).toHaveCSS('min-height', '100px')
+  await expect(composerSurface).toHaveCSS('height', '100px')
+  await expect(composerSurface).toHaveCSS('border-radius', '22px')
+  await expect(composerSurface).not.toHaveCSS('box-shadow', 'none')
+  for (const control of [permission, model]) {
+    await expect(control).toHaveCSS('height', '28px')
+    await expect(control).toHaveCSS('font-size', '13px')
+    await expect(control).toHaveCSS('font-weight', '400')
+    expect(await control.evaluate((element) => (
+      Number.parseFloat(getComputedStyle(element).borderRadius) >= element.clientHeight / 2
+    ))).toBe(true)
+  }
+  await expect(permission).not.toHaveAttribute('title')
+  const permissionTooltip = permission.getByText('Change permissions', { exact: true })
+  await expect(permissionTooltip).toHaveCSS('opacity', '0')
+  await permission.hover()
+  await expect(permissionTooltip).toHaveCSS('opacity', '1')
+  await expect(permissionTooltip).toHaveCSS('border-radius', '10px')
+  await expect(permissionTooltip).toHaveCSS('font-size', '13.125px')
+  await expect(permissionTooltip).toHaveCSS('font-weight', '400')
+  const [permissionTriggerBox, permissionTooltipBox] = await Promise.all([
+    permission.boundingBox(),
+    permissionTooltip.boundingBox(),
+  ])
+  expect(permissionTriggerBox).not.toBeNull()
+  expect(permissionTooltipBox).not.toBeNull()
+  expect(
+    permissionTriggerBox!.y - (permissionTooltipBox!.y + permissionTooltipBox!.height),
+  ).toBeGreaterThanOrEqual(1.5)
+  expect(
+    permissionTriggerBox!.y - (permissionTooltipBox!.y + permissionTooltipBox!.height),
+  ).toBeLessThanOrEqual(2.5)
   await expect(permission.locator('.lucide-chevron-down')).toHaveCount(0)
   await expect(model.locator('.lucide-chevron-down')).toHaveCount(0)
 
@@ -5755,12 +5848,28 @@ test('Composer context ring opens the measured context breakdown', async ({ page
 
   await trigger.click()
   await expect(trigger).toHaveAttribute('aria-expanded', 'true')
+  const panel = page.getByTestId('context-window-panel')
+  await expect(panel).toHaveCSS('border-radius', '15px')
+  await expect(panel).toHaveCSS('padding', '3.75px')
+  await expect.poll(async () => {
+    const [triggerBox, panelBox] = await Promise.all([
+      trigger.boundingBox(),
+      panel.boundingBox(),
+    ])
+    if (!triggerBox || !panelBox) return Number.POSITIVE_INFINITY
+    return Math.abs(triggerBox.y - (panelBox.y + panelBox.height) - 2)
+  }).toBeLessThanOrEqual(0.5)
   const summary = page.getByTestId('context-window-summary')
+  await expect(summary).toHaveCSS('font-size', '13.125px')
   await expect(summary).toContainText('Context window')
   await expect(summary).toContainText(/64k\s*\/\s*128k\s*·\s*50%/)
   await expect(page.getByTestId('context-window-ring')).toHaveAttribute('stroke-dasharray', '50 100')
   const breakdown = page.getByTestId('context-window-breakdown')
   await expect(breakdown).toBeVisible()
+  await expect(page.getByTestId('context-breakdown-messages')).toHaveCSS(
+    'font-size',
+    '13.125px',
+  )
   await expect(breakdown).toContainText('Estimated breakdown')
   await expect(page.getByTestId('context-breakdown-messages')).toContainText(/Messages\s*40k\s*31\.3%/)
   await expect(page.getByTestId('context-breakdown-tools')).toContainText(/System tools\s*10k\s*7\.8%/)
@@ -5768,6 +5877,9 @@ test('Composer context ring opens the measured context breakdown', async ({ page
   await expect(page.getByTestId('context-breakdown-skills')).toContainText(/Skills\s*4k\s*3\.1%/)
   await expect(page.getByTestId('context-breakdown-project')).toContainText(/Project context\s*4k\s*3\.1%/)
   await expect(page.getByTestId('context-breakdown-free')).toContainText(/Free space\s*64k\s*50\.0%/)
+  const compact = panel.getByRole('menuitem', { name: 'Compact context' })
+  await expect(compact).toHaveCSS('font-size', '13.125px')
+  await expect(compact).toHaveCSS('margin-bottom', '0px')
 })
 
 test('Composer shows the full model name when space is available', async ({ page }) => {
@@ -6347,11 +6459,11 @@ test('composer slash catalog lists skills, refreshes, and follows keyboard navig
   await input.press('ArrowDown')
   await expect(selectedOption).toContainText('Code review')
   expect(await scrollArea.evaluate((element) => element.scrollTop)).toBe(0)
-  for (const label of ['Compact', 'Continue in new chat', 'Plan mode', 'skill-1']) {
+  for (const label of ['Compact', 'Continue in new chat', 'Plan', 'skill-1']) {
     await input.press('ArrowDown')
     await expect(selectedOption).toContainText(label)
   }
-  for (const label of ['Plan mode', 'Continue in new chat', 'Compact', 'Code review']) {
+  for (const label of ['Plan', 'Continue in new chat', 'Compact', 'Code review']) {
     await input.press('ArrowUp')
     await expect(selectedOption).toContainText(label)
   }
@@ -6583,7 +6695,7 @@ test('Full access requires confirmation before updating the session', async ({ p
 
   await confirmation.getByRole('button', { name: 'Cancel' }).click()
   await expect(confirmation).toHaveCount(0)
-  await expect(composer.getByTestId('permission-mode-label')).toHaveText('Ask')
+    await expect(composer.getByTestId('permission-mode-label')).toHaveText('Ask for approval')
 
   await permission.click()
   await page.getByRole('menuitemradio', { name: /^Full access/ }).click()
@@ -6687,16 +6799,37 @@ for (const control of [
     await expect(
       composer.getByRole('button', { name: 'Choose how this message is delivered' }),
     ).toBeEnabled()
+    const delivery = composer.getByRole('button', {
+      name: 'Choose how this message is delivered',
+    })
+    await expect(delivery).toHaveCSS('height', '28px')
+    expect(await delivery.evaluate((element) => (
+      Number.parseFloat(getComputedStyle(element).borderRadius) >= element.clientHeight / 2
+    ))).toBe(true)
   })
 }
 
 test('desktop project browsing uses the native directory picker', async ({ page }) => {
   const requests = await openDesktopClient(page, { nativeDirectory: '/tmp/native-project' })
 
-  const projectPicker = page.getByRole('button', { name: 'Choose project' })
+  const projectPicker = page.getByTestId('project-picker-trigger')
   await expect(projectPicker).toHaveClass(/text-\[rgb\(138,139,141\)\]/)
+  await expect(projectPicker).toHaveCSS('height', '28px')
+  expect(await projectPicker.evaluate((element) => (
+    Number.parseFloat(getComputedStyle(element).borderRadius) >= element.clientHeight / 2
+  ))).toBe(true)
   await expect(projectPicker.locator('.lucide-chevron-down')).toHaveCount(0)
   await projectPicker.click()
+  const projectMenu = page.getByRole('menu')
+  await expect(projectMenu).toBeVisible()
+  await expect.poll(async () => {
+    const [triggerBox, menuBox] = await Promise.all([
+      projectPicker.boundingBox(),
+      projectMenu.boundingBox(),
+    ])
+    if (!triggerBox || !menuBox) return Number.POSITIVE_INFINITY
+    return Math.abs(triggerBox.y - (menuBox.y + menuBox.height) - 2)
+  }).toBeLessThanOrEqual(0.5)
   await expect(page.getByRole('textbox', { name: 'Search projects' })).toHaveCSS('height', '30px')
   const newProject = page.getByRole('menuitem', { name: 'New project' })
   await expect(newProject).toHaveCSS('height', '30px')
