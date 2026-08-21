@@ -69,6 +69,7 @@ export function Composer({
   planMode = false,
   contextUsage,
   centered = false,
+  anchored = false,
   projectPickerVisible = false,
   workspaces,
   workspacePath,
@@ -102,6 +103,7 @@ export function Composer({
   planMode?: boolean
   contextUsage?: ContextUsage
   centered?: boolean
+  anchored?: boolean
   projectPickerVisible?: boolean
   workspaces: WorkspaceSummary[]
   workspacePath?: string
@@ -442,10 +444,18 @@ export function Composer({
         'z-30 w-full',
         centered
           ? 'bg-transparent p-0'
-          : 'shrink-0 bg-canvas px-3 pt-3 pb-4 md:px-8 max-md:pt-2',
+          : cn(
+              'shrink-0 bg-canvas px-3 pt-3 pb-4 max-md:pt-2',
+              anchored ? 'md:px-6' : 'md:px-8',
+            ),
       )}
     >
-      <div className="relative mx-auto flex w-full max-w-[750px] flex-col gap-2">
+      <div
+        className={cn(
+          'relative mx-auto flex w-full max-w-[750px] flex-col gap-2',
+          anchored && !centered && 'conversation-rail',
+        )}
+      >
         <TodoChecklist todos={todos?.todos ?? []} />
         {queuedMessages.length > 0 && (
           <PendingQueue messages={queuedMessages} onRemove={(id) => void removeQueued(id)} />

@@ -30,7 +30,14 @@ type UseWorkbenchLayoutOptions = {
   secondaryPreviewOpen: boolean
 }
 
-const WORKBENCH_CLOSE_TRANSITION_MS = 260
+const WORKBENCH_CLOSE_TRANSITION_MS = 180
+const WORKBENCH_WIDTH_KEY = 'coding.workbench-width'
+
+function storedWorkbenchWidth(): number | undefined {
+  if (typeof localStorage === 'undefined') return undefined
+  const value = Number(localStorage.getItem(WORKBENCH_WIDTH_KEY))
+  return Number.isFinite(value) && value > 0 ? value : undefined
+}
 
 export function useWorkbenchLayout({
   enabled,
@@ -45,7 +52,7 @@ export function useWorkbenchLayout({
   const layoutRef = useRef<HTMLDivElement>(null)
   const viewportRef = useRef<HTMLElement>(null)
   const widthRef = useRef<number | undefined>(undefined)
-  const preferredWidthRef = useRef<number | undefined>(undefined)
+  const preferredWidthRef = useRef<number | undefined>(storedWorkbenchWidth())
   const constrainedRef = useRef(false)
   const openRef = useRef(false)
   const maximizedRef = useRef(false)
@@ -227,6 +234,7 @@ export function useWorkbenchLayout({
     preferredWidthRef.current = nextWidth
     widthRef.current = nextWidth
     setWidth(nextWidth)
+    localStorage.setItem(WORKBENCH_WIDTH_KEY, String(Math.round(nextWidth)))
   }, [])
 
   const beginResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {

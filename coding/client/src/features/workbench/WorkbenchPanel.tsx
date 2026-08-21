@@ -1,5 +1,4 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { PanelTopDashed } from 'lucide-react'
 import type {
   BrowserCommandState,
   BrowserInspectionCommandState,
@@ -54,6 +53,7 @@ export function WorkbenchPanel({
   onBrowserInspectionHandled,
   onConfigureModel,
   onToggleMaximized,
+  persistentTitlebarControls,
   toggleControl,
 }: {
   open: boolean
@@ -78,6 +78,7 @@ export function WorkbenchPanel({
   onBrowserInspectionHandled: (sessionID: string, commandID: string) => void
   onConfigureModel: () => void
   onToggleMaximized: () => void
+  persistentTitlebarControls?: boolean
   toggleControl?: ReactNode
 }) {
   const { t } = useI18n()
@@ -113,11 +114,11 @@ export function WorkbenchPanel({
   return (
     <section
       className={cn(
-        'relative h-full min-h-0 bg-canvas transition-opacity duration-[220ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none [contain:layout_paint] md:absolute md:inset-y-0 md:right-0',
+        'relative h-full min-h-0 bg-canvas transition-[opacity,transform] ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none [contain:layout_paint] md:absolute md:inset-y-0 md:right-0',
         maximized ? 'md:w-full' : 'md:w-[var(--workbench-expanded-width)]',
         open
-          ? 'opacity-100 delay-[40ms]'
-          : 'opacity-0 delay-0',
+          ? 'translate-x-0 opacity-100 delay-[25ms] duration-150'
+          : 'translate-x-2 opacity-0 delay-0 duration-100',
       )}
       data-testid="workbench-panel"
       aria-label={t('workbench.title')}
@@ -157,6 +158,7 @@ export function WorkbenchPanel({
           onCreateConversation={onCreateConversation}
           maximized={maximized}
           onToggleMaximized={onToggleMaximized}
+          persistentTitlebarControls={persistentTitlebarControls}
           toggleControl={toggleControl}
         />
       ) : (
@@ -175,6 +177,7 @@ export function WorkbenchPanel({
                 setMode('views')
               }
             : undefined}
+          persistentTitlebarControls={persistentTitlebarControls}
           toggleControl={toggleControl}
         />
       )}
@@ -225,6 +228,7 @@ function WorkbenchLauncher({
   onToggleMaximized,
   onOpenBrowser,
   onOpenTasks,
+  persistentTitlebarControls,
   toggleControl,
 }: {
   maximized: boolean
@@ -233,6 +237,7 @@ function WorkbenchLauncher({
   onToggleMaximized: () => void
   onOpenBrowser: () => void
   onOpenTasks?: () => void
+  persistentTitlebarControls?: boolean
   toggleControl?: ReactNode
 }) {
   const { t } = useI18n()
@@ -250,17 +255,17 @@ function WorkbenchLauncher({
           onToggleMaximized={onToggleMaximized}
           onOpenBrowser={onOpenBrowser}
           onOpenTasks={onOpenTasks}
+          persistentTitlebarControls={persistentTitlebarControls}
           toggleControl={toggleControl}
         />
       </div>
       <div className="grid min-h-0 flex-1 place-items-center px-8 pb-[5vh]">
-        <div
-          className="flex flex-col items-center gap-2 text-ink-faint"
+        <p
+          className="text-[0.8125rem] leading-5 text-ink-faint"
           data-testid="workbench-empty"
         >
-          <PanelTopDashed className="size-5 text-ink-ghost" aria-hidden="true" />
-          <span className="text-[0.8125rem] leading-5">{t('workbench.empty')}</span>
-        </div>
+          {t('workbench.empty')}
+        </p>
       </div>
     </div>
   )

@@ -38,6 +38,7 @@ import {
   DraftConversationView,
 } from '@/features/conversation'
 import type { WorkbenchConversation } from './conversations'
+import { HeaderControlTooltip } from '@/shared/ui/HeaderControlTooltip'
 
 function addressTitle(url: string): string {
   try {
@@ -60,6 +61,7 @@ export function WorkbenchView({
   onConfigureModel,
   maximized,
   onToggleMaximized,
+  persistentTitlebarControls,
   toggleControl,
 }: {
   workspace: BrowserWorkspaceController
@@ -74,6 +76,7 @@ export function WorkbenchView({
   onConfigureModel: () => void
   maximized: boolean
   onToggleMaximized: () => void
+  persistentTitlebarControls?: boolean
   toggleControl?: ReactNode
 }) {
   const { t } = useI18n()
@@ -295,6 +298,7 @@ export function WorkbenchView({
             ) : undefined
           }
           onOpenTasks={taskSource ? workspace.openTasks : undefined}
+          persistentTitlebarControls={persistentTitlebarControls}
           toggleControl={toggleControl}
         />
       </div>
@@ -345,29 +349,28 @@ export function WorkbenchView({
         >
           <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-edge bg-canvas px-2.5">
             <button
-              className="grid size-7 cursor-pointer place-items-center rounded-md text-ink-muted outline-none transition-colors hover:bg-canvas-sunken hover:text-ink focus-visible:bg-canvas-sunken focus-visible:text-ink disabled:cursor-default disabled:text-ink-ghost disabled:hover:bg-transparent"
+              className="relative grid size-7 cursor-pointer place-items-center rounded-md text-ink-muted outline-none transition-colors hover:bg-canvas-sunken hover:text-ink focus-visible:bg-canvas-sunken focus-visible:text-ink disabled:cursor-default disabled:text-ink-ghost disabled:hover:bg-transparent"
               type="button"
-              title={t('preview.back')}
               aria-label={t('preview.back')}
               disabled={!browserRuntime || !activeObserved?.canGoBack}
               onClick={goBack}
             >
               <ArrowLeft className="size-4" aria-hidden="true" />
+              <HeaderControlTooltip align="start">{t('preview.back')}</HeaderControlTooltip>
             </button>
             <button
-              className="grid size-7 cursor-pointer place-items-center rounded-md text-ink-muted outline-none transition-colors hover:bg-canvas-sunken hover:text-ink focus-visible:bg-canvas-sunken focus-visible:text-ink disabled:cursor-default disabled:text-ink-ghost disabled:hover:bg-transparent"
+              className="relative grid size-7 cursor-pointer place-items-center rounded-md text-ink-muted outline-none transition-colors hover:bg-canvas-sunken hover:text-ink focus-visible:bg-canvas-sunken focus-visible:text-ink disabled:cursor-default disabled:text-ink-ghost disabled:hover:bg-transparent"
               type="button"
-              title={t('preview.forward')}
               aria-label={t('preview.forward')}
               disabled={!browserRuntime || !activeObserved?.canGoForward}
               onClick={goForward}
             >
               <ArrowRight className="size-4" aria-hidden="true" />
+              <HeaderControlTooltip>{t('preview.forward')}</HeaderControlTooltip>
             </button>
             <button
-              className="grid size-7 cursor-pointer place-items-center rounded-md text-ink-muted outline-none transition-colors hover:bg-canvas-sunken hover:text-ink focus-visible:bg-canvas-sunken focus-visible:text-ink disabled:cursor-default disabled:text-ink-ghost disabled:hover:bg-transparent"
+              className="relative grid size-7 cursor-pointer place-items-center rounded-md text-ink-muted outline-none transition-colors hover:bg-canvas-sunken hover:text-ink focus-visible:bg-canvas-sunken focus-visible:text-ink disabled:cursor-default disabled:text-ink-ghost disabled:hover:bg-transparent"
               type="button"
-              title={t('preview.refresh')}
               aria-label={t('preview.refresh')}
               disabled={!browserRuntime || !activeDesired?.requestedURL}
               onClick={() => reload()}
@@ -379,6 +382,7 @@ export function WorkbenchView({
                 )}
                 aria-hidden="true"
               />
+              <HeaderControlTooltip>{t('preview.refresh')}</HeaderControlTooltip>
             </button>
             <form className="mx-1 min-w-0 flex-1" onSubmit={navigate}>
               <input
@@ -397,14 +401,16 @@ export function WorkbenchView({
               />
             </form>
             <button
-              className="grid size-7 cursor-pointer place-items-center rounded-md text-ink-muted outline-none transition-colors hover:bg-canvas-sunken hover:text-ink focus-visible:bg-canvas-sunken focus-visible:text-ink disabled:cursor-default disabled:text-ink-ghost disabled:hover:bg-transparent"
+              className="relative grid size-7 cursor-pointer place-items-center rounded-md text-ink-muted outline-none transition-colors hover:bg-canvas-sunken hover:text-ink focus-visible:bg-canvas-sunken focus-visible:text-ink disabled:cursor-default disabled:text-ink-ghost disabled:hover:bg-transparent"
               type="button"
-              title={t('preview.openExternal')}
               aria-label={t('preview.openExternal')}
               disabled={!activeExternalURL}
               onClick={openExternal}
             >
               <ExternalLink className="size-3.5" aria-hidden="true" />
+              <HeaderControlTooltip align="end">
+                {t('preview.openExternal')}
+              </HeaderControlTooltip>
             </button>
           </div>
 
@@ -454,6 +460,7 @@ export function WorkbenchHeaderActions({
   creatingConversation,
   onCreateConversation,
   conversationActions,
+  persistentTitlebarControls,
   toggleControl,
 }: {
   maximized: boolean
@@ -463,24 +470,32 @@ export function WorkbenchHeaderActions({
   creatingConversation: boolean
   onCreateConversation: () => void
   conversationActions?: ReactNode
+  persistentTitlebarControls?: boolean
   toggleControl?: ReactNode
 }) {
   const { t } = useI18n()
   const ExpandIcon = maximized ? Minimize2 : Maximize2
 
   return (
-    <div className="window-titlebar-controls ml-1 flex h-[44px] shrink-0 items-center gap-0.5 self-start">
+    <div
+      className={cn(
+        'workbench-titlebar-actions window-titlebar-controls ml-1 flex h-[44px] shrink-0 items-center gap-0.5 self-start',
+        persistentTitlebarControls && 'mr-10',
+      )}
+    >
       {conversationActions}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild>
           <button
-            className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-md text-ink-muted outline-none transition-colors hover:bg-surface-active hover:text-ink focus-visible:bg-surface-active focus-visible:text-ink data-[state=open]:bg-surface-selected data-[state=open]:text-ink"
+            className="relative grid size-[30px] shrink-0 cursor-pointer place-items-center rounded-md text-ink-muted outline-none transition-colors hover:bg-surface-active hover:text-ink focus-visible:bg-surface-active focus-visible:text-ink data-[state=open]:bg-surface-selected data-[state=open]:text-ink"
             data-testid="workbench-add-view"
             type="button"
-            title={t('workbench.addView')}
             aria-label={t('workbench.addView')}
           >
             <Plus className="size-4" aria-hidden="true" />
+            <HeaderControlTooltip align="end">
+              {t('workbench.addView')}
+            </HeaderControlTooltip>
           </button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
@@ -510,15 +525,17 @@ export function WorkbenchHeaderActions({
         </DropdownMenu.Portal>
       </DropdownMenu.Root>
       <button
-        className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-md text-ink-muted outline-none transition-colors hover:bg-surface-active hover:text-ink focus-visible:bg-surface-active focus-visible:text-ink"
+        className="relative grid size-[30px] shrink-0 cursor-pointer place-items-center rounded-md text-ink-muted outline-none transition-colors hover:bg-surface-active hover:text-ink focus-visible:bg-surface-active focus-visible:text-ink"
         data-testid="workbench-maximize"
         type="button"
-        title={maximized ? t('workbench.restore') : t('workbench.maximize')}
         aria-label={maximized ? t('workbench.restore') : t('workbench.maximize')}
         aria-pressed={maximized}
         onClick={onToggleMaximized}
       >
         <ExpandIcon className="size-3.5" aria-hidden="true" />
+        <HeaderControlTooltip align="end">
+          {maximized ? t('workbench.restore') : t('workbench.maximize')}
+        </HeaderControlTooltip>
       </button>
       {toggleControl}
     </div>

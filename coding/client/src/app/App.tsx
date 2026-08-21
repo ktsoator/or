@@ -15,7 +15,7 @@ import { useSession, type SessionDraft } from '@/features/session'
 import type { MessageImage, PromptFile, SessionSummary } from '@/types'
 import { cn } from '@/lib/utils'
 import { Composer } from '@/features/composer'
-import { chooseNativeDirectory, revealNativePath } from '@/lib/desktop'
+import { chooseNativeDirectory, desktopPlatform, revealNativePath } from '@/lib/desktop'
 import type { SettingsSection } from '@/features/settings'
 import {
   WorkbenchPanel,
@@ -36,6 +36,9 @@ import {
 import { useI18n } from '@/i18n'
 import { useSidebarLayout } from './useSidebarLayout'
 import type { DiagnosticsSessionState } from '@/features/diagnostics/DiagnosticsPage'
+import { DesktopTitlebarControls } from './DesktopTitlebarControls'
+import { HeaderControlTooltip } from '@/shared/ui/HeaderControlTooltip'
+import { PanelResizeHandle } from '@/shared/ui/PanelResizeHandle'
 
 const SettingsPage = lazy(() =>
   import('@/features/settings/SettingsPage').then((module) => ({ default: module.SettingsPage })),
@@ -69,6 +72,7 @@ type WorkbenchConversationTab =
 
 export default function App() {
   const { t } = useI18n()
+  const nativeMacTitlebar = desktopPlatform() === 'darwin'
   const [workbenchConversationTabs, setWorkbenchConversationTabs] =
     useState<WorkbenchConversationTab[]>([])
   const [activeWorkbenchConversationID, setActiveWorkbenchConversationID] =
@@ -589,6 +593,7 @@ export default function App() {
       planMode={planMode}
       contextUsage={contextUsage}
       centered={centered}
+      anchored
       projectPickerVisible={Boolean(draft)}
       workspaces={workspaces}
       workspacePath={draft
@@ -642,13 +647,13 @@ export default function App() {
   }
 
   const workbenchOwnsToggle =
-    workbenchOpen || workbenchClosing || workbenchAutoLayoutChanging
-  const workbenchToggleControl = (
+    !nativeMacTitlebar &&
+    (workbenchOpen || workbenchClosing || workbenchAutoLayoutChanging)
+  const workbenchToggleControl = !nativeMacTitlebar ? (
     <button
-      className="window-titlebar-control relative grid size-7 shrink-0 cursor-pointer place-items-center rounded-md text-ink-muted outline-none transition-colors duration-100 hover:bg-canvas-strong/75 hover:text-ink focus-visible:bg-canvas-strong/75 focus-visible:text-ink"
+      className="window-titlebar-control relative grid size-[30px] shrink-0 cursor-pointer place-items-center rounded-md text-ink-muted outline-none transition-colors duration-100 hover:bg-canvas-strong/75 hover:text-ink focus-visible:bg-canvas-strong/75 focus-visible:text-ink"
       data-testid="workbench-panel-toggle"
       type="button"
-      title={workbenchOpen ? t('workbench.hide') : t('workbench.show')}
       aria-label={workbenchOpen ? t('workbench.hide') : t('workbench.show')}
       aria-expanded={workbenchOpen}
       onClick={toggleWorkbench}
@@ -660,8 +665,11 @@ export default function App() {
           aria-hidden="true"
         />
       )}
+      <HeaderControlTooltip align="end">
+        {workbenchOpen ? t('workbench.hide') : t('workbench.show')}
+      </HeaderControlTooltip>
     </button>
-  )
+  ) : undefined
 
   if (view.type === 'settings') {
     return (
@@ -678,23 +686,38 @@ export default function App() {
   return (
     <div
       className={cn(
-        'relative grid h-full grid-cols-[var(--sidebar-width)_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] overflow-hidden bg-canvas motion-reduce:transition-none max-md:grid-cols-1',
-        !sidebarResizing &&
-          'transition-[grid-template-columns] duration-[180ms] ease-[cubic-bezier(0.2,0,0,1)]',
+        'app-shell-root relative grid h-full grid-cols-[var(--sidebar-width)_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] overflow-hidden bg-canvas max-md:grid-cols-1',
+        sidebarResizing && 'sidebar-is-resizing',
       )}
+      data-sidebar-state={sidebarCollapsed ? 'closed' : 'open'}
       style={
         {
           '--sidebar-expanded-width': `${sidebarWidth}px`,
           '--sidebar-width': sidebarCollapsed
             ? '0px'
             : 'var(--sidebar-expanded-width)',
+          '--sidebar-motion-duration': sidebarCollapsed ? '180ms' : '220ms',
         } as CSSProperties
       }
     >
+      {nativeMacTitlebar && (
+        <DesktopTitlebarControls
+          sidebarExpanded={!sidebarCollapsed}
+          workbenchAvailable={view.type === 'conversation'}
+          workbenchExpanded={workbenchOpen}
+          previewAvailable={Boolean(workbenchPreview)}
+          creatingSession={creating}
+          onToggleSidebar={toggleSidebar}
+          onToggleWorkbench={toggleWorkbench}
+          onCreateSession={() => addSession(undefined, false)}
+        />
+      )}
+
       <AppSidebar
         layout={{
           mobileSessionsOpen,
           sidebarCollapsed,
+          persistentTitlebarControls: nativeMacTitlebar,
           sidebarWidth,
           sidebarResizing,
           sidebarMinimumWidth,
@@ -741,6 +764,7 @@ export default function App() {
             onBack={() => setView({ type: 'conversation' })}
             sidebarCollapsed={sidebarCollapsed}
             onExpandSidebar={expandSidebar}
+            persistentTitlebarControls={nativeMacTitlebar}
             workspacePath={activeSession?.workspacePath}
             workspaceName={activeSession?.workspaceName}
           />
@@ -751,6 +775,7 @@ export default function App() {
             onBack={() => setView({ type: 'conversation' })}
             sidebarCollapsed={sidebarCollapsed}
             onExpandSidebar={expandSidebar}
+            persistentTitlebarControls={nativeMacTitlebar}
             workspacePath={activeSession?.workspacePath}
             workspaceName={activeSession?.workspaceName}
           />
@@ -762,9 +787,13 @@ export default function App() {
           'relative grid h-full min-h-0 min-w-0 grid-cols-1 grid-rows-[minmax(0,1fr)] overflow-hidden motion-reduce:transition-none [container-type:inline-size] md:grid-cols-[minmax(0,1fr)_minmax(0,var(--workbench-width))]',
           !workbenchResizing &&
             !workbenchAutoLayoutChanging &&
-            'transition-[grid-template-columns] duration-[260ms] ease-[cubic-bezier(0.4,0,0.2,1)]',
+            cn(
+              'transition-[grid-template-columns] ease-[cubic-bezier(0.2,0,0,1)]',
+              workbenchOpen ? 'duration-[220ms]' : 'duration-[180ms]',
+            ),
         )}
         data-testid="workbench-layout"
+        data-workbench-state={workbenchOpen ? 'open' : 'closed'}
         style={
           {
             '--workbench-expanded-width': workbenchExpandedWidth,
@@ -791,6 +820,8 @@ export default function App() {
         }}
         layout={{
           sidebarCollapsed,
+          persistentTitlebarControls: nativeMacTitlebar,
+          workbenchOpen,
           workbenchMaximized,
           workbenchOwnsToggle,
           workbenchToggleControl,
@@ -847,39 +878,33 @@ export default function App() {
               : 'visible absolute inset-0 z-40 delay-0 md:relative md:z-auto'
             : workbenchAutoLayoutChanging
               ? 'invisible hidden delay-0 md:block'
-              : 'invisible hidden delay-[260ms] md:block',
+              : 'invisible hidden delay-[180ms] md:block',
         )}
         data-testid="workbench-viewport"
         aria-hidden={!workbenchOpen}
         inert={!workbenchOpen}
       >
-        {workbenchOpen && !workbenchMaximized && (
-          <div
-            className="group absolute inset-y-0 -left-1.5 z-50 hidden w-1.5 touch-none cursor-col-resize outline-none md:block"
-            data-testid="workbench-resize-handle"
-            role="separator"
-            aria-label={t('workbench.resize')}
-            aria-orientation="vertical"
-            aria-valuemin={workbenchResizeMinimum}
-            aria-valuemax={workbenchResizeMaximum}
-            aria-valuenow={workbenchResizeValue}
-            tabIndex={0}
+        {(workbenchOpen || workbenchClosing) && !workbenchMaximized && (
+          <PanelResizeHandle
+            edge="left"
+            className={cn(
+              'workbench-resize-handle',
+              !workbenchOpen && 'pointer-events-none',
+            )}
+            testID="workbench-resize-handle"
+            dividerTestID="workbench-divider-line"
+            label={t('workbench.resize')}
+            minimum={workbenchResizeMinimum}
+            maximum={workbenchResizeMaximum}
+            value={workbenchResizeValue}
+            resizing={workbenchResizing}
             onPointerDown={startWorkbenchResize}
             onPointerMove={resizeWorkbench}
             onPointerUp={stopWorkbenchResize}
             onPointerCancel={stopWorkbenchResize}
             onLostPointerCapture={stopWorkbenchResize}
             onKeyDown={resizeWorkbenchWithKeyboard}
-          >
-            <span
-              className={cn(
-                'absolute inset-y-0 right-0 w-px bg-ink-ghost/80 transition-colors group-hover:bg-ink-muted/70 group-focus-visible:bg-ink-muted/80',
-                workbenchResizing && 'bg-ink-muted/80',
-              )}
-              data-testid="workbench-divider-line"
-              aria-hidden="true"
-            />
-          </div>
+          />
         )}
         <div className="relative h-full min-h-0 min-w-0 overflow-hidden">
           <WorkbenchPanel
@@ -924,6 +949,7 @@ export default function App() {
               setView({ type: 'settings', section: 'models' })
             }}
             onToggleMaximized={toggleWorkbenchMaximized}
+            persistentTitlebarControls={nativeMacTitlebar}
             toggleControl={workbenchOwnsToggle ? workbenchToggleControl : undefined}
           />
         </div>

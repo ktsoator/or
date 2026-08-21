@@ -9,6 +9,10 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { Tooltip } from 'radix-ui'
+import {
+  TOOLTIP_DELAY_MS,
+  TOOLTIP_SKIP_DELAY_MS,
+} from '@/shared/ui/tooltipTiming'
 import type { Usage } from '@/types'
 import { formatMessageTime } from '@/lib/time'
 import { cn } from '@/lib/utils'
@@ -68,7 +72,10 @@ export function ResponseActions({
       className="mt-0.5 flex h-7 min-w-0 animate-[fade-in_160ms_ease-out] items-center gap-0.5 overflow-hidden"
       data-testid="response-actions"
     >
-      <Tooltip.Provider delayDuration={80} skipDelayDuration={100}>
+      <Tooltip.Provider
+        delayDuration={TOOLTIP_DELAY_MS}
+        skipDelayDuration={TOOLTIP_SKIP_DELAY_MS}
+      >
         <div
           className="flex shrink-0 items-center gap-0.5"
           data-testid="response-message-actions"

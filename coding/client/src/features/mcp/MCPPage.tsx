@@ -40,12 +40,14 @@ export function MCPPage({
   onBack,
   sidebarCollapsed,
   onExpandSidebar,
+  persistentTitlebarControls = false,
   workspacePath,
   workspaceName,
 }: {
   onBack: () => void
   sidebarCollapsed?: boolean
   onExpandSidebar?: () => void
+  persistentTitlebarControls?: boolean
   workspacePath?: string
   workspaceName?: string
 }) {
@@ -175,7 +177,7 @@ export function MCPPage({
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-canvas">
       <header className={`skills-header window-titlebar z-20 flex h-[45px] shrink-0 items-center gap-1 border-b border-edge/80 bg-canvas px-4 max-md:h-12 ${sidebarCollapsed ? 'sidebar-is-collapsed' : ''}`}>
-        {sidebarCollapsed && onExpandSidebar && (
+        {sidebarCollapsed && onExpandSidebar && !persistentTitlebarControls && (
           <SidebarToggleButton expanded={false} className="desktop-sidebar-toggle hidden md:grid" onToggle={onExpandSidebar} />
         )}
         <button className="window-titlebar-control flex h-9 cursor-pointer items-center gap-2 rounded-[10px] px-2.5 text-[0.84375rem] font-normal text-ink-muted outline-none transition-colors hover:bg-canvas-strong/65 hover:text-ink focus-visible:bg-canvas-strong/65 focus-visible:text-ink" type="button" onClick={onBack}>

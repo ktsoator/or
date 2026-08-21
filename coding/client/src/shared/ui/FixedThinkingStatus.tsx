@@ -2,6 +2,7 @@ import { Lock } from 'lucide-react'
 import { Tooltip } from 'radix-ui'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
+import { TOOLTIP_DELAY_MS, TOOLTIP_SKIP_DELAY_MS } from './tooltipTiming'
 
 export function FixedThinkingStatus({
   className,
@@ -20,7 +21,10 @@ export function FixedThinkingStatus({
     : t('model.fixedThinkingDescription')
 
   return (
-    <Tooltip.Provider delayDuration={180} skipDelayDuration={80}>
+    <Tooltip.Provider
+      delayDuration={TOOLTIP_DELAY_MS}
+      skipDelayDuration={TOOLTIP_SKIP_DELAY_MS}
+    >
       <Tooltip.Root>
         <Tooltip.Trigger asChild>
           <span

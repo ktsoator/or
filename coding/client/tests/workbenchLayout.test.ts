@@ -35,8 +35,8 @@ describe('workbench layout', () => {
   })
 
   test('maps keyboard controls to bounded workbench widths', () => {
-    expect(keyboardWorkbenchWidth('ArrowLeft', 500, 1200)).toBe(516)
-    expect(keyboardWorkbenchWidth('ArrowRight', 500, 1200)).toBe(484)
+    expect(keyboardWorkbenchWidth('ArrowLeft', 500, 1200)).toBe(508)
+    expect(keyboardWorkbenchWidth('ArrowRight', 500, 1200)).toBe(492)
     expect(keyboardWorkbenchWidth('Home', 500, 1200)).toBe(300)
     expect(keyboardWorkbenchWidth('End', 500, 1200)).toBeCloseTo(816)
     expect(keyboardWorkbenchWidth('Escape', 500, 1200)).toBeUndefined()

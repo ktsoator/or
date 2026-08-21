@@ -5,6 +5,7 @@ import type {
   UsageEventPage,
   UsageReport,
 } from '../src/types'
+import { MIN_WORKBENCH_WIDTH } from '../src/features/workbench/layout'
 
 type BrowserRuntimeRecord = {
   tabID: string
@@ -1029,31 +1030,56 @@ test('sidebar collapse keeps the titlebar control stable and clears the divider'
   await openDesktopClient(page)
   const toggle = page.getByTestId('sidebar-panel-toggle')
   const sidebar = page.getByTestId('sidebar-viewport')
+  const divider = page.getByTestId('sidebar-divider-line')
+  const sidebarHeader = page.locator('.app-sidebar-header').first()
+  const newSessionAction = page
+    .getByRole('complementary', { name: 'Sessions' })
+    .getByRole('button', { name: 'New session', exact: true })
   const header = page.getByTestId('conversation-header')
   const title = page.getByTestId('conversation-title')
 
   await expect(toggle).toBeVisible()
   await expect(title).toHaveCSS('user-select', 'none')
   await expect.poll(() => header.evaluate((element) => element.getBoundingClientRect().height)).toBe(45)
+  await expect.poll(() =>
+    sidebarHeader.evaluate((element) => element.getBoundingClientRect().height),
+  ).toBe(45)
+  const sidebarHeaderBox = await sidebarHeader.boundingBox()
+  const newSessionActionBox = await newSessionAction.boundingBox()
+  expect(sidebarHeaderBox).not.toBeNull()
+  expect(newSessionActionBox).not.toBeNull()
+  expect(newSessionActionBox!.y).toBeCloseTo(
+    sidebarHeaderBox!.y + sidebarHeaderBox!.height,
+    0,
+  )
   await expect.poll(() => sidebar.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(200)
+  await expect(divider).toHaveCSS('opacity', '1')
 
   const before = await toggle.boundingBox()
   expect(before).not.toBeNull()
   await expect.poll(() =>
-    toggle.evaluate((element) => element.closest('.app-sidebar-header') !== null),
+    toggle.evaluate((element) => element.closest('[data-testid="desktop-titlebar-controls"]') !== null),
   ).toBe(true)
+  await toggle.evaluate((element) => {
+    ;(window as Window & { __sidebarToggle?: Element }).__sidebarToggle = element
+  })
 
   await toggle.click()
+  await expect(toggle).toBeFocused()
+  expect(await divider.evaluate((element) => Number(getComputedStyle(element).opacity))).toBeGreaterThan(0.5)
   await page.waitForTimeout(60)
   const during = await toggle.boundingBox()
   expect(during).not.toBeNull()
   expect(during!.x).toBeCloseTo(before!.x, 1)
   expect(during!.y).toBeCloseTo(before!.y, 1)
   await expect.poll(() =>
-    toggle.evaluate((element) => element.closest('[data-testid="conversation-header"]') !== null),
+    toggle.evaluate((element) =>
+      (window as Window & { __sidebarToggle?: Element }).__sidebarToggle === element,
+    ),
   ).toBe(true)
 
   await expect.poll(() => sidebar.evaluate((element) => element.getBoundingClientRect().width)).toBeLessThan(1)
+  await expect(divider).toHaveCSS('opacity', '0')
 
   const after = await toggle.boundingBox()
   const titleBox = await title.boundingBox()
@@ -1062,7 +1088,9 @@ test('sidebar collapse keeps the titlebar control stable and clears the divider'
   expect(after!.x).toBeCloseTo(before!.x, 1)
   expect(after!.y).toBeCloseTo(before!.y, 1)
   await expect.poll(() =>
-    toggle.evaluate((element) => element.closest('[data-testid="conversation-header"]') !== null),
+    toggle.evaluate((element) =>
+      (window as Window & { __sidebarToggle?: Element }).__sidebarToggle === element,
+    ),
   ).toBe(true)
   expect(titleBox!.x).toBeGreaterThanOrEqual(after!.x + after!.width + 10)
 
@@ -1075,24 +1103,207 @@ test('sidebar collapse keeps the titlebar control stable and clears the divider'
   await expect.poll(() => sidebar.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(200)
 })
 
+test('conversation and Composer stay centered in the available Chat pane', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await openDesktopClient(page, {
+    existingSession: true,
+    historyEvents: [
+      {
+        type: 'user_message',
+        id: 'rail-user',
+        text: 'Keep this conversation aligned',
+        images: [],
+      },
+      {
+        type: 'message_end',
+        text: 'The transcript and Composer share one reading axis.',
+        finalResponse: true,
+      },
+    ],
+  })
+
+  const transcriptRail = page.getByTestId('conversation-transcript').locator('.conversation-rail')
+  const composerRail = page.getByTestId('composer').locator('.conversation-rail')
+  const conversationPane = page.getByTestId('conversation-pane')
+  const sidebar = page.getByTestId('sidebar-viewport')
+  const railOffsets = () => conversationPane.evaluate((paneElement) => {
+    const transcriptElement = document.querySelector<HTMLElement>(
+      '[data-testid="conversation-transcript"] .conversation-rail',
+    )
+    const composerElement = document.querySelector<HTMLElement>(
+      '[data-testid="composer"] .conversation-rail',
+    )
+    if (!transcriptElement || !composerElement) {
+      throw new Error('conversation rail is not visible')
+    }
+    const transcript = transcriptElement.getBoundingClientRect()
+    const composer = composerElement.getBoundingClientRect()
+    const pane = paneElement.getBoundingClientRect()
+    const paneCenter = pane.x + pane.width / 2
+    return {
+      transcriptAlignment: transcript.x - composer.x,
+      transcriptCentering: transcript.x + transcript.width / 2 - paneCenter,
+      composerCentering: composer.x + composer.width / 2 - paneCenter,
+    }
+  })
+
+  await expect(transcriptRail).toBeVisible()
+  await expect(composerRail).toBeVisible()
+  const before = await railOffsets()
+  expect(before.transcriptAlignment).toBeCloseTo(0, 1)
+  expect(before.transcriptCentering).toBeCloseTo(0, 1)
+  expect(before.composerCentering).toBeCloseTo(0, 1)
+
+  await page.getByTestId('sidebar-panel-toggle').click()
+  await expect.poll(() => sidebar.evaluate((element) => element.getBoundingClientRect().width)).toBeLessThan(1)
+  const after = await railOffsets()
+  expect(after.transcriptAlignment).toBeCloseTo(0, 1)
+  expect(after.transcriptCentering).toBeCloseTo(0, 1)
+  expect(after.composerCentering).toBeCloseTo(0, 1)
+})
+
+test('panel layout honors reduced motion without moving the persistent controls', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await openDesktopClient(page)
+
+  const shell = page.locator('.app-shell-root')
+  const sidebarDivider = page.getByTestId('sidebar-divider-line')
+  const workbenchToggle = page.getByTestId('workbench-panel-toggle')
+  const before = await workbenchToggle.boundingBox()
+  const transitionDuration = (locator: typeof shell) => locator.evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).transitionDuration),
+  )
+
+  await expect.poll(() => transitionDuration(shell)).toBeLessThanOrEqual(0.00001)
+  await expect.poll(() => transitionDuration(sidebarDivider)).toBeLessThanOrEqual(0.00001)
+  await workbenchToggle.click()
+  await expect.poll(() => transitionDuration(page.getByTestId('workbench-panel'))).toBeLessThanOrEqual(0.00001)
+  await expect.poll(() => transitionDuration(page.getByTestId('workbench-resize-handle'))).toBeLessThanOrEqual(0.00001)
+  const after = await workbenchToggle.boundingBox()
+  expect(after?.x).toBeCloseTo(before!.x, 1)
+  expect(after?.y).toBeCloseTo(before!.y, 1)
+})
+
 test('desktop headers expose native drag regions while controls remain interactive', async ({ page }) => {
   await openDesktopClient(page)
   const header = page.getByTestId('conversation-header')
+  const persistentControls = page.getByTestId('desktop-titlebar-controls')
   const sidebarControl = page.getByTestId('sidebar-panel-toggle')
+  const newSession = page.getByTestId('desktop-new-session')
   const workbenchToggle = page.getByTestId('workbench-panel-toggle')
+  await expect(page.getByRole('button', { name: 'Search sessions' })).toHaveCount(0)
   await expect(header).toHaveCSS('-webkit-app-region', 'drag')
+  await expect(persistentControls).toHaveCSS('-webkit-app-region', 'none')
+  await expect(persistentControls).toHaveCSS('pointer-events', 'none')
   await expect(sidebarControl).toHaveCSS('-webkit-app-region', 'no-drag')
   await expect(workbenchToggle).toHaveCSS('-webkit-app-region', 'no-drag')
-  await expect.poll(() =>
-    sidebarControl.evaluate((element) => element.closest('.window-titlebar') !== null),
-  ).toBe(true)
-  await expect.poll(() =>
-    workbenchToggle.evaluate((element) => element.closest('.window-titlebar') !== null),
-  ).toBe(true)
+  await expect(sidebarControl).toHaveCSS('pointer-events', 'auto')
+  await expect(workbenchToggle).toHaveCSS('pointer-events', 'auto')
+  await expect.poll(async () => (await sidebarControl.boundingBox())?.width).toBe(30)
+  await expect.poll(async () => (await workbenchToggle.boundingBox())?.width).toBe(30)
+  await expect(sidebarControl).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  await expect(workbenchToggle).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  await expect(sidebarControl).not.toHaveAttribute('title')
+  const sidebarTooltip = sidebarControl.locator('.header-control-tooltip')
+  await expect(sidebarTooltip).toHaveCSS('opacity', '0')
+  await sidebarControl.hover()
+  await page.waitForTimeout(650)
+  await expect(sidebarTooltip).toHaveCSS('opacity', '0')
+  await expect(sidebarTooltip).toHaveCSS('opacity', '1')
+  await expect(sidebarTooltip).toContainText('Collapse sidebar')
+  const sidebarControlBox = await sidebarControl.boundingBox()
+  const sidebarTooltipBox = await sidebarTooltip.boundingBox()
+  expect(sidebarControlBox).not.toBeNull()
+  expect(sidebarTooltipBox).not.toBeNull()
+  expect(sidebarTooltipBox!.y).toBeGreaterThanOrEqual(
+    sidebarControlBox!.y + sidebarControlBox!.height,
+  )
+  const tooltipSurfaceStyle = (locator: typeof sidebarTooltip) =>
+    locator.evaluate((element) => {
+      const style = getComputedStyle(element)
+      return {
+        backgroundColor: style.backgroundColor,
+        borderRadius: style.borderRadius,
+        fontSize: style.fontSize,
+        fontWeight: style.fontWeight,
+        lineHeight: style.lineHeight,
+        padding: style.padding,
+      }
+    })
+  expect(await tooltipSurfaceStyle(sidebarTooltip.locator(':scope > span'))).toEqual(
+    await tooltipSurfaceStyle(
+      page.getByTestId('composer-send').locator('.composer-control-tooltip'),
+    ),
+  )
+  const composerSend = page.getByTestId('composer-send')
+  const composerTooltip = composerSend.locator('.composer-control-tooltip')
+  await composerSend.hover()
+  await page.waitForTimeout(650)
+  await expect(composerTooltip).toHaveCSS('opacity', '0')
+  await expect(composerTooltip).toHaveCSS('opacity', '1')
+  await expect(newSession).toHaveCSS('opacity', '0')
+  await expect(newSession).toHaveCSS('pointer-events', 'none')
+  await expect(newSession).toHaveAttribute('aria-hidden', 'true')
+  await workbenchToggle.evaluate((element) => {
+    ;(window as Window & { __workbenchToggle?: Element }).__workbenchToggle = element
+  })
   await workbenchToggle.click()
+  await expect(workbenchToggle).toBeFocused()
+  await expect.poll(() => workbenchToggle.evaluate((element) =>
+    (window as Window & { __workbenchToggle?: Element }).__workbenchToggle === element,
+  )).toBe(true)
   await expect(workbenchToggle).toHaveAccessibleName('Hide workbench')
+  const addView = page.getByTestId('workbench-add-view')
+  const maximize = page.getByTestId('workbench-maximize')
+  await expect(addView).toHaveCSS('-webkit-app-region', 'no-drag')
+  await expect(maximize).toHaveCSS('-webkit-app-region', 'no-drag')
+  await expect.poll(async () => (await addView.boundingBox())?.width).toBe(30)
+  await expect.poll(async () => (await maximize.boundingBox())?.width).toBe(30)
+  await addView.hover()
+  const addViewTooltip = addView.locator('.header-control-tooltip')
+  await expect(addViewTooltip).toHaveCSS('opacity', '1')
+  await expect(addViewTooltip).toContainText('Add view')
+  await addView.click()
+  await expect(page.getByRole('menu')).toBeVisible()
+  await expect(addViewTooltip).toHaveCSS('display', 'none')
+  await page.keyboard.press('Escape')
+  await maximize.click()
+  await expect(maximize).toHaveAttribute('aria-pressed', 'true')
+  await maximize.click()
+  await expect(maximize).toHaveAttribute('aria-pressed', 'false')
   await workbenchToggle.click()
   await expect(workbenchToggle).toHaveAccessibleName('Show workbench')
+})
+
+test('collapsed native titlebar reveals a stable new session action', async ({ page }) => {
+  await openDesktopClient(page, { sessionTitle: 'Existing session' })
+  const sidebarToggle = page.getByTestId('sidebar-panel-toggle')
+  const newSession = page.getByTestId('desktop-new-session')
+  const title = page.getByTestId('conversation-title')
+
+  await newSession.evaluate((element) => {
+    ;(window as Window & { __newSessionControl?: Element }).__newSessionControl = element
+  })
+  await sidebarToggle.click()
+
+  await expect(newSession).toHaveCSS('opacity', '1')
+  await expect(newSession).toHaveCSS('pointer-events', 'auto')
+  await expect(newSession).not.toHaveAttribute('aria-hidden', 'true')
+  await expect(newSession).toHaveAccessibleName('New session')
+  await expect.poll(() => newSession.evaluate((element) =>
+    (window as Window & { __newSessionControl?: Element }).__newSessionControl === element,
+  )).toBe(true)
+
+  const newSessionBox = await newSession.boundingBox()
+  const titleBox = await title.boundingBox()
+  expect(newSessionBox).not.toBeNull()
+  expect(titleBox).not.toBeNull()
+  expect(titleBox!.x).toBeGreaterThanOrEqual(newSessionBox!.x + newSessionBox!.width + 10)
+
+  await newSession.click()
+  await expect(title).toContainText('New session')
 })
 
 test('conversation diagnostics uses one session-scoped header entry', async ({ page }) => {
@@ -2710,6 +2921,9 @@ test('workbench opens before a preview and launches Browser without hiding Chat'
   expect(togglePosition).not.toBeNull()
   await workbenchToggle.click()
   await page.waitForTimeout(60)
+  const workbenchDivider = page.getByTestId('workbench-divider-line')
+  await expect(workbenchDivider).toBeVisible()
+  await expect(page.getByTestId('workbench-resize-handle')).toHaveCSS('opacity', '1')
   const toggleDuringOpen = await workbenchToggle.boundingBox()
   expect(toggleDuringOpen).not.toBeNull()
   expect(toggleDuringOpen!.x).toBeCloseTo(togglePosition!.x, 1)
@@ -2731,7 +2945,7 @@ test('workbench opens before a preview and launches Browser without hiding Chat'
   )
   const settledWorkbench = await workbench.boundingBox()
   expect(settledWorkbench).not.toBeNull()
-  await expect(workbench.getByTestId('workbench-empty')).toContainText('No open views')
+  await expect(workbench.getByTestId('workbench-empty')).toHaveText('No open views')
   await expect(workbench.getByRole('button', { name: 'Browser' })).toHaveCount(0)
   await expect(workbench.getByRole('button', { name: 'Chat' })).toHaveCount(0)
 
@@ -2837,9 +3051,14 @@ test('workbench opens before a preview and launches Browser without hiding Chat'
   ).toBe('https://example.com/')
   await page.getByRole('button', { name: 'Close tab: Example' }).click()
   await expect(page.getByTestId('browser-view')).toHaveCount(0)
-  await expect(workbench.getByTestId('workbench-empty')).toContainText('No open views')
+  await expect(workbench.getByTestId('workbench-empty')).toHaveText('No open views')
+  await expect(workbench.getByRole('button', { name: 'Browser' })).toHaveCount(0)
   await workbenchToggle.click()
+  expect(await workbenchDivider.evaluate((element) =>
+    Number(getComputedStyle(element.parentElement!).opacity),
+  )).toBeGreaterThan(0.5)
   await page.waitForTimeout(60)
+  await expect(workbenchDivider).toBeVisible()
   const toggleDuringClose = await workbenchToggle.boundingBox()
   const workbenchDuringClose = await workbench.boundingBox()
   expect(toggleDuringClose).not.toBeNull()
@@ -2848,6 +3067,7 @@ test('workbench opens before a preview and launches Browser without hiding Chat'
   expect(toggleDuringClose!.y).toBeCloseTo(togglePosition!.y, 1)
   expect(workbenchDuringClose!.width).toBeCloseTo(settledWorkbench!.width, 1)
   await expect(workbench).toBeHidden()
+  await expect(page.getByTestId('workbench-resize-handle')).toHaveCount(0)
   await expect(workbenchToggle).toBeVisible()
   await expect(workbenchToggle).toHaveAccessibleName('Show workbench')
   const toggleAfterClose = await workbenchToggle.boundingBox()
@@ -3479,6 +3699,45 @@ test('workbench divider resizes the panel without moving the corner control', as
   page,
 }) => {
   await openDesktopClient(page, { existingSession: true })
+  const sidebar = page.getByTestId('sidebar-viewport')
+  const sidebarHandle = page.getByTestId('sidebar-resize-handle')
+  const sidebarDivider = page.getByTestId('sidebar-resize-divider')
+  const sidebarBefore = await sidebar.boundingBox()
+  const sidebarHandleBefore = await sidebarHandle.boundingBox()
+  const sidebarDividerBefore = await sidebarDivider.boundingBox()
+  expect(sidebarBefore).not.toBeNull()
+  expect(sidebarHandleBefore).not.toBeNull()
+  expect(sidebarDividerBefore).not.toBeNull()
+  expect(sidebarHandleBefore!.width).toBeCloseTo(8, 0)
+  expect(
+    Math.abs(
+      sidebarHandleBefore!.x + sidebarHandleBefore!.width / 2 -
+      (sidebarBefore!.x + sidebarBefore!.width)
+    ),
+  ).toBeLessThanOrEqual(1)
+  expect(
+    Math.abs(
+      sidebarDividerBefore!.x + sidebarDividerBefore!.width / 2 -
+      (sidebarBefore!.x + sidebarBefore!.width)
+    ),
+  ).toBeLessThanOrEqual(1)
+
+  await page.mouse.move(
+    sidebarHandleBefore!.x + sidebarHandleBefore!.width / 2,
+    sidebarHandleBefore!.y + sidebarHandleBefore!.height / 2,
+  )
+  await page.mouse.down()
+  await page.mouse.move(
+    sidebarHandleBefore!.x + sidebarHandleBefore!.width / 2 + 40,
+    sidebarHandleBefore!.y + sidebarHandleBefore!.height / 2,
+    { steps: 6 },
+  )
+  await page.mouse.up()
+  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBeCloseTo(
+    sidebarBefore!.width + 40,
+    0,
+  )
+
   const toggle = page.getByTestId('workbench-panel-toggle')
   await toggle.click()
 
@@ -3490,7 +3749,13 @@ test('workbench divider resizes the panel without moving the corner control', as
     const color = getComputedStyle(element).backgroundColor
     return color !== 'transparent' && color !== 'rgba(0, 0, 0, 0)'
   })).toBe(true)
-  await expect.poll(async () => (await viewport.boundingBox())?.width).toBeGreaterThan(490)
+  await expect.poll(async () => {
+    const viewportWidth = (await viewport.boundingBox())?.width ?? 0
+    const expandedWidth = await page.getByTestId('workbench-layout').evaluate((element) =>
+      Number.parseFloat(getComputedStyle(element).getPropertyValue('--workbench-expanded-width')),
+    )
+    return Math.abs(viewportWidth - expandedWidth)
+  }).toBeLessThan(0.5)
   const before = await viewport.boundingBox()
   const handleBefore = await handle.boundingBox()
   const dividerBefore = await divider.boundingBox()
@@ -3499,11 +3764,17 @@ test('workbench divider resizes the panel without moving the corner control', as
   expect(handleBefore).not.toBeNull()
   expect(dividerBefore).not.toBeNull()
   expect(toggleBefore).not.toBeNull()
-  expect(Math.abs(handleBefore!.x + handleBefore!.width - before!.x)).toBeLessThanOrEqual(1)
+  expect(handleBefore!.width).toBeCloseTo(sidebarHandleBefore!.width, 0)
+  expect(
+    Math.abs(handleBefore!.x + handleBefore!.width / 2 - before!.x),
+  ).toBeLessThanOrEqual(1)
   expect(dividerBefore!.height).toBeCloseTo(before!.height, 0)
   expect(
     Math.abs(dividerBefore!.x + dividerBefore!.width - before!.x),
   ).toBeLessThanOrEqual(1)
+  expect(await divider.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe(
+    await sidebarDivider.evaluate((element) => getComputedStyle(element).backgroundColor),
+  )
 
   await page.mouse.move(handleBefore!.x + 2, handleBefore!.y + handleBefore!.height / 2)
   await page.mouse.down()
@@ -3523,7 +3794,7 @@ test('workbench divider resizes the panel without moving the corner control', as
   expect(handleAfterDrag).not.toBeNull()
   expect(toggleAfterDrag).not.toBeNull()
   expect(
-    Math.abs(handleAfterDrag!.x + handleAfterDrag!.width - afterDrag!.x),
+    Math.abs(handleAfterDrag!.x + handleAfterDrag!.width / 2 - afterDrag!.x),
   ).toBeLessThanOrEqual(1)
   expect(toggleAfterDrag!.x).toBeCloseTo(toggleBefore!.x, 1)
   expect(toggleAfterDrag!.y).toBeCloseTo(toggleBefore!.y, 1)
@@ -3531,7 +3802,7 @@ test('workbench divider resizes the panel without moving the corner control', as
   await handle.focus()
   await handle.press('ArrowRight')
   await expect.poll(async () => (await viewport.boundingBox())?.width).toBeCloseTo(
-    afterDrag!.width - 16,
+    afterDrag!.width - 8,
     0,
   )
 })
@@ -3548,9 +3819,16 @@ test('long threads coalesce workbench resize events into one animation frame', a
   await expect(page.getByTestId('assistant-message')).toHaveCount(144)
 
   await page.getByTestId('workbench-panel-toggle').click()
+  const layout = page.getByTestId('workbench-layout')
   const viewport = page.getByTestId('workbench-viewport')
   const handle = page.getByTestId('workbench-resize-handle')
-  await expect.poll(async () => (await viewport.boundingBox())?.width).toBeGreaterThan(490)
+  await expect.poll(async () => {
+    const viewportWidth = (await viewport.boundingBox())?.width ?? 0
+    const expandedWidth = await layout.evaluate((element) =>
+      Number.parseFloat(getComputedStyle(element).getPropertyValue('--workbench-expanded-width')),
+    )
+    return Math.abs(viewportWidth - expandedWidth)
+  }).toBeLessThan(0.5)
   const before = await viewport.boundingBox()
   const handleBox = await handle.boundingBox()
   expect(before).not.toBeNull()
@@ -3674,7 +3952,7 @@ test('workbench restores after an automatic collapse but respects a manual close
 
   await toggle.click()
   await expect(viewport.getByRole('button', { name: 'Maximize workbench' })).toBeVisible()
-  await expect.poll(async () => (await viewport.boundingBox())?.width).toBeGreaterThan(700)
+  await expect.poll(async () => (await viewport.boundingBox())?.width).toBeGreaterThan(610)
   const originalWorkbenchWidth = (await viewport.boundingBox())!.width
 
   await page.setViewportSize({ width: 960, height: 700 })
@@ -3687,7 +3965,7 @@ test('workbench restores after an automatic collapse but respects a manual close
   await expect(page.getByTestId('workbench-panel')).toBeHidden()
 
   // 520-560 px is a dead band: growing slightly does not flip back to split mode.
-  await page.setViewportSize({ width: 1490, height: 900 })
+  await page.setViewportSize({ width: 1424, height: 900 })
   await expect(toggle).toHaveAccessibleName('Show workbench')
 
   await page.setViewportSize({ width: 1728, height: 1000 })
@@ -3766,7 +4044,13 @@ test('empty workbench keeps header actions and can cover Chat without hiding the
   const addView = viewport.getByRole('button', { name: 'Add view' })
   const maximize = viewport.getByRole('button', { name: 'Maximize workbench' })
 
-  await expect.poll(async () => (await viewport.boundingBox())?.width).toBeGreaterThan(490)
+  await expect.poll(async () => {
+    const viewportWidth = (await viewport.boundingBox())?.width ?? 0
+    const expandedWidth = await layout.evaluate((element) =>
+      Number.parseFloat(getComputedStyle(element).getPropertyValue('--workbench-expanded-width')),
+    )
+    return Math.abs(viewportWidth - expandedWidth)
+  }).toBeLessThan(0.5)
   const normalWidth = (await viewport.boundingBox())!.width
   const normalConversationWidth = (await conversation.boundingBox())!.width
   await expect(addView).toBeVisible()
@@ -3782,7 +4066,10 @@ test('empty workbench keeps header actions and can cover Chat without hiding the
     layoutWidth,
     0,
   )
-  expect((await conversation.boundingBox())!.width).toBeCloseTo(normalConversationWidth, 0)
+  await expect.poll(async () => (await conversation.boundingBox())?.width).toBeCloseTo(
+    normalConversationWidth,
+    0,
+  )
   await expect(conversation).toHaveAttribute('aria-hidden', 'true')
   await expect(resizeHandle).toHaveCount(0)
   await expect(sidebar).toBeVisible()
@@ -3937,7 +4224,7 @@ test('AI preview tool opens a public website inside the Browser', async ({ page 
     const dividerBox = await divider.boundingBox()
     const runtimeView = await browserRuntimeView(page, 'preview:test-session')
     if (!dividerBox || !runtimeView) return Number.NEGATIVE_INFINITY
-    return runtimeView.bounds.x - (dividerBox.x + dividerBox.width)
+    return runtimeView.bounds.x - (dividerBox.x + dividerBox.width / 2)
   }).toBeGreaterThanOrEqual(0)
   await expect(page.getByRole('textbox', { name: 'Address' })).toHaveValue(
     'https://www.google.com/',
@@ -5466,7 +5753,7 @@ test('response usage stays on one line and truncates when Chat is narrow', async
     .click()
   await expect.poll(async () =>
     (await page.getByTestId('workbench-viewport').boundingBox())?.width,
-  ).toBeGreaterThan(330)
+  ).toBeGreaterThanOrEqual(MIN_WORKBENCH_WIDTH)
 
   const summary = page.getByTestId('response-usage-summary')
   await expect(summary).toBeVisible()
@@ -5707,6 +5994,8 @@ test('unknown provider input is shown as unavailable', async ({ page }) => {
 
   await page.getByTestId('response-usage-trigger').hover()
   const tooltip = page.getByRole('tooltip')
+  await page.waitForTimeout(650)
+  await expect(tooltip).toHaveCount(0)
   await expect(tooltip).toContainText(/Uncached input\s*--/)
   await expect(tooltip).not.toContainText('Cache hit')
 })
@@ -5724,7 +6013,7 @@ test('Composer controls stay separate and compact when Chat is narrow', async ({
     .click()
   await expect.poll(async () =>
     (await page.getByTestId('workbench-viewport').boundingBox())?.width,
-  ).toBeGreaterThan(330)
+  ).toBeGreaterThanOrEqual(MIN_WORKBENCH_WIDTH)
 
   const composer = page.getByTestId('composer')
   const composerSurface = composer.getByTestId('composer-surface')
@@ -6248,6 +6537,7 @@ test('sidebar session hover shows conversation details with a small row gap', as
   await openDesktopClient(page, { existingSession: true, sessionTitle: title })
 
   const trigger = page.getByRole('button', { name: title, exact: true })
+  await page.mouse.move(0, 0)
   await trigger.hover()
 
   const hoverCard = page.getByTestId('session-hover-card')

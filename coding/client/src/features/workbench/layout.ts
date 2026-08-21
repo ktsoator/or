@@ -1,4 +1,4 @@
-export const DEFAULT_WORKBENCH_RATIO = 0.48
+export const DEFAULT_WORKBENCH_RATIO = 0.42
 export const MIN_WORKBENCH_WIDTH = 300
 export const MIN_CHAT_WIDTH = 360
 export const MAX_WORKBENCH_RATIO = 0.68
@@ -46,8 +46,8 @@ export function keyboardWorkbenchWidth(
 ): number | undefined {
   const { minimum, maximum } = workbenchWidthBounds(layoutWidth)
   let nextWidth: number | undefined
-  if (key === 'ArrowLeft') nextWidth = currentWidth + 16
-  if (key === 'ArrowRight') nextWidth = currentWidth - 16
+  if (key === 'ArrowLeft') nextWidth = currentWidth + 8
+  if (key === 'ArrowRight') nextWidth = currentWidth - 8
   if (key === 'Home') nextWidth = minimum
   if (key === 'End') nextWidth = maximum
   return nextWidth === undefined ? undefined : clampWorkbenchWidth(nextWidth, layoutWidth)

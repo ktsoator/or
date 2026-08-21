@@ -46,9 +46,46 @@ test('webview fills its host and renderer menus stay above it', async () => {
     await page.waitForLoadState('domcontentloaded')
 
     const panelToggle = page.getByTestId('workbench-panel-toggle')
+    await expect(page.getByTestId('desktop-titlebar-controls')).toHaveCSS(
+      '-webkit-app-region',
+      'none',
+    )
+
+    const sidebarToggle = page.getByTestId('sidebar-panel-toggle')
+    await expect.poll(() => page.locator('.app-sidebar-header').first().evaluate(
+      (element) => element.getBoundingClientRect().height,
+    )).toBe(45)
+    await expect.poll(async () => (await sidebarToggle.boundingBox())?.width).toBe(30)
+    await sidebarToggle.hover()
+    await expect(sidebarToggle.locator('.header-control-tooltip')).toHaveCSS('opacity', '1')
+    if (await sidebarToggle.getAttribute('aria-expanded') === 'true') {
+      await sidebarToggle.click()
+    }
+    const newSession = page.getByTestId('desktop-new-session')
+    await expect(newSession).toHaveCSS('opacity', '1')
+    await expect(newSession).toHaveCSS('-webkit-app-region', 'no-drag')
+    await newSession.click()
+    await expect(page.getByTestId('conversation-title')).toContainText('New session')
+    await sidebarToggle.click()
+    const sidebarResizeHandle = page.getByTestId('sidebar-resize-handle')
+    await expect(sidebarResizeHandle).toHaveCSS('-webkit-app-region', 'no-drag')
+    await expect.poll(async () => (await sidebarResizeHandle.boundingBox())?.width).toBe(8)
+
     if (await panelToggle.getAttribute('aria-expanded') === 'false') {
       await panelToggle.click()
     }
+    const workbenchResizeHandle = page.getByTestId('workbench-resize-handle')
+    await expect(workbenchResizeHandle).toHaveCSS('-webkit-app-region', 'no-drag')
+    await expect.poll(async () => (await workbenchResizeHandle.boundingBox())?.width).toBe(8)
+
+    const maximize = page.getByTestId('workbench-maximize')
+    await expect.poll(async () => (await page.getByTestId('workbench-add-view').boundingBox())?.width)
+      .toBe(30)
+    await expect.poll(async () => (await maximize.boundingBox())?.width).toBe(30)
+    await maximize.click()
+    await expect(maximize).toHaveAttribute('aria-pressed', 'true')
+    await maximize.click()
+    await expect(maximize).toHaveAttribute('aria-pressed', 'false')
 
     await page.getByTestId('workbench-add-view').click()
     await page.getByRole('menuitem').first().click()

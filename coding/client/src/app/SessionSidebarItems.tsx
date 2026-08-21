@@ -297,6 +297,7 @@ export function SessionRow({
   const editing = draftTitle !== undefined
   const committing = useRef(false)
   const openingEditor = useRef(false)
+  const suppressHoverCard = useRef(false)
   const renameInput = useRef<HTMLInputElement>(null)
   const hoverCardKey = `session:${session.id}`
 
@@ -358,7 +359,7 @@ export function SessionRow({
       <HoverCard.Root
         open={!menuOpen && openHoverCardKey === hoverCardKey}
         onOpenChange={(open) => {
-          if (open && menuOpen) return
+          if (open && (menuOpen || suppressHoverCard.current)) return
           onHoverCardOpenChange(hoverCardKey, open)
         }}
         openDelay={200}
@@ -375,7 +376,14 @@ export function SessionRow({
             )}
             type="button"
             aria-current={active ? 'page' : undefined}
-            onClick={onSelect}
+            onClick={(event) => {
+              suppressHoverCard.current = event.detail > 0
+              onHoverCardOpenChange(hoverCardKey, false)
+              onSelect()
+            }}
+            onPointerLeave={() => {
+              suppressHoverCard.current = false
+            }}
           >
             <span className="min-w-0 flex-1 truncate text-[0.875rem] font-normal leading-5">
               {title}

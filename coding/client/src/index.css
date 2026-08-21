@@ -17,6 +17,8 @@
    A theme is selected by the OS unless the user overrode it, in which case
    data-theme on the root element wins in both directions. */
 :root {
+  --tooltip-delay: 800ms;
+
   --canvas: #ffffff;          /* stone: white  */
   --canvas-raised: #fafaf9;   /* stone-50      */
   --canvas-sunken: #f5f5f4;   /* stone-100     */
@@ -341,18 +343,6 @@
   -webkit-app-region: no-drag;
 }
 
-.desktop-macos .app-sidebar-header {
-  height: 5.75rem;
-}
-
-.desktop-macos .app-sidebar-header .sidebar-header-action {
-  top: 2.75rem;
-}
-
-.desktop-macos .app-sidebar-header .sidebar-search-action {
-  right: 1rem;
-}
-
 .desktop-macos .app-sidebar-header .sidebar-collapse-action {
   top: 0.6875rem;
   right: auto;
@@ -362,7 +352,7 @@
 
 .desktop-macos .conversation-header.sidebar-is-collapsed,
 .desktop-macos .skills-header.sidebar-is-collapsed {
-  padding-left: 8.5rem;
+  padding-left: 10.75rem;
   border-bottom-color: transparent;
 }
 
@@ -375,13 +365,91 @@
   transform: translateY(0.1875rem);
 }
 
+.desktop-macos .conversation-header-actions,
+.desktop-macos .workbench-titlebar-actions {
+  transform: translateY(0.1875rem);
+}
+
+.app-shell-root {
+  transition-property: grid-template-columns;
+  transition-duration: var(--sidebar-motion-duration, 180ms);
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.app-shell-root.sidebar-is-resizing {
+  transition: none;
+}
+
+.sidebar-transition-divider {
+  opacity: 1;
+  transition: opacity 80ms ease-out;
+}
+
+.app-shell-root[data-sidebar-state="closed"] .sidebar-transition-divider {
+  opacity: 0;
+  transition-delay: 100ms;
+}
+
+.workbench-resize-handle {
+  opacity: 1;
+  transition: opacity 80ms ease-out;
+}
+
+[data-workbench-state="closed"] .workbench-resize-handle {
+  opacity: 0;
+  transition-delay: 100ms;
+}
+
+button:hover > .header-control-tooltip,
+button:focus-visible > .header-control-tooltip {
+  opacity: 1;
+  transition-delay: var(--tooltip-delay);
+}
+
+button:hover > .header-control-tooltip > span,
+button:focus-visible > .header-control-tooltip > span {
+  transform: translateY(0);
+  transition-delay: var(--tooltip-delay);
+}
+
+button[data-state="open"] > .header-control-tooltip {
+  display: none;
+}
+
+.composer-control-tooltip {
+  transition-delay: 0ms;
+}
+
+.group:hover > .composer-control-tooltip,
+.group:focus-visible > .composer-control-tooltip {
+  transition-delay: var(--tooltip-delay);
+}
+
 @media (min-width: 768px) {
+  .desktop-macos .app-sidebar-header {
+    height: 45px;
+  }
+
   .desktop-macos .desktop-sidebar-toggle {
     position: fixed;
     top: 0.6875rem;
     left: 5.75rem;
     z-index: 70;
     display: grid;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell-root,
+  .sidebar-transition-divider,
+  .workbench-resize-handle,
+  .header-control-tooltip > span {
+    transition: none;
+  }
+
+  .header-control-tooltip,
+  .composer-control-tooltip {
+    transition-duration: 0ms;
   }
 }
 

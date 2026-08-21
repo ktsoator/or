@@ -7,13 +7,13 @@ import {
   BookOpenText,
   Cable,
   LoaderCircle,
-  Search,
   SquarePen,
 } from 'lucide-react'
 import type { SessionSummary } from '@/types'
 import type { WorkspaceSessionGroup } from './sessionSidebarLayout'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
+import { PanelResizeHandle } from '@/shared/ui/PanelResizeHandle'
 import { SidebarToggleButton } from '@/shared/ui/SidebarToggleButton'
 import { ProfileMenu } from './ProfileMenu'
 import {
@@ -26,6 +26,7 @@ type AppSidebarProps = {
   layout: {
     mobileSessionsOpen: boolean
     sidebarCollapsed: boolean
+    persistentTitlebarControls: boolean
     sidebarWidth: number
     sidebarResizing: boolean
     sidebarMinimumWidth: number
@@ -75,6 +76,7 @@ export function AppSidebar({ layout, content, actions }: AppSidebarProps) {
   const {
     mobileSessionsOpen,
     sidebarCollapsed,
+    persistentTitlebarControls,
     sidebarWidth,
     sidebarResizing,
     sidebarMinimumWidth,
@@ -119,12 +121,16 @@ export function AppSidebar({ layout, content, actions }: AppSidebarProps) {
         />
       )}
       <div
-        className="sidebar-viewport relative z-50 min-h-0 min-w-0 overflow-hidden max-md:contents"
+        className={cn(
+          'sidebar-viewport relative z-50 min-h-0 min-w-0 max-md:contents',
+          sidebarCollapsed ? 'overflow-hidden' : 'overflow-visible',
+        )}
         data-testid="sidebar-viewport"
       >
         <aside
           className={cn(
-            'app-sidebar relative flex h-full w-[var(--sidebar-expanded-width)] min-h-0 min-w-0 flex-col overflow-hidden border-r border-edge/75 bg-canvas text-ink-soft transition-transform duration-200 ease-out',
+            'app-sidebar relative flex h-full w-[var(--sidebar-expanded-width)] min-h-0 min-w-0 flex-col overflow-hidden bg-canvas text-ink-soft transition-transform duration-200 ease-out',
+            persistentTitlebarControls ? 'border-r-0' : 'border-r border-edge/75',
             'max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:w-[17.5rem] max-md:shadow-2xl',
             mobileSessionsOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full',
           )}
@@ -134,18 +140,7 @@ export function AppSidebar({ layout, content, actions }: AppSidebarProps) {
         >
           <div className="app-sidebar-header window-titlebar relative h-16 w-full shrink-0 max-md:w-[17.5rem]">
             <div className="window-titlebar-controls">
-              <button
-                className={cn(
-                  'sidebar-header-action sidebar-search-action absolute top-4 right-14 grid size-8 cursor-pointer place-items-center rounded-lg text-ink-muted outline-none transition-[opacity,color,background-color,transform] duration-100 ease-out motion-reduce:transition-none hover:bg-canvas-strong/75 hover:text-ink active:scale-95 focus-visible:bg-canvas-strong/75 focus-visible:text-ink',
-                  sidebarCollapsed ? 'pointer-events-none opacity-0' : 'opacity-100',
-                )}
-                type="button"
-                title={t('app.searchSessions')}
-                aria-label={t('app.searchSessions')}
-              >
-                <Search className="size-4" aria-hidden="true" />
-              </button>
-              {!sidebarCollapsed && (
+              {!sidebarCollapsed && (!persistentTitlebarControls || mobileSessionsOpen) && (
                 <SidebarToggleButton
                   expanded
                   className="sidebar-header-action sidebar-collapse-action absolute top-4 right-4 motion-reduce:transition-none"
@@ -303,33 +298,32 @@ export function AppSidebar({ layout, content, actions }: AppSidebarProps) {
           }}
         />
 
+        </aside>
         {!sidebarCollapsed && (
-          <div
-            className="group absolute inset-y-0 right-0 z-[60] w-1.5 touch-none cursor-col-resize outline-none max-md:hidden"
-            role="separator"
-            aria-label={t('app.resizeSidebar')}
-            aria-orientation="vertical"
-            aria-valuemin={sidebarMinimumWidth}
-            aria-valuemax={sidebarMaximumWidth}
-            aria-valuenow={sidebarWidth}
-            tabIndex={0}
+          <PanelResizeHandle
+            edge="right"
+            label={t('app.resizeSidebar')}
+            minimum={sidebarMinimumWidth}
+            maximum={sidebarMaximumWidth}
+            value={sidebarWidth}
+            resizing={sidebarResizing}
+            testID="sidebar-resize-handle"
+            dividerTestID="sidebar-resize-divider"
             onPointerDown={startSidebarResize}
             onPointerMove={resizeSidebar}
             onPointerUp={stopSidebarResize}
             onPointerCancel={stopSidebarResize}
             onLostPointerCapture={stopSidebarResize}
             onKeyDown={resizeSidebarWithKeyboard}
-          >
-            <span
-              className={cn(
-                'absolute inset-y-0 right-0 w-px transition-colors group-hover:bg-ink-faint/60 group-focus-visible:bg-ink-muted/70',
-                sidebarResizing && 'bg-ink-muted/70',
-              )}
-              aria-hidden="true"
-            />
-          </div>
+          />
         )}
-        </aside>
+        {persistentTitlebarControls && (
+          <span
+            className="sidebar-transition-divider pointer-events-none absolute inset-y-0 right-0 hidden w-px bg-edge/75 md:block"
+            data-testid="sidebar-divider-line"
+            aria-hidden="true"
+          />
+        )}
       </div>
     </>
   )

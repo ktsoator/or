@@ -6,7 +6,6 @@ import type {
 } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Gauge, LoaderCircle, PanelLeft } from 'lucide-react'
-import { Tooltip } from 'radix-ui'
 import type {
   ApprovalItem,
   BackgroundTask,
@@ -27,6 +26,7 @@ import {
 import { SidebarToggleButton } from '@/shared/ui/SidebarToggleButton'
 import { StepGroup } from './StepGroup'
 import { ConversationBranchNavigation } from './ConversationBranchNavigation'
+import { HeaderControlTooltip } from '@/shared/ui/HeaderControlTooltip'
 
 type ConversationPaneProps = {
   thread: {
@@ -48,6 +48,8 @@ type ConversationPaneProps = {
   }
   layout: {
     sidebarCollapsed: boolean
+    persistentTitlebarControls: boolean
+    workbenchOpen: boolean
     workbenchMaximized: boolean
     workbenchOwnsToggle: boolean
     workbenchToggleControl: ReactNode
@@ -103,6 +105,8 @@ export function ConversationPane({
   } = thread
   const {
     sidebarCollapsed,
+    persistentTitlebarControls,
+    workbenchOpen,
     workbenchMaximized,
     workbenchOwnsToggle,
     workbenchToggleControl,
@@ -217,10 +221,11 @@ export function ConversationPane({
           className={cn(
             'conversation-header window-titlebar z-20 flex h-[45px] shrink-0 items-center gap-3 border-b border-edge/80 bg-canvas py-0 pr-2 pl-6 max-md:h-12 max-md:px-2 max-md:pl-4',
             sidebarCollapsed && 'sidebar-is-collapsed',
+            persistentTitlebarControls && !workbenchOpen && 'pr-12',
           )}
           data-testid="conversation-header"
         >
-          {sidebarCollapsed && (
+          {sidebarCollapsed && !persistentTitlebarControls && (
             <SidebarToggleButton
               expanded={false}
               className="desktop-sidebar-toggle hidden md:grid"
@@ -274,47 +279,35 @@ export function ConversationPane({
               />
             )}
           </div>
-          {!draft && activeSession && (
-            <ConversationActionsMenu
-              sessionID={activeSession.id}
-              tasks={tasks}
-              onSelectTask={openTaskInWorkbench}
-            />
-          )}
-          {!draft && activeSession && (
-            <Tooltip.Provider delayDuration={120}>
-              <Tooltip.Root>
-                <Tooltip.Trigger asChild>
-                  <button
-                    type="button"
-                    aria-label={diagnosticsOpen ? t('diagnostics.backToConversation') : t('diagnostics.openCurrentSession')}
-                    aria-pressed={diagnosticsOpen}
-                    data-testid="conversation-diagnostics-button"
-                    data-active={diagnosticsOpen || undefined}
-                    title={diagnosticsOpen ? t('diagnostics.backToConversation') : t('diagnostics.openCurrentSession')}
-                    className={cn(
-                      'window-titlebar-control grid size-8 shrink-0 cursor-pointer place-items-center rounded-[8px] text-ink-muted outline-none transition-colors hover:bg-canvas-strong/65 hover:text-ink focus-visible:bg-canvas-strong/65 focus-visible:text-ink',
-                      diagnosticsOpen && 'bg-canvas-strong text-ink',
-                    )}
-                    onClick={openSessionDiagnostics}
-                  >
-                    <Gauge className="size-4" aria-hidden="true" />
-                  </button>
-                </Tooltip.Trigger>
-                <Tooltip.Portal>
-                  <Tooltip.Content
-                    side="bottom"
-                    sideOffset={6}
-                    collisionPadding={8}
-                    className="z-[150] animate-[fade-in_100ms_ease-out] rounded-md bg-canvas-inverse px-2 py-1 text-[0.6875rem] leading-4 font-medium whitespace-nowrap text-ink-inverse shadow-lg"
-                  >
-                    {diagnosticsOpen ? t('diagnostics.backToConversation') : t('diagnostics.openCurrentSession')}
-                  </Tooltip.Content>
-                </Tooltip.Portal>
-              </Tooltip.Root>
-            </Tooltip.Provider>
-          )}
-          {!workbenchOwnsToggle && workbenchToggleControl}
+          <div className="conversation-header-actions window-titlebar-controls flex shrink-0 items-center gap-3">
+            {!draft && activeSession && (
+              <ConversationActionsMenu
+                sessionID={activeSession.id}
+                tasks={tasks}
+                onSelectTask={openTaskInWorkbench}
+              />
+            )}
+            {!draft && activeSession && (
+              <button
+                type="button"
+                aria-label={diagnosticsOpen ? t('diagnostics.backToConversation') : t('diagnostics.openCurrentSession')}
+                aria-pressed={diagnosticsOpen}
+                data-testid="conversation-diagnostics-button"
+                data-active={diagnosticsOpen || undefined}
+                className={cn(
+                  'window-titlebar-control relative grid size-[30px] shrink-0 cursor-pointer place-items-center rounded-[8px] text-ink-muted outline-none transition-colors hover:bg-canvas-strong/65 hover:text-ink focus-visible:bg-canvas-strong/65 focus-visible:text-ink',
+                  diagnosticsOpen && 'bg-canvas-strong text-ink',
+                )}
+                onClick={openSessionDiagnostics}
+              >
+                <Gauge className="size-4" aria-hidden="true" />
+                <HeaderControlTooltip align="end">
+                  {diagnosticsOpen ? t('diagnostics.backToConversation') : t('diagnostics.openCurrentSession')}
+                </HeaderControlTooltip>
+              </button>
+            )}
+            {!persistentTitlebarControls && !workbenchOwnsToggle && workbenchToggleControl}
+          </div>
         </header>
 
         <div className="relative min-h-0 flex-1">
@@ -328,7 +321,7 @@ export function ConversationPane({
             >
             <div
               className={cn(
-                'mx-auto min-h-full w-full max-w-[750px] pt-5 pb-9 max-md:pt-4 max-md:pb-7',
+                'conversation-rail mx-auto min-h-full w-full max-w-[750px] pt-5 pb-9 max-md:pt-4 max-md:pb-7',
                 (loading || emptySession) && 'grid place-items-center',
               )}
             >
