@@ -30,23 +30,26 @@ func (s *Session) prepareNextStep(step agent.StepCtx) *agent.StepUpdate {
 	if s.execution.persistenceError() != nil {
 		return nil
 	}
-	if len(step.ToolResults) == 0 && !s.agent.HasQueuedMessages() {
-		return nil
-	}
-	if !s.shouldAutoCompact(usageTokens(step.Message.Usage)) {
-		return nil
-	}
-	ctx := s.execution.runContext()
-	if ctx == nil {
-		return nil
-	}
-	compacted, err := s.autoCompact(ctx)
-	if err != nil || !compacted {
-		return nil
-	}
-
 	next := step.Context
-	next.Messages = s.agent.Snapshot().Messages
+	changed := false
+	if prompt := s.toolRuntime.stableSystemPrompt(); next.SystemPrompt != prompt {
+		next.SystemPrompt = prompt
+		changed = true
+	}
+	if (len(step.ToolResults) > 0 || s.agent.HasQueuedMessages()) &&
+		s.shouldAutoCompact(usageTokens(step.Message.Usage)) {
+		ctx := s.execution.runContext()
+		if ctx != nil {
+			compacted, err := s.autoCompact(ctx)
+			if err == nil && compacted {
+				next.Messages = s.agent.Snapshot().Messages
+				changed = true
+			}
+		}
+	}
+	if !changed {
+		return nil
+	}
 	return &agent.StepUpdate{Context: &next}
 }
 

@@ -35,7 +35,17 @@ type Question struct {
 	Header      string   `json:"header" jsonschema:"description=Very short label shown as a chip beside the question such as Auth method or Library,minLength=1"`
 	Options     []Option `json:"options" jsonschema:"description=The available choices. Each must be distinct,minItems=2,maxItems=4"`
 	MultiSelect bool     `json:"multi_select,omitempty" jsonschema:"description=Allow several options to be selected at once. Set it when the options are not mutually exclusive"`
+	// Detail and Intent are product-owned presentation hints. They are excluded
+	// from the model-facing ask_user_question schema.
+	Detail string         `json:"-" jsonschema:"-"`
+	Intent QuestionIntent `json:"-" jsonschema:"-"`
 }
+
+// QuestionIntent lets a product surface specialize a question without changing
+// how answers flow back through Asker.
+type QuestionIntent string
+
+const QuestionIntentPlanReview QuestionIntent = "plan_review"
 
 // Answer is the user's response to one Question. Values holds one entry for a
 // single-select question and may hold several for a multi-select one; free text

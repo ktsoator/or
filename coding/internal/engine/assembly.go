@@ -9,6 +9,7 @@ import (
 	"github.com/ktsoator/or/coding/internal/compaction"
 	"github.com/ktsoator/or/coding/internal/observability"
 	"github.com/ktsoator/or/coding/internal/skills"
+	"github.com/ktsoator/or/coding/internal/tools"
 )
 
 // New builds a Session. When a Store is configured, its transcript is loaded and
@@ -74,10 +75,13 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		sessionID:              s.sessionID,
 		runPersistenceError:    s.execution.persistenceError,
 		recordPersistenceError: s.execution.recordPersistenceError,
-		systemPrompt:           contextState.systemPrompt,
-		activateSkill:          contextState.activateSkill,
-		stageTaskStatus:        contextState.stageTaskStatus,
-		dispatchEvent:          s.dispatchEvent,
+		systemPrompt: func(toolSet []tools.Tool) string {
+			return contextState.systemPrompt(toolSet, s.PlanModeActive())
+		},
+		activateSkill:   contextState.activateSkill,
+		stageTaskStatus: contextState.stageTaskStatus,
+		dispatchEvent:   s.dispatchEvent,
+		planMode:        s,
 	})
 	if err != nil {
 		return nil, err

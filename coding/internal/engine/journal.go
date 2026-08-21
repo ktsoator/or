@@ -59,6 +59,9 @@ func newSessionJournal(
 	if err := projections.Register(newTodoProjectionUnit()); err != nil {
 		return nil, nil, nil, fmt.Errorf("coding: register todo projection: %w", err)
 	}
+	if err := projections.Register(newPlanModeProjectionUnit()); err != nil {
+		return nil, nil, nil, fmt.Errorf("coding: register plan mode projection: %w", err)
+	}
 	validator, repairs, err := transcript.RecoverSessionWithProjections(entries, projections)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("coding: recover session transcript: %w", err)
@@ -214,6 +217,32 @@ func (j *sessionJournal) todoSnapshot() (*TodoSnapshot, error) {
 	if snapshot.AsOfSeq != wantSeq {
 		return nil, fmt.Errorf(
 			"coding: todo projection at sequence %d, validator at %d",
+			snapshot.AsOfSeq,
+			wantSeq,
+		)
+	}
+	return projection, nil
+}
+
+func (j *sessionJournal) planModeSnapshot() (PlanModeSnapshot, error) {
+	j.mu.RLock()
+	defer j.mu.RUnlock()
+	snapshot, err := j.projections.SnapshotKey(planModeProjectionKey)
+	if err != nil {
+		return PlanModeSnapshot{}, err
+	}
+	value, ok := snapshot.Values[planModeProjectionKey]
+	if !ok {
+		return PlanModeSnapshot{}, fmt.Errorf("coding: plan mode projection is not registered")
+	}
+	projection, ok := value.(PlanModeSnapshot)
+	if !ok {
+		return PlanModeSnapshot{}, fmt.Errorf("coding: plan mode projection has type %T", value)
+	}
+	wantSeq := j.validator.NextSeq() - 1
+	if snapshot.AsOfSeq != wantSeq {
+		return PlanModeSnapshot{}, fmt.Errorf(
+			"coding: plan mode projection at sequence %d, validator at %d",
 			snapshot.AsOfSeq,
 			wantSeq,
 		)
@@ -450,6 +479,25 @@ func (j *sessionJournal) appendCompaction(ctx context.Context, entry transcript.
 		ctx,
 		"compaction",
 		[]transcript.Entry{entry},
+	)
+	if err != nil {
+		return err
+	}
+	j.mu.Lock()
+	prepared.Commit()
+	j.entries = append(j.entries, sequenced[0])
+	j.mu.Unlock()
+	return nil
+}
+
+func (j *sessionJournal) appendPlanMode(ctx context.Context, active bool) error {
+	j.commitMu.Lock()
+	defer j.commitMu.Unlock()
+
+	sequenced, prepared, err := j.persistEntriesLocked(
+		ctx,
+		"plan mode",
+		[]transcript.Entry{transcript.NewPlanMode(active)},
 	)
 	if err != nil {
 		return err

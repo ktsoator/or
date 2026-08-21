@@ -38,6 +38,7 @@ type toolRuntime struct {
 	activateSkill          func(string)
 	stageTaskStatus        func(string)
 	dispatchEvent          func(Event)
+	planMode               tools.PlanModeState
 }
 
 type toolRuntimeOptions struct {
@@ -60,6 +61,7 @@ type toolRuntimeOptions struct {
 	activateSkill          func(string)
 	stageTaskStatus        func(string)
 	dispatchEvent          func(Event)
+	planMode               tools.PlanModeState
 }
 
 func newToolRuntime(opts toolRuntimeOptions) (*toolRuntime, error) {
@@ -79,6 +81,7 @@ func newToolRuntime(opts toolRuntimeOptions) (*toolRuntime, error) {
 	})
 	if opts.asker != nil {
 		catalog = append(catalog, tools.AskUserQuestion(opts.asker))
+		catalog = append(catalog, tools.ExitPlanMode(opts.asker, opts.planMode))
 	}
 
 	runtime := &toolRuntime{
@@ -97,6 +100,7 @@ func newToolRuntime(opts toolRuntimeOptions) (*toolRuntime, error) {
 		activateSkill:          opts.activateSkill,
 		stageTaskStatus:        opts.stageTaskStatus,
 		dispatchEvent:          opts.dispatchEvent,
+		planMode:               opts.planMode,
 	}
 	authorizer, err := permission.NewService(
 		opts.cwd,

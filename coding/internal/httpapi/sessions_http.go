@@ -88,6 +88,27 @@ func (s *Server) handlePermissionMode(c *gin.Context) {
 	}
 }
 
+func (s *Server) handlePlanMode(c *gin.Context) {
+	var body struct {
+		Active *bool `json:"active"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.Active == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid plan mode"})
+		return
+	}
+	err := s.conversations.SetPlanMode(c.Param("sessionID"), *body.Active)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+	case errors.Is(err, conversation.ErrSessionActive), errors.Is(err, engine.ErrBusy):
+		c.JSON(http.StatusConflict, gin.H{"error": "wait for the session to become idle before changing plan mode"})
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	default:
+		c.Status(http.StatusNoContent)
+	}
+}
+
 func (s *Server) handleRenameSession(c *gin.Context) {
 	var body struct {
 		CustomTitle string `json:"customTitle"`
@@ -284,6 +305,7 @@ func (s *Server) handleHistory(c *gin.Context) {
 	var contextUsage wireContextUsage
 	var tasks []wireBackgroundTask
 	var todos *wireTodoSnapshot
+	var planMode bool
 	var running bool
 	var title string
 	var snapshotErr error
@@ -302,6 +324,7 @@ func (s *Server) handleHistory(c *gin.Context) {
 		contextUsage = projectContextUsage(snapshot.ContextUsage)
 		tasks = projectBackgroundTasks(snapshot.Tasks)
 		todos = projectTodoSnapshot(snapshot.Todos)
+		planMode = snapshot.PlanMode.Active
 		running = snapshot.Running
 		title = snapshot.Title
 	})
@@ -321,6 +344,7 @@ func (s *Server) handleHistory(c *gin.Context) {
 		Context:  contextUsage,
 		Tasks:    tasks,
 		Todos:    todos,
+		PlanMode: planMode,
 		Running:  running,
 		EventSeq: eventSeq,
 		Title:    title,
@@ -634,6 +658,7 @@ func (s *Server) mountSessions(r gin.IRouter) {
 	one.POST("/message-edits", s.handleEditMessage)
 	one.PATCH("/settings", s.handleSessionSettings)
 	one.PATCH("/permission-mode", s.handlePermissionMode)
+	one.PATCH("/plan-mode", s.handlePlanMode)
 	one.PATCH("/title", s.handleRenameSession)
 	one.POST("/prompt", s.handlePrompt)
 	one.POST("/steer", s.handleSteer)

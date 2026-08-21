@@ -83,6 +83,21 @@ func TestProjectEventIncludesTurnBoundary(t *testing.T) {
 	}
 }
 
+func TestProjectEventIncludesPlanModeChange(t *testing.T) {
+	data, ok := ProjectEvent(engine.Event{Type: engine.PlanModeChanged, PlanMode: true})
+	if !ok {
+		t.Fatal("plan mode event was not projected")
+	}
+
+	var event wireEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		t.Fatal(err)
+	}
+	if event.Type != wireEventPlanModeChanged || !event.PlanMode {
+		t.Fatalf("plan mode event = %#v", event)
+	}
+}
+
 func TestProjectEventIncludesPersistedRunMessageIDs(t *testing.T) {
 	data, ok := ProjectEvent(engine.Event{
 		Type:               engine.RunCompleted,

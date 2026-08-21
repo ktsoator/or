@@ -38,6 +38,7 @@ const (
 	wireEventQuestionRequest   wireEventType = "question_request"
 	wireEventQuestionResolved  wireEventType = "question_resolved"
 	wireEventQuestionCancelled wireEventType = "question_cancelled"
+	wireEventPlanModeChanged   wireEventType = "plan_mode_changed"
 )
 
 type wireTaskStatus string
@@ -202,6 +203,8 @@ type wireQuestion struct {
 	Header      string               `json:"header"`
 	Options     []wireQuestionOption `json:"options"`
 	MultiSelect bool                 `json:"multiSelect,omitempty"`
+	Detail      string               `json:"detail,omitempty"`
+	Intent      string               `json:"intent,omitempty"`
 }
 
 // wireQuestionAnswer is one reply, carrying the labels the user picked or the
@@ -277,6 +280,8 @@ type wireEvent struct {
 	TabID string `json:"tabID,omitempty"`
 	// question_request
 	Questions []wireQuestion `json:"questions,omitempty"`
+	// plan mode
+	PlanMode bool `json:"planMode,omitempty"`
 	// title_update
 	Title string `json:"title,omitempty"`
 	// run timing
@@ -419,6 +424,7 @@ type wireHistoryResponse struct {
 	Context  wireContextUsage     `json:"context"`
 	Tasks    []wireBackgroundTask `json:"tasks"`
 	Todos    *wireTodoSnapshot    `json:"todos"`
+	PlanMode bool                 `json:"planMode"`
 	Running  bool                 `json:"running"`
 	EventSeq uint64               `json:"eventSeq"`
 	Title    string               `json:"title"`

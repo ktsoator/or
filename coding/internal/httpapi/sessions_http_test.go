@@ -120,6 +120,54 @@ func TestHistoryHTTPReturnsCurrentTodoSnapshotAndClearsItOnNextTurn(t *testing.T
 	assertHistoryTodoJSON(t, response, true)
 }
 
+func TestPlanModeHTTPUpdatesHistory(t *testing.T) {
+	manager, transports, model, thinking := newForkHTTPManager(t, func(
+		_ context.Context,
+		model llm.Model,
+		_ llm.Context,
+		_ llm.StreamOptions,
+	) (<-chan llm.Event, error) {
+		message := llm.NewAssistantMessage(model)
+		message.StopReason = llm.StopReasonStop
+		message.Content = []llm.AssistantContent{&llm.TextContent{Text: "done"}}
+		events := make(chan llm.Event, 1)
+		events <- llm.Event{Type: llm.EventDone, Message: &message}
+		close(events)
+		return events, nil
+	})
+	created, err := manager.Create(
+		"Plan mode", t.TempDir(), conversation.ScopeProject, model, thinking, permission.ModeAsk,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewServer(Options{Conversations: manager, Transports: transports}).Handler()
+
+	request := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/sessions/"+created.ID+"/plan-mode",
+		strings.NewReader(`{"active":true}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("plan mode status = %d, body = %s", response.Code, response.Body.String())
+	}
+
+	historyResponse := sessionHistoryRequest(handler, created.ID)
+	if historyResponse.Code != http.StatusOK {
+		t.Fatalf("history status = %d, body = %s", historyResponse.Code, historyResponse.Body.String())
+	}
+	var history wireHistoryResponse
+	if err := json.Unmarshal(historyResponse.Body.Bytes(), &history); err != nil {
+		t.Fatal(err)
+	}
+	if !history.PlanMode {
+		t.Fatalf("history plan mode = %v, want true", history.PlanMode)
+	}
+}
+
 func TestForkSessionHTTP(t *testing.T) {
 	manager, transports, model, thinking := newForkHTTPManager(t, func(
 		_ context.Context,

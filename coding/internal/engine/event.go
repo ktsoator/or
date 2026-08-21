@@ -37,6 +37,7 @@ const (
 	CompactionFailed     EventType = "compaction_failed"
 	TaskStarted          EventType = "task_started"
 	TaskCompleted        EventType = "task_completed"
+	PlanModeChanged      EventType = "plan_mode_changed"
 	RunCompleted         EventType = "run_completed"
 )
 
@@ -73,6 +74,8 @@ type Event struct {
 
 	// BackgroundTask contains the latest lifecycle state for task events.
 	BackgroundTask BackgroundTask
+	// PlanMode is populated on PlanModeChanged.
+	PlanMode bool
 
 	// Usage is one assistant request's consumption on MessageCompleted and the
 	// aggregate consumption on RunCompleted. Product adapters may accumulate

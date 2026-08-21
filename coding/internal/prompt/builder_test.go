@@ -69,6 +69,26 @@ func TestBuildSystemOmitsSkillProtocolWithoutTool(t *testing.T) {
 	}
 }
 
+func TestBuildSystemIncludesPlanModePolicyOnlyWhenActive(t *testing.T) {
+	inactive := BuildSystem(SystemOptions{})
+	if strings.Contains(inactive, "## Plan mode") {
+		t.Fatalf("inactive prompt contains plan-mode policy:\n%s", inactive)
+	}
+
+	active := BuildSystem(SystemOptions{PlanMode: true})
+	for _, want := range []string{
+		"## Plan mode",
+		"do not edit files",
+		"Do not call todo_write",
+		"only and final tool call",
+		"exit_plan_mode",
+	} {
+		if !strings.Contains(active, want) {
+			t.Errorf("active prompt missing plan-mode rule %q:\n%s", want, active)
+		}
+	}
+}
+
 func TestBuildSystemDoesNotContainDynamicResourceSections(t *testing.T) {
 	out := BuildSystem(SystemOptions{})
 	for _, unwanted := range []string{

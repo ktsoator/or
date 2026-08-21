@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	CurrentVersion           = 7
+	CurrentVersion           = 8
 	unassignedSequence int64 = -1
 )
 
@@ -34,6 +34,7 @@ const (
 	StepStartEntry     EntryType = "step/start"
 	StepEndEntry       EntryType = "step/end"
 	RequestHeaderEntry EntryType = "request/header"
+	PlanModeEntry      EntryType = "plan/mode"
 )
 
 type LifecycleStatus string
@@ -67,6 +68,7 @@ type Entry struct {
 	Compaction    *Compaction
 	Lifecycle     *Lifecycle
 	RequestHeader *RequestHeader
+	PlanMode      *PlanMode
 }
 
 // Lifecycle identifies one durable Run, Turn, or Step boundary. Entry.Type
@@ -77,6 +79,12 @@ type Lifecycle struct {
 	StepID string          `json:"stepId,omitempty"`
 	Status LifecycleStatus `json:"status,omitempty"`
 	Reason string          `json:"reason,omitempty"`
+}
+
+// PlanMode records whether planning policy applies to subsequent model
+// requests. The latest value wins across resume and fork.
+type PlanMode struct {
+	Active bool `json:"active"`
 }
 
 // ToolCall is a durable dispatch intent. Its presence means validation and
@@ -182,6 +190,16 @@ func NewCompaction(compact Compaction) Entry {
 	}
 }
 
+func NewPlanMode(active bool) Entry {
+	return Entry{
+		Seq:       unassignedSequence,
+		ID:        NewID(),
+		Timestamp: time.Now().UTC(),
+		Type:      PlanModeEntry,
+		PlanMode:  &PlanMode{Active: active},
+	}
+}
+
 func NewRunStart(runID string) Entry {
 	return newLifecycleEntry(RunStartEntry, Lifecycle{RunID: runID})
 }
@@ -246,14 +264,14 @@ func (e Entry) Validate() error {
 	}
 	switch e.Type {
 	case MessageEntry:
-		if e.Message == nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Lifecycle != nil || e.RequestHeader != nil {
+		if e.Message == nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Lifecycle != nil || e.RequestHeader != nil || e.PlanMode != nil {
 			return fmt.Errorf("transcript: message entry %s has invalid payload", e.ID)
 		}
 		if _, ok := agent.ToLLM(e.Message); !ok {
 			return fmt.Errorf("transcript: cannot persist custom message %T", e.Message)
 		}
 	case ToolCallEntry:
-		if e.Message != nil || e.ToolCall == nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Lifecycle != nil || e.RequestHeader != nil {
+		if e.Message != nil || e.ToolCall == nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Lifecycle != nil || e.RequestHeader != nil || e.PlanMode != nil {
 			return fmt.Errorf("transcript: tool call entry %s has invalid payload", e.ID)
 		}
 		if e.ToolCall.ToolCallID == "" || e.ToolCall.ToolName == "" ||
@@ -264,7 +282,7 @@ func (e Entry) Validate() error {
 			return fmt.Errorf("transcript: tool call entry %s has invalid arguments", e.ID)
 		}
 	case ToolOutcomeEntry:
-		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome == nil || e.Context != nil || e.Compaction != nil || e.Lifecycle != nil || e.RequestHeader != nil {
+		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome == nil || e.Context != nil || e.Compaction != nil || e.Lifecycle != nil || e.RequestHeader != nil || e.PlanMode != nil {
 			return fmt.Errorf("transcript: tool outcome entry %s has invalid payload", e.ID)
 		}
 		if e.ToolOutcome.ToolCallID == "" || e.ToolOutcome.Status == "" {
@@ -274,7 +292,7 @@ func (e Entry) Validate() error {
 			return fmt.Errorf("transcript: tool outcome entry %s has invalid data", e.ID)
 		}
 	case ContextEntry:
-		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context == nil || e.Compaction != nil || e.Lifecycle != nil || e.RequestHeader != nil {
+		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context == nil || e.Compaction != nil || e.Lifecycle != nil || e.RequestHeader != nil || e.PlanMode != nil {
 			return fmt.Errorf("transcript: context entry %s has invalid payload", e.ID)
 		}
 		if e.Context.AttachmentID == "" ||
@@ -286,7 +304,7 @@ func (e Entry) Validate() error {
 			return fmt.Errorf("transcript: context entry %s is incomplete", e.ID)
 		}
 	case CompactionEntry:
-		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction == nil || e.Lifecycle != nil || e.RequestHeader != nil {
+		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction == nil || e.Lifecycle != nil || e.RequestHeader != nil || e.PlanMode != nil {
 			return fmt.Errorf("transcript: compaction entry %s has invalid payload", e.ID)
 		}
 		if e.Compaction.Summary == "" || e.Compaction.FirstKeptEntryID == "" {
@@ -295,18 +313,22 @@ func (e Entry) Validate() error {
 	case RunStartEntry, RunEndEntry,
 		TurnStartEntry, TurnEndEntry,
 		StepStartEntry, StepEndEntry:
-		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Lifecycle == nil || e.RequestHeader != nil {
+		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Lifecycle == nil || e.RequestHeader != nil || e.PlanMode != nil {
 			return fmt.Errorf("transcript: lifecycle entry %s has invalid payload", e.ID)
 		}
 		if err := validateLifecyclePayload(e.Type, *e.Lifecycle); err != nil {
 			return fmt.Errorf("transcript: lifecycle entry %s: %w", e.ID, err)
 		}
 	case RequestHeaderEntry:
-		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Lifecycle != nil || e.RequestHeader == nil {
+		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Lifecycle != nil || e.RequestHeader == nil || e.PlanMode != nil {
 			return fmt.Errorf("transcript: request header entry %s has invalid payload", e.ID)
 		}
 		if err := validateRequestHeader(*e.RequestHeader, e.Seq); err != nil {
 			return fmt.Errorf("transcript: request header entry %s: %w", e.ID, err)
+		}
+	case PlanModeEntry:
+		if e.Message != nil || e.ToolCall != nil || e.ToolOutcome != nil || e.Context != nil || e.Compaction != nil || e.Lifecycle != nil || e.RequestHeader != nil || e.PlanMode == nil {
+			return fmt.Errorf("transcript: plan mode entry %s has invalid payload", e.ID)
 		}
 	default:
 		return fmt.Errorf("transcript: entry %s has unknown type %q", e.ID, e.Type)
@@ -366,10 +388,12 @@ func (e Entry) MarshalJSON() ([]byte, error) {
 		Compaction    *Compaction        `json:"compaction,omitempty"`
 		Lifecycle     *Lifecycle         `json:"lifecycle,omitempty"`
 		RequestHeader *RequestHeader     `json:"requestHeader,omitempty"`
+		PlanMode      *PlanMode          `json:"planMode,omitempty"`
 	}{
 		Seq: e.Seq, ID: e.ID, Timestamp: e.Timestamp, Type: e.Type,
 		ToolCall: e.ToolCall, ToolOutcome: e.ToolOutcome, Context: e.Context,
 		Compaction: e.Compaction, Lifecycle: e.Lifecycle, RequestHeader: e.RequestHeader,
+		PlanMode: e.PlanMode,
 	}
 	if e.Message != nil {
 		message, _ := agent.ToLLM(e.Message)
@@ -398,6 +422,7 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 		Compaction    *Compaction        `json:"compaction"`
 		Lifecycle     *Lifecycle         `json:"lifecycle"`
 		RequestHeader *RequestHeader     `json:"requestHeader"`
+		PlanMode      *PlanMode          `json:"planMode"`
 	}{}
 	if err := json.Unmarshal(data, &wire); err != nil {
 		return err
@@ -409,6 +434,7 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 		Seq: *wire.Seq, ID: wire.ID, Timestamp: wire.Timestamp,
 		Type: wire.Type, ToolCall: wire.ToolCall, ToolOutcome: wire.ToolOutcome, Context: wire.Context,
 		Compaction: wire.Compaction, Lifecycle: wire.Lifecycle, RequestHeader: wire.RequestHeader,
+		PlanMode: wire.PlanMode,
 	}
 	if len(wire.Message) > 0 && string(wire.Message) != "null" {
 		message, err := llm.UnmarshalMessage(wire.Message)

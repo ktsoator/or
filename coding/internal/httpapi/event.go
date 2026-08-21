@@ -146,6 +146,9 @@ func projectEvent(ev engine.Event) (wireEvent, bool) {
 			Task: projectBackgroundTask(ev.BackgroundTask),
 		}
 
+	case engine.PlanModeChanged:
+		out = wireEvent{Type: wireEventPlanModeChanged, PlanMode: ev.PlanMode}
+
 	case engine.RunCompleted:
 		out = wireEvent{
 			Type:               wireEventDone,

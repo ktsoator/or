@@ -79,7 +79,7 @@ func newContextManager(
 // systemPrompt assembles only the stable coding prompt. Session instructions
 // and skill listings are projected at the request boundary and never become
 // part of the Agent's canonical system prompt.
-func (manager *contextManager) systemPrompt(toolSet []tools.Tool) string {
+func (manager *contextManager) systemPrompt(toolSet []tools.Tool, planMode bool) string {
 	infos := make([]prompt.ToolInfo, len(toolSet))
 	for i, t := range toolSet {
 		infos[i] = prompt.ToolInfo{Name: t.Name(), Guidelines: t.Guidelines}
@@ -87,6 +87,7 @@ func (manager *contextManager) systemPrompt(toolSet []tools.Tool) string {
 	return prompt.BuildSystem(prompt.SystemOptions{
 		Instructions: manager.instructions,
 		Tools:        infos,
+		PlanMode:     planMode,
 	})
 }
 

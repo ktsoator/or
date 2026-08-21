@@ -137,6 +137,8 @@ func projectQuestions(questions []tools.Question) []wireQuestion {
 			Header:      question.Header,
 			Options:     options,
 			MultiSelect: question.MultiSelect,
+			Detail:      question.Detail,
+			Intent:      string(question.Intent),
 		})
 	}
 	return out
