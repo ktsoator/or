@@ -23,12 +23,14 @@ import type {
   SessionSummary,
   TaskOutputResponse,
   ThinkingLevel,
+  TodoSnapshot,
   WorkspaceSummary,
 } from '@/types'
 
 type ThreadView = {
   items: Item[]
   tasks: BackgroundTask[]
+  todos: TodoSnapshot | null
   queuedMessages: QueuedMessage[]
   contextUsage?: ContextUsage
   preview?: PreviewState

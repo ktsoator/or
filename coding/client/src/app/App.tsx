@@ -89,6 +89,7 @@ export default function App() {
     activeSessionID,
     items,
     tasks,
+    todos,
     queuedMessages,
     contextUsage,
     preview,
@@ -568,6 +569,7 @@ export default function App() {
       approval={approval}
       question={question}
       queuedMessages={queuedMessages}
+      todos={todos}
       contextUsage={contextUsage}
       centered={centered}
       projectPickerVisible={Boolean(draft)}

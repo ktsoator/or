@@ -19,6 +19,7 @@ import type {
   PromptFile,
   QueuedMessage,
   ThinkingLevel,
+  TodoSnapshot,
   WorkspaceSummary,
 } from '@/types'
 import { cn } from '@/lib/utils'
@@ -50,6 +51,7 @@ import { PermissionModeMenu } from './PermissionModeMenu'
 import { ProjectPicker } from './ProjectPicker'
 import { PendingQueue } from './PendingQueue'
 import { RunDeliveryMenu } from './RunDeliveryMenu'
+import { TodoChecklist } from './TodoChecklist'
 import { useI18n } from '@/i18n'
 
 export function Composer({
@@ -58,6 +60,7 @@ export function Composer({
   approval,
   question,
   queuedMessages,
+  todos,
   contextUsage,
   centered = false,
   projectPickerVisible = false,
@@ -88,6 +91,7 @@ export function Composer({
   approval?: ApprovalItem
   question?: QuestionItem
   queuedMessages: QueuedMessage[]
+  todos?: TodoSnapshot | null
   contextUsage?: ContextUsage
   centered?: boolean
   projectPickerVisible?: boolean
@@ -377,6 +381,7 @@ export function Composer({
       )}
     >
       <div className="relative mx-auto flex w-full max-w-[750px] flex-col gap-2">
+        <TodoChecklist todos={todos?.todos ?? []} />
         {queuedMessages.length > 0 && (
           <PendingQueue messages={queuedMessages} onRemove={(id) => void removeQueued(id)} />
         )}

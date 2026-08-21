@@ -48,6 +48,7 @@ export function ConversationView({
       approval={thread.approval}
       question={thread.question}
       queuedMessages={thread.queuedMessages}
+      todos={thread.todos}
       contextUsage={thread.contextUsage}
       centered={centered}
       projectPickerVisible={false}
