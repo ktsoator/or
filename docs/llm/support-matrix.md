@@ -2,15 +2,15 @@
 
 The model catalog and protocol implementations are independent. `GetModels` returns catalog entries. A request is routable only when the current process has registered an adapter for the model's `Protocol`. Use `GetRunnableModels` for runtime model lists.
 
-<!-- catalog-stats: total=425 runnable=382 openai-completions=250 anthropic-messages=76 openai-responses=56 google-generative-ai=21 mistral-conversations=22 -->
+<!-- catalog-stats: total=429 runnable=386 openai-completions=252 anthropic-messages=76 openai-responses=58 google-generative-ai=21 mistral-conversations=22 -->
 
 ## Protocol status
 
 | Protocol | Catalog models | Status | Registration | Meaning |
 |---|---:|---|---|---|
-| `openai-completions` | 250 | Implemented | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Chat Completions and compatible endpoints |
+| `openai-completions` | 252 | Implemented | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Chat Completions and compatible endpoints |
 | `anthropic-messages` | 76 | Implemented | `_ "github.com/ktsoator/or/llm/anthropic"` | Anthropic Messages and compatible endpoints |
-| `openai-responses` | 56 | Implemented | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Responses API and compatible gateways |
+| `openai-responses` | 58 | Implemented | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Responses API and compatible gateways |
 | `google-generative-ai` | 21 | Catalog only | None | No adapter |
 | `mistral-conversations` | 22 | Catalog only | None | No adapter |
 
@@ -42,7 +42,7 @@ The current catalog contains the following provider IDs. Counts come from `llm/c
 | `github-copilot` | 22 | Both implemented protocols | `COPILOT_GITHUB_TOKEN` |
 | `google` | 21 | Google Generative AI | `GEMINI_API_KEY` |
 | `groq` | 6 | OpenAI Completions | `GROQ_API_KEY` |
-| `huggingface` | 66 | OpenAI Completions | `HF_TOKEN` |
+| `huggingface` | 67 | OpenAI Completions | `HF_TOKEN` |
 | `kimi-coding` | 4 | Anthropic Messages | `KIMI_API_KEY` |
 | `minimax` | 7 | Anthropic Messages | `MINIMAX_API_KEY` |
 | `minimax-cn` | 7 | Anthropic Messages | `MINIMAX_CN_API_KEY` |
@@ -52,7 +52,7 @@ The current catalog contains the following provider IDs. Counts come from `llm/c
 | `nvidia` | 59 | OpenAI Completions | `NVIDIA_API_KEY` |
 | `openai` | 30 | OpenAI Responses | `OPENAI_API_KEY` |
 | `opencode` | 56 | All three implemented protocols | `OPENCODE_API_KEY` |
-| `opencode-go` | 19 | All three implemented protocols | `OPENCODE_API_KEY` |
+| `opencode-go` | 22 | All three implemented protocols | `OPENCODE_API_KEY` |
 | `together` | 19 | OpenAI Completions | `TOGETHER_API_KEY` |
 | `xai` | 6 | OpenAI Completions | `XAI_API_KEY` |
 | `xiaomi` | 3 | OpenAI Completions | `XIAOMI_API_KEY` or `MIMO_API_KEY` |
