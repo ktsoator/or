@@ -56,6 +56,9 @@ func newSessionJournal(
 	if err := projections.Register(modelContextView); err != nil {
 		return nil, nil, nil, fmt.Errorf("coding: register model-context projection: %w", err)
 	}
+	if err := projections.Register(newTodoProjectionUnit()); err != nil {
+		return nil, nil, nil, fmt.Errorf("coding: register todo projection: %w", err)
+	}
 	validator, repairs, err := transcript.RecoverSessionWithProjections(entries, projections)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("coding: recover session transcript: %w", err)
@@ -186,6 +189,32 @@ func (j *sessionJournal) modelContextSnapshot() (*transcript.ModelContextProject
 			"coding: projection registry at sequence %d, model context at %d, validator at %d",
 			snapshot.AsOfSeq,
 			projection.AsOfSeq,
+			wantSeq,
+		)
+	}
+	return projection, nil
+}
+
+func (j *sessionJournal) todoSnapshot() (*TodoSnapshot, error) {
+	j.mu.RLock()
+	defer j.mu.RUnlock()
+	snapshot, err := j.projections.SnapshotKey(todoProjectionKey)
+	if err != nil {
+		return nil, err
+	}
+	value, ok := snapshot.Values[todoProjectionKey]
+	if !ok {
+		return nil, fmt.Errorf("coding: todo projection is not registered")
+	}
+	projection, ok := value.(*TodoSnapshot)
+	if !ok {
+		return nil, fmt.Errorf("coding: todo projection has type %T", value)
+	}
+	wantSeq := j.validator.NextSeq() - 1
+	if snapshot.AsOfSeq != wantSeq {
+		return nil, fmt.Errorf(
+			"coding: todo projection at sequence %d, validator at %d",
+			snapshot.AsOfSeq,
 			wantSeq,
 		)
 	}

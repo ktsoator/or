@@ -11,7 +11,7 @@ func TestCoreAndBrowserToolGroupsRemainSeparate(t *testing.T) {
 	browser := BrowserTools(t.TempDir())
 
 	if got := toolNames(core); !reflect.DeepEqual(got, []string{
-		"read", "grep", "glob", "edit", "write", "bash", "task_stop",
+		"read", "grep", "glob", "edit", "write", "bash", "task_stop", "todo_write",
 	}) {
 		t.Fatalf("core tools = %v", got)
 	}

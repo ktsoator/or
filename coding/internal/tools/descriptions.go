@@ -174,3 +174,17 @@ Usage:
 		"Ask with `ask_user_question` only when the decision is the user's to make; anything the workspace can answer, answer with a tool.",
 	},
 }
+
+var todoWriteText = toolText{
+	description: `Record and update a structured execution checklist for the current work.
+
+Usage:
+- Send the ENTIRE list on every call. Each call replaces the previous list; there are no partial updates or per-item edits.
+- Use this for work with several concrete steps so progress stays visible. Skip it for conversational or trivial single-step requests.
+- Add one short imperative item per concrete step before starting the work.
+- Mark each item being actively worked on as in_progress. Use several in_progress items only when work is genuinely running in parallel; otherwise use one.
+- Mark an item completed as soon as it is done. Do not batch completed updates until the end.
+- While work remains, keep at least one item in_progress. Once all work is done, every item should be completed.
+- Send an empty list only to clear a checklist that is no longer relevant.
+- Statuses are pending (not started), in_progress (being worked on), and completed (done).`,
+}
