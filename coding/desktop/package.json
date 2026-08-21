@@ -1,6 +1,6 @@
 {
   "name": "coding-desktop",
-  "version": "0.6.14",
+  "version": "0.6.15",
   "private": true,
   "description": "Electron desktop shell for Or",
   "author": "Kt <ktsoator@gmail.com>",
