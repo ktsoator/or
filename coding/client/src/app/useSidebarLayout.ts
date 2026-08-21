@@ -21,6 +21,17 @@ import {
 } from './sessionSidebarLayout'
 
 const PINNED_SESSIONS_KEY = 'coding.pinned-session-ids'
+const SIDEBAR_WIDTH_KEY = 'coding.sidebar-width'
+
+function storedSidebarWidth(): number {
+  if (typeof localStorage === 'undefined') return DEFAULT_SIDEBAR_WIDTH
+  const storedValue = localStorage.getItem(SIDEBAR_WIDTH_KEY)
+  if (storedValue === null) return DEFAULT_SIDEBAR_WIDTH
+  const value = Number(storedValue)
+  return Number.isFinite(value)
+    ? Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, value))
+    : DEFAULT_SIDEBAR_WIDTH
+}
 
 export function useSidebarLayout(
   sessions: SessionSummary[],
@@ -28,7 +39,7 @@ export function useSidebarLayout(
 ) {
   const [mobileSessionsOpen, setMobileSessionsOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
-  const [width, setWidth] = useState(DEFAULT_SIDEBAR_WIDTH)
+  const [width, setWidth] = useState(storedSidebarWidth)
   const [pinnedSessionIDs, setPinnedSessionIDs] = useState(() =>
     parsePinnedSessionIDs(
       typeof localStorage === 'undefined'
@@ -48,6 +59,10 @@ export function useSidebarLayout(
   useEffect(() => {
     localStorage.setItem(PINNED_SESSIONS_KEY, JSON.stringify(pinnedSessionIDs))
   }, [pinnedSessionIDs])
+
+  useEffect(() => {
+    localStorage.setItem(SIDEBAR_WIDTH_KEY, String(Math.round(width)))
+  }, [width])
 
   const toggleSidebar = useCallback(() => {
     if (mobileSessionsOpen) {

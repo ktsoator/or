@@ -22,12 +22,14 @@ export function SkillsPage({
   onBack,
   sidebarCollapsed,
   onExpandSidebar,
+  persistentTitlebarControls = false,
   workspacePath,
   workspaceName,
 }: {
   onBack: () => void
   sidebarCollapsed?: boolean
   onExpandSidebar?: () => void
+  persistentTitlebarControls?: boolean
   workspacePath?: string
   workspaceName?: string
 }) {
@@ -60,7 +62,7 @@ export function SkillsPage({
       <header
         className={`skills-header window-titlebar z-20 flex h-[45px] shrink-0 items-center gap-1 border-b border-edge/80 bg-canvas px-4 max-md:h-12 ${sidebarCollapsed ? 'sidebar-is-collapsed' : ''}`}
       >
-        {sidebarCollapsed && onExpandSidebar && (
+        {sidebarCollapsed && onExpandSidebar && !persistentTitlebarControls && (
           <SidebarToggleButton
             expanded={false}
             className="desktop-sidebar-toggle hidden md:grid"

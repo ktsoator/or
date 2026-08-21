@@ -10,6 +10,10 @@ import {
   Pencil,
 } from 'lucide-react'
 import { Tooltip } from 'radix-ui'
+import {
+  TOOLTIP_DELAY_MS,
+  TOOLTIP_SKIP_DELAY_MS,
+} from '@/shared/ui/tooltipTiming'
 import { formatFileSize } from '@/shared/attachments'
 import {
   parseSkillReference,
@@ -290,7 +294,10 @@ export const ThreadItem = memo(function ThreadItem({
                     />
                   )}
                   {onEditMessage && (
-                    <Tooltip.Provider delayDuration={80}>
+                    <Tooltip.Provider
+                      delayDuration={TOOLTIP_DELAY_MS}
+                      skipDelayDuration={TOOLTIP_SKIP_DELAY_MS}
+                    >
                       <MessageActionButton
                         icon={Pencil}
                         label={t('actions.editMessage')}

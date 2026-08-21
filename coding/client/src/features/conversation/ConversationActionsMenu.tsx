@@ -12,6 +12,7 @@ import { DropdownMenu } from 'radix-ui'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 import type { BackgroundTask } from '@/types'
+import { HeaderControlTooltip } from '@/shared/ui/HeaderControlTooltip'
 
 const visibleTaskLimit = 20
 
@@ -51,10 +52,9 @@ export function ConversationActionsMenu({
     <DropdownMenu.Root open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenu.Trigger asChild>
           <button
-            className="window-titlebar-control relative grid size-7 shrink-0 cursor-pointer place-items-center rounded-md text-ink-muted outline-none transition-colors hover:bg-surface-active hover:text-ink focus-visible:bg-surface-active focus-visible:text-ink data-[state=open]:bg-surface-selected data-[state=open]:text-ink"
+            className="window-titlebar-control relative grid size-[30px] shrink-0 cursor-pointer place-items-center rounded-md text-ink-muted outline-none transition-colors hover:bg-surface-active hover:text-ink focus-visible:bg-surface-active focus-visible:text-ink data-[state=open]:bg-surface-selected data-[state=open]:text-ink"
             data-testid="conversation-actions-trigger"
             type="button"
-            title={t('conversation.actions')}
             aria-label={t('conversation.actions')}
           >
             <Ellipsis className="size-4" aria-hidden="true" />
@@ -64,6 +64,9 @@ export function ConversationActionsMenu({
                 aria-hidden="true"
               />
             )}
+            <HeaderControlTooltip align="end">
+              {t('conversation.actions')}
+            </HeaderControlTooltip>
           </button>
         </DropdownMenu.Trigger>
 
