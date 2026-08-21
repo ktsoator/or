@@ -27,6 +27,8 @@ type SystemOptions struct {
 	Instructions string
 	// Tools are the active tools' prompt contributions, in advertise order.
 	Tools []ToolInfo
+	// PlanMode includes the planning-only policy for this request.
+	PlanMode bool
 }
 
 // DefaultInstructions is the baseline preamble used when
@@ -41,6 +43,13 @@ const workingRules = "## Working rules\n" +
 	"- After changing code, verify it with the project's build, its tests, or the command the user named. Report the command and result; if a check was skipped or failed, say so plainly.\n" +
 	"- Do not commit, push, or otherwise change version-control state unless the user asks for it.\n" +
 	"- When the request is ambiguous in a way that changes what you would build, ask before building."
+
+const planModePolicy = "## Plan mode\n" +
+	"- Explore the codebase and resolve implementation details, but do not edit files or run commands that mutate the workspace.\n" +
+	"- Do not call todo_write in plan mode; the execution checklist begins only after the plan is approved.\n" +
+	"- Produce a concrete, implementation-ready plan grounded in the code you inspected.\n" +
+	"- When the plan is ready, call exit_plan_mode with the complete plan. Make it the only and final tool call in that assistant response; do not merely print the plan as a final response.\n" +
+	"- If the user keeps planning, incorporate their feedback, investigate further as needed, and present the revised complete plan again."
 
 const approvalProtocol = "## Approvals\n" +
 	"- Some tool calls require the user's approval before they run. A denied call is the user's decision, not a tool malfunction.\n" +
@@ -104,6 +113,10 @@ func BuildSystem(opts SystemOptions) string {
 	} {
 		b.WriteString("\n\n")
 		b.WriteString(section)
+	}
+	if opts.PlanMode {
+		b.WriteString("\n\n")
+		b.WriteString(planModePolicy)
 	}
 
 	if hasTool(opts.Tools, "skill") {

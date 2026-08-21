@@ -18,6 +18,7 @@ export type WorkbenchDraftConversation = {
     text: string,
     images: MessageImage[],
     files: PromptFile[],
+    planModeOverride?: boolean,
   ) => Promise<boolean>
 }
 

@@ -52,6 +52,7 @@ func CoreTools(root string) ([]Tool, *TaskManager) {
 		writeTool(root, files),
 		bashTool(root, tasks),
 		taskStopTool(tasks),
+		todoWriteTool(),
 	}, tasks
 }
 

@@ -23,6 +23,7 @@ export function ComposerSkillSuggestions({
   visible,
   query,
   commandsEnabled,
+  planEnabled,
   skillsEnabled,
   projectSkills,
   systemSkills,
@@ -39,6 +40,7 @@ export function ComposerSkillSuggestions({
   visible: boolean
   query: string
   commandsEnabled: boolean
+  planEnabled: boolean
   skillsEnabled: boolean
   projectSkills: SkillEntry[]
   systemSkills: SkillEntry[]
@@ -190,7 +192,7 @@ export function ComposerSkillSuggestions({
               <span className="min-w-0 truncate text-right text-ink-faint">
                 {item.description}
               </span>
-              {item.command !== 'compact' && (
+              {item.command !== 'compact' && !(item.command === 'plan' && planEnabled) && (
                 <span className="shrink-0 whitespace-nowrap text-[0.6875rem] text-ink-faint">
                   {t('composer.comingSoon')}
                 </span>

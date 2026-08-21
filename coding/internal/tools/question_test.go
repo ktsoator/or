@@ -67,6 +67,11 @@ func TestQuestionSchemaBoundsTheCounts(t *testing.T) {
 			t.Errorf("schema missing %q:\n%s", want, schema)
 		}
 	}
+	for _, productOnly := range []string{`"detail"`, `"intent"`} {
+		if strings.Contains(schema, productOnly) {
+			t.Errorf("schema leaked product-only field %s:\n%s", productOnly, schema)
+		}
+	}
 }
 
 func TestQuestionRejectsDuplicatesAndOversizedHeaders(t *testing.T) {

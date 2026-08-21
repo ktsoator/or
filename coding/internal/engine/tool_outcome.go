@@ -13,6 +13,7 @@ const (
 	kindMutationFailure = "mutation_failure"
 	kindPreview         = "preview"
 	kindQuestionAnswers = "question_answers"
+	kindTodoList        = "todo_list"
 	kindGenericData     = "generic"
 )
 
@@ -45,6 +46,8 @@ func encodeOutcomeData(data any) (string, json.RawMessage) {
 		kind = kindPreview
 	case tools.QuestionAnswers:
 		kind = kindQuestionAnswers
+	case tools.TodoSnapshot:
+		kind = kindTodoList
 	}
 	raw, err := json.Marshal(data)
 	if err != nil {
@@ -89,6 +92,11 @@ func decodeOutcomeData(kind string, raw json.RawMessage) any {
 		}
 	case kindQuestionAnswers:
 		var value tools.QuestionAnswers
+		if json.Unmarshal(raw, &value) == nil {
+			return value
+		}
+	case kindTodoList:
+		var value tools.TodoSnapshot
 		if json.Unmarshal(raw, &value) == nil {
 			return value
 		}

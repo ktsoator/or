@@ -3,6 +3,7 @@
 export type WireEventType =
   | "user_message"
   | "run_start"
+  | "turn_start"
   | "delta"
   | "tool_input_start"
   | "tool_input_delta"
@@ -30,6 +31,7 @@ export type WireEventType =
   | "question_request"
   | "question_resolved"
   | "question_cancelled"
+  | "plan_mode_changed"
 
 export type DeltaKind =
   | "text"
@@ -235,6 +237,15 @@ export type TaskOutputResponse = {
   truncated: boolean
 }
 
+export type TodoItem = {
+  content: string
+  status: string
+}
+
+export type TodoSnapshot = {
+  todos: TodoItem[]
+}
+
 export type QuestionOption = {
   label: string
   description: string
@@ -245,6 +256,8 @@ export type Question = {
   header: string
   options: QuestionOption[]
   multiSelect?: boolean
+  detail?: string
+  intent?: string
 }
 
 export type QuestionAnswer = {
@@ -297,8 +310,10 @@ export type WireEvent = {
   disposition?: BrowserDisposition
   tabID?: string
   questions?: Question[]
+  planMode?: boolean
   title?: string
   runId?: string
+  turnId?: string
   providerRequestId?: string
   startedAt?: string
   completedAt?: string
@@ -313,6 +328,8 @@ export type HistoryResponse = {
   queue: WireEvent[]
   context: ContextUsage
   tasks: BackgroundTask[]
+  todos: TodoSnapshot | null
+  planMode: boolean
   running: boolean
   eventSeq: number
   title: string

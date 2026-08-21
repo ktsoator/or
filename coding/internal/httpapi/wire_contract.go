@@ -10,6 +10,7 @@ type wireEventType string
 const (
 	wireEventUserMessage       wireEventType = "user_message"
 	wireEventRunStart          wireEventType = "run_start"
+	wireEventTurnStart         wireEventType = "turn_start"
 	wireEventDelta             wireEventType = "delta"
 	wireEventToolInputStart    wireEventType = "tool_input_start"
 	wireEventToolInputDelta    wireEventType = "tool_input_delta"
@@ -37,6 +38,7 @@ const (
 	wireEventQuestionRequest   wireEventType = "question_request"
 	wireEventQuestionResolved  wireEventType = "question_resolved"
 	wireEventQuestionCancelled wireEventType = "question_cancelled"
+	wireEventPlanModeChanged   wireEventType = "plan_mode_changed"
 )
 
 type wireTaskStatus string
@@ -201,6 +203,8 @@ type wireQuestion struct {
 	Header      string               `json:"header"`
 	Options     []wireQuestionOption `json:"options"`
 	MultiSelect bool                 `json:"multiSelect,omitempty"`
+	Detail      string               `json:"detail,omitempty"`
+	Intent      string               `json:"intent,omitempty"`
 }
 
 // wireQuestionAnswer is one reply, carrying the labels the user picked or the
@@ -276,10 +280,13 @@ type wireEvent struct {
 	TabID string `json:"tabID,omitempty"`
 	// question_request
 	Questions []wireQuestion `json:"questions,omitempty"`
+	// plan mode
+	PlanMode bool `json:"planMode,omitempty"`
 	// title_update
 	Title string `json:"title,omitempty"`
 	// run timing
 	RunID             string `json:"runId,omitempty"`
+	TurnID            string `json:"turnId,omitempty"`
 	ProviderRequestID string `json:"providerRequestId,omitempty"`
 	StartedAt         string `json:"startedAt,omitempty"`
 	CompletedAt       string `json:"completedAt,omitempty"`
@@ -402,11 +409,22 @@ type wireTaskOutputResponse struct {
 	Truncated bool   `json:"truncated"`
 }
 
+type wireTodoItem struct {
+	Content string `json:"content"`
+	Status  string `json:"status"`
+}
+
+type wireTodoSnapshot struct {
+	Todos []wireTodoItem `json:"todos"`
+}
+
 type wireHistoryResponse struct {
 	Events   []wireEvent          `json:"events"`
 	Queue    []wireEvent          `json:"queue"`
 	Context  wireContextUsage     `json:"context"`
 	Tasks    []wireBackgroundTask `json:"tasks"`
+	Todos    *wireTodoSnapshot    `json:"todos"`
+	PlanMode bool                 `json:"planMode"`
 	Running  bool                 `json:"running"`
 	EventSeq uint64               `json:"eventSeq"`
 	Title    string               `json:"title"`

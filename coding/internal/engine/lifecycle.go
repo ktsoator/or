@@ -13,6 +13,19 @@ type agentLifecycleDecision struct {
 	stepComplete lifecycleStepCompleted
 }
 
+func turnStartedEvent(decision agentLifecycleDecision) (Event, bool) {
+	transition := decision.followUp
+	if transition.runID == "" || transition.nextTurnID == "" {
+		return Event{}, false
+	}
+	return Event{
+		Type:      TurnStarted,
+		RunID:     transition.runID,
+		TurnID:    transition.nextTurnID,
+		StartedAt: transition.nextStartedAt,
+	}, true
+}
+
 // coordinateAgentLifecycle translates reusable-agent facts into lifecycle
 // transitions. Observability consumes the returned decision but never drives it.
 func (s *Session) coordinateAgentLifecycle(event agent.AgentEvent) agentLifecycleDecision {

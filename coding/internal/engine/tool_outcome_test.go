@@ -34,3 +34,21 @@ func TestToolOutcomeRoundTrip(t *testing.T) {
 		t.Fatalf("decoded outcome = %#v, want %#v", got, want)
 	}
 }
+
+func TestTodoOutcomeRoundTripUsesDedicatedKind(t *testing.T) {
+	want := agent.ToolOutcome{
+		Status: agent.ToolOutcomeSuccess,
+		Data: tools.TodoSnapshot{Todos: []tools.TodoItem{
+			{Content: "Inspect authentication", Status: tools.TodoCompleted},
+			{Content: "Run tests", Status: tools.TodoInProgress},
+		}},
+	}
+	persisted := encodeOutcome("call-todo", want)
+	if persisted.DataKind != kindTodoList {
+		t.Fatalf("persisted outcome kind = %q, want %q", persisted.DataKind, kindTodoList)
+	}
+	got, ok := decodeOutcome(persisted)
+	if !ok || !reflect.DeepEqual(got, want) {
+		t.Fatalf("decoded outcome = %#v, %v; want %#v", got, ok, want)
+	}
+}

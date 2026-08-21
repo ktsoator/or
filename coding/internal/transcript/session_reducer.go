@@ -301,6 +301,10 @@ func (r *sessionReducer) Apply(index int, entry Entry) (sessionTransition, error
 		transition.Scope = r.scope
 		return transition, nil
 
+	case PlanModeEntry:
+		transition.Scope = r.scope
+		return transition, nil
+
 	default:
 		return sessionTransition{}, fmt.Errorf(
 			"transcript: entry %s has unsupported type %q",

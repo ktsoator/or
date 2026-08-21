@@ -23,9 +23,9 @@ import (
 
 // Manager owns every conversation across the registered workspaces. Metadata
 // is kept in indexes while each transcript stays separate.
-// Lock ordering: mu is always taken before the workspace registry's own lock.
-// The registry never calls back into this package, so that ordering holds
-// simply by never taking mu inside a registry call.
+// Lock ordering: mu is always taken before the workspace registry's or a
+// transport's own lock. Neither dependency calls back into Manager while its
+// lock is held.
 type Manager struct {
 	ctx        context.Context
 	cancel     context.CancelFunc

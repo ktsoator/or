@@ -23,12 +23,15 @@ import type {
   SessionSummary,
   TaskOutputResponse,
   ThinkingLevel,
+  TodoSnapshot,
   WorkspaceSummary,
 } from '@/types'
 
 type ThreadView = {
   items: Item[]
   tasks: BackgroundTask[]
+  todos: TodoSnapshot | null
+  planMode: boolean
   queuedMessages: QueuedMessage[]
   contextUsage?: ContextUsage
   preview?: PreviewState
@@ -52,6 +55,7 @@ type ThreadActions = {
     images: MessageImage[],
     files: PromptFile[],
     delivery?: DeliveryMode,
+    planModeOverride?: boolean,
   ) => Promise<boolean>
   removeQueuedMessage: (id: string) => Promise<void>
   stop: () => void
@@ -65,6 +69,7 @@ type ThreadActions = {
     thinkingLevel: ThinkingLevel,
   ) => Promise<void>
   updatePermissionMode: (mode: PermissionMode) => Promise<void>
+  setPlanMode: (active: boolean) => Promise<void>
   compactContext: () => Promise<CompactionResult>
 }
 

@@ -6,6 +6,9 @@ func TestActiveRunHistoryCompactsStreamingProgressAndClearsOnDone(t *testing.T) 
 	history := activeRunHistory{}
 	contentIndex := 2
 	history.apply(wireEvent{Type: wireEventRunStart, StartedAt: "2026-07-27T12:00:00Z"})
+	history.apply(wireEvent{
+		Type: wireEventTurnStart, RunID: "run-1", TurnID: "turn-1",
+	})
 	history.apply(wireEvent{Type: wireEventDelta, Kind: wireDeltaText, Delta: "still "})
 	history.apply(wireEvent{Type: wireEventDelta, Kind: wireDeltaText, Delta: "working"})
 	history.apply(wireEvent{
@@ -22,17 +25,20 @@ func TestActiveRunHistoryCompactsStreamingProgressAndClearsOnDone(t *testing.T) 
 	if snapshot.startedAt != "2026-07-27T12:00:00Z" {
 		t.Fatalf("startedAt = %q", snapshot.startedAt)
 	}
-	if len(snapshot.events) != 4 {
-		t.Fatalf("events = %#v, want run, text, tool start, and tool progress", snapshot.events)
+	if len(snapshot.events) != 5 {
+		t.Fatalf("events = %#v, want run, turn, text, tool start, and tool progress", snapshot.events)
 	}
-	if snapshot.events[1].Delta != "still working" {
-		t.Fatalf("compacted text = %q", snapshot.events[1].Delta)
+	if snapshot.events[1].Type != wireEventTurnStart || snapshot.events[1].TurnID != "turn-1" {
+		t.Fatalf("turn boundary = %#v", snapshot.events[1])
 	}
-	if snapshot.events[3].Bytes != 21 {
-		t.Fatalf("compacted tool bytes = %d", snapshot.events[3].Bytes)
+	if snapshot.events[2].Delta != "still working" {
+		t.Fatalf("compacted text = %q", snapshot.events[2].Delta)
 	}
-	if snapshot.events[3].Delta != `{"path":"main.go"}` {
-		t.Fatalf("compacted tool delta = %q", snapshot.events[3].Delta)
+	if snapshot.events[4].Bytes != 21 {
+		t.Fatalf("compacted tool bytes = %d", snapshot.events[4].Bytes)
+	}
+	if snapshot.events[4].Delta != `{"path":"main.go"}` {
+		t.Fatalf("compacted tool delta = %q", snapshot.events[4].Delta)
 	}
 
 	history.apply(wireEvent{Type: wireEventDone})

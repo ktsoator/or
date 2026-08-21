@@ -254,6 +254,25 @@ func (m *Manager) UpdatePermissionMode(id string, mode permission.Mode) (Summary
 	return runtime.summary(), nil
 }
 
+// SetPlanMode durably changes the planning policy used by subsequent model
+// requests. In-run exits are owned by exit_plan_mode; direct changes require an
+// idle conversation.
+func (m *Manager) SetPlanMode(id string, active bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return ErrManagerClosed
+	}
+	runtime, err := m.loadRuntimeLocked(id)
+	if err != nil {
+		return err
+	}
+	if runtime.running.Load() || runtime.awaitingUser() {
+		return ErrSessionActive
+	}
+	return runtime.session.SetPlanMode(m.ctx, active)
+}
+
 // Rename sets a user-defined custom title on the session. An empty title clears
 // it so the display falls back to the AI or prompt-derived title.
 func (m *Manager) Rename(id, customTitle string) (Summary, error) {

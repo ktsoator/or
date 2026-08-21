@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/ktsoator/or/coding/internal/conversation"
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/permission"
+	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/usage"
 	"github.com/ktsoator/or/coding/internal/workspace"
 	"github.com/ktsoator/or/llm"
@@ -44,6 +46,182 @@ func TestBindCreateSessionRequestWithUnknownContentLength(t *testing.T) {
 	}
 	if body.ThinkingLevel != "high" || body.PermissionMode != "ask" {
 		t.Fatalf("settings = thinking %q, permission %q", body.ThinkingLevel, body.PermissionMode)
+	}
+}
+
+func TestHistoryHTTPReturnsCurrentTodoSnapshotAndClearsItOnNextTurn(t *testing.T) {
+	var modelCalls atomic.Int64
+	manager, transports, model, thinking := newForkHTTPManager(t, func(
+		_ context.Context,
+		model llm.Model,
+		_ llm.Context,
+		_ llm.StreamOptions,
+	) (<-chan llm.Event, error) {
+		message := llm.NewAssistantMessage(model)
+		if modelCalls.Add(1) == 1 {
+			message.StopReason = llm.StopReasonToolUse
+			message.Content = []llm.AssistantContent{&llm.ToolCall{
+				ID: "todo-call", Name: tools.ToolNameTodoWrite,
+				Arguments: map[string]any{"todos": []any{
+					map[string]any{"content": "Inspect parser", "status": "completed"},
+					map[string]any{"content": "Run tests", "status": "in_progress"},
+				}},
+			}}
+		} else {
+			message.StopReason = llm.StopReasonStop
+			message.Content = []llm.AssistantContent{&llm.TextContent{Text: "done"}}
+		}
+		events := make(chan llm.Event, 1)
+		events <- llm.Event{Type: llm.EventDone, Message: &message}
+		close(events)
+		return events, nil
+	})
+	created, err := manager.Create(
+		"Todo history", t.TempDir(), conversation.ScopeProject, model, thinking, permission.ModeAsk,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewServer(Options{Conversations: manager, Transports: transports}).Handler()
+
+	if err := manager.StartPromptWithFiles(created.ID, "finish the parser", nil); err != nil {
+		t.Fatal(err)
+	}
+	waitForHTTPTestSessionIdle(t, manager, created.ID)
+	response := sessionHistoryRequest(handler, created.ID)
+	if response.Code != http.StatusOK {
+		t.Fatalf("history status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var history wireHistoryResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &history); err != nil {
+		t.Fatal(err)
+	}
+	if history.Todos == nil || len(history.Todos.Todos) != 2 ||
+		history.Todos.Todos[0].Content != "Inspect parser" ||
+		history.Todos.Todos[1].Status != "in_progress" {
+		t.Fatalf("history todos = %#v", history.Todos)
+	}
+	assertHistoryTodoJSON(t, response, false)
+
+	if err := manager.StartPromptWithFiles(created.ID, "say what is next", nil); err != nil {
+		t.Fatal(err)
+	}
+	waitForHTTPTestSessionIdle(t, manager, created.ID)
+	response = sessionHistoryRequest(handler, created.ID)
+	if response.Code != http.StatusOK {
+		t.Fatalf("next history status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &history); err != nil {
+		t.Fatal(err)
+	}
+	if history.Todos != nil {
+		t.Fatalf("next-turn todos = %#v, want nil", history.Todos)
+	}
+	assertHistoryTodoJSON(t, response, true)
+}
+
+func TestHistorySnapshotDoesNotDeadlockIdleRelease(t *testing.T) {
+	manager, transports, model, thinking := newForkHTTPManager(t, nil)
+	created, err := manager.Create(
+		"Concurrent history", t.TempDir(), conversation.ScopeProject, model, thinking, permission.ModeAsk,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	transport, ok := transports.get(created.ID)
+	if !ok {
+		t.Fatal("session transport was not created")
+	}
+
+	transport.hub.mu.Lock()
+	snapshotStarted := make(chan struct{})
+	snapshotDone := make(chan error, 1)
+	go func() {
+		snapshotDone <- manager.SnapshotWithin(created.ID, func(read func() conversation.Snapshot) error {
+			close(snapshotStarted)
+			transport.hub.snapshot(func() { _ = read() })
+			return nil
+		})
+	}()
+	select {
+	case <-snapshotStarted:
+	case <-time.After(time.Second):
+		transport.hub.mu.Unlock()
+		t.Fatal("history snapshot did not reach the hub boundary")
+	}
+
+	releaseStarted := make(chan struct{})
+	releaseDone := make(chan bool, 1)
+	go func() {
+		close(releaseStarted)
+		releaseDone <- manager.ReleaseIfIdle(created.ID)
+	}()
+	<-releaseStarted
+	transport.hub.mu.Unlock()
+
+	select {
+	case err := <-snapshotDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("history snapshot deadlocked with idle release")
+	}
+	select {
+	case released := <-releaseDone:
+		if !released {
+			t.Fatal("idle release did not retire the session")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("idle release deadlocked with history snapshot")
+	}
+}
+
+func TestPlanModeHTTPUpdatesHistory(t *testing.T) {
+	manager, transports, model, thinking := newForkHTTPManager(t, func(
+		_ context.Context,
+		model llm.Model,
+		_ llm.Context,
+		_ llm.StreamOptions,
+	) (<-chan llm.Event, error) {
+		message := llm.NewAssistantMessage(model)
+		message.StopReason = llm.StopReasonStop
+		message.Content = []llm.AssistantContent{&llm.TextContent{Text: "done"}}
+		events := make(chan llm.Event, 1)
+		events <- llm.Event{Type: llm.EventDone, Message: &message}
+		close(events)
+		return events, nil
+	})
+	created, err := manager.Create(
+		"Plan mode", t.TempDir(), conversation.ScopeProject, model, thinking, permission.ModeAsk,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewServer(Options{Conversations: manager, Transports: transports}).Handler()
+
+	request := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/sessions/"+created.ID+"/plan-mode",
+		strings.NewReader(`{"active":true}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("plan mode status = %d, body = %s", response.Code, response.Body.String())
+	}
+
+	historyResponse := sessionHistoryRequest(handler, created.ID)
+	if historyResponse.Code != http.StatusOK {
+		t.Fatalf("history status = %d, body = %s", historyResponse.Code, historyResponse.Body.String())
+	}
+	var history wireHistoryResponse
+	if err := json.Unmarshal(historyResponse.Body.Bytes(), &history); err != nil {
+		t.Fatal(err)
+	}
+	if !history.PlanMode {
+		t.Fatalf("history plan mode = %v, want true", history.PlanMode)
 	}
 }
 
@@ -335,6 +513,28 @@ func sessionPostRequest(
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	return response
+}
+
+func sessionHistoryRequest(handler http.Handler, sessionID string) *httptest.ResponseRecorder {
+	request := httptest.NewRequest(http.MethodGet, "/api/sessions/"+sessionID+"/history", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	return response
+}
+
+func assertHistoryTodoJSON(t *testing.T, response *httptest.ResponseRecorder, wantNull bool) {
+	t.Helper()
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(response.Body.Bytes(), &fields); err != nil {
+		t.Fatal(err)
+	}
+	raw, ok := fields["todos"]
+	if !ok {
+		t.Fatal("history response omitted todos")
+	}
+	if gotNull := string(raw) == "null"; gotNull != wantNull {
+		t.Fatalf("history todos JSON = %s, want null = %v", raw, wantNull)
+	}
 }
 
 func waitForHTTPTestSessionIdle(t *testing.T, manager *conversation.Manager, id string) {

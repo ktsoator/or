@@ -50,6 +50,9 @@ func (s *Session) run(ctx context.Context, fn func(context.Context) error) error
 		s.execution.end()
 	}()
 	s.dispatchEvent(Event{Type: RunStarted, RunID: runID, StartedAt: startedAt})
+	s.dispatchEvent(Event{
+		Type: TurnStarted, RunID: runID, TurnID: turnID, StartedAt: startedAt,
+	})
 	s.recorder.Record(observability.Event{
 		Name: observability.RunStarted, SessionID: s.sessionID, RunID: runID,
 		StartedAt: startedAt, Status: "running",

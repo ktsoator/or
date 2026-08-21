@@ -3,6 +3,7 @@ import {
   ArrowUp,
   BookOpen,
   Info,
+  ListChecks,
   Square,
   X,
 } from 'lucide-react'
@@ -19,6 +20,7 @@ import type {
   PromptFile,
   QueuedMessage,
   ThinkingLevel,
+  TodoSnapshot,
   WorkspaceSummary,
 } from '@/types'
 import { cn } from '@/lib/utils'
@@ -40,16 +42,19 @@ import {
   moveSuggestionIndex,
   parseComposerCatalogQuery,
   parseExecutableComposerCommand,
+  parsePlanComposerCommand,
   previewSkillCommandCount,
   skillSuggestionOptionID,
 } from './panelStyles'
 import { Question } from './Question'
+import { PlanReview } from './PlanReview'
 import { ModelSettingsMenu } from './ModelSettingsMenu'
 import { ContextUsageMenu } from './ContextUsageMenu'
 import { PermissionModeMenu } from './PermissionModeMenu'
 import { ProjectPicker } from './ProjectPicker'
 import { PendingQueue } from './PendingQueue'
 import { RunDeliveryMenu } from './RunDeliveryMenu'
+import { TodoChecklist } from './TodoChecklist'
 import { useI18n } from '@/i18n'
 
 export function Composer({
@@ -58,6 +63,8 @@ export function Composer({
   approval,
   question,
   queuedMessages,
+  todos,
+  planMode = false,
   contextUsage,
   centered = false,
   projectPickerVisible = false,
@@ -81,6 +88,7 @@ export function Composer({
   onConfigureModel,
   onSettingsChange,
   onPermissionModeChange,
+  onPlanModeChange,
   onCompact,
 }: {
   connected: boolean
@@ -88,6 +96,8 @@ export function Composer({
   approval?: ApprovalItem
   question?: QuestionItem
   queuedMessages: QueuedMessage[]
+  todos?: TodoSnapshot | null
+  planMode?: boolean
   contextUsage?: ContextUsage
   centered?: boolean
   projectPickerVisible?: boolean
@@ -106,6 +116,7 @@ export function Composer({
     images: MessageImage[],
     files: PromptFile[],
     delivery?: DeliveryMode,
+    planModeOverride?: boolean,
   ) => Promise<boolean>
   onRemoveQueued: (id: string) => Promise<void>
   onStop: () => void
@@ -120,6 +131,7 @@ export function Composer({
     thinkingLevel: ThinkingLevel,
   ) => Promise<void>
   onPermissionModeChange: (mode: PermissionMode) => Promise<void>
+  onPlanModeChange?: (active: boolean) => Promise<void>
   onCompact?: () => Promise<unknown>
 }) {
   const { t } = useI18n()
@@ -131,6 +143,8 @@ export function Composer({
   const [settingsError, setSettingsError] = useState('')
   const [queueError, setQueueError] = useState('')
   const [sendError, setSendError] = useState('')
+  const [planModeError, setPlanModeError] = useState('')
+  const [planModeChanging, setPlanModeChanging] = useState(false)
   const [delivery, setDelivery] = useState<DeliveryMode>('steer')
   const [draftValue, setDraftValue] = useState('')
   const [selectedSkill, setSelectedSkill] = useState<SkillEntry>()
@@ -153,9 +167,9 @@ export function Composer({
       : undefined
   const contextWindow = currentModel?.contextWindow ?? currentContextUsage?.contextWindow ?? 0
   const editorDisabled = awaitingUser || !connected || compacting || !modelConfigured
-  const settingsLocked = running || editorDisabled
+  const settingsLocked = running || editorDisabled || planModeChanging
   const settingsDisabled = settingsLocked || updatingSettings
-  const sendDisabled = editorDisabled || updatingSettings
+  const sendDisabled = editorDisabled || updatingSettings || planModeChanging
   const supportsImages = Boolean(currentModel?.supportsImages)
   const {
     imageFileRef,
@@ -257,27 +271,15 @@ export function Composer({
     if (!stillAvailable) setSelectedSkill(undefined)
   }, [availableSkills, selectedSkill, skillsLoaded])
 
-  const runPreviewCommand = async (command: ComposerPreviewCommand) => {
-    if (command !== 'compact' || sendDisabled) return
+  const clearSubmission = () => {
     setDraftValue('')
-    setAddPanelOpen(false)
-    setSkillSuggestionsDismissed(true)
+    setSelectedSkill(undefined)
+    setSkillSuggestionsDismissed(false)
+    clearAttachments()
     requestAnimationFrame(autosize)
-    await compactContext()
   }
 
-  const submit = async () => {
-    const el = ref.current
-    if (!el || submittingRef.current || sendDisabled) return
-    const command = parseExecutableComposerCommand(draftValue)
-    if (command) {
-      await runPreviewCommand(command)
-      return
-    }
-    const argumentsText = draftValue.trim()
-    const text = selectedSkill
-      ? buildSkillInvocation(selectedSkill, argumentsText)
-      : argumentsText
+  const sendSubmission = async (text: string, planModeOverride?: boolean) => {
     if (!text && images.length === 0 && files.length === 0) return
     if (images.length > 0 && !supportsImages) {
       reportUnsupportedImages()
@@ -296,18 +298,83 @@ export function Composer({
           file,
         })),
         running ? delivery : undefined,
+        planModeOverride,
       )
       if (!accepted) return
-      setDraftValue('')
-      setSelectedSkill(undefined)
-      setSkillSuggestionsDismissed(false)
-      clearAttachments()
-      requestAnimationFrame(autosize)
+      clearSubmission()
     } catch (error) {
       setSendError(error instanceof Error ? error.message : t('composer.couldNotSend'))
     } finally {
       submittingRef.current = false
     }
+  }
+
+  const changePlanMode = async (active: boolean): Promise<boolean> => {
+    if (!onPlanModeChange || planModeChanging) return false
+    setPlanModeError('')
+    setPlanModeChanging(true)
+    try {
+      await onPlanModeChange(active)
+      return true
+    } catch (error) {
+      setPlanModeError(
+        error instanceof Error ? error.message : t('composer.couldNotUpdatePlanMode'),
+      )
+      return false
+    } finally {
+      setPlanModeChanging(false)
+    }
+  }
+
+  const runPreviewCommand = async (command: ComposerPreviewCommand) => {
+    if (sendDisabled) return
+    if (command === 'compact') {
+      setDraftValue('')
+      setAddPanelOpen(false)
+      setSkillSuggestionsDismissed(true)
+      requestAnimationFrame(autosize)
+      await compactContext()
+      return
+    }
+    if (command === 'plan' && onPlanModeChange) {
+      if (await changePlanMode(true)) {
+        setDraftValue('')
+        setAddPanelOpen(false)
+        setSkillSuggestionsDismissed(true)
+        requestAnimationFrame(autosize)
+      }
+    }
+  }
+
+  const submit = async () => {
+    const el = ref.current
+    if (!el || submittingRef.current || sendDisabled) return
+
+    const planCommand = onPlanModeChange
+      ? parsePlanComposerCommand(draftValue)
+      : undefined
+    if (planCommand) {
+      if (!(await changePlanMode(planCommand.active))) return
+      if (!planCommand.message) {
+        setDraftValue('')
+        setSkillSuggestionsDismissed(false)
+        requestAnimationFrame(autosize)
+        return
+      }
+      await sendSubmission(planCommand.message, planCommand.active)
+      return
+    }
+
+    const command = parseExecutableComposerCommand(draftValue)
+    if (command) {
+      await runPreviewCommand(command)
+      return
+    }
+    const argumentsText = draftValue.trim()
+    const text = selectedSkill
+      ? buildSkillInvocation(selectedSkill, argumentsText)
+      : argumentsText
+    await sendSubmission(text)
   }
 
   const selectSkill = (skill: SkillEntry) => {
@@ -377,12 +444,17 @@ export function Composer({
       )}
     >
       <div className="relative mx-auto flex w-full max-w-[750px] flex-col gap-2">
+        <TodoChecklist todos={todos?.todos ?? []} />
         {queuedMessages.length > 0 && (
           <PendingQueue messages={queuedMessages} onRemove={(id) => void removeQueued(id)} />
         )}
         {approval && <Approval key={approval.id} item={approval} onResolve={onResolve} />}
         {question && (
-          <Question key={question.id} item={question} onResolve={onResolveQuestion} />
+          question.questions[0]?.intent === 'plan_review' ? (
+            <PlanReview key={question.id} item={question} onResolve={onResolveQuestion} />
+          ) : (
+            <Question key={question.id} item={question} onResolve={onResolveQuestion} />
+          )
         )}
 
         <div
@@ -400,6 +472,7 @@ export function Composer({
             visible={skillSuggestionsVisible}
             query={slashQuery?.query ?? ''}
             commandsEnabled={Boolean(slashQuery)}
+            planEnabled={Boolean(onPlanModeChange)}
             skillsEnabled={Boolean(slashQuery)}
             projectSkills={suggestedProjectSkills}
             systemSkills={suggestedSystemSkills}
@@ -621,6 +694,25 @@ export function Composer({
                 data-testid="composer-permission-controls"
                 className="flex min-w-0 shrink items-center gap-1"
               >
+                {onPlanModeChange && (
+                  <button
+                    type="button"
+                    data-testid="composer-plan-mode"
+                    aria-pressed={planMode}
+                    title={planMode ? t('composer.disablePlanMode') : t('composer.enablePlanMode')}
+                    disabled={settingsDisabled}
+                    onClick={() => void changePlanMode(!planMode)}
+                    className={cn(
+                      'inline-flex h-[30px] min-w-0 cursor-pointer items-center gap-1.5 rounded-[10px] px-2 text-[0.8125rem] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-edge-stronger disabled:cursor-not-allowed disabled:opacity-45',
+                      planMode
+                        ? 'bg-info-surface text-info'
+                        : 'text-ink-muted hover:bg-surface-active hover:text-ink',
+                    )}
+                  >
+                    <ListChecks className="size-3.5 shrink-0" aria-hidden="true" />
+                    <span className="max-w-24 truncate">{t('composer.planMode')}</span>
+                  </button>
+                )}
                 <PermissionModeMenu
                   value={permissionMode}
                   disabled={settingsDisabled}
@@ -767,9 +859,9 @@ export function Composer({
             </button>
           </div>
         )}
-        {(workspaceError || settingsError || attachmentError || queueError || sendError) && (
+        {(workspaceError || settingsError || planModeError || attachmentError || queueError || sendError) && (
           <p className="px-4 text-[0.75rem] leading-5 text-danger" role="alert">
-            {workspaceError || settingsError || attachmentError || queueError || sendError}
+            {workspaceError || settingsError || planModeError || attachmentError || queueError || sendError}
           </p>
         )}
       </div>

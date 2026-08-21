@@ -76,6 +76,18 @@ describe('sessionCommands', () => {
     ])
   })
 
+  test('updates plan mode through the session endpoint', async () => {
+    const { calls, commands } = recordingRequest()
+
+    await commands.setPlanMode('session / one', true)
+    await commands.setPlanMode('session / one', false)
+
+    expect(calls.map((call) => [call.url, call.init.method, jsonBody(call)])).toEqual([
+      ['/api/sessions/session%20%2F%20one/plan-mode', 'PATCH', { active: true }],
+      ['/api/sessions/session%20%2F%20one/plan-mode', 'PATCH', { active: false }],
+    ])
+  })
+
   test('encodes resource IDs for abort, queue removal, approval, and browser results', async () => {
     const { calls, commands } = recordingRequest()
 

@@ -174,3 +174,29 @@ Usage:
 		"Ask with `ask_user_question` only when the decision is the user's to make; anything the workspace can answer, answer with a tool.",
 	},
 }
+
+var todoWriteText = toolText{
+	description: `Record and update a structured execution checklist for the current work.
+
+Usage:
+- Send the ENTIRE list on every call. Each call replaces the previous list; there are no partial updates or per-item edits.
+- Use this for work with several concrete steps so progress stays visible. Skip it for conversational or trivial single-step requests.
+- Do not use this to present a plan for approval or when the user asked only for a plan. Plan-mode work is submitted with exit_plan_mode instead.
+- Add one short imperative item per concrete step before starting the work.
+- Recording the checklist does not complete the request. After writing it, immediately continue with the in_progress step unless the user asked you to stop at planning or work is blocked.
+- Mark each item being actively worked on as in_progress. Use several in_progress items only when work is genuinely running in parallel; otherwise use one.
+- Mark an item completed as soon as it is done. Do not batch completed updates until the end.
+- While work remains, keep at least one item in_progress. Once all work is done, every item should be completed.
+- Send an empty list only to clear a checklist that is no longer relevant.
+- Statuses are pending (not started), in_progress (being worked on), and completed (done).`,
+}
+
+var exitPlanModeText = toolText{
+	description: `Use only in plan mode. Present the complete implementation plan for the user's review and, on approval, leave plan mode.
+
+Usage:
+- Send the COMPLETE plan as Markdown, starting with a # heading that names it.
+- Call this only after you have explored enough of the codebase to produce an implementation-ready plan.
+- The user may approve the plan or keep planning and return feedback.
+- When approved, begin carrying out the plan from the next step.`,
+}

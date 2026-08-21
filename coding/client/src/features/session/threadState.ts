@@ -9,12 +9,15 @@ import type {
   Item,
   PreviewState,
   QueuedMessage,
+  TodoSnapshot,
   Usage,
 } from '@/types'
 
 export type ThreadState = {
   items: Item[]
   tasks: Record<string, BackgroundTask>
+  todos: TodoSnapshot | null
+  planMode: boolean
   queue: QueuedMessage[]
   responseUsage: Usage
   contextUsage?: ContextUsage
@@ -46,6 +49,8 @@ export const emptyUsage = (): Usage => ({
 export const createThreadState = (): ThreadState => ({
   items: [],
   tasks: {},
+  todos: null,
+  planMode: false,
   queue: [],
   responseUsage: emptyUsage(),
   contextUsage: undefined,

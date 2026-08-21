@@ -95,7 +95,7 @@ func TestJSONLLoadRejectsLegacyMessagesWithoutRewriting(t *testing.T) {
 }
 
 func TestJSONLRejectsUnsupportedVersions(t *testing.T) {
-	for _, version := range []int{2, 3, 4, 5, 6, 8} {
+	for _, version := range []int{2, 3, 4, 5, 6, 7} {
 		t.Run(fmt.Sprintf("version_%d", version), func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "session.jsonl")
 			data := []byte(fmt.Sprintf("{\"type\":\"session\",\"version\":%d}\n", version))
@@ -497,8 +497,8 @@ func TestJSONLRoundTripsLifecycleTiming(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(data, []byte(`"version":7`)) {
-		t.Fatalf("session header is not v7:\n%s", data)
+	if !bytes.Contains(data, []byte(`"version":8`)) {
+		t.Fatalf("session header is not v8:\n%s", data)
 	}
 	if !bytes.Contains(data, []byte(`"seq":0`)) || !bytes.Contains(data, []byte(`"seq":1`)) {
 		t.Fatalf("session entries have no durable sequence:\n%s", data)

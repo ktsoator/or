@@ -94,6 +94,7 @@ function history(overrides: Partial<HistoryResponse> = {}): HistoryResponse {
       contextWindow: 0,
       measured: false,
     },
+    todos: null,
     running: false,
     eventSeq: 0,
     title: 'New session',

@@ -20,6 +20,7 @@ export type ThreadAction =
   | { t: 'wire'; sessionID: string; ev: WireEvent; serverEventSeq?: number }
   | { t: 'status'; sessionID: string; status: ConnectionStatus }
   | { t: 'running'; sessionID: string; running: boolean }
+  | { t: 'planMode'; sessionID: string; active: boolean }
   | {
       t: 'sendUser'
       sessionID: string
@@ -71,6 +72,8 @@ export function threadsReducer(state: ThreadsState, action: ThreadAction): Threa
         running: action.history.running,
         serverEventSeq: action.history.eventSeq ?? 0,
         loaded: true,
+        todos: action.history.todos ?? null,
+        planMode: action.history.planMode ?? false,
         tasks: Object.fromEntries(
           (action.history.tasks ?? []).map((task) => [task.id, task]),
         ),
@@ -112,6 +115,10 @@ export function threadsReducer(state: ThreadsState, action: ThreadAction): Threa
         autoCompacting: action.running ? current.autoCompacting : false,
         items: action.running ? current.items : completeOpenRun(current.items),
       }
+      break
+    case 'planMode':
+      if (current.planMode === action.active) return state
+      next = { ...current, planMode: action.active }
       break
     case 'sendUser':
       next = action.delivery

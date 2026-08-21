@@ -88,6 +88,27 @@ func (s *Server) handlePermissionMode(c *gin.Context) {
 	}
 }
 
+func (s *Server) handlePlanMode(c *gin.Context) {
+	var body struct {
+		Active *bool `json:"active"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.Active == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid plan mode"})
+		return
+	}
+	err := s.conversations.SetPlanMode(c.Param("sessionID"), *body.Active)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+	case errors.Is(err, conversation.ErrSessionActive), errors.Is(err, engine.ErrBusy):
+		c.JSON(http.StatusConflict, gin.H{"error": "wait for the session to become idle before changing plan mode"})
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	default:
+		c.Status(http.StatusNoContent)
+	}
+}
+
 func (s *Server) handleRenameSession(c *gin.Context) {
 	var body struct {
 		CustomTitle string `json:"customTitle"`
@@ -275,49 +296,59 @@ func (s *Server) sessionTransport(c *gin.Context) (*sessionTransport, bool) {
 // events.
 func (s *Server) handleHistory(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
-	transport, ok := s.sessionTransport(c)
-	if !ok {
-		return
-	}
+	sessionID := c.Param("sessionID")
 	var events []wireEvent
 	var queue []wireEvent
 	var contextUsage wireContextUsage
 	var tasks []wireBackgroundTask
+	var todos *wireTodoSnapshot
+	var planMode bool
 	var running bool
 	var title string
-	var snapshotErr error
-	eventSeq := transport.hub.snapshot(func() {
-		var snapshot conversation.Snapshot
-		snapshot, snapshotErr = s.conversations.Snapshot(c.Param("sessionID"))
-		if snapshotErr != nil {
-			return
+	var eventSeq uint64
+	snapshotErr := s.conversations.SnapshotWithin(sessionID, func(read func() conversation.Snapshot) error {
+		transport, ok := s.transports.get(sessionID)
+		if !ok {
+			return errors.New("session transport is unavailable")
 		}
-		events = ProjectHistory(snapshot.History)
-		events = mergeActiveRunHistory(events, transport.activeRun.snapshot())
-		events = append(events, transport.broker.PendingEvents()...)
-		events = append(events, transport.browser.PendingEvents()...)
-		events = append(events, transport.questions.PendingEvents()...)
-		queue = projectQueue(snapshot.Queue)
-		contextUsage = projectContextUsage(snapshot.ContextUsage)
-		tasks = projectBackgroundTasks(snapshot.Tasks)
-		running = snapshot.Running
-		title = snapshot.Title
+		eventSeq = transport.hub.snapshot(func() {
+			snapshot := read()
+			events = ProjectHistory(snapshot.History)
+			events = mergeActiveRunHistory(events, transport.activeRun.snapshot())
+			events = append(events, transport.broker.PendingEvents()...)
+			events = append(events, transport.browser.PendingEvents()...)
+			events = append(events, transport.questions.PendingEvents()...)
+			queue = projectQueue(snapshot.Queue)
+			contextUsage = projectContextUsage(snapshot.ContextUsage)
+			tasks = projectBackgroundTasks(snapshot.Tasks)
+			todos = projectTodoSnapshot(snapshot.Todos)
+			planMode = snapshot.PlanMode.Active
+			running = snapshot.Running
+			title = snapshot.Title
+		})
+		return nil
 	})
 	if snapshotErr != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+		if errors.Is(snapshotErr, os.ErrNotExist) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": snapshotErr.Error()})
+		}
 		return
 	}
-	workspacePath, err := s.conversations.WorkspacePath(c.Param("sessionID"))
+	workspacePath, err := s.conversations.WorkspacePath(sessionID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
 		return
 	}
-	reissuePreviewGrants(s.transports.previews, c.Param("sessionID"), workspacePath, events)
+	reissuePreviewGrants(s.transports.previews, sessionID, workspacePath, events)
 	c.JSON(http.StatusOK, wireHistoryResponse{
 		Events:   events,
 		Queue:    queue,
 		Context:  contextUsage,
 		Tasks:    tasks,
+		Todos:    todos,
+		PlanMode: planMode,
 		Running:  running,
 		EventSeq: eventSeq,
 		Title:    title,
@@ -631,6 +662,7 @@ func (s *Server) mountSessions(r gin.IRouter) {
 	one.POST("/message-edits", s.handleEditMessage)
 	one.PATCH("/settings", s.handleSessionSettings)
 	one.PATCH("/permission-mode", s.handlePermissionMode)
+	one.PATCH("/plan-mode", s.handlePlanMode)
 	one.PATCH("/title", s.handleRenameSession)
 	one.POST("/prompt", s.handlePrompt)
 	one.POST("/steer", s.handleSteer)

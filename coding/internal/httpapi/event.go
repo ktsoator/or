@@ -66,6 +66,12 @@ func projectEvent(ev engine.Event) (wireEvent, bool) {
 	case engine.RunStarted:
 		out = wireEvent{Type: wireEventRunStart, ID: ev.RunID, RunID: ev.RunID, StartedAt: formatEventTime(ev.StartedAt)}
 
+	case engine.TurnStarted:
+		out = wireEvent{
+			Type: wireEventTurnStart, RunID: ev.RunID, TurnID: ev.TurnID,
+			StartedAt: formatEventTime(ev.StartedAt),
+		}
+
 	case engine.UserMessageCompleted:
 		out = wireEvent{
 			Type:   wireEventUserMessage,
@@ -140,6 +146,9 @@ func projectEvent(ev engine.Event) (wireEvent, bool) {
 			Task: projectBackgroundTask(ev.BackgroundTask),
 		}
 
+	case engine.PlanModeChanged:
+		out = wireEvent{Type: wireEventPlanModeChanged, PlanMode: ev.PlanMode}
+
 	case engine.RunCompleted:
 		out = wireEvent{
 			Type:               wireEventDone,
@@ -177,6 +186,17 @@ func projectBackgroundTasks(tasks []engine.BackgroundTask) []wireBackgroundTask 
 		projected = append(projected, *projectBackgroundTask(task))
 	}
 	return projected
+}
+
+func projectTodoSnapshot(snapshot *engine.TodoSnapshot) *wireTodoSnapshot {
+	if snapshot == nil {
+		return nil
+	}
+	items := make([]wireTodoItem, len(snapshot.Todos))
+	for index, item := range snapshot.Todos {
+		items[index] = wireTodoItem{Content: item.Content, Status: item.Status}
+	}
+	return &wireTodoSnapshot{Todos: items}
 }
 
 func intPointer(value int) *int {

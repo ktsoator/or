@@ -21,6 +21,7 @@ type EventType string
 
 const (
 	RunStarted           EventType = "run_started"
+	TurnStarted          EventType = "turn_started"
 	UserMessageCompleted EventType = "user_message_completed"
 	TextDelta            EventType = "text_delta"
 	ThinkingDelta        EventType = "thinking_delta"
@@ -36,6 +37,7 @@ const (
 	CompactionFailed     EventType = "compaction_failed"
 	TaskStarted          EventType = "task_started"
 	TaskCompleted        EventType = "task_completed"
+	PlanModeChanged      EventType = "plan_mode_changed"
 	RunCompleted         EventType = "run_completed"
 )
 
@@ -72,6 +74,8 @@ type Event struct {
 
 	// BackgroundTask contains the latest lifecycle state for task events.
 	BackgroundTask BackgroundTask
+	// PlanMode is populated on PlanModeChanged.
+	PlanMode bool
 
 	// Usage is one assistant request's consumption on MessageCompleted and the
 	// aggregate consumption on RunCompleted. Product adapters may accumulate
@@ -99,8 +103,10 @@ type Event struct {
 
 	// Run timing is populated on RunStarted and RunCompleted. It measures the
 	// full invocation, including model calls, tools, approvals, retries, and any
-	// steering or follow-up work consumed before the run ends.
+	// steering or follow-up work consumed before the run ends. TurnStarted also
+	// carries its owning RunID, stable TurnID, and StartedAt boundary.
 	RunID       string
+	TurnID      string
 	StartedAt   time.Time
 	CompletedAt time.Time
 	// RunCompleted identifies the messages made durable by the finished run.

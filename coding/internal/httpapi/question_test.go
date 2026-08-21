@@ -25,6 +25,23 @@ func cacheQuestions() []tools.Question {
 	}}
 }
 
+func TestProjectQuestionsPreservesProductPresentationHints(t *testing.T) {
+	projected := projectQuestions([]tools.Question{{
+		Question: "Approve this plan?",
+		Header:   "Plan review",
+		Detail:   "# Plan\n\n1. Change the code.",
+		Intent:   tools.QuestionIntentPlanReview,
+		Options: []tools.Option{
+			{Label: "Approve", Description: "Begin implementation."},
+			{Label: "Keep planning", Description: "Revise the plan."},
+		},
+	}})
+	if len(projected) != 1 || projected[0].Detail != "# Plan\n\n1. Change the code." ||
+		projected[0].Intent != string(tools.QuestionIntentPlanReview) {
+		t.Fatalf("projected plan review = %#v", projected)
+	}
+}
+
 func TestQuestionBrokerDeliversAnswers(t *testing.T) {
 	hub := NewHub()
 	events, syncRequired := hub.add(0)
