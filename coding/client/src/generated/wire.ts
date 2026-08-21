@@ -235,6 +235,15 @@ export type TaskOutputResponse = {
   truncated: boolean
 }
 
+export type TodoItem = {
+  content: string
+  status: string
+}
+
+export type TodoSnapshot = {
+  todos: TodoItem[]
+}
+
 export type QuestionOption = {
   label: string
   description: string
@@ -313,6 +322,7 @@ export type HistoryResponse = {
   queue: WireEvent[]
   context: ContextUsage
   tasks: BackgroundTask[]
+  todos: TodoSnapshot | null
   running: boolean
   eventSeq: number
   title: string

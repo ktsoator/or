@@ -50,6 +50,8 @@ var outputNames = map[string]string{
 	"wireContextUsage":             "ContextUsage",
 	"wireBackgroundTask":           "BackgroundTask",
 	"wireTaskOutputResponse":       "TaskOutputResponse",
+	"wireTodoItem":                 "TodoItem",
+	"wireTodoSnapshot":             "TodoSnapshot",
 	"wireQuestionOption":           "QuestionOption",
 	"wireQuestion":                 "Question",
 	"wireQuestionAnswer":           "QuestionAnswer",
@@ -93,6 +95,8 @@ var outputOrder = []string{
 	"wireContextUsage",
 	"wireBackgroundTask",
 	"wireTaskOutputResponse",
+	"wireTodoItem",
+	"wireTodoSnapshot",
 	"wireQuestionOption",
 	"wireQuestion",
 	"wireQuestionAnswer",
@@ -243,6 +247,9 @@ func writeStruct(out *bytes.Buffer, name string, structure *ast.StructType) erro
 		tsType, err := translateType(field.Type)
 		if err != nil {
 			return fmt.Errorf("field %s: %w", field.Names[0].Name, err)
+		}
+		if _, pointer := field.Type.(*ast.StarExpr); pointer && optional == "" {
+			tsType += " | null"
 		}
 		fmt.Fprintf(out, "  %s%s: %s\n", parts[0], optional, tsType)
 	}

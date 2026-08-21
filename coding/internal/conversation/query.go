@@ -17,6 +17,7 @@ type Snapshot struct {
 	Queue        []Event
 	ContextUsage engine.ContextUsage
 	Tasks        []engine.BackgroundTask
+	Todos        *engine.TodoSnapshot
 	Running      bool
 	Title        string
 }
@@ -36,6 +37,7 @@ func (m *Manager) Snapshot(id string) (Snapshot, error) {
 		Queue:        runtime.pendingEvents(),
 		ContextUsage: runtime.session.ContextUsage(),
 		Tasks:        runtime.session.Tasks(),
+		Todos:        runtime.session.Todos(),
 		Running:      runtime.live.Load(),
 		Title:        title,
 	}, nil

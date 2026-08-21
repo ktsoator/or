@@ -179,6 +179,17 @@ func projectBackgroundTasks(tasks []engine.BackgroundTask) []wireBackgroundTask 
 	return projected
 }
 
+func projectTodoSnapshot(snapshot *engine.TodoSnapshot) *wireTodoSnapshot {
+	if snapshot == nil {
+		return nil
+	}
+	items := make([]wireTodoItem, len(snapshot.Todos))
+	for index, item := range snapshot.Todos {
+		items[index] = wireTodoItem{Content: item.Content, Status: item.Status}
+	}
+	return &wireTodoSnapshot{Todos: items}
+}
+
 func intPointer(value int) *int {
 	return &value
 }

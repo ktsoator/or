@@ -283,6 +283,7 @@ func (s *Server) handleHistory(c *gin.Context) {
 	var queue []wireEvent
 	var contextUsage wireContextUsage
 	var tasks []wireBackgroundTask
+	var todos *wireTodoSnapshot
 	var running bool
 	var title string
 	var snapshotErr error
@@ -300,6 +301,7 @@ func (s *Server) handleHistory(c *gin.Context) {
 		queue = projectQueue(snapshot.Queue)
 		contextUsage = projectContextUsage(snapshot.ContextUsage)
 		tasks = projectBackgroundTasks(snapshot.Tasks)
+		todos = projectTodoSnapshot(snapshot.Todos)
 		running = snapshot.Running
 		title = snapshot.Title
 	})
@@ -318,6 +320,7 @@ func (s *Server) handleHistory(c *gin.Context) {
 		Queue:    queue,
 		Context:  contextUsage,
 		Tasks:    tasks,
+		Todos:    todos,
 		Running:  running,
 		EventSeq: eventSeq,
 		Title:    title,

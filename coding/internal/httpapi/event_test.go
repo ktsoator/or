@@ -130,6 +130,23 @@ func TestProjectEventIncludesContextBreakdown(t *testing.T) {
 	}
 }
 
+func TestProjectTodoSnapshotPreservesUnsetAndExplicitClear(t *testing.T) {
+	if got := projectTodoSnapshot(nil); got != nil {
+		t.Fatalf("unset todo snapshot = %#v, want nil", got)
+	}
+	got := projectTodoSnapshot(&engine.TodoSnapshot{Todos: []engine.TodoItem{}})
+	if got == nil || got.Todos == nil || len(got.Todos) != 0 {
+		t.Fatalf("cleared todo snapshot = %#v, want a non-nil empty list", got)
+	}
+	encoded, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(encoded) != `{"todos":[]}` {
+		t.Fatalf("cleared todo JSON = %s, want an explicit empty array", encoded)
+	}
+}
+
 func TestProjectHistoryIncludesResponseCompletionTime(t *testing.T) {
 	completedAt := time.Date(2026, time.July, 22, 16, 43, 0, 0, time.UTC)
 	events := ProjectHistory([]engine.HistoryItem{{

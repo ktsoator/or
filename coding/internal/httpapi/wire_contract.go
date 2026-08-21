@@ -402,11 +402,21 @@ type wireTaskOutputResponse struct {
 	Truncated bool   `json:"truncated"`
 }
 
+type wireTodoItem struct {
+	Content string `json:"content"`
+	Status  string `json:"status"`
+}
+
+type wireTodoSnapshot struct {
+	Todos []wireTodoItem `json:"todos"`
+}
+
 type wireHistoryResponse struct {
 	Events   []wireEvent          `json:"events"`
 	Queue    []wireEvent          `json:"queue"`
 	Context  wireContextUsage     `json:"context"`
 	Tasks    []wireBackgroundTask `json:"tasks"`
+	Todos    *wireTodoSnapshot    `json:"todos"`
 	Running  bool                 `json:"running"`
 	EventSeq uint64               `json:"eventSeq"`
 	Title    string               `json:"title"`
