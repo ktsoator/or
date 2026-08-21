@@ -21,6 +21,7 @@ type EventType string
 
 const (
 	RunStarted           EventType = "run_started"
+	TurnStarted          EventType = "turn_started"
 	UserMessageCompleted EventType = "user_message_completed"
 	TextDelta            EventType = "text_delta"
 	ThinkingDelta        EventType = "thinking_delta"
@@ -99,8 +100,10 @@ type Event struct {
 
 	// Run timing is populated on RunStarted and RunCompleted. It measures the
 	// full invocation, including model calls, tools, approvals, retries, and any
-	// steering or follow-up work consumed before the run ends.
+	// steering or follow-up work consumed before the run ends. TurnStarted also
+	// carries its owning RunID, stable TurnID, and StartedAt boundary.
 	RunID       string
+	TurnID      string
 	StartedAt   time.Time
 	CompletedAt time.Time
 	// RunCompleted identifies the messages made durable by the finished run.

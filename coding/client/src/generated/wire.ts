@@ -3,6 +3,7 @@
 export type WireEventType =
   | "user_message"
   | "run_start"
+  | "turn_start"
   | "delta"
   | "tool_input_start"
   | "tool_input_delta"
@@ -308,6 +309,7 @@ export type WireEvent = {
   questions?: Question[]
   title?: string
   runId?: string
+  turnId?: string
   providerRequestId?: string
   startedAt?: string
   completedAt?: string

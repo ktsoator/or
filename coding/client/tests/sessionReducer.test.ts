@@ -19,6 +19,54 @@ function thread(state: ThreadsState) {
 }
 
 describe('threadsReducer event sequences', () => {
+  test('restores todos from history and clears them at the next turn boundary', () => {
+    let state = reduce([{
+      t: 'reset',
+      sessionID,
+      history: {
+        running: true,
+        events: [],
+        todos: {
+          todos: [
+            { content: 'Inspect parser', status: 'completed' },
+            { content: 'Run tests', status: 'in_progress' },
+          ],
+        },
+      },
+    }])
+
+    expect(thread(state).todos).toEqual({
+      todos: [
+        { content: 'Inspect parser', status: 'completed' },
+        { content: 'Run tests', status: 'in_progress' },
+      ],
+    })
+
+    state = reduce([{
+      t: 'wire',
+      sessionID,
+      ev: {
+        type: 'turn_start',
+        runId: 'run-1',
+        turnId: 'turn-2',
+        startedAt,
+      },
+    }], state)
+
+    expect(thread(state).todos).toBeNull()
+
+    const replayed = reduce([{
+      t: 'reset',
+      sessionID,
+      history: {
+        running: true,
+        todos: { todos: [{ content: 'Stale item', status: 'pending' }] },
+        events: [{ type: 'turn_start', runId: 'run-1', turnId: 'turn-2' }],
+      },
+    }])
+    expect(thread(replayed).todos).toBeNull()
+  })
+
   test('preserves durable message metadata from a history snapshot', () => {
     const sentAt = '2026-08-11T16:30:00Z'
     const state = reduce([
@@ -697,6 +745,82 @@ describe('threadsReducer event sequences', () => {
       },
       change: undefined,
     })
+  })
+
+  test('replaces todos only from successful valid todo_write outcomes', () => {
+    let state = reduce([{
+      t: 'reset',
+      sessionID,
+      history: {
+        running: true,
+        events: [],
+        todos: { todos: [{ content: 'Original', status: 'in_progress' }] },
+      },
+    }])
+
+    state = reduce([{
+      t: 'wire',
+      sessionID,
+      ev: {
+        type: 'tool_end',
+        id: 'todo-1',
+        tool: 'todo_write',
+        outcome: {
+          status: 'success',
+          data: {
+            todos: [
+              { content: 'Inspect parser', status: 'completed' },
+              { content: 'Run tests', status: 'in_progress' },
+            ],
+          },
+        },
+      },
+    }], state)
+    expect(thread(state).todos).toEqual({
+      todos: [
+        { content: 'Inspect parser', status: 'completed' },
+        { content: 'Run tests', status: 'in_progress' },
+      ],
+    })
+
+    state = reduce([
+      {
+        t: 'wire',
+        sessionID,
+        ev: {
+          type: 'tool_end',
+          id: 'todo-failed',
+          tool: 'todo_write',
+          outcome: { status: 'failed', data: { todos: [] } },
+        },
+      },
+      {
+        t: 'wire',
+        sessionID,
+        ev: {
+          type: 'tool_end',
+          id: 'todo-invalid',
+          tool: 'todo_write',
+          outcome: {
+            status: 'success',
+            data: { todos: [{ content: 'Broken', status: 'unknown' }] },
+          },
+        },
+      },
+    ], state)
+    expect(thread(state).todos?.todos).toHaveLength(2)
+
+    state = reduce([{
+      t: 'wire',
+      sessionID,
+      ev: {
+        type: 'tool_end',
+        id: 'todo-clear',
+        tool: 'todo_write',
+        outcome: { status: 'success', data: { todos: [] } },
+      },
+    }], state)
+    expect(thread(state).todos).toEqual({ todos: [] })
   })
 
   test('keeps MCP tool result images in live and restored tool items', () => {

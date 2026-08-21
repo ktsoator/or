@@ -10,6 +10,7 @@ type wireEventType string
 const (
 	wireEventUserMessage       wireEventType = "user_message"
 	wireEventRunStart          wireEventType = "run_start"
+	wireEventTurnStart         wireEventType = "turn_start"
 	wireEventDelta             wireEventType = "delta"
 	wireEventToolInputStart    wireEventType = "tool_input_start"
 	wireEventToolInputDelta    wireEventType = "tool_input_delta"
@@ -280,6 +281,7 @@ type wireEvent struct {
 	Title string `json:"title,omitempty"`
 	// run timing
 	RunID             string `json:"runId,omitempty"`
+	TurnID            string `json:"turnId,omitempty"`
 	ProviderRequestID string `json:"providerRequestId,omitempty"`
 	StartedAt         string `json:"startedAt,omitempty"`
 	CompletedAt       string `json:"completedAt,omitempty"`

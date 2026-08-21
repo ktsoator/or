@@ -71,6 +71,7 @@ export function threadsReducer(state: ThreadsState, action: ThreadAction): Threa
         running: action.history.running,
         serverEventSeq: action.history.eventSeq ?? 0,
         loaded: true,
+        todos: action.history.todos ?? null,
         tasks: Object.fromEntries(
           (action.history.tasks ?? []).map((task) => [task.id, task]),
         ),

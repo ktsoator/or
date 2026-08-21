@@ -64,6 +64,25 @@ func TestProjectEventIncludesResponseCompletionTime(t *testing.T) {
 	}
 }
 
+func TestProjectEventIncludesTurnBoundary(t *testing.T) {
+	startedAt := time.Date(2026, time.August, 20, 17, 30, 0, 0, time.UTC)
+	data, ok := ProjectEvent(engine.Event{
+		Type: engine.TurnStarted, RunID: "run-1", TurnID: "turn-2", StartedAt: startedAt,
+	})
+	if !ok {
+		t.Fatal("turn start event was not projected")
+	}
+
+	var event wireEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		t.Fatal(err)
+	}
+	if event.Type != wireEventTurnStart || event.RunID != "run-1" ||
+		event.TurnID != "turn-2" || event.StartedAt != startedAt.Format(time.RFC3339Nano) {
+		t.Fatalf("turn start event = %#v", event)
+	}
+}
+
 func TestProjectEventIncludesPersistedRunMessageIDs(t *testing.T) {
 	data, ok := ProjectEvent(engine.Event{
 		Type:               engine.RunCompleted,
@@ -423,6 +442,41 @@ func TestProjectEventIncludesLivePreviewRequest(t *testing.T) {
 	}
 	if event.Outcome.Data.URL != "http://localhost:3000" || event.Outcome.Data.Title != "Local app" {
 		t.Fatalf("outcome data = %#v", event.Outcome.Data)
+	}
+}
+
+func TestProjectEventIncludesTodoSnapshot(t *testing.T) {
+	data, ok := ProjectEvent(engine.Event{
+		Type:       engine.ToolFinished,
+		ToolCallID: "todo-call",
+		ToolName:   tools.ToolNameTodoWrite,
+		ToolOutcome: agent.ToolOutcome{
+			Status: agent.ToolOutcomeSuccess,
+			Data: tools.TodoSnapshot{Todos: []tools.TodoItem{
+				{Content: "Inspect parser", Status: tools.TodoCompleted},
+				{Content: "Run tests", Status: tools.TodoInProgress},
+			}},
+		},
+	})
+	if !ok {
+		t.Fatal("todo tool event was not projected")
+	}
+
+	var event struct {
+		Type    wireEventType `json:"type"`
+		Tool    string        `json:"tool"`
+		Outcome struct {
+			Status wireToolOutcomeStatus `json:"status"`
+			Data   tools.TodoSnapshot    `json:"data"`
+		} `json:"outcome"`
+	}
+	if err := json.Unmarshal(data, &event); err != nil {
+		t.Fatal(err)
+	}
+	if event.Type != wireEventToolEnd || event.Tool != tools.ToolNameTodoWrite ||
+		event.Outcome.Status != wireToolOutcomeSuccess || len(event.Outcome.Data.Todos) != 2 ||
+		event.Outcome.Data.Todos[1].Status != tools.TodoInProgress {
+		t.Fatalf("todo event = %#v", event)
 	}
 }
 

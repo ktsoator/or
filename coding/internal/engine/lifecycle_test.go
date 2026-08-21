@@ -85,12 +85,25 @@ func TestSessionFollowUpStartsNewTurnBetweenMessages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var turnEvents []Event
+	session.Subscribe(func(event Event) {
+		if event.Type == TurnStarted {
+			turnEvents = append(turnEvents, event)
+		}
+	})
 	session.FollowUp("more")
 	if err := session.Prompt(context.Background(), "question"); err != nil {
 		t.Fatal(err)
 	}
 	if call != 2 {
 		t.Fatalf("provider requests = %d, want 2", call)
+	}
+	if len(turnEvents) != 2 || turnEvents[0].RunID == "" ||
+		turnEvents[0].RunID != turnEvents[1].RunID ||
+		turnEvents[0].TurnID == "" || turnEvents[1].TurnID == "" ||
+		turnEvents[0].TurnID == turnEvents[1].TurnID ||
+		turnEvents[0].StartedAt.IsZero() || turnEvents[1].StartedAt.IsZero() {
+		t.Fatalf("follow-up turn events = %#v", turnEvents)
 	}
 
 	entries, _, _ := store.snapshot()
@@ -175,11 +188,20 @@ func TestSessionSteeringStaysInCurrentTurn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var turnEvents []Event
+	session.Subscribe(func(event Event) {
+		if event.Type == TurnStarted {
+			turnEvents = append(turnEvents, event)
+		}
+	})
 	if err := session.Prompt(context.Background(), "question"); err != nil {
 		t.Fatal(err)
 	}
 	if call != 2 {
 		t.Fatalf("provider requests = %d, want 2", call)
+	}
+	if len(turnEvents) != 1 || turnEvents[0].RunID == "" || turnEvents[0].TurnID == "" {
+		t.Fatalf("steering turn events = %#v, want one turn", turnEvents)
 	}
 
 	entries, _, _ := store.snapshot()

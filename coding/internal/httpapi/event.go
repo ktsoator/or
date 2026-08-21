@@ -66,6 +66,12 @@ func projectEvent(ev engine.Event) (wireEvent, bool) {
 	case engine.RunStarted:
 		out = wireEvent{Type: wireEventRunStart, ID: ev.RunID, RunID: ev.RunID, StartedAt: formatEventTime(ev.StartedAt)}
 
+	case engine.TurnStarted:
+		out = wireEvent{
+			Type: wireEventTurnStart, RunID: ev.RunID, TurnID: ev.TurnID,
+			StartedAt: formatEventTime(ev.StartedAt),
+		}
+
 	case engine.UserMessageCompleted:
 		out = wireEvent{
 			Type:   wireEventUserMessage,

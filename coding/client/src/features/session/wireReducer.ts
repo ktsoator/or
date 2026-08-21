@@ -9,6 +9,7 @@ import type {
   QueuedMessage,
   QuestionItem,
   TaskItem,
+  TodoSnapshot,
   ToolOutcome,
   Usage,
   WireEvent,
@@ -39,6 +40,31 @@ function outcomePreview(
   return data as PreviewRequest
 }
 
+function outcomeTodos(
+  tool: string | undefined,
+  outcome: ToolOutcome | undefined,
+): TodoSnapshot | undefined {
+  if (tool !== 'todo_write' || outcome?.status !== 'success') return undefined
+  const data = recordOf(outcome.data)
+  if (!data || !Array.isArray(data.todos)) return undefined
+
+  const todos: TodoSnapshot['todos'] = []
+  for (const value of data.todos) {
+    const item = recordOf(value)
+    if (
+      !item ||
+      typeof item.content !== 'string' ||
+      (item.status !== 'pending' &&
+        item.status !== 'in_progress' &&
+        item.status !== 'completed')
+    ) {
+      return undefined
+    }
+    todos.push({ content: item.content, status: item.status })
+  }
+  return { todos }
+}
+
 function lastIndex(items: Item[], pred: (it: Item) => boolean): number {
   for (let i = items.length - 1; i >= 0; i--) if (pred(items[i])) return i
   return -1
@@ -62,6 +88,7 @@ function hasOnlyPreparingToolsAfter(items: Item[], index: number): boolean {
 export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
   let items = state.items
   let tasks = state.tasks
+  let todos = state.todos
   let queue = state.queue
   let responseUsage = state.responseUsage
   let contextUsage = state.contextUsage
@@ -112,6 +139,10 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
   }
 
   switch (ev.type) {
+    case 'turn_start':
+      todos = null
+      break
+
     case 'run_start': {
       const exactIndex = ev.startedAt
         ? lastIndex(items, (it) => it.kind === 'run' && it.startedAt === ev.startedAt)
@@ -491,6 +522,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
       const outcome: ToolOutcome = ev.outcome ?? { status: 'success' }
       const structuredChange = outcomeChange(outcome)
       const structuredPreview = outcomePreview(ev.tool, outcome)
+      const todoSnapshot = outcomeTodos(ev.tool, outcome)
       const patch = {
         status: (outcome.status === 'success' ? 'complete' : 'error') as
           | 'error'
@@ -510,6 +542,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
           { kind: 'tool', id: ev.id ?? nextId(), name: ev.tool ?? 'tool', args: undefined, ...patch },
         ]
       }
+      if (todoSnapshot) todos = todoSnapshot
       if (structuredPreview?.url || structuredPreview?.path) {
         const sameTarget =
           preview?.url === structuredPreview.url &&
@@ -835,6 +868,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
     ...state,
     items,
     tasks,
+    todos,
     queue,
     responseUsage,
     contextUsage,

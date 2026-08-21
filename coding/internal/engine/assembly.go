@@ -116,6 +116,9 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 		}
 		lifecycleDecision := s.coordinateAgentLifecycle(ev)
 		s.observeAgentEvent(ev, lifecycleDecision)
+		if turnStarted, ok := turnStartedEvent(lifecycleDecision); ok {
+			s.dispatchEvent(turnStarted)
+		}
 		if visible {
 			if projected.Type == MessageCompleted {
 				projected.ContextUsage = s.ContextUsage()

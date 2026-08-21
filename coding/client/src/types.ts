@@ -50,6 +50,7 @@ export type ThreadSnapshot = Pick<HistoryResponse, 'events' | 'running'> &
       | 'queue'
       | 'context'
       | 'tasks'
+      | 'todos'
       | 'eventSeq'
       | 'title'
     >
