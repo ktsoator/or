@@ -125,7 +125,7 @@ func loadSnapshot(request *Request, run observability.DiagnosticRun, reader snap
 	if reader == nil || strings.HasPrefix(request.ID, "turn:") || strings.HasPrefix(request.ID, "step:") {
 		return
 	}
-	record, err := reader.Load(request.ID)
+	record, err := reader.LoadForSession(run.SessionID, request.ID)
 	if errors.Is(err, snapshot.ErrNotFound) || errors.Is(err, snapshot.ErrInvalidID) {
 		return
 	}

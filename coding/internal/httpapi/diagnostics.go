@@ -54,7 +54,11 @@ func (s *Server) handleDiagnosticRequest(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "request snapshot unavailable"})
 		return
 	}
-	record, err := s.requestSnapshots.Load(c.Param("providerRequestID"))
+	sessionID := strings.TrimSpace(c.Query("sessionId"))
+	record, err := s.requestSnapshots.LoadForSession(
+		sessionID,
+		c.Param("providerRequestID"),
+	)
 	if errors.Is(err, snapshot.ErrNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "request snapshot unavailable"})
 		return
@@ -67,7 +71,7 @@ func (s *Server) handleDiagnosticRequest(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not read request snapshot"})
 		return
 	}
-	if expected := strings.TrimSpace(c.Query("sessionId")); expected != "" && record.SessionID != expected {
+	if sessionID != "" && record.SessionID != sessionID {
 		c.JSON(http.StatusNotFound, gin.H{"error": "request snapshot unavailable"})
 		return
 	}

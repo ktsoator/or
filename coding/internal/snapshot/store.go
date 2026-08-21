@@ -44,8 +44,21 @@ type FileStore struct {
 	maxFileBytes int64
 }
 
-// NewFileStore creates and secures a local request snapshot directory.
+// NewFileStore creates and secures a local request snapshot directory. It is
+// retained for legacy fixtures and cleanup; production no longer writes new
+// request snapshot files.
 func NewFileStore(dir string, options Options) (*FileStore, error) {
+	return newFileStore(dir, options, true)
+}
+
+// OpenLegacyFileStore opens an existing request snapshot directory without
+// creating one. Production uses it only to cascade session deletion to files
+// left by older releases.
+func OpenLegacyFileStore(dir string) (*FileStore, error) {
+	return newFileStore(dir, Options{}, false)
+}
+
+func newFileStore(dir string, options Options, create bool) (*FileStore, error) {
 	if strings.TrimSpace(dir) == "" {
 		return nil, errors.New("request snapshot directory is empty")
 	}
@@ -58,8 +71,18 @@ func NewFileStore(dir string, options Options) (*FileStore, error) {
 	if options.MaxFileBytes <= 0 {
 		options.MaxFileBytes = DefaultMaxFileBytes
 	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return nil, err
+	if create {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return nil, err
+		}
+	} else {
+		info, err := os.Stat(dir)
+		if err != nil {
+			return nil, err
+		}
+		if !info.IsDir() {
+			return nil, fmt.Errorf("request snapshot path %q is not a directory", dir)
+		}
 	}
 	if err := os.Chmod(dir, 0o700); err != nil {
 		return nil, err
@@ -170,6 +193,21 @@ func (store *FileStore) Load(requestID string) (Snapshot, error) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	return store.loadLocked(requestID)
+}
+
+// LoadForSession implements Reader while keeping file-backed fixtures and
+// legacy cleanup scoped to the owning conversation.
+func (store *FileStore) LoadForSession(
+	sessionID, requestID string,
+) (Snapshot, error) {
+	record, err := store.Load(requestID)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	if sessionID != "" && record.SessionID != sessionID {
+		return Snapshot{}, ErrNotFound
+	}
+	return record, nil
 }
 
 func (store *FileStore) loadLocked(requestID string) (Snapshot, error) {
@@ -295,6 +333,5 @@ func (store *FileStore) pruneLocked() error {
 
 func validRequestID(value string) bool { return requestIDPattern.MatchString(value) }
 
-var _ Writer = (*FileStore)(nil)
 var _ Reader = (*FileStore)(nil)
 var _ SessionCleaner = (*FileStore)(nil)

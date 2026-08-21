@@ -2,8 +2,11 @@ package app
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/ktsoator/or/coding/internal/conversation"
@@ -12,9 +15,13 @@ import (
 )
 
 func TestRuntimeServesAPIAndClosesMoreThanOnce(t *testing.T) {
-	runtime, err := New(context.Background(), t.TempDir())
+	dataDir := t.TempDir()
+	runtime, err := New(context.Background(), dataDir)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, "diagnostics", "requests")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("legacy request snapshot directory exists or cannot be checked: %v", err)
 	}
 
 	request := httptest.NewRequest(http.MethodGet, "/api/sessions", nil)

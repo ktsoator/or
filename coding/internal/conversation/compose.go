@@ -8,23 +8,21 @@ import (
 	"github.com/ktsoator/or/coding/internal/observability"
 	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/coding/internal/skills"
-	"github.com/ktsoator/or/coding/internal/snapshot"
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/coding/internal/transcript"
 	"github.com/ktsoator/or/llm"
 )
 
 type engineSessionConfig struct {
-	SessionID        string
-	WorkspacePath    string
-	TranscriptPath   string
-	Model            llm.Model
-	ThinkingLevel    llm.ModelThinkingLevel
-	PermissionMode   permission.Mode
-	AdditionalTools  []tools.Tool
-	StreamFn         agent.StreamFn
-	Recorder         observability.Recorder
-	RequestSnapshots snapshot.Writer
+	SessionID       string
+	WorkspacePath   string
+	TranscriptPath  string
+	Model           llm.Model
+	ThinkingLevel   llm.ModelThinkingLevel
+	PermissionMode  permission.Mode
+	AdditionalTools []tools.Tool
+	StreamFn        agent.StreamFn
+	Recorder        observability.Recorder
 }
 
 // This is the one place an engine.Session is assembled. Every conversation the
@@ -41,17 +39,16 @@ func newEngineSession(
 	transport Transport,
 ) (*engine.Session, error) {
 	return engine.New(ctx, engine.Options{
-		SessionID:        cfg.SessionID,
-		Recorder:         cfg.Recorder,
-		RequestSnapshots: cfg.RequestSnapshots,
-		Model:            cfg.Model,
-		ThinkingLevel:    cfg.ThinkingLevel,
-		Cwd:              cfg.WorkspacePath,
-		Store:            transcript.NewJSONL(cfg.TranscriptPath),
-		PermissionMode:   cfg.PermissionMode,
-		Approver:         transport,
-		Browser:          transport,
-		Asker:            transport,
+		SessionID:      cfg.SessionID,
+		Recorder:       cfg.Recorder,
+		Model:          cfg.Model,
+		ThinkingLevel:  cfg.ThinkingLevel,
+		Cwd:            cfg.WorkspacePath,
+		Store:          transcript.NewJSONL(cfg.TranscriptPath),
+		PermissionMode: cfg.PermissionMode,
+		Approver:       transport,
+		Browser:        transport,
+		Asker:          transport,
 		SkillLoader: func() []skills.Skill {
 			return loadSkills(cfg.WorkspacePath)
 		},

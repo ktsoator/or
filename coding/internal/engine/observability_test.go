@@ -25,62 +25,6 @@ type memoryRecorder struct {
 	events []observability.Event
 }
 
-type memorySnapshotWriter struct {
-	mu        sync.Mutex
-	snapshots []snapshot.Snapshot
-}
-
-func (writer *memorySnapshotWriter) Save(record snapshot.Snapshot) error {
-	writer.mu.Lock()
-	writer.snapshots = append(writer.snapshots, record)
-	writer.mu.Unlock()
-	return nil
-}
-
-func (writer *memorySnapshotWriter) SaveOutput(requestID string, message *llm.AssistantMessage) error {
-	writer.mu.Lock()
-	defer writer.mu.Unlock()
-	for index := len(writer.snapshots) - 1; index >= 0; index-- {
-		if writer.snapshots[index].ProviderRequestID != requestID {
-			continue
-		}
-		output := snapshot.Output{
-			CapturedAt:   time.Now().UTC(),
-			Message:      snapshot.Message{Role: "assistant", ProviderRequestID: requestID},
-			StopReason:   string(message.StopReason),
-			ErrorMessage: message.ErrorMessage,
-		}
-		for _, content := range message.Content {
-			switch typed := content.(type) {
-			case *llm.TextContent:
-				output.Message.Content = append(output.Message.Content, snapshot.Content{Type: "text", Text: typed.Text})
-			case *llm.ThinkingContent:
-				output.Message.Content = append(output.Message.Content, snapshot.Content{Type: "thinking", Thinking: typed.Thinking})
-			case *llm.ToolCall:
-				output.Message.Content = append(output.Message.Content, snapshot.Content{Type: "toolCall", ToolCallID: typed.ID, ToolName: typed.Name, Arguments: typed.Arguments})
-			}
-		}
-		writer.snapshots[index].Output = &output
-		break
-	}
-	return nil
-}
-
-func (writer *memorySnapshotWriter) snapshot() snapshot.Snapshot {
-	writer.mu.Lock()
-	defer writer.mu.Unlock()
-	if len(writer.snapshots) == 0 {
-		return snapshot.Snapshot{}
-	}
-	return writer.snapshots[len(writer.snapshots)-1]
-}
-
-func (writer *memorySnapshotWriter) allSnapshots() []snapshot.Snapshot {
-	writer.mu.Lock()
-	defer writer.mu.Unlock()
-	return append([]snapshot.Snapshot(nil), writer.snapshots...)
-}
-
 func (r *memoryRecorder) Record(event observability.Event) {
 	r.mu.Lock()
 	r.events = append(r.events, event)
@@ -230,7 +174,6 @@ func TestStepCorrelationQueuesNextStepBeforePriorStepEnds(t *testing.T) {
 
 func TestProviderObservabilityCorrelatesPerformanceUsageAndAttempts(t *testing.T) {
 	recorder := &memoryRecorder{}
-	snapshots := &memorySnapshotWriter{}
 	const (
 		sensitiveURL     = "https://provider.example/private"
 		sensitiveBody    = `{"prompt":"private prompt"}`
@@ -241,12 +184,11 @@ func TestProviderObservabilityCorrelatesPerformanceUsageAndAttempts(t *testing.T
 	var callbackURL, callbackBody, callbackHeader string
 	model := llm.Model{Provider: "test-provider", ID: "test-model"}
 	session, err := New(context.Background(), Options{
-		SessionID:        "session-provider",
-		Recorder:         recorder,
-		RequestSnapshots: snapshots,
-		Model:            model,
-		Tools:            []tools.Tool{},
-		Store:            &transcript.Memory{},
+		SessionID: "session-provider",
+		Recorder:  recorder,
+		Model:     model,
+		Tools:     []tools.Tool{},
+		Store:     &transcript.Memory{},
 		StreamOptions: llm.StreamOptions{
 			OnRequest: func(_ string, url string, body []byte) {
 				requestCallbacks++
@@ -313,11 +255,14 @@ func TestProviderObservabilityCorrelatesPerformanceUsageAndAttempts(t *testing.T
 	providerCompleted := onlyEvent(t, events, observability.ProviderCompleted)
 	turnCompleted := onlyEvent(t, events, observability.TurnCompleted)
 	stepCompleted := onlyEvent(t, events, observability.StepCompleted)
-	captured := snapshots.snapshot()
 
 	if runStarted.RunID == "" || turnStarted.TurnID == "" || stepStarted.StepID == "" ||
 		providerStarted.RequestID == "" {
 		t.Fatalf("missing correlation IDs: run %#v, turn %#v, provider %#v", runStarted, turnStarted, providerStarted)
+	}
+	captured, err := session.RequestSnapshot(providerStarted.RequestID)
+	if err != nil {
+		t.Fatal(err)
 	}
 	if captured.SessionID != "session-provider" || captured.RunID != runStarted.RunID ||
 		captured.TurnID != turnStarted.TurnID || captured.StepID != stepStarted.StepID ||
@@ -648,7 +593,6 @@ func toolThenStopStream(call *int, toolCall llm.ToolCall) agent.StreamFn {
 
 func TestObservabilityUsesDistinctStepCorrelationForToolLoop(t *testing.T) {
 	recorder := &memoryRecorder{}
-	snapshots := &memorySnapshotWriter{}
 	call := 0
 	tool := tools.Tool{
 		AgentTool: agent.AgentTool{
@@ -668,12 +612,11 @@ func TestObservabilityUsesDistinctStepCorrelationForToolLoop(t *testing.T) {
 		AccessFor: tools.InternalAccess,
 	}
 	session, err := New(context.Background(), Options{
-		SessionID:        "session-tool-loop",
-		Recorder:         recorder,
-		RequestSnapshots: snapshots,
-		Model:            llm.Model{Provider: "test", ID: "model"},
-		Tools:            []tools.Tool{tool},
-		Store:            &transcript.Memory{},
+		SessionID: "session-tool-loop",
+		Recorder:  recorder,
+		Model:     llm.Model{Provider: "test", ID: "model"},
+		Tools:     []tools.Tool{tool},
+		Store:     &transcript.Memory{},
 		StreamFn: func(
 			_ context.Context,
 			model llm.Model,
@@ -753,9 +696,12 @@ func TestObservabilityUsesDistinctStepCorrelationForToolLoop(t *testing.T) {
 		t.Fatalf("tool checkpoint correlation = %#v", toolCheckpoint)
 	}
 
-	captured := snapshots.allSnapshots()
-	if len(captured) != 2 {
-		t.Fatalf("tool-loop snapshots = %d, want 2: %#v", len(captured), captured)
+	captured := make([]snapshot.Snapshot, len(providers))
+	for index := range providers {
+		captured[index], err = session.RequestSnapshot(providers[index].RequestID)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 	if captured[0].Output == nil ||
 		captured[0].Output.Message.ProviderRequestID != providers[0].RequestID {

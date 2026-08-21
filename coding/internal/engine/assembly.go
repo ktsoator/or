@@ -9,7 +9,6 @@ import (
 	"github.com/ktsoator/or/coding/internal/compaction"
 	"github.com/ktsoator/or/coding/internal/observability"
 	"github.com/ktsoator/or/coding/internal/skills"
-	"github.com/ktsoator/or/coding/internal/snapshot"
 )
 
 // New builds a Session. When a Store is configured, its transcript is loaded and
@@ -52,13 +51,12 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	)
 
 	s := &Session{
-		journal:          journal,
-		sessionID:        opts.SessionID,
-		recorder:         observability.OrDiscard(opts.Recorder),
-		requestSnapshots: snapshot.OrDiscard(opts.RequestSnapshots),
-		context:          contextState,
-		maxRetries:       maxRetries,
-		compactor:        opts.Compactor,
+		journal:    journal,
+		sessionID:  opts.SessionID,
+		recorder:   observability.OrDiscard(opts.Recorder),
+		context:    contextState,
+		maxRetries: maxRetries,
+		compactor:  opts.Compactor,
 	}
 	toolState, err := newToolRuntime(toolRuntimeOptions{
 		cwd:                    cwd,
