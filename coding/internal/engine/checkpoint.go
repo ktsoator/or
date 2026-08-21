@@ -13,7 +13,6 @@ import (
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/contextprojection"
 	"github.com/ktsoator/or/coding/internal/observability"
-	"github.com/ktsoator/or/coding/internal/snapshot"
 	"github.com/ktsoator/or/coding/internal/transcript"
 	"github.com/ktsoator/or/llm"
 )
@@ -95,30 +94,8 @@ func (s *Session) modelStreamFn(delegate agent.StreamFn) agent.StreamFn {
 			AttachmentCount: len(prepared.Pending),
 		})
 		s.context.commit(prepared)
-		// Content snapshots are diagnostic and deliberately fail-open: a local
-		// write failure must never prevent a provider request from running.
-		_ = s.requestSnapshots.Save(snapshot.NewSnapshot(
-			s.sessionID, correlation.runID, correlation.turnID, correlation.stepID,
-			correlation.requestID,
-			model.Provider, model.ID, providerInput,
-			projectedSnapshotAttachments(prepared.Attachments),
-		))
 		return s.observeProviderStream(ctx, delegate, model, providerInput, options, correlation)
 	}
-}
-
-func projectedSnapshotAttachments(
-	attachments []contextprojection.ProjectedAttachment,
-) []snapshot.Attachment {
-	result := make([]snapshot.Attachment, 0, len(attachments))
-	for _, attachment := range attachments {
-		result = append(result, snapshot.Attachment{
-			ID: attachment.ID, Kind: string(attachment.Kind),
-			Placement: string(attachment.Placement), Path: attachment.Path,
-			Revision: attachment.Revision, MessageIndex: attachment.MessageIndex,
-		})
-	}
-	return result
 }
 
 func (s *Session) observeProviderStream(
@@ -163,7 +140,6 @@ func (s *Session) observeProviderStream(
 				if event.Message != nil {
 					event.Message.ProviderRequestID = correlation.requestID
 				}
-				_ = s.requestSnapshots.SaveOutput(correlation.requestID, event.Message)
 				s.recordProviderTerminal(
 					correlation, model, startedAt, firstOutputAt, event, ctx,
 				)

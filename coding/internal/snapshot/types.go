@@ -1,6 +1,6 @@
-// Package snapshot stores inspectable, provider-neutral model exchanges.
-// Snapshots are separate from the privacy-safe performance event log because
-// they contain conversation content and are loaded only on explicit request.
+// Package snapshot projects inspectable, provider-neutral model exchanges.
+// Current snapshots are reconstructed from committed transcripts on demand;
+// the file store remains only for legacy cleanup and test fixtures.
 package snapshot
 
 import (
@@ -89,15 +89,9 @@ type Snapshot struct {
 	Attachments       []Attachment `json:"attachments,omitempty"`
 }
 
-// Writer records request snapshots without coupling the engine to file I/O.
-type Writer interface {
-	Save(Snapshot) error
-	SaveOutput(providerRequestID string, message *llm.AssistantMessage) error
-}
-
-// Reader loads one snapshot on demand for the diagnostics API.
+// Reader reconstructs one session-scoped snapshot on demand for diagnostics.
 type Reader interface {
-	Load(providerRequestID string) (Snapshot, error)
+	LoadForSession(sessionID, providerRequestID string) (Snapshot, error)
 }
 
 // SessionCleaner removes every private snapshot owned by one session.
@@ -105,20 +99,10 @@ type SessionCleaner interface {
 	DeleteSession(sessionID string) error
 }
 
-// DiscardWriter keeps snapshot capture optional and fail-open.
-type DiscardWriter struct{}
+// DiscardCleaner keeps legacy snapshot cleanup optional and fail-open.
+type DiscardCleaner struct{}
 
-func (DiscardWriter) Save(Snapshot) error                            { return nil }
-func (DiscardWriter) SaveOutput(string, *llm.AssistantMessage) error { return nil }
-func (DiscardWriter) DeleteSession(string) error                     { return nil }
-
-// OrDiscard replaces a nil writer with a no-op implementation.
-func OrDiscard(writer Writer) Writer {
-	if writer == nil {
-		return DiscardWriter{}
-	}
-	return writer
-}
+func (DiscardCleaner) DeleteSession(string) error { return nil }
 
 // NewSnapshot removes replay-only signatures and image payloads while keeping
 // every piece of content a person can meaningfully inspect.

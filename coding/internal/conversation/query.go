@@ -7,6 +7,7 @@ import (
 
 	"github.com/ktsoator/or/coding/internal/engine"
 	"github.com/ktsoator/or/coding/internal/permission"
+	"github.com/ktsoator/or/coding/internal/snapshot"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -38,6 +39,24 @@ func (m *Manager) Snapshot(id string) (Snapshot, error) {
 		Running:      runtime.live.Load(),
 		Title:        title,
 	}, nil
+}
+
+// LoadForSession reconstructs one diagnostic request from the conversation's
+// committed transcript. Keeping the manager lock prevents idle unloading from
+// closing the runtime while its journal snapshot is being read.
+func (m *Manager) LoadForSession(
+	sessionID, providerRequestID string,
+) (snapshot.Snapshot, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	runtime, err := m.loadRuntimeLocked(sessionID)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return snapshot.Snapshot{}, snapshot.ErrNotFound
+		}
+		return snapshot.Snapshot{}, err
+	}
+	return runtime.session.RequestSnapshot(providerRequestID)
 }
 
 // StopTask terminates one background task owned by the conversation.

@@ -75,27 +75,25 @@ func New(ctx context.Context, dataDir string) (*Runtime, error) {
 		eventRecorder = discard
 		eventCleaner = discard
 	}
-	requestSnapshots, snapshotErr := snapshot.NewFileStore(
+	legacySnapshots, snapshotErr := snapshot.OpenLegacyFileStore(
 		filepath.Join(dataDir, "diagnostics", "requests"),
-		snapshot.Options{},
 	)
-	var snapshotWriter snapshot.Writer = requestSnapshots
 	if snapshotErr != nil {
-		// Request inspection is also best-effort and cannot block the runtime.
-		snapshotWriter = snapshot.DiscardWriter{}
+		// Do not create the retired directory on new installations. Cleanup is
+		// best-effort when an older release did leave snapshot files behind.
+		legacySnapshots = nil
 	}
 
 	manager, err := conversation.NewManager(ctx, conversation.Options{
-		DataDir:          dataDir,
-		Usage:            ledger,
-		Workspaces:       workspaces,
-		NewTransport:     transports.New,
-		MCP:              mcp,
-		Recorder:         eventRecorder,
-		RequestSnapshots: snapshotWriter,
+		DataDir:      dataDir,
+		Usage:        ledger,
+		Workspaces:   workspaces,
+		NewTransport: transports.New,
+		MCP:          mcp,
+		Recorder:     eventRecorder,
 		SessionData: diagnosticSessionCleaner{
 			observability: eventCleaner,
-			requests:      snapshotCleaner(requestSnapshots),
+			requests:      snapshotCleaner(legacySnapshots),
 		},
 	})
 	if err != nil {
@@ -116,7 +114,7 @@ func New(ctx context.Context, dataDir string) (*Runtime, error) {
 		ProviderTests:        providerTests,
 		MCP:                  mcp,
 		ObservabilityLogPath: observabilityLogPath,
-		RequestSnapshots:     requestSnapshots,
+		RequestSnapshots:     manager,
 	})
 	runtime := &Runtime{
 		handler:        server.Handler(),
@@ -145,7 +143,7 @@ func (cleaner diagnosticSessionCleaner) DeleteSession(sessionID string) error {
 
 func snapshotCleaner(store *snapshot.FileStore) snapshot.SessionCleaner {
 	if store == nil {
-		return snapshot.DiscardWriter{}
+		return snapshot.DiscardCleaner{}
 	}
 	return store
 }
