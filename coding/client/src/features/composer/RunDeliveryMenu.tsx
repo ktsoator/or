@@ -2,6 +2,8 @@ import { DropdownMenu } from 'radix-ui'
 import { Check, ChevronDown } from 'lucide-react'
 import type { DeliveryMode } from '@/types'
 import { useI18n } from '@/i18n'
+import { composerMenuTriggerClass } from '@/shared/ui/composerControlStyles'
+import { ComposerControlTooltip } from './ComposerControlTooltip'
 
 export function RunDeliveryMenu({
   value,
@@ -16,7 +18,7 @@ export function RunDeliveryMenu({
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <button
-          className="group inline-flex h-[30px] cursor-pointer items-center gap-1 rounded-[10px] px-2.5 text-[0.8125rem] font-medium text-ink-muted outline-none transition-colors hover:bg-surface-active focus-visible:bg-surface-active data-[state=open]:bg-surface-selected"
+          className={`${composerMenuTriggerClass} gap-1`}
           type="button"
           aria-label={t('delivery.choose')}
         >
@@ -25,6 +27,9 @@ export function RunDeliveryMenu({
             className="size-3.5 text-ink-faint transition-transform group-data-[state=open]:rotate-180"
             aria-hidden="true"
           />
+          <ComposerControlTooltip align="end">
+            {t('delivery.choose')}
+          </ComposerControlTooltip>
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>

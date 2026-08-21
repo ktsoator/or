@@ -522,6 +522,7 @@ const en = {
   'planReview.couldNotSend': 'Could not send the plan decision',
 
   'permission.choose': 'How should actions be approved?',
+  'permission.change': 'Change permissions',
   'permission.ask': 'Ask for approval',
   'permission.askShort': 'Ask',
   'permission.askDescription': 'Ask before edits, commands, or internet access',
@@ -556,7 +557,7 @@ const en = {
   'composer.captureAppDescription': 'Capture the current app',
   'composer.addGoal': 'Goal',
   'composer.addGoalDescription': 'Keep working toward an objective',
-  'composer.planMode': 'Plan mode',
+  'composer.planMode': 'Plan',
   'composer.planModeDescription': 'Plan before making changes',
   'composer.enablePlanMode': 'Enable plan mode',
   'composer.disablePlanMode': 'Disable plan mode',
@@ -1415,6 +1416,7 @@ const zh: Record<TranslationKey, string> = {
   'planReview.couldNotSend': '无法提交计划决定',
 
   'permission.choose': '如何处理操作权限',
+  'permission.change': '更改权限',
   'permission.ask': '请求审批',
   'permission.askShort': '询问',
   'permission.askDescription': '修改文件、执行命令或访问互联网前请求审批',
@@ -1449,7 +1451,7 @@ const zh: Record<TranslationKey, string> = {
   'composer.captureAppDescription': '截取当前应用画面',
   'composer.addGoal': '目标',
   'composer.addGoalDescription': '持续推进一个明确目标',
-  'composer.planMode': '计划模式',
+  'composer.planMode': '计划',
   'composer.planModeDescription': '修改代码前先制定计划',
   'composer.enablePlanMode': '开启计划模式',
   'composer.disablePlanMode': '关闭计划模式',

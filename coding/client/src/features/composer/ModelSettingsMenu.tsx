@@ -18,6 +18,7 @@ import {
   composerControlTextClass,
   composerMenuTriggerClass,
 } from '@/shared/ui/composerControlStyles'
+import { ComposerControlTooltip } from './ComposerControlTooltip'
 
 export function ModelSettingsMenu({
   models,
@@ -111,7 +112,7 @@ export function ModelSettingsMenu({
           className={cn(
             composerMenuTriggerClass,
             composerControlTextClass,
-            'h-[30px] max-w-[24rem] rounded-[10px] px-2 max-sm:max-w-[8rem]',
+            'max-w-[24rem] max-sm:max-w-[8rem]',
           )}
           aria-label={t('model.settings')}
           disabled={controlsDisabled}
@@ -145,6 +146,9 @@ export function ModelSettingsMenu({
               {thinkingName}
             </span>
           )}
+          <ComposerControlTooltip align="end">
+            {t('model.settings')}
+          </ComposerControlTooltip>
         </button>
       </DropdownMenu.Trigger>
 

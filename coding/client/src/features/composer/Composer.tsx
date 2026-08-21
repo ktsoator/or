@@ -3,7 +3,7 @@ import {
   ArrowUp,
   BookOpen,
   Info,
-  ListChecks,
+  Lightbulb,
   Square,
   X,
 } from 'lucide-react'
@@ -54,8 +54,10 @@ import { PermissionModeMenu } from './PermissionModeMenu'
 import { ProjectPicker } from './ProjectPicker'
 import { PendingQueue } from './PendingQueue'
 import { RunDeliveryMenu } from './RunDeliveryMenu'
+import { ComposerControlTooltip } from './ComposerControlTooltip'
 import { TodoChecklist } from './TodoChecklist'
 import { useI18n } from '@/i18n'
+import { composerMenuTriggerClass } from '@/shared/ui/composerControlStyles'
 
 export function Composer({
   connected,
@@ -462,7 +464,7 @@ export function Composer({
           data-testid="composer-surface"
           hidden={awaitingUser}
           className={cn(
-            'relative rounded-[28px] border border-edge bg-canvas [container-type:inline-size]',
+            'relative min-h-[100px] rounded-[22px] border border-edge bg-canvas shadow-[0_10px_32px_-24px_rgba(28,25,23,0.32)] [container-type:inline-size]',
             !centered &&
               'transition-colors focus-within:border-edge-strong',
           )}
@@ -486,7 +488,7 @@ export function Composer({
             onSelect={selectSkill}
           />
           <div
-            className="grid min-h-24 grid-cols-[2.5rem_minmax(0,1fr)] grid-rows-[auto_2.5rem] items-center gap-x-3 gap-y-1 px-3 py-2.5 max-sm:gap-x-2"
+            className="grid min-h-[98px] grid-cols-[2.5rem_minmax(0,1fr)] grid-rows-[auto_2.5rem] items-center gap-x-3 gap-y-1 px-3 pt-2.5 pb-1.5 max-sm:gap-x-2"
           >
             <ComposerAddMenu
               disabled={editorDisabled}
@@ -494,12 +496,21 @@ export function Composer({
               imageAttachmentAvailable={supportsImages}
               imageLimitReached={imageLimitReached}
               fileLimitReached={fileLimitReached}
+              planMode={planMode}
+              planModeDisabled={settingsDisabled}
               onOpenChange={(open) => {
                 setAddPanelOpen(open)
                 if (open) setSkillSuggestionsDismissed(true)
               }}
               onAttachImages={() => imageFileRef.current?.click()}
               onAttachFiles={() => textFileRef.current?.click()}
+              onEnablePlanMode={
+                onPlanModeChange
+                  ? () => {
+                      void changePlanMode(true)
+                    }
+                  : undefined
+              }
             />
             <input
               ref={imageFileRef}
@@ -535,7 +546,7 @@ export function Composer({
                 {selectedSkill && (
                   <button
                     type="button"
-                    className="mt-1.5 flex h-6 max-w-[45%] shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-1.5 font-mono text-[14px] font-medium text-info outline-none transition-colors hover:bg-info-surface focus-visible:bg-info-surface"
+                    className="mt-1.5 flex h-6 max-w-[45%] shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-1.5 font-mono text-[13px] font-normal text-info outline-none transition-colors hover:bg-info-surface focus-visible:bg-info-surface"
                     aria-label={t('composer.removeSelectedSkill', {
                       name: selectedSkill.name,
                     })}
@@ -568,7 +579,7 @@ export function Composer({
                         )
                       : undefined
                   }
-                  className="block max-h-[15rem] min-h-8 min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-1 py-1.5 text-[14px] leading-6 text-ink outline-none placeholder:text-ink-faint disabled:cursor-not-allowed disabled:bg-transparent"
+                  className="block max-h-[15rem] min-h-8 min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-1 py-1.5 text-[13px] leading-5 font-normal text-ink outline-none placeholder:text-ink-faint disabled:cursor-not-allowed disabled:bg-transparent"
                   placeholder={
                     awaitingQuestion
                       ? t('composer.answerQuestionPlaceholder')
@@ -689,36 +700,48 @@ export function Composer({
                 />
               </div>
             </div>
-            <div className="col-start-2 row-start-2 flex min-w-0 items-center gap-1.5">
+            <div className="col-start-2 row-start-2 -ml-[11px] flex min-w-0 items-center gap-1.5">
               <div
                 data-testid="composer-permission-controls"
                 className="flex min-w-0 shrink items-center gap-1"
               >
-                {onPlanModeChange && (
-                  <button
-                    type="button"
-                    data-testid="composer-plan-mode"
-                    aria-pressed={planMode}
-                    title={planMode ? t('composer.disablePlanMode') : t('composer.enablePlanMode')}
-                    disabled={settingsDisabled}
-                    onClick={() => void changePlanMode(!planMode)}
-                    className={cn(
-                      'inline-flex h-[30px] min-w-0 cursor-pointer items-center gap-1.5 rounded-[10px] px-2 text-[0.8125rem] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-edge-stronger disabled:cursor-not-allowed disabled:opacity-45',
-                      planMode
-                        ? 'bg-info-surface text-info'
-                        : 'text-ink-muted hover:bg-surface-active hover:text-ink',
-                    )}
-                  >
-                    <ListChecks className="size-3.5 shrink-0" aria-hidden="true" />
-                    <span className="max-w-24 truncate">{t('composer.planMode')}</span>
-                  </button>
-                )}
                 <PermissionModeMenu
                   value={permissionMode}
                   disabled={settingsDisabled}
                   confirmationBlocked={settingsLocked}
                   onChange={changePermissionMode}
                 />
+                {onPlanModeChange && planMode && (
+                  <button
+                    type="button"
+                    data-testid="composer-plan-mode"
+                    aria-label={t('composer.disablePlanMode')}
+                    aria-pressed={true}
+                    disabled={settingsDisabled}
+                    onClick={() => void changePlanMode(false)}
+                    className={cn(
+                      composerMenuTriggerClass,
+                      'text-ink-muted hover:text-ink focus-visible:text-ink disabled:opacity-45',
+                    )}
+                  >
+                    <span className="relative size-3.5 shrink-0" aria-hidden="true">
+                      <Lightbulb
+                        data-testid="plan-mode-lightbulb"
+                        className="absolute inset-0 size-3.5 transition-opacity group-hover:opacity-0 group-focus-visible:opacity-0"
+                      />
+                      <span
+                        data-testid="plan-mode-exit"
+                        className="absolute inset-0 grid size-3.5 place-items-center rounded-full bg-ink-faint text-canvas opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                      >
+                        <X className="size-2.5" strokeWidth={2.4} />
+                      </span>
+                    </span>
+                    <span className="max-w-24 truncate">{t('composer.planMode')}</span>
+                    <ComposerControlTooltip align="start">
+                      {t('composer.disablePlanMode')}
+                    </ComposerControlTooltip>
+                  </button>
+                )}
                 {projectPickerVisible && (
                   <ProjectPicker
                     workspaces={workspaces}
@@ -763,9 +786,14 @@ export function Composer({
                   <button
                     type="button"
                     onClick={onConfigureModel}
-                    className="inline-flex h-[30px] min-w-0 cursor-pointer items-center truncate rounded-[10px] px-2 text-[0.8125rem] font-medium text-ink-muted outline-none transition-colors hover:bg-surface-active hover:text-ink focus-visible:bg-surface-active"
+                    className={`${composerMenuTriggerClass} hover:text-ink`}
                   >
-                    {t('composer.configureModel')}
+                    <span className="min-w-0 truncate">
+                      {t('composer.configureModel')}
+                    </span>
+                    <ComposerControlTooltip align="end">
+                      {t('composer.configureModel')}
+                    </ComposerControlTooltip>
                   </button>
                 )}
                 {running && !awaitingApproval && (
@@ -779,12 +807,9 @@ export function Composer({
                     onClick={onStop}
                   >
                     <Square className="size-3 fill-current" aria-hidden="true" />
-                    <span
-                      className="pointer-events-none absolute right-0 bottom-[calc(100%+0.5625rem)] z-50 translate-y-1 whitespace-nowrap rounded-md bg-canvas-inverse px-2.5 py-1.5 text-[0.75rem] leading-4 font-medium text-ink-inverse opacity-0 shadow-lg transition-[opacity,transform] duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
-                      aria-hidden="true"
-                    >
+                    <ComposerControlTooltip align="end">
                       {t('composer.stopGenerating')}
-                    </span>
+                    </ComposerControlTooltip>
                   </button>
                 )}
                 <button
@@ -806,25 +831,24 @@ export function Composer({
                   onClick={() => void submit()}
                 >
                   <ArrowUp className="size-4" aria-hidden="true" />
-                  <span
-                    className="pointer-events-none absolute right-0 bottom-[calc(100%+0.5625rem)] z-50 flex translate-y-1 items-center gap-2 whitespace-nowrap rounded-md bg-canvas-inverse px-2.5 py-1.5 text-[0.75rem] leading-4 font-medium text-ink-inverse opacity-0 shadow-lg transition-[opacity,transform] duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
-                    aria-hidden="true"
-                  >
-                    <span>
-                      {awaitingApproval
-                        ? t('composer.resolveApprovalFirst')
-                        : connected
-                          ? running
-                            ? delivery === 'steer'
-                              ? t('composer.steerRun')
-                              : t('composer.queueFollowUp')
-                            : t('composer.sendPrompt')
-                          : t('composer.waitingForAPIShort')}
+                  <ComposerControlTooltip align="end">
+                    <span className="flex items-center gap-2">
+                      <span>
+                        {awaitingApproval
+                          ? t('composer.resolveApprovalFirst')
+                          : connected
+                            ? running
+                              ? delivery === 'steer'
+                                ? t('composer.steerRun')
+                                : t('composer.queueFollowUp')
+                              : t('composer.sendPrompt')
+                            : t('composer.waitingForAPIShort')}
+                      </span>
+                      {connected && !awaitingApproval && (
+                        <kbd className="font-mono text-[0.6875rem] font-normal text-ink-faint">↵</kbd>
+                      )}
                     </span>
-                    {connected && !awaitingApproval && (
-                      <kbd className="font-mono text-[0.6875rem] font-normal text-ink-faint">↵</kbd>
-                    )}
-                  </span>
+                  </ComposerControlTooltip>
                 </button>
               </div>
             </div>
