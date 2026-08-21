@@ -19,6 +19,29 @@ function thread(state: ThreadsState) {
 }
 
 describe('threadsReducer event sequences', () => {
+  test('restores plan mode and follows live mode changes', () => {
+    let state = reduce([{
+      t: 'reset',
+      sessionID,
+      history: {
+        running: false,
+        events: [],
+        planMode: true,
+      },
+    }])
+
+    expect(thread(state).planMode).toBe(true)
+
+    state = reduce([{
+      t: 'wire',
+      sessionID,
+      ev: { type: 'plan_mode_changed', planMode: false },
+    }], state)
+
+    expect(thread(state).planMode).toBe(false)
+    expect(thread(state).items).toEqual([])
+  })
+
   test('restores todos from history and clears them at the next turn boundary', () => {
     let state = reduce([{
       t: 'reset',

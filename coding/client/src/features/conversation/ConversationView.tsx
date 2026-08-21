@@ -49,6 +49,7 @@ export function ConversationView({
       question={thread.question}
       queuedMessages={thread.queuedMessages}
       todos={thread.todos}
+      planMode={thread.planMode}
       contextUsage={thread.contextUsage}
       centered={centered}
       projectPickerVisible={false}
@@ -71,6 +72,7 @@ export function ConversationView({
       onConfigureModel={onConfigureModel}
       onSettingsChange={thread.updateSettings}
       onPermissionModeChange={thread.updatePermissionMode}
+      onPlanModeChange={thread.setPlanMode}
       onCompact={thread.compactContext}
     />
   )
@@ -170,6 +172,7 @@ export function DraftConversationView({
     text: string,
     images: MessageImage[],
     files: PromptFile[],
+    planModeOverride?: boolean,
   ) => Promise<boolean>
   onConfigureModel: () => void
 }) {
@@ -196,6 +199,7 @@ export function DraftConversationView({
             connected={connected && !creating}
             running={false}
             queuedMessages={[]}
+            planMode={draft.planMode}
             centered
             projectPickerVisible={false}
             workspaces={workspaces}
@@ -206,7 +210,8 @@ export function DraftConversationView({
             permissionMode={draft.permissionMode}
             updatingSettings={false}
             compacting={false}
-            onSend={onSend}
+            onSend={(text, images, files, _delivery, planModeOverride) =>
+              onSend(text, images, files, planModeOverride)}
             onRemoveQueued={async () => {}}
             onStop={() => {}}
             onResolve={async () => {}}
@@ -224,6 +229,9 @@ export function DraftConversationView({
             }}
             onPermissionModeChange={async (permissionMode) => {
               onChange({ ...draft, permissionMode })
+            }}
+            onPlanModeChange={async (planMode) => {
+              onChange({ ...draft, planMode })
             }}
           />
         </div>

@@ -89,6 +89,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
   let items = state.items
   let tasks = state.tasks
   let todos = state.todos
+  let planMode = state.planMode
   let queue = state.queue
   let responseUsage = state.responseUsage
   let contextUsage = state.contextUsage
@@ -139,6 +140,10 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
   }
 
   switch (ev.type) {
+    case 'plan_mode_changed':
+      planMode = Boolean(ev.planMode)
+      break
+
     case 'turn_start':
       todos = null
       break
@@ -869,6 +874,7 @@ export function reduceWire(state: ThreadState, ev: WireEvent): ThreadState {
     items,
     tasks,
     todos,
+    planMode,
     queue,
     responseUsage,
     contextUsage,

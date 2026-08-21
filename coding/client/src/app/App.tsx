@@ -90,6 +90,7 @@ export default function App() {
     items,
     tasks,
     todos,
+    planMode,
     queuedMessages,
     contextUsage,
     preview,
@@ -123,6 +124,7 @@ export default function App() {
     selectSession,
     updateSettings,
     updatePermissionMode,
+    setPlanMode,
     compactContext,
     send,
     removeQueuedMessage,
@@ -406,10 +408,14 @@ export default function App() {
     text: string,
     images: MessageImage[],
     files: PromptFile[],
+    planModeOverride?: boolean,
   ): Promise<boolean> => {
     setCreatingWorkbenchDraftIDs((current) => new Set(current).add(draft.id))
     try {
-      const created = await createChatSession(draft, { text, images, files })
+      const created = await createChatSession(
+        { ...draft, planMode: planModeOverride ?? draft.planMode },
+        { text, images, files },
+      )
       setWorkbenchConversationTabs((current) =>
         current.map((conversation) =>
           conversation.kind === 'draft' && conversation.id === draft.id
@@ -447,8 +453,18 @@ export default function App() {
         connected: draftReady,
         creating: creatingWorkbenchDraftIDs.has(conversation.id),
         onChange: updateWorkbenchDraft,
-        onSend: (text: string, images: MessageImage[], files: PromptFile[]) =>
-          sendWorkbenchDraft(conversation.draft, text, images, files),
+        onSend: (
+          text: string,
+          images: MessageImage[],
+          files: PromptFile[],
+          planModeOverride?: boolean,
+        ) => sendWorkbenchDraft(
+          conversation.draft,
+          text,
+          images,
+          files,
+          planModeOverride,
+        ),
       }]
     })
 
@@ -570,6 +586,7 @@ export default function App() {
       question={question}
       queuedMessages={queuedMessages}
       todos={todos}
+      planMode={planMode}
       contextUsage={contextUsage}
       centered={centered}
       projectPickerVisible={Boolean(draft)}
@@ -605,6 +622,7 @@ export default function App() {
       }}
       onSettingsChange={updateSettings}
       onPermissionModeChange={updatePermissionMode}
+      onPlanModeChange={setPlanMode}
       onCompact={draft ? undefined : compactContext}
     />
   )

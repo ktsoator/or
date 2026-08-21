@@ -25,6 +25,19 @@ export function parseExecutableComposerCommand(
   return input.trim() === '/compact' ? 'compact' : undefined
 }
 
+export type PlanComposerCommand = {
+  active: boolean
+  message: string
+}
+
+export function parsePlanComposerCommand(input: string): PlanComposerCommand | undefined {
+  const match = /^\s*\/plan(?:\s+([\s\S]*))?\s*$/.exec(input)
+  if (!match) return undefined
+  const argument = (match[1] ?? '').trim()
+  if (argument.toLocaleLowerCase() === 'off') return { active: false, message: '' }
+  return { active: true, message: argument }
+}
+
 export function parseComposerCatalogQuery(
   draft: string,
 ): { query: string; argumentsText: string } | undefined {

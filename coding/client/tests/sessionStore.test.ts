@@ -34,6 +34,18 @@ function reduce(actions: SessionStoreAction[], initial = createSessionStoreState
 }
 
 describe('sessionStoreReducer', () => {
+  test('keeps plan mode in local draft state until the first send', () => {
+    const draft = createSessionDraft(undefined, false, undefined, [], undefined, 'draft-1')
+    expect(draft.planMode).toBe(false)
+
+    const state = reduce([
+      { t: 'draftStarted', draft },
+      { t: 'draftPlanModeUpdated', active: true },
+    ])
+
+    expect(state.draft?.planMode).toBe(true)
+  })
+
   test('opens a draft on startup and keeps draft selection exclusive', () => {
     const emptyDraft = createSessionDraft(undefined, false, undefined, [], undefined, 'draft-1')
     let state = reduce([

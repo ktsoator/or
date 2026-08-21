@@ -18,6 +18,7 @@ export type SessionDraft = {
   modelID?: string
   thinkingLevel?: ThinkingLevel
   permissionMode: PermissionMode
+  planMode: boolean
 }
 
 export type DraftSubmission = {
@@ -61,6 +62,7 @@ export type SessionStoreAction =
       thinkingLevel: ThinkingLevel
     }
   | { t: 'draftPermissionUpdated'; permissionMode: PermissionMode }
+  | { t: 'draftPlanModeUpdated'; active: boolean }
   | { t: 'draftSendQueued'; submission: DraftSubmission }
   | { t: 'draftSendConsumed'; sessionID: string }
   | { t: 'workspaceUpserted'; workspace: WorkspaceSummary }
@@ -109,6 +111,7 @@ export function createSessionDraft(
     modelID: base?.modelId ?? fallback?.id,
     thinkingLevel: base?.thinkingLevel ?? fallbackThinking,
     permissionMode: base?.permissionMode ?? 'ask',
+    planMode: false,
   }
 }
 
@@ -128,6 +131,7 @@ export function resolveSessionDraft(
       draft.id,
     ),
     permissionMode: draft.permissionMode,
+    planMode: draft.planMode,
   }
 }
 
@@ -267,6 +271,13 @@ export function sessionStoreReducer(
       return {
         ...state,
         draft: { ...state.draft, permissionMode: action.permissionMode },
+      }
+
+    case 'draftPlanModeUpdated':
+      if (!state.draft) return state
+      return {
+        ...state,
+        draft: { ...state.draft, planMode: action.active },
       }
 
     case 'draftSendQueued':

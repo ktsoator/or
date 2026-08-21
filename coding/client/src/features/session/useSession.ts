@@ -258,6 +258,7 @@ export function useSession(secondarySessionIDs: string[] = []): Session {
           modelID: effectiveDraft.modelID,
           thinkingLevel: effectiveDraft.thinkingLevel,
           permissionMode: effectiveDraft.permissionMode,
+          planMode: effectiveDraft.planMode,
         }
       : created
   }
@@ -279,6 +280,9 @@ export function useSession(secondarySessionIDs: string[] = []): Session {
       settings.permissionMode,
       false,
     )
+    if (settings.planMode) {
+      await sessionCommands.setPlanMode(created.id, true)
+    }
     setPendingSecondaryDraftSends((current) => ({
       ...current,
       [created.id]: { sessionID: created.id, ...submission },
@@ -483,6 +487,22 @@ export function useSession(secondarySessionIDs: string[] = []): Session {
     return compactSessionContext(activeSessionID)
   }
 
+  const setSessionPlanMode = async (sessionID: string, active: boolean) => {
+    const target = threads[sessionID]
+    if (target?.running) throw new Error('session is not idle')
+    await sessionCommands.setPlanMode(sessionID, active)
+    dispatch({ t: 'planMode', sessionID, active })
+  }
+
+  const setPlanMode = async (active: boolean) => {
+    if (effectiveDraft) {
+      dispatchSessionStore({ t: 'draftPlanModeUpdated', active })
+      return
+    }
+    if (!activeSessionID) throw new Error('no active session')
+    await setSessionPlanMode(activeSessionID, active)
+  }
+
   const activeSessionRunning = activeSession?.running
 
   const startSessionPrompt = useCallback(
@@ -625,6 +645,7 @@ export function useSession(secondarySessionIDs: string[] = []): Session {
     images: MessageImage[],
     files: PromptFile[],
     delivery?: DeliveryMode,
+    planModeOverride?: boolean,
   ): Promise<boolean> => {
     const trimmed = text.trim()
     if (!trimmed && images.length === 0 && files.length === 0) return false
@@ -640,6 +661,7 @@ export function useSession(secondarySessionIDs: string[] = []): Session {
       const model = requestedDraft.modelID
       const thinkingLevel = requestedDraft.thinkingLevel
       const permissionMode = requestedDraft.permissionMode
+      const initialPlanMode = planModeOverride ?? requestedDraft.planMode
       setCreating(true)
       try {
         const created = await createSessionRecord(
@@ -650,6 +672,9 @@ export function useSession(secondarySessionIDs: string[] = []): Session {
           thinkingLevel,
           permissionMode,
         )
+        if (initialPlanMode) {
+          await sessionCommands.setPlanMode(created.id, true)
+        }
         dispatchSessionStore({
           t: 'draftSendQueued',
           submission: { sessionID: created.id, text: trimmed, images, files },
@@ -758,6 +783,7 @@ export function useSession(secondarySessionIDs: string[] = []): Session {
           ) ?? [],
         tasks: Object.values(secondaryState?.tasks ?? {}),
         todos: secondaryState?.todos ?? null,
+        planMode: secondaryState?.planMode ?? false,
         queuedMessages: secondaryState?.queue ?? [],
         contextUsage: secondaryState?.contextUsage,
         preview: secondaryState?.preview,
@@ -792,6 +818,8 @@ export function useSession(secondarySessionIDs: string[] = []): Session {
           updateSessionSettings(secondarySession.id, provider, model, thinkingLevel),
         updatePermissionMode: (mode: PermissionMode) =>
           updateSessionPermissionMode(secondarySession.id, mode),
+        setPlanMode: (active: boolean) =>
+          setSessionPlanMode(secondarySession.id, active),
         compactContext: () => compactSessionContext(secondarySession.id),
       }
     return [secondaryThread]
@@ -806,6 +834,7 @@ export function useSession(secondarySessionIDs: string[] = []): Session {
     items,
     tasks: Object.values(thread?.tasks ?? {}),
     todos: thread?.todos ?? null,
+    planMode: effectiveDraft?.planMode ?? thread?.planMode ?? false,
     queuedMessages: thread?.queue ?? [],
     contextUsage: thread?.contextUsage,
     preview: thread?.preview,
@@ -841,6 +870,7 @@ export function useSession(secondarySessionIDs: string[] = []): Session {
     selectSession,
     updateSettings,
     updatePermissionMode,
+    setPlanMode,
     compactContext,
     send,
     removeQueuedMessage,

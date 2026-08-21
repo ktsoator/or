@@ -31,6 +31,7 @@ export type WireEventType =
   | "question_request"
   | "question_resolved"
   | "question_cancelled"
+  | "plan_mode_changed"
 
 export type DeltaKind =
   | "text"
@@ -255,6 +256,8 @@ export type Question = {
   header: string
   options: QuestionOption[]
   multiSelect?: boolean
+  detail?: string
+  intent?: string
 }
 
 export type QuestionAnswer = {
@@ -307,6 +310,7 @@ export type WireEvent = {
   disposition?: BrowserDisposition
   tabID?: string
   questions?: Question[]
+  planMode?: boolean
   title?: string
   runId?: string
   turnId?: string
@@ -325,6 +329,7 @@ export type HistoryResponse = {
   context: ContextUsage
   tasks: BackgroundTask[]
   todos: TodoSnapshot | null
+  planMode: boolean
   running: boolean
   eventSeq: number
   title: string

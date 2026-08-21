@@ -25,6 +25,7 @@ export type SessionRequest = (url: string, init: RequestInit) => Promise<Respons
 
 export type SessionCommands = {
   sendPrompt: (sessionID: string, input: PromptInput) => Promise<void>
+  setPlanMode: (sessionID: string, active: boolean) => Promise<void>
   enqueueMessage: (
     sessionID: string,
     delivery: DeliveryMode,
@@ -125,6 +126,14 @@ export function createSessionCommands(
         sessionURL(sessionID, '/prompt'),
         messageRequest('POST', input),
         (status) => `prompt request failed (${status})`,
+      ),
+
+    setPlanMode: (sessionID, active) =>
+      requestOK(
+        request,
+        sessionURL(sessionID, '/plan-mode'),
+        jsonRequest('PATCH', { active }),
+        (status) => `plan mode request failed (${status})`,
       ),
 
     enqueueMessage: (sessionID, delivery, input) => {

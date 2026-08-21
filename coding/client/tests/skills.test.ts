@@ -10,6 +10,7 @@ import {
   composerPreviewCommands,
   moveSuggestionIndex,
   parseExecutableComposerCommand,
+  parsePlanComposerCommand,
   previewSkillCommandCount,
 } from '../src/features/composer/panelStyles'
 
@@ -85,5 +86,18 @@ describe('Composer preview commands', () => {
     expect(parseExecutableComposerCommand('  /compact  ')).toBe('compact')
     expect(parseExecutableComposerCommand('/compact now')).toBeUndefined()
     expect(parseExecutableComposerCommand('/review')).toBeUndefined()
+  })
+
+  test('parses plan mode commands without leaking the command into the prompt', () => {
+    expect(parsePlanComposerCommand('/plan')).toEqual({ active: true, message: '' })
+    expect(parsePlanComposerCommand('/plan inspect auth first')).toEqual({
+      active: true,
+      message: 'inspect auth first',
+    })
+    expect(parsePlanComposerCommand(' /plan off ')).toEqual({
+      active: false,
+      message: '',
+    })
+    expect(parsePlanComposerCommand('/planner')).toBeUndefined()
   })
 })

@@ -1,5 +1,10 @@
 import { expect, test, type Page } from '@playwright/test'
-import type { ContextUsage, UsageEventPage, UsageReport } from '../src/types'
+import type {
+  ContextUsage,
+  TodoSnapshot,
+  UsageEventPage,
+  UsageReport,
+} from '../src/types'
 
 type BrowserRuntimeRecord = {
   tabID: string
@@ -155,9 +160,12 @@ async function openDesktopClient(
     historyEvents?: unknown[]
     historyRunning?: boolean
     historyEventSeq?: number
+    historyTodos?: TodoSnapshot | null
+    historyPlanMode?: boolean
     backgroundTasks?: unknown[]
     secondarySession?: boolean
     secondaryHistoryEvents?: unknown[]
+    secondaryHistoryTodos?: TodoSnapshot | null
     contextUsage?: ContextUsage
     modelName?: string
     modelThinkingLevels?: Array<'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'>
@@ -244,6 +252,7 @@ async function openDesktopClient(
   let branchSessionCreated = false
   let sessionHistoryEvents = options.historyEvents ?? []
   let sessionHistoryRunning = options.historyRunning ?? false
+  let sessionPlanMode = options.historyPlanMode ?? false
   let remainingHealthFailures = options.healthFailures ?? 0
   let remainingBrowserResultFailures = options.browserResultFailures ?? 0
   let diagnosticTraceRequestCount = 0
@@ -904,6 +913,8 @@ async function openDesktopClient(
       body = {
         events: sessionHistoryEvents,
         tasks: options.backgroundTasks ?? [],
+        todos: options.historyTodos ?? null,
+        planMode: sessionPlanMode,
         queue: [],
         context: options.contextUsage ?? {},
         running: sessionHistoryRunning,
@@ -913,6 +924,8 @@ async function openDesktopClient(
     if (path === '/api/sessions/secondary-session/history') {
       body = {
         events: options.secondaryHistoryEvents ?? [],
+        todos: options.secondaryHistoryTodos ?? null,
+        planMode: false,
         queue: [],
         context: {},
         running: false,
@@ -970,6 +983,11 @@ async function openDesktopClient(
             : createdSession
       target.permissionMode = mode
       body = target
+    }
+    if (path === '/api/sessions/test-session/plan-mode' && method === 'PATCH') {
+      sessionPlanMode = Boolean((requestBody as { active?: boolean }).active)
+      status = 204
+      body = undefined
     }
     await route.fulfill({
       status,
@@ -2141,6 +2159,103 @@ test('Or API startup retries recover the Composer automatically', async ({ page 
   ).toBeGreaterThanOrEqual(3)
 })
 
+test('Todo checklist restores, updates live, and clears at the next turn', async ({ page }) => {
+  await openDesktopClient(page, {
+    existingSession: true,
+    historyEvents: [
+      {
+        type: 'user_message',
+        id: 'todo-user',
+        text: 'Implement the checklist',
+        images: [],
+      },
+      {
+        type: 'run_start',
+        id: 'todo-run',
+        startedAt: '2026-08-20T12:00:00Z',
+      },
+    ],
+    historyRunning: true,
+    historyTodos: {
+      todos: [
+        { content: 'Inspect the conversation state', status: 'completed' },
+        { content: 'Build the checklist component', status: 'in_progress' },
+        { content: 'Run the UI checks', status: 'pending' },
+      ],
+    },
+    secondarySession: true,
+    secondaryHistoryEvents: [
+      {
+        type: 'user_message',
+        id: 'secondary-todo-user',
+        text: 'Review the secondary task',
+        images: [],
+      },
+      {
+        type: 'run_start',
+        id: 'secondary-todo-run',
+        startedAt: '2026-08-20T12:00:00Z',
+      },
+    ],
+    secondaryHistoryTodos: {
+      todos: [{ content: 'Review the side panel', status: 'in_progress' }],
+    },
+  })
+
+  const composer = page.getByTestId('composer')
+  const checklist = composer.getByTestId('todo-checklist')
+  const toggle = checklist.getByRole('button', { name: /Checklist/ })
+  await expect(checklist).toBeVisible()
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  await expect(checklist).toContainText('1 done · 1 active · 1 pending')
+  await expect(checklist.getByRole('list')).toHaveCount(0)
+
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  const restoredItems = checklist.getByRole('listitem')
+  await expect(restoredItems).toHaveCount(3)
+  await expect(restoredItems.nth(0)).toHaveAttribute('data-status', 'completed')
+  await expect(restoredItems.nth(1)).toHaveAttribute('data-status', 'in_progress')
+  await expect(restoredItems.nth(2)).toHaveAttribute('data-status', 'pending')
+  await expect(restoredItems.nth(1)).toContainText('Build the checklist component')
+
+  await emitSessionEvent(page, 'test-session', {
+    type: 'tool_end',
+    id: 'todo-update',
+    tool: 'todo_write',
+    outcome: {
+      status: 'success',
+      data: {
+        todos: [
+          { content: 'Inspect the conversation state', status: 'completed' },
+          { content: 'Build the checklist component', status: 'completed' },
+          { content: 'Run the UI checks', status: 'in_progress' },
+        ],
+      },
+    },
+  })
+  await expect(checklist).toContainText('2 done · 1 active')
+  await expect(checklist).not.toContainText('pending')
+  await expect(checklist.getByText('Run the UI checks')).toBeVisible()
+
+  await emitSessionEvent(page, 'test-session', {
+    type: 'turn_start',
+    runId: 'todo-run',
+    turnId: 'todo-turn-2',
+    startedAt: '2026-08-20T12:01:00Z',
+  })
+  await expect(composer.getByTestId('todo-checklist')).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Actions for Secondary task' }).click()
+  await page.getByRole('menuitem', { name: 'Open in right panel' }).click()
+  const sideChecklist = page
+    .getByTestId('workbench-panel')
+    .getByTestId('todo-checklist')
+  await expect(sideChecklist).toContainText('1 active')
+  await sideChecklist.getByRole('button', { name: /Checklist/ }).click()
+  await expect(sideChecklist.getByText('Review the side panel')).toBeVisible()
+})
+
 test('approval replaces the Composer with a complete command review', async ({ page }) => {
   const command = [
     "python3 - <<'EOF'",
@@ -2398,6 +2513,127 @@ test('guided questions replace the Composer with a clear selected state and prog
       { question: questions[2].question, values: ['Apply'] },
     ],
   })
+})
+
+test('plan mode restores, runs slash commands, and reviews the complete plan', async ({ page }) => {
+  const requests = await openDesktopClient(page, {
+    existingSession: true,
+    historyPlanMode: true,
+  })
+  const composer = page.getByTestId('composer')
+  const toggle = composer.getByTestId('composer-plan-mode')
+  const input = composer.locator('textarea')
+
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+  await expect.poll(() =>
+    requests.findLast(
+      (request) => request.path === '/api/sessions/test-session/plan-mode',
+    )?.body,
+  ).toEqual({ active: false })
+
+  await input.fill('/plan inspect the authentication flow')
+  await input.press('Enter')
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+  await expect.poll(() =>
+    requests.findLast(
+      (request) => request.path === '/api/sessions/test-session/plan-mode',
+    )?.body,
+  ).toEqual({ active: true })
+  await expect.poll(() =>
+    requests.findLast(
+      (request) => request.path === '/api/sessions/test-session/prompt',
+    )?.body,
+  ).toEqual({ text: 'inspect the authentication flow', images: [] })
+
+  const reviewQuestion = {
+    header: 'Plan review',
+    question: 'Approve this plan and leave plan mode?',
+    detail: '# Implementation plan\n\n1. Inspect the auth handler.\n2. Add focused tests.',
+    intent: 'plan_review',
+    options: [
+      { label: 'Approve', description: 'Begin implementation.' },
+      { label: 'Keep planning', description: 'Revise the plan.' },
+    ],
+  }
+  await emitSessionEvent(page, 'test-session', {
+    type: 'question_request',
+    id: 'plan-review-1',
+    questions: [reviewQuestion],
+  })
+
+  const review = composer.getByTestId('plan-review')
+  await expect(review.getByRole('heading', { name: 'Implementation plan' })).toBeVisible()
+  await expect(review).toContainText('Inspect the auth handler.')
+  await review.getByRole('textbox', { name: 'Optional feedback for the next revision' })
+    .fill('Include a rollback check')
+  await review.getByRole('button', { name: 'Keep planning' }).click()
+  await expect(review).toHaveCount(0)
+  await expect.poll(() =>
+    requests.find(
+      (request) => request.path === '/api/sessions/test-session/questions/plan-review-1',
+    )?.body,
+  ).toEqual({
+    answers: [{
+      question: reviewQuestion.question,
+      values: ['Include a rollback check'],
+    }],
+  })
+
+  await emitSessionEvent(page, 'test-session', {
+    type: 'question_request',
+    id: 'plan-review-2',
+    questions: [reviewQuestion],
+  })
+  const revisedReview = composer.getByTestId('plan-review')
+  await revisedReview.getByRole('button', { name: 'Approve and implement' }).click()
+  await expect(revisedReview).toHaveCount(0)
+  await expect.poll(() =>
+    requests.find(
+      (request) => request.path === '/api/sessions/test-session/questions/plan-review-2',
+    )?.body,
+  ).toEqual({
+    answers: [{ question: reviewQuestion.question, values: ['Approve'] }],
+  })
+})
+
+test('a new chat enters plan mode before its first prompt', async ({ page }) => {
+  const requests = await openDesktopClient(page)
+  const composer = page.getByTestId('composer')
+  const input = composer.locator('textarea')
+
+  await expect(composer.getByTestId('composer-plan-mode')).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  )
+  await input.fill('/plan design the authentication change')
+  await input.press('Enter')
+
+  await expect.poll(() =>
+    requests.some((request) => request.path === '/api/sessions/test-session/prompt'),
+  ).toBe(true)
+  const createIndex = requests.findIndex(
+    (request) => request.path === '/api/sessions' && request.method === 'POST',
+  )
+  const planIndex = requests.findIndex(
+    (request) => request.path === '/api/sessions/test-session/plan-mode',
+  )
+  const promptIndex = requests.findIndex(
+    (request) => request.path === '/api/sessions/test-session/prompt',
+  )
+  expect(createIndex).toBeGreaterThanOrEqual(0)
+  expect(planIndex).toBeGreaterThan(createIndex)
+  expect(promptIndex).toBeGreaterThan(planIndex)
+  expect(requests[planIndex]?.body).toEqual({ active: true })
+  expect(requests[promptIndex]?.body).toEqual({
+    text: 'design the authentication change',
+    images: [],
+  })
+  await expect(composer.getByTestId('composer-plan-mode')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
 })
 
 test('workbench opens before a preview and launches Browser without hiding Chat', async ({
