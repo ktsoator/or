@@ -32,6 +32,23 @@ func (m *Manager) Snapshot(id string) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
+	return snapshotRuntime(runtime), nil
+}
+
+// SnapshotWithin keeps the current runtime and its transport stable while fn
+// chooses the external synchronization boundary at which to read the snapshot.
+// The callback must call read synchronously and must not re-enter Manager.
+func (m *Manager) SnapshotWithin(id string, fn func(read func() Snapshot) error) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	runtime, err := m.loadRuntimeLocked(id)
+	if err != nil {
+		return err
+	}
+	return fn(func() Snapshot { return snapshotRuntime(runtime) })
+}
+
+func snapshotRuntime(runtime *sessionRuntime) Snapshot {
 	title := runtime.displayTitle()
 	return Snapshot{
 		History:      runtime.session.History(),
@@ -42,7 +59,7 @@ func (m *Manager) Snapshot(id string) (Snapshot, error) {
 		PlanMode:     runtime.session.PlanMode(),
 		Running:      runtime.live.Load(),
 		Title:        title,
-	}, nil
+	}
 }
 
 // LoadForSession reconstructs one diagnostic request from the conversation's

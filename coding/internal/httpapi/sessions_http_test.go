@@ -120,6 +120,63 @@ func TestHistoryHTTPReturnsCurrentTodoSnapshotAndClearsItOnNextTurn(t *testing.T
 	assertHistoryTodoJSON(t, response, true)
 }
 
+func TestHistorySnapshotDoesNotDeadlockIdleRelease(t *testing.T) {
+	manager, transports, model, thinking := newForkHTTPManager(t, nil)
+	created, err := manager.Create(
+		"Concurrent history", t.TempDir(), conversation.ScopeProject, model, thinking, permission.ModeAsk,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	transport, ok := transports.get(created.ID)
+	if !ok {
+		t.Fatal("session transport was not created")
+	}
+
+	transport.hub.mu.Lock()
+	snapshotStarted := make(chan struct{})
+	snapshotDone := make(chan error, 1)
+	go func() {
+		snapshotDone <- manager.SnapshotWithin(created.ID, func(read func() conversation.Snapshot) error {
+			close(snapshotStarted)
+			transport.hub.snapshot(func() { _ = read() })
+			return nil
+		})
+	}()
+	select {
+	case <-snapshotStarted:
+	case <-time.After(time.Second):
+		transport.hub.mu.Unlock()
+		t.Fatal("history snapshot did not reach the hub boundary")
+	}
+
+	releaseStarted := make(chan struct{})
+	releaseDone := make(chan bool, 1)
+	go func() {
+		close(releaseStarted)
+		releaseDone <- manager.ReleaseIfIdle(created.ID)
+	}()
+	<-releaseStarted
+	transport.hub.mu.Unlock()
+
+	select {
+	case err := <-snapshotDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("history snapshot deadlocked with idle release")
+	}
+	select {
+	case released := <-releaseDone:
+		if !released {
+			t.Fatal("idle release did not retire the session")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("idle release deadlocked with history snapshot")
+	}
+}
+
 func TestPlanModeHTTPUpdatesHistory(t *testing.T) {
 	manager, transports, model, thinking := newForkHTTPManager(t, func(
 		_ context.Context,

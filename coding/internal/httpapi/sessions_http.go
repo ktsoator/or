@@ -296,10 +296,7 @@ func (s *Server) sessionTransport(c *gin.Context) (*sessionTransport, bool) {
 // events.
 func (s *Server) handleHistory(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
-	transport, ok := s.sessionTransport(c)
-	if !ok {
-		return
-	}
+	sessionID := c.Param("sessionID")
 	var events []wireEvent
 	var queue []wireEvent
 	var contextUsage wireContextUsage
@@ -308,36 +305,43 @@ func (s *Server) handleHistory(c *gin.Context) {
 	var planMode bool
 	var running bool
 	var title string
-	var snapshotErr error
-	eventSeq := transport.hub.snapshot(func() {
-		var snapshot conversation.Snapshot
-		snapshot, snapshotErr = s.conversations.Snapshot(c.Param("sessionID"))
-		if snapshotErr != nil {
-			return
+	var eventSeq uint64
+	snapshotErr := s.conversations.SnapshotWithin(sessionID, func(read func() conversation.Snapshot) error {
+		transport, ok := s.transports.get(sessionID)
+		if !ok {
+			return errors.New("session transport is unavailable")
 		}
-		events = ProjectHistory(snapshot.History)
-		events = mergeActiveRunHistory(events, transport.activeRun.snapshot())
-		events = append(events, transport.broker.PendingEvents()...)
-		events = append(events, transport.browser.PendingEvents()...)
-		events = append(events, transport.questions.PendingEvents()...)
-		queue = projectQueue(snapshot.Queue)
-		contextUsage = projectContextUsage(snapshot.ContextUsage)
-		tasks = projectBackgroundTasks(snapshot.Tasks)
-		todos = projectTodoSnapshot(snapshot.Todos)
-		planMode = snapshot.PlanMode.Active
-		running = snapshot.Running
-		title = snapshot.Title
+		eventSeq = transport.hub.snapshot(func() {
+			snapshot := read()
+			events = ProjectHistory(snapshot.History)
+			events = mergeActiveRunHistory(events, transport.activeRun.snapshot())
+			events = append(events, transport.broker.PendingEvents()...)
+			events = append(events, transport.browser.PendingEvents()...)
+			events = append(events, transport.questions.PendingEvents()...)
+			queue = projectQueue(snapshot.Queue)
+			contextUsage = projectContextUsage(snapshot.ContextUsage)
+			tasks = projectBackgroundTasks(snapshot.Tasks)
+			todos = projectTodoSnapshot(snapshot.Todos)
+			planMode = snapshot.PlanMode.Active
+			running = snapshot.Running
+			title = snapshot.Title
+		})
+		return nil
 	})
 	if snapshotErr != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+		if errors.Is(snapshotErr, os.ErrNotExist) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": snapshotErr.Error()})
+		}
 		return
 	}
-	workspacePath, err := s.conversations.WorkspacePath(c.Param("sessionID"))
+	workspacePath, err := s.conversations.WorkspacePath(sessionID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
 		return
 	}
-	reissuePreviewGrants(s.transports.previews, c.Param("sessionID"), workspacePath, events)
+	reissuePreviewGrants(s.transports.previews, sessionID, workspacePath, events)
 	c.JSON(http.StatusOK, wireHistoryResponse{
 		Events:   events,
 		Queue:    queue,
