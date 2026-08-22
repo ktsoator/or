@@ -9,6 +9,7 @@ require (
 	github.com/invopop/jsonschema v0.14.0
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/openai/openai-go/v3 v3.50.0
+	golang.org/x/image v0.44.0
 	modernc.org/sqlite v1.56.0
 )
 

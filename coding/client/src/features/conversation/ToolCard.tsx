@@ -279,7 +279,7 @@ function ToolResultImages({ images }: Pick<ToolItem, 'images'>) {
                     alt={label}
                   />
                   <Dialog.Close
-                    className="absolute top-2 right-2 inline-flex size-8 items-center justify-center rounded-md border border-white/20 bg-black/60 text-white outline-none transition-colors hover:bg-black/80 focus-visible:ring-2 focus-visible:ring-white"
+                    className="window-titlebar-control absolute top-2 right-2 inline-flex size-8 items-center justify-center rounded-md border border-white/20 bg-black/60 text-white outline-none transition-colors hover:bg-black/80 focus-visible:ring-2 focus-visible:ring-white"
                     aria-label={t('tool.closeResultImage')}
                   >
                     <X className="size-4" aria-hidden="true" />

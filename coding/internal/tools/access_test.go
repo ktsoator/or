@@ -29,6 +29,7 @@ func TestBuiltInToolsDescribeAccess(t *testing.T) {
 		path   string
 	}{
 		{name: "workspace read", tool: "read", args: map[string]any{"path": "README.md"}, action: permission.Read, path: "README.md"},
+		{name: "workspace image", tool: "view_image", args: map[string]any{"path": "screenshot.png"}, action: permission.Read, path: "screenshot.png"},
 		{name: "workspace grep", tool: "grep", args: map[string]any{}, action: permission.Read},
 		{name: "workspace glob", tool: "glob", args: map[string]any{"path": "src"}, action: permission.Read, path: "src"},
 		{name: "workspace edit", tool: "edit", args: map[string]any{"path": "main.go"}, action: permission.Write, path: "main.go"},

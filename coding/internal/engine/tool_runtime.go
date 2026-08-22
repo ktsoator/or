@@ -9,6 +9,7 @@ import (
 	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/coding/internal/skills"
 	"github.com/ktsoator/or/coding/internal/tools"
+	"github.com/ktsoator/or/llm"
 )
 
 // toolRuntime owns the session's tool catalog, authorization service, durable
@@ -22,6 +23,8 @@ type toolRuntime struct {
 	allTools    []tools.Tool
 	toolByName  map[string]tools.Tool
 	authorizer  *permission.Service
+	model       llm.Model
+	skillsReady bool
 
 	taskManager     *tools.TaskManager
 	taskUnsubscribe func()
@@ -43,6 +46,7 @@ type toolRuntime struct {
 
 type toolRuntimeOptions struct {
 	cwd                    string
+	model                  llm.Model
 	configuredTools        []tools.Tool
 	additionalTools        []tools.Tool
 	browser                tools.BrowserController
@@ -85,9 +89,10 @@ func newToolRuntime(opts toolRuntimeOptions) (*toolRuntime, error) {
 	}
 
 	runtime := &toolRuntime{
-		activeTools:            toolsWithSkillAvailability(catalog, opts.skillsAvailable),
 		allTools:               catalog,
 		toolByName:             toolsByName(catalog),
+		model:                  opts.model,
+		skillsReady:            opts.skillsAvailable,
 		taskManager:            taskManager,
 		cwd:                    opts.cwd,
 		journal:                opts.journal,
@@ -102,6 +107,7 @@ func newToolRuntime(opts toolRuntimeOptions) (*toolRuntime, error) {
 		dispatchEvent:          opts.dispatchEvent,
 		planMode:               opts.planMode,
 	}
+	runtime.activeTools = compatibleTools(catalog, runtime.model, runtime.skillsReady)
 	authorizer, err := permission.NewService(
 		opts.cwd,
 		opts.permissionMode,
@@ -140,7 +146,8 @@ func (runtime *toolRuntime) activeToolSnapshot() []tools.Tool {
 
 func (runtime *toolRuntime) setSkillAvailable(available bool) {
 	runtime.mu.Lock()
-	next := toolsWithSkillAvailability(runtime.allTools, available)
+	runtime.skillsReady = available
+	next := compatibleTools(runtime.allTools, runtime.model, runtime.skillsReady)
 	if sameToolNames(runtime.activeTools, next) {
 		runtime.mu.Unlock()
 		return
@@ -151,6 +158,28 @@ func (runtime *toolRuntime) setSkillAvailable(available bool) {
 	runtime.mu.Unlock()
 
 	if bound != nil {
+		bound.SetTools(tools.AgentTools(active))
+		bound.SetSystemPrompt(runtime.systemPrompt(active))
+	}
+}
+
+func (runtime *toolRuntime) setModel(model llm.Model) {
+	runtime.mu.Lock()
+	runtime.model = model
+	next := compatibleTools(runtime.allTools, runtime.model, runtime.skillsReady)
+	toolsChanged := !sameToolNames(runtime.activeTools, next)
+	if toolsChanged {
+		runtime.activeTools = next
+	}
+	bound := runtime.agent
+	active := append([]tools.Tool(nil), runtime.activeTools...)
+	runtime.mu.Unlock()
+
+	if bound == nil {
+		return
+	}
+	bound.SetModel(model)
+	if toolsChanged {
 		bound.SetTools(tools.AgentTools(active))
 		bound.SetSystemPrompt(runtime.systemPrompt(active))
 	}
@@ -177,6 +206,15 @@ func (runtime *toolRuntime) beforeToolCall(call agent.BeforeToolCallCtx) (bool, 
 	args, _ := call.Args.(map[string]any)
 	var accesses []permission.Access
 	if tool, ok := runtime.lookup(call.ToolCall.Name); ok {
+		runtime.mu.RLock()
+		model := runtime.model
+		runtime.mu.RUnlock()
+		if !tool.Supports(model) {
+			return true, fmt.Sprintf(
+				"tool %q requires model input capabilities %v; model %q does not support them",
+				tool.Name(), tool.RequiredInputs, model.ID,
+			)
+		}
 		accesses = tool.Accesses(args)
 	}
 	result, _ := runtime.authorizer.Authorize(call.RunContext, permission.Request{
@@ -281,10 +319,13 @@ func toolsByName(toolSet []tools.Tool) map[string]tools.Tool {
 	return result
 }
 
-func toolsWithSkillAvailability(toolSet []tools.Tool, available bool) []tools.Tool {
+func compatibleTools(toolSet []tools.Tool, model llm.Model, skillsAvailable bool) []tools.Tool {
 	result := make([]tools.Tool, 0, len(toolSet))
 	for _, tool := range toolSet {
-		if !available && tool.Name() == skills.ToolName {
+		if !skillsAvailable && tool.Name() == skills.ToolName {
+			continue
+		}
+		if !tool.Supports(model) {
 			continue
 		}
 		result = append(result, tool)

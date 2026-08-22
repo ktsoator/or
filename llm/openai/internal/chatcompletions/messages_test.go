@@ -371,12 +371,16 @@ func TestConvertToolResultMessageRequiresToolCallID(t *testing.T) {
 	}
 }
 
-func TestConvertToolResultMessageWithImagesProducesFollowupUserMessage(t *testing.T) {
+func TestConvertDeepSeekVisionToolResultImageUsesFollowupUserMessage(t *testing.T) {
 	// A tool result carrying images is split into a tool message (text only) plus
-	// a follow-up user message containing the images, since the tool role does
-	// not accept image content parts on the OpenAI protocol.
-	model := openAIReplayModel()
-	model.Input = []llm.ModelInput{llm.ModelInputText, llm.ModelInputImage}
+	// a follow-up user message. DeepSeek's vision endpoint accepts images only
+	// on the user role and rejects image content on tool messages.
+	model := llm.Model{
+		ID:       "deepseek-v4-flash-vision-exp",
+		Provider: "opencode-go",
+		Protocol: llm.ProtocolOpenAICompletions,
+		Input:    []llm.ModelInput{llm.ModelInputText, llm.ModelInputImage},
+	}
 	input := llm.Context{Messages: []llm.Message{
 		&llm.UserMessage{Content: []llm.UserContent{&llm.TextContent{Text: "weather"}}},
 		&llm.AssistantMessage{

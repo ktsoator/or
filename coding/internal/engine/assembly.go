@@ -61,6 +61,7 @@ func New(ctx context.Context, opts Options) (*Session, error) {
 	}
 	toolState, err := newToolRuntime(toolRuntimeOptions{
 		cwd:                    cwd,
+		model:                  opts.Model,
 		configuredTools:        opts.Tools,
 		additionalTools:        opts.AdditionalTools,
 		browser:                opts.Browser,
