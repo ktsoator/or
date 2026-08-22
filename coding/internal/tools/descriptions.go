@@ -30,6 +30,16 @@ Usage:
 	},
 }
 
+var viewImageText = toolText{
+	description: `Load a local image so you can inspect its visual content.
+
+Usage:
+- path may be absolute or relative to the workspace root.
+- Supports PNG, JPEG, WebP, and single-frame GIF images up to 10 MiB and 40 million pixels.
+- Large images are resized proportionally before being returned.
+- Use this for visual inspection. Use read for text files and inspect_browser for the current browser page.`,
+}
+
 var grepText = toolText{
 	description: `Search file contents across the workspace with a regular expression (Go regexp syntax). Built for code search.
 

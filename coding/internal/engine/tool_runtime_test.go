@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ktsoator/or/agent"
+	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/coding/internal/skills"
 	"github.com/ktsoator/or/coding/internal/tools"
 	"github.com/ktsoator/or/llm"
@@ -50,6 +51,86 @@ func TestToolRuntimeOwnsCatalogAndSkillAvailability(t *testing.T) {
 	assertAgentToolNames(t, withSkill, "external_tool", skills.ToolName)
 	if !strings.Contains(withSkill.SystemPrompt, "## Skills") {
 		t.Fatal("stable prompt did not restore the Skill protocol with its tool")
+	}
+}
+
+func TestToolRuntimeFiltersToolsByModelAndRefreshesOnSetModel(t *testing.T) {
+	textTool := tools.Tool{AgentTool: agent.AgentTool{
+		Definition: llm.ToolDefinition{Name: "text_tool"},
+	}}
+	imageTool := tools.Tool{
+		AgentTool:      agent.AgentTool{Definition: llm.ToolDefinition{Name: "image_tool"}},
+		RequiredInputs: []llm.ModelInput{llm.ModelInputImage},
+		Guidelines:     []string{"vision-only guideline"},
+	}
+	session, err := New(t.Context(), Options{
+		Model: llm.Model{Provider: "test", ID: "text", Input: []llm.ModelInput{llm.ModelInputText}},
+		Cwd:   t.TempDir(),
+		Tools: []tools.Tool{textTool, imageTool},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+
+	initial := session.Snapshot()
+	assertAgentToolNames(t, initial, "text_tool")
+	if strings.Contains(initial.SystemPrompt, "vision-only guideline") {
+		t.Fatal("text-only prompt contains the image tool guideline")
+	}
+
+	vision := llm.Model{
+		Provider: "test", ID: "vision",
+		Input: []llm.ModelInput{llm.ModelInputText, llm.ModelInputImage},
+	}
+	session.SetModel(vision)
+	withVision := session.Snapshot()
+	assertAgentToolNames(t, withVision, "text_tool", "image_tool")
+	if withVision.Model.ID != vision.ID {
+		t.Fatalf("agent model = %q, want %q", withVision.Model.ID, vision.ID)
+	}
+	if !strings.Contains(withVision.SystemPrompt, "vision-only guideline") {
+		t.Fatal("vision prompt omitted the image tool guideline")
+	}
+
+	session.SetModel(llm.Model{Provider: "test", ID: "unknown"})
+	unknown := session.Snapshot()
+	assertAgentToolNames(t, unknown, "text_tool")
+	if strings.Contains(unknown.SystemPrompt, "vision-only guideline") {
+		t.Fatal("unknown-modality prompt contains the image tool guideline")
+	}
+}
+
+func TestToolRuntimeBlocksIncompatibleToolBeforeAuthorization(t *testing.T) {
+	accessChecked := false
+	imageTool := tools.Tool{
+		AgentTool:      agent.AgentTool{Definition: llm.ToolDefinition{Name: "image_tool"}},
+		RequiredInputs: []llm.ModelInput{llm.ModelInputImage},
+		AccessFor: func(map[string]any) []permission.Access {
+			accessChecked = true
+			return []permission.Access{{Action: permission.Read, Path: "missing.png"}}
+		},
+	}
+	session, err := New(t.Context(), Options{
+		Model: llm.Model{Provider: "test", ID: "text-only", Input: []llm.ModelInput{llm.ModelInputText}},
+		Cwd:   t.TempDir(),
+		Tools: []tools.Tool{imageTool},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+
+	blocked, reason := session.toolRuntime.beforeToolCall(agent.BeforeToolCallCtx{
+		RunContext: t.Context(),
+		ToolCall:   llm.ToolCall{ID: "call-1", Name: "image_tool"},
+		Args:       map[string]any{"path": "missing.png"},
+	})
+	if !blocked || !strings.Contains(reason, "image") {
+		t.Fatalf("beforeToolCall() = blocked %v, reason %q", blocked, reason)
+	}
+	if accessChecked {
+		t.Fatal("incompatible tool reached authorization")
 	}
 }
 

@@ -1277,6 +1277,37 @@ test('desktop headers expose native drag regions while controls remain interacti
   await expect(workbenchToggle).toHaveAccessibleName('Show workbench')
 })
 
+test('tool image lightbox close control opts out of the native titlebar drag region', async ({
+  page,
+}) => {
+  await openDesktopClient(page, {
+    existingSession: true,
+    historyEvents: [
+      {
+        type: 'tool_end',
+        id: 'view-image-result',
+        tool: 'view_image',
+        result: 'Viewed image diagram.png (image/png, 1x1).',
+        images: [
+          {
+            mimeType: 'image/png',
+            data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+          },
+        ],
+      },
+    ],
+  })
+
+  await page.getByText('view_image', { exact: true }).click()
+  await page.getByRole('button', { name: 'Open tool result image 1' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Tool result image 1' })
+  const close = dialog.getByRole('button', { name: 'Close image' })
+  await expect(dialog).toBeVisible()
+  await expect(close).toHaveCSS('-webkit-app-region', 'no-drag')
+  await close.click()
+  await expect(dialog).toHaveCount(0)
+})
+
 test('collapsed native titlebar reveals a stable new session action', async ({ page }) => {
   await openDesktopClient(page, { sessionTitle: 'Existing session' })
   const sidebarToggle = page.getByTestId('sidebar-panel-toggle')

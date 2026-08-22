@@ -4,6 +4,7 @@ package tools
 
 import (
 	"path/filepath"
+	"slices"
 
 	"github.com/ktsoator/or/agent"
 	"github.com/ktsoator/or/coding/internal/permission"
@@ -24,6 +25,10 @@ type Tool struct {
 	// AccessFor describes the effects of one validated call. A nil function is
 	// treated as unknown access and therefore requires approval.
 	AccessFor func(args map[string]any) []permission.Access
+	// RequiredInputs lists the model input modalities needed to use this tool.
+	// The coding runtime hides incompatible tools and checks this again before
+	// execution. An empty list makes the tool available to every model.
+	RequiredInputs []llm.ModelInput
 }
 
 // Accesses returns the declared effects of one validated call.
@@ -37,6 +42,17 @@ func (t Tool) Accesses(args map[string]any) []permission.Access {
 // Name returns the tool's advertised name.
 func (t Tool) Name() string { return t.Definition.Name }
 
+// Supports reports whether model accepts every input modality the tool can
+// return to it. Unknown or omitted model modalities fail closed.
+func (t Tool) Supports(model llm.Model) bool {
+	for _, required := range t.RequiredInputs {
+		if !slices.Contains(model.Input, required) {
+			return false
+		}
+	}
+	return true
+}
+
 // CoreTools returns the filesystem and shell tools that make up the coding
 // product's core capability, plus their session-scoped task manager. Browser
 // tools are assembled separately so the engine can register them as an optional
@@ -46,6 +62,7 @@ func CoreTools(root string) ([]Tool, *TaskManager) {
 	tasks := newTaskManager()
 	return []Tool{
 		readTool(root, files, tasks.OwnsOutputPath),
+		viewImageTool(root),
 		grepTool(root),
 		globTool(root),
 		editTool(root, files),
