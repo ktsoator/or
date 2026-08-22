@@ -105,7 +105,7 @@ func adaptTool(source callableTool) (tools.Tool, error) {
 				if err != nil {
 					return agent.ToolResult{}, err
 				}
-				return projectResult(serverName, definition.Name, result), nil
+				return projectResult(ctx, serverName, definition.Name, result)
 			},
 		},
 		AccessFor: func(map[string]any) []permission.Access {

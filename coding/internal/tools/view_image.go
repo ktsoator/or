@@ -3,29 +3,17 @@ package tools
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"image"
-	_ "image/gif"
-	"image/jpeg"
-	"image/png"
 	"io"
 	"os"
 	"strings"
 
 	"github.com/ktsoator/or/agent"
+	"github.com/ktsoator/or/coding/internal/imageprep"
 	"github.com/ktsoator/or/coding/internal/permission"
 	"github.com/ktsoator/or/llm"
-	xdraw "golang.org/x/image/draw"
-	_ "golang.org/x/image/webp"
-)
-
-const (
-	maxViewImageBytes     int64 = 10 << 20
-	maxViewImagePixels    int64 = 40_000_000
-	maxViewImageDimension       = 2048
 )
 
 type viewImageArgs struct {
@@ -65,28 +53,25 @@ func viewImageTool(root string) Tool {
 				if err != nil {
 					return viewImageFailure(in.Path, viewImageErrorCode(err), err), nil
 				}
-				prepared, err := prepareViewImage(data)
+				prepared, err := imageprep.Prepare(ctx, imageprep.Input{Data: data}, imageprep.DefaultPolicy())
 				if err != nil {
 					return viewImageFailure(in.Path, viewImageErrorCode(err), err), nil
 				}
 
 				metadata := ImageViewResult{
 					Path:           in.Path,
-					MIMEType:       prepared.mimeType,
-					Bytes:          len(prepared.data),
-					OriginalWidth:  prepared.originalWidth,
-					OriginalHeight: prepared.originalHeight,
-					OutputWidth:    prepared.outputWidth,
-					OutputHeight:   prepared.outputHeight,
-					Resized:        prepared.resized,
+					MIMEType:       prepared.Content.MIMEType,
+					Bytes:          prepared.Bytes,
+					OriginalWidth:  prepared.OriginalWidth,
+					OriginalHeight: prepared.OriginalHeight,
+					OutputWidth:    prepared.OutputWidth,
+					OutputHeight:   prepared.OutputHeight,
+					Resized:        prepared.Resized,
 				}
 				return agent.ToolResult{
 					Content: []llm.ToolResultContent{
 						&llm.TextContent{Text: formatViewImageResult(metadata)},
-						&llm.ImageContent{
-							Data:     base64.StdEncoding.EncodeToString(prepared.data),
-							MIMEType: prepared.mimeType,
-						},
+						&prepared.Content,
 					},
 					Outcome: agent.ToolOutcome{Status: agent.ToolOutcomeSuccess, Data: metadata},
 				}, nil
@@ -97,22 +82,9 @@ func viewImageTool(root string) Tool {
 	}
 }
 
-type preparedImage struct {
-	data           []byte
-	mimeType       string
-	originalWidth  int
-	originalHeight int
-	outputWidth    int
-	outputHeight   int
-	resized        bool
-}
-
 var (
-	errViewImageTooLarge    = errors.New("image exceeds the 10 MiB size limit")
-	errViewImageTooManyPx   = errors.New("image exceeds the 40 million pixel limit")
-	errViewImageUnsupported = errors.New("unsupported image format")
-	errViewImageAnimated    = errors.New("animated GIF images are not supported")
-	errViewImageNotRegular  = errors.New("path is not a regular file")
+	errViewImageTooLarge   = errors.New("image exceeds the 10 MiB size limit")
+	errViewImageNotRegular = errors.New("path is not a regular file")
 )
 
 func readViewImageFile(ctx context.Context, path string) ([]byte, error) {
@@ -129,7 +101,7 @@ func readViewImageFile(ctx context.Context, path string) ([]byte, error) {
 	if before.Size() == 0 {
 		return nil, io.ErrUnexpectedEOF
 	}
-	if before.Size() > maxViewImageBytes {
+	if before.Size() > imageprep.DefaultMaxInputBytes {
 		return nil, errViewImageTooLarge
 	}
 
@@ -162,7 +134,7 @@ func readViewImageBytes(ctx context.Context, reader io.Reader) ([]byte, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		remaining := maxViewImageBytes + 1 - int64(data.Len())
+		remaining := imageprep.DefaultMaxInputBytes + 1 - int64(data.Len())
 		if remaining <= 0 {
 			return nil, errViewImageTooLarge
 		}
@@ -173,7 +145,7 @@ func readViewImageBytes(ctx context.Context, reader io.Reader) ([]byte, error) {
 		n, err := reader.Read(chunk)
 		if n > 0 {
 			_, _ = data.Write(chunk[:n])
-			if int64(data.Len()) > maxViewImageBytes {
+			if int64(data.Len()) > imageprep.DefaultMaxInputBytes {
 				return nil, errViewImageTooLarge
 			}
 		}
@@ -188,195 +160,6 @@ func readViewImageBytes(ctx context.Context, reader io.Reader) ([]byte, error) {
 		default:
 			return nil, err
 		}
-	}
-}
-
-func prepareViewImage(data []byte) (preparedImage, error) {
-	config, format, err := image.DecodeConfig(bytes.NewReader(data))
-	if err != nil {
-		return preparedImage{}, fmt.Errorf("decode image metadata: %w", err)
-	}
-	mimeType, ok := viewImageMIMEType(format)
-	if !ok {
-		return preparedImage{}, fmt.Errorf("%w: %s", errViewImageUnsupported, format)
-	}
-	if err := validateViewImageDimensions(config.Width, config.Height); err != nil {
-		return preparedImage{}, err
-	}
-	if format == "gif" {
-		frames, err := gifFrameCount(data)
-		if err != nil {
-			return preparedImage{}, fmt.Errorf("decode GIF: %w", err)
-		}
-		if frames != 1 {
-			return preparedImage{}, errViewImageAnimated
-		}
-	}
-
-	decoded, decodedFormat, err := image.Decode(bytes.NewReader(data))
-	if err != nil {
-		return preparedImage{}, fmt.Errorf("decode image: %w", err)
-	}
-	if decodedFormat != format {
-		return preparedImage{}, errors.New("image format changed while decoding")
-	}
-	bounds := decoded.Bounds()
-	width, height := bounds.Dx(), bounds.Dy()
-	if width != config.Width || height != config.Height {
-		return preparedImage{}, errors.New("decoded image dimensions do not match its metadata")
-	}
-
-	result := preparedImage{
-		data:           data,
-		mimeType:       mimeType,
-		originalWidth:  width,
-		originalHeight: height,
-		outputWidth:    width,
-		outputHeight:   height,
-	}
-	if width <= maxViewImageDimension && height <= maxViewImageDimension {
-		return result, nil
-	}
-
-	outputWidth, outputHeight := resizedViewImageDimensions(width, height)
-	destination := image.NewNRGBA(image.Rect(0, 0, outputWidth, outputHeight))
-	xdraw.CatmullRom.Scale(destination, destination.Bounds(), decoded, bounds, xdraw.Src, nil)
-
-	var encoded bytes.Buffer
-	if format == "jpeg" {
-		err = jpeg.Encode(&encoded, destination, &jpeg.Options{Quality: 90})
-		result.mimeType = "image/jpeg"
-	} else {
-		err = png.Encode(&encoded, destination)
-		result.mimeType = "image/png"
-	}
-	if err != nil {
-		return preparedImage{}, fmt.Errorf("encode resized image: %w", err)
-	}
-	if int64(encoded.Len()) > maxViewImageBytes {
-		return preparedImage{}, fmt.Errorf("resized output: %w", errViewImageTooLarge)
-	}
-	result.data = encoded.Bytes()
-	result.outputWidth = outputWidth
-	result.outputHeight = outputHeight
-	result.resized = true
-	return result, nil
-}
-
-func validateViewImageDimensions(width, height int) error {
-	if width <= 0 || height <= 0 {
-		return errors.New("image dimensions must be positive")
-	}
-	if int64(width) > maxViewImagePixels/int64(height) {
-		return errViewImageTooManyPx
-	}
-	return nil
-}
-
-func resizedViewImageDimensions(width, height int) (int, int) {
-	if width >= height {
-		return maxViewImageDimension, max(1, int((int64(height)*maxViewImageDimension+int64(width)/2)/int64(width)))
-	}
-	return max(1, int((int64(width)*maxViewImageDimension+int64(height)/2)/int64(height))), maxViewImageDimension
-}
-
-func viewImageMIMEType(format string) (string, bool) {
-	switch format {
-	case "png":
-		return "image/png", true
-	case "jpeg":
-		return "image/jpeg", true
-	case "webp":
-		return "image/webp", true
-	case "gif":
-		return "image/gif", true
-	default:
-		return "", false
-	}
-}
-
-// gifFrameCount walks GIF container blocks without decoding every frame into
-// memory. This lets the tool reject animation before a small compressed file
-// can expand into an unbounded frame set.
-func gifFrameCount(data []byte) (int, error) {
-	if len(data) < 13 || (string(data[:6]) != "GIF87a" && string(data[:6]) != "GIF89a") {
-		return 0, errors.New("invalid GIF header")
-	}
-	offset := 13
-	if data[10]&0x80 != 0 {
-		colorTableBytes := 3 * (1 << (uint(data[10]&0x07) + 1))
-		if offset+colorTableBytes > len(data) {
-			return 0, io.ErrUnexpectedEOF
-		}
-		offset += colorTableBytes
-	}
-
-	frames := 0
-	for {
-		if offset >= len(data) {
-			return 0, io.ErrUnexpectedEOF
-		}
-		blockType := data[offset]
-		offset++
-		switch blockType {
-		case 0x3b:
-			return frames, nil
-		case 0x21:
-			if offset >= len(data) {
-				return 0, io.ErrUnexpectedEOF
-			}
-			offset++ // Extension label.
-			var err error
-			offset, err = skipGIFSubBlocks(data, offset)
-			if err != nil {
-				return 0, err
-			}
-		case 0x2c:
-			frames++
-			if frames > 1 {
-				return frames, nil
-			}
-			if offset+9 > len(data) {
-				return 0, io.ErrUnexpectedEOF
-			}
-			packed := data[offset+8]
-			offset += 9
-			if packed&0x80 != 0 {
-				colorTableBytes := 3 * (1 << (uint(packed&0x07) + 1))
-				if offset+colorTableBytes > len(data) {
-					return 0, io.ErrUnexpectedEOF
-				}
-				offset += colorTableBytes
-			}
-			if offset >= len(data) {
-				return 0, io.ErrUnexpectedEOF
-			}
-			offset++ // LZW minimum code size.
-			var err error
-			offset, err = skipGIFSubBlocks(data, offset)
-			if err != nil {
-				return 0, err
-			}
-		default:
-			return 0, fmt.Errorf("invalid GIF block type 0x%02x", blockType)
-		}
-	}
-}
-
-func skipGIFSubBlocks(data []byte, offset int) (int, error) {
-	for {
-		if offset >= len(data) {
-			return 0, io.ErrUnexpectedEOF
-		}
-		size := int(data[offset])
-		offset++
-		if size == 0 {
-			return offset, nil
-		}
-		if offset+size > len(data) {
-			return 0, io.ErrUnexpectedEOF
-		}
-		offset += size
 	}
 }
 
@@ -408,13 +191,13 @@ func viewImageErrorCode(err error) string {
 		return "image_not_file"
 	case errors.Is(err, errViewImageTooLarge):
 		return "image_too_large"
-	case errors.Is(err, errViewImageTooManyPx):
+	case imageprep.CodeOf(err) == imageprep.ErrorTooLarge:
+		return "image_too_large"
+	case imageprep.CodeOf(err) == imageprep.ErrorTooManyPixels:
 		return "image_too_many_pixels"
-	case errors.Is(err, image.ErrFormat):
+	case imageprep.CodeOf(err) == imageprep.ErrorUnsupported:
 		return "image_unsupported"
-	case errors.Is(err, errViewImageUnsupported):
-		return "image_unsupported"
-	case errors.Is(err, errViewImageAnimated):
+	case imageprep.CodeOf(err) == imageprep.ErrorAnimated:
 		return "image_animated"
 	case errors.Is(err, ErrFileChanged):
 		return "image_changed"

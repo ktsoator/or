@@ -1,11 +1,13 @@
 package mcp
 
 import (
-	"encoding/base64"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/ktsoator/or/agent"
+	"github.com/ktsoator/or/coding/internal/imageprep"
 	"github.com/ktsoator/or/llm"
 	protocol "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -15,12 +17,12 @@ const (
 	maxResultImageBytes = 20 << 20
 )
 
-func projectResult(serverName, toolName string, result *protocol.CallToolResult) agent.ToolResult {
+func projectResult(ctx context.Context, serverName, toolName string, result *protocol.CallToolResult) (agent.ToolResult, error) {
 	if result == nil {
 		return agent.ToolResult{
 			Content: []llm.ToolResultContent{&llm.TextContent{Text: "MCP server returned an empty result"}},
 			Outcome: agent.ToolOutcome{Status: agent.ToolOutcomeFailed, ErrorCode: "mcp_empty_result"},
-		}
+		}, nil
 	}
 	content := make([]llm.ToolResultContent, 0, len(result.Content)+1)
 	remainingText := maxResultTextBytes
@@ -40,17 +42,32 @@ func projectResult(serverName, toolName string, result *protocol.CallToolResult)
 	for _, block := range result.Content {
 		switch value := block.(type) {
 		case *protocol.TextContent:
+			if value == nil {
+				continue
+			}
 			appendText(value.Text)
 		case *protocol.ImageContent:
+			if value == nil {
+				appendText("[image omitted: MCP server returned empty image content]")
+				continue
+			}
 			if len(value.Data) > remainingImages {
 				appendText(fmt.Sprintf("[image omitted: MCP image output exceeded %d bytes]", maxResultImageBytes))
 				continue
 			}
 			remainingImages -= len(value.Data)
-			content = append(content, &llm.ImageContent{
-				Data:     base64.StdEncoding.EncodeToString(value.Data),
-				MIMEType: value.MIMEType,
-			})
+			prepared, err := imageprep.Prepare(ctx, imageprep.Input{
+				Data:         value.Data,
+				DeclaredMIME: value.MIMEType,
+			}, imageprep.DefaultPolicy())
+			if err != nil {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					return agent.ToolResult{}, err
+				}
+				appendText(fmt.Sprintf("[image omitted: %v]", err))
+				continue
+			}
+			content = append(content, &prepared.Content)
 		default:
 			encoded, err := json.Marshal(value)
 			if err == nil {
@@ -68,7 +85,7 @@ func projectResult(serverName, toolName string, result *protocol.CallToolResult)
 		return agent.ToolResult{
 			Content: content,
 			Outcome: agent.ToolOutcome{Status: agent.ToolOutcomeFailed, ErrorCode: "mcp_input_required"},
-		}
+		}, nil
 	}
 	if len(content) == 0 {
 		content = append(content, &llm.TextContent{Text: "MCP tool completed without content"})
@@ -84,7 +101,7 @@ func projectResult(serverName, toolName string, result *protocol.CallToolResult)
 		outcome.Status = agent.ToolOutcomeFailed
 		outcome.ErrorCode = "mcp_tool_error"
 	}
-	return agent.ToolResult{Content: content, Outcome: outcome}
+	return agent.ToolResult{Content: content, Outcome: outcome}, nil
 }
 
 func validPrefix(value string, maxBytes int) string {
