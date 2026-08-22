@@ -94,10 +94,13 @@ func TestAdaptToolMapsStdioToExecuteAccess(t *testing.T) {
 }
 
 func TestProjectResultPreservesMCPToolErrors(t *testing.T) {
-	result := projectResult("server", "tool", &protocol.CallToolResult{
+	result, err := projectResult(t.Context(), "server", "tool", &protocol.CallToolResult{
 		Content: []protocol.Content{&protocol.TextContent{Text: "invalid request"}},
 		IsError: true,
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if result.Outcome.Status != agent.ToolOutcomeFailed || result.Outcome.ErrorCode != "mcp_tool_error" {
 		t.Fatalf("outcome = %#v", result.Outcome)
 	}
@@ -136,9 +139,12 @@ func TestDisplayTitleUsesProtocolPrecedence(t *testing.T) {
 }
 
 func TestProjectResultCapsTextOutput(t *testing.T) {
-	result := projectResult("server", "tool", &protocol.CallToolResult{
+	result, err := projectResult(t.Context(), "server", "tool", &protocol.CallToolResult{
 		Content: []protocol.Content{&protocol.TextContent{Text: strings.Repeat("x", maxResultTextBytes+100)}},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	text := result.Content[0].(*llm.TextContent).Text
 	if !strings.Contains(text, "[truncated: MCP output exceeded") {
 		t.Fatalf("output was not marked as truncated: %d bytes", len(text))

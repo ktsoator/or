@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ktsoator/or/coding/internal/engine"
+	"github.com/ktsoator/or/coding/internal/imageprep"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -52,7 +54,7 @@ func bindMessageRequest(
 		return messageRequest{}, nil, nil, false
 	}
 	body.Text = strings.TrimSpace(body.Text)
-	images, err := decodePromptImages(body.Images)
+	images, err := decodePromptImages(c.Request.Context(), body.Images)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return messageRequest{}, nil, nil, false
@@ -84,35 +86,42 @@ func bindMessagePayload(c *gin.Context) (messageRequest, []engine.AttachedFile, 
 	return body, files, err
 }
 
-func decodePromptImages(input []promptImage) ([]llm.ImageContent, error) {
+func decodePromptImages(ctx context.Context, input []promptImage) ([]llm.ImageContent, error) {
 	if len(input) > maxPromptImages {
 		return nil, fmt.Errorf("a prompt can include at most %d images", maxPromptImages)
 	}
-	allowed := map[string]bool{
-		"image/gif":  true,
-		"image/jpeg": true,
-		"image/png":  true,
-		"image/webp": true,
+	type decodedImage struct {
+		data     []byte
+		mimeType string
 	}
-	images := make([]llm.ImageContent, 0, len(input))
+	decoded := make([]decodedImage, 0, len(input))
 	total := 0
 	for _, image := range input {
 		mimeType := strings.ToLower(strings.TrimSpace(image.MIMEType))
-		if !allowed[mimeType] {
-			return nil, fmt.Errorf("unsupported image type %q", image.MIMEType)
-		}
-		decoded, err := base64.StdEncoding.DecodeString(image.Data)
-		if err != nil || len(decoded) == 0 {
+		data, err := base64.StdEncoding.DecodeString(image.Data)
+		if err != nil || len(data) == 0 {
 			return nil, errors.New("image data is not valid base64")
 		}
-		if len(decoded) > maxPromptImageBytes {
-			return nil, fmt.Errorf("each image must be %d MB or smaller", maxPromptImageBytes>>20)
+		if int64(len(data)) > imageprep.DefaultMaxInputBytes {
+			return nil, fmt.Errorf("each image must be %d MB or smaller", imageprep.DefaultMaxInputBytes>>20)
 		}
-		total += len(decoded)
+		total += len(data)
 		if total > maxPromptImagesBytes {
 			return nil, fmt.Errorf("images must total %d MB or less", maxPromptImagesBytes>>20)
 		}
-		images = append(images, llm.ImageContent{Data: image.Data, MIMEType: mimeType})
+		decoded = append(decoded, decodedImage{data: data, mimeType: mimeType})
+	}
+
+	images := make([]llm.ImageContent, 0, len(decoded))
+	for index, image := range decoded {
+		prepared, err := imageprep.Prepare(ctx, imageprep.Input{
+			Data:         image.data,
+			DeclaredMIME: image.mimeType,
+		}, imageprep.DefaultPolicy())
+		if err != nil {
+			return nil, fmt.Errorf("prepare image %d: %w", index+1, err)
+		}
+		images = append(images, prepared.Content)
 	}
 	return images, nil
 }

@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/ktsoator/or/agent"
+	"github.com/ktsoator/or/coding/internal/imageprep"
 	"github.com/ktsoator/or/llm"
 )
 
@@ -96,14 +97,25 @@ func TestViewImageResizesLargeImages(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			prepared, err := prepareViewImage(encodeTestImage(t, test.format, test.width, test.height))
+			root := t.TempDir()
+			path := "large." + test.format
+			if err := os.WriteFile(filepath.Join(root, path), encodeTestImage(t, test.format, test.width, test.height), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			result := executeViewImage(t, root, path)
+			if result.Outcome.Failed() {
+				t.Fatalf("view_image failed: %+v", result.Outcome)
+			}
+			metadata := result.Outcome.Data.(ImageViewResult)
+			if !metadata.Resized || metadata.OutputWidth != test.wantWidth || metadata.OutputHeight != test.wantHeight || metadata.MIMEType != test.wantMIME {
+				t.Fatalf("metadata = %+v", metadata)
+			}
+			prepared := result.Content[1].(*llm.ImageContent)
+			data, err := base64.StdEncoding.DecodeString(prepared.Data)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !prepared.resized || prepared.outputWidth != test.wantWidth || prepared.outputHeight != test.wantHeight || prepared.mimeType != test.wantMIME {
-				t.Fatalf("prepared image = %+v", prepared)
-			}
-			config, _, err := image.DecodeConfig(bytes.NewReader(prepared.data))
+			config, _, err := image.DecodeConfig(bytes.NewReader(data))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -131,7 +143,7 @@ func TestViewImageRejectsInvalidInputs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := large.Truncate(maxViewImageBytes + 1); err != nil {
+	if err := large.Truncate(imageprep.DefaultMaxInputBytes + 1); err != nil {
 		t.Fatal(err)
 	}
 	if err := large.Close(); err != nil {
@@ -164,14 +176,7 @@ func TestViewImageRejectsInvalidInputs(t *testing.T) {
 	}
 }
 
-func TestViewImagePixelLimitAndCancellation(t *testing.T) {
-	if err := validateViewImageDimensions(40_000_001, 1); err != errViewImageTooManyPx {
-		t.Fatalf("pixel limit error = %v", err)
-	}
-	if err := validateViewImageDimensions(10_000, 4_000); err != nil {
-		t.Fatalf("boundary dimensions rejected: %v", err)
-	}
-
+func TestViewImageCancellation(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "image.png"), encodeTestImage(t, "png", 2, 2), 0o600); err != nil {
 		t.Fatal(err)
