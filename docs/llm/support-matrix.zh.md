@@ -2,15 +2,15 @@
 
 内置模型清单和协议实现是两套独立信息。`GetModels` 返回清单中收录的模型；只有模型的 `Protocol` 已在当前进程注册协议适配器时，请求才能被路由。使用 `GetRunnableModels` 构建运行时模型列表。
 
-<!-- catalog-stats: total=425 runnable=382 openai-completions=250 anthropic-messages=76 openai-responses=56 google-generative-ai=21 mistral-conversations=22 -->
+<!-- catalog-stats: total=429 runnable=386 openai-completions=252 anthropic-messages=76 openai-responses=58 google-generative-ai=21 mistral-conversations=22 -->
 
 ## 协议状态
 
 | 协议 | 收录模型数 | 状态 | 注册方式 | 说明 |
 |---|---:|---|---|---|
-| `openai-completions` | 250 | 已实现 | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Chat Completions 及兼容服务 |
+| `openai-completions` | 252 | 已实现 | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Chat Completions 及兼容服务 |
 | `anthropic-messages` | 76 | 已实现 | `_ "github.com/ktsoator/or/llm/anthropic"` | Anthropic Messages 及兼容服务 |
-| `openai-responses` | 56 | 已实现 | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Responses API 及兼容网关 |
+| `openai-responses` | 58 | 已实现 | `_ "github.com/ktsoator/or/llm/openai"` | OpenAI Responses API 及兼容网关 |
 | `google-generative-ai` | 21 | 仅收录 | 无 | 当前没有协议适配器 |
 | `mistral-conversations` | 22 | 仅收录 | 无 | 当前没有协议适配器 |
 
@@ -42,7 +42,7 @@ runnable := llm.GetRunnableModels("openai") // 返回可调用的 Responses 模�
 | `github-copilot` | 22 | 两种已实现协议 | `COPILOT_GITHUB_TOKEN` |
 | `google` | 21 | Google Generative AI | `GEMINI_API_KEY` |
 | `groq` | 6 | OpenAI Completions | `GROQ_API_KEY` |
-| `huggingface` | 66 | OpenAI Completions | `HF_TOKEN` |
+| `huggingface` | 67 | OpenAI Completions | `HF_TOKEN` |
 | `kimi-coding` | 4 | Anthropic Messages | `KIMI_API_KEY` |
 | `minimax` | 7 | Anthropic Messages | `MINIMAX_API_KEY` |
 | `minimax-cn` | 7 | Anthropic Messages | `MINIMAX_CN_API_KEY` |
@@ -52,7 +52,7 @@ runnable := llm.GetRunnableModels("openai") // 返回可调用的 Responses 模�
 | `nvidia` | 59 | OpenAI Completions | `NVIDIA_API_KEY` |
 | `openai` | 30 | OpenAI Responses | `OPENAI_API_KEY` |
 | `opencode` | 56 | 三种已实现协议 | `OPENCODE_API_KEY` |
-| `opencode-go` | 19 | 三种已实现协议 | `OPENCODE_API_KEY` |
+| `opencode-go` | 22 | 三种已实现协议 | `OPENCODE_API_KEY` |
 | `together` | 19 | OpenAI Completions | `TOGETHER_API_KEY` |
 | `xai` | 6 | OpenAI Completions | `XAI_API_KEY` |
 | `xiaomi` | 3 | OpenAI Completions | `XIAOMI_API_KEY` 或 `MIMO_API_KEY` |
